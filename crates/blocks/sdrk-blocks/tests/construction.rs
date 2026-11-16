@@ -19,7 +19,8 @@
     clippy::type_complexity,
     clippy::float_cmp,
     clippy::unreadable_literal,
-    clippy::cast_possible_truncation
+    clippy::cast_possible_truncation,
+    clippy::print_stderr
 )]
 
 mod common;
@@ -39,12 +40,12 @@ use sdrk_blocks::{
     SymbolSyncBlock, SymbolSyncConfig, Ted,
 };
 use sdrk_blocks::{
-    CostasBlock, CostasConfig, FrameRotations, InterpolateBlock, IqOffsetBlock, IqOffsetConfig,
-    IqPart, MorseDecodeBlock, MorseDecodeConfig, MorseEncodeBlock, MorseEncodeConfig,
-    PskDemodBlock, PskDemodConfig, PskModBlock, PskModConfig, PskVariant, QamAcquireBlock,
-    QamAcquireConfig, QamDemodBlock, QamDemodConfig, QamModBlock, QamModConfig, RdsDecodeBlock,
-    RdsDecodeConfig, RdsDemodBlock, RdsDemodConfig, SymbolMapBlock, SymbolMapConfig,
-    SymbolMapConstellation, SymbolMapVariant,
+    CostasBlock, CostasConfig, FrameRotations, FskDemodBlock, InterpolateBlock, IqOffsetBlock,
+    IqOffsetConfig, IqPart, MorseDecodeBlock, MorseDecodeConfig, MorseEncodeBlock,
+    MorseEncodeConfig, OokDemodBlock, PskDemodBlock, PskDemodConfig, PskModBlock, PskModConfig,
+    PskVariant, QamAcquireBlock, QamAcquireConfig, QamDemodBlock, QamDemodConfig, QamModBlock,
+    QamModConfig, RdsDecodeBlock, RdsDecodeConfig, RdsDemodBlock, RdsDemodConfig, SymbolMapBlock,
+    SymbolMapConfig, SymbolMapConstellation, SymbolMapVariant,
 };
 use sdrk_device::{SdrkError, formats};
 
@@ -536,12 +537,19 @@ fn the_error_is_a_storage_error_of_kind_capacity_exceeded() {
     assert_eq!(e.kind(), sdrk_device::ErrorKind::CapacityExceeded);
 }
 
+/// The limit of a primitive block in bytes: all big data lives in the storage, the structs hold
+/// only a few slices and counters. The limit follows the stack limit of 4 KiB of R3 (clippy
+/// `large_stack_frames`): `chain!` holds up to 8 blocks inline, 8 x 512 bytes.
+const BLOCK_LIMIT: usize = 512;
+/// The limit of a composite block (a block that holds other blocks inline) in bytes, the
+/// maintainer's decision on I44.1-1 (D1573).
+const COMPOSITE_LIMIT: usize = 2048;
+
 #[test]
 fn no_block_is_larger_than_512_bytes() {
-    // All big data lives in the storage; the structs hold only a few slices and counters.
     fn check<T>(name: &str) {
         let size = std::mem::size_of::<T>();
-        assert!(size <= 512, "{name} is {size} bytes");
+        assert!(size <= BLOCK_LIMIT, "{name} is {size} bytes");
     }
     macro_rules! both {
         ($($b:ident),*) => {$(
@@ -581,8 +589,6 @@ fn no_block_is_larger_than_512_bytes() {
     check::<SymbolDemapBlock<C32, A<'static>>>("SymbolDemapBlock<C32>");
     check::<SymbolDemapBlock<f32, sdrk_testkit::VecStorage>>("SymbolDemapBlock<f32, Vec>");
     check::<CostasBlock<A<'static>>>("CostasBlock");
-    check::<PskModBlock<A<'static>>>("PskModBlock");
-    check::<PskModBlock<sdrk_testkit::VecStorage>>("PskModBlock<Vec>");
     check::<PskDemodBlock<A<'static>>>("PskDemodBlock");
     check::<PskDemodBlock<sdrk_testkit::VecStorage>>("PskDemodBlock<Vec>");
     check::<SymbolMapBlock<A<'static>>>("SymbolMapBlock");
@@ -591,10 +597,6 @@ fn no_block_is_larger_than_512_bytes() {
     check::<IqOffsetBlock<sdrk_testkit::VecStorage>>("IqOffsetBlock<Vec>");
     check::<QamAcquireBlock<A<'static>>>("QamAcquireBlock");
     check::<QamAcquireBlock<sdrk_testkit::VecStorage>>("QamAcquireBlock<Vec>");
-    check::<QamModBlock<A<'static>>>("QamModBlock");
-    check::<QamModBlock<sdrk_testkit::VecStorage>>("QamModBlock<Vec>");
-    check::<QamDemodBlock<A<'static>>>("QamDemodBlock");
-    check::<QamDemodBlock<sdrk_testkit::VecStorage>>("QamDemodBlock<Vec>");
     check::<DcBlockRealBlock<f32, A<'static>>>("DcBlockRealBlock<f32>");
     check::<DcBlockRealBlock<Q15, sdrk_testkit::VecStorage>>("DcBlockRealBlock<Q15, Vec>");
     check::<BiquadRealBlock<f32, A<'static>>>("BiquadRealBlock<f32>");
@@ -606,6 +608,30 @@ fn no_block_is_larger_than_512_bytes() {
     check::<ResampleRealBlock<Q15, sdrk_testkit::VecStorage>>("ResampleRealBlock<Q15, Vec>");
 }
 
+/// The composite blocks, the blocks that hold other blocks inline (the explicit list of the
+/// limit [`COMPOSITE_LIMIT`]; every other block is a primitive block within [`BLOCK_LIMIT`]).
+#[test]
+fn no_composite_block_is_larger_than_2048_bytes() {
+    fn check<T>(name: &str) {
+        let size = std::mem::size_of::<T>();
+        assert!(size <= COMPOSITE_LIMIT, "{name} is {size} bytes");
+        eprintln!("{name}: {size} bytes");
+    }
+    macro_rules! composites {
+        ($($b:ident),*) => {$(
+            check::<$b<A<'static>>>(stringify!($b));
+            check::<$b<sdrk_testkit::VecStorage>>(concat!(stringify!($b), "<Vec>"));
+        )*};
+    }
+    composites!(
+        PskModBlock,
+        QamModBlock,
+        QamDemodBlock,
+        FskDemodBlock,
+        OokDemodBlock
+    );
+}
+
 fn assert_send<T: Send>() {}
 
 /// A lock policy for the send and sync checks of `LockWatch`.
@@ -614,6 +640,8 @@ struct Policy;
 impl sdrk_blocks::LockPolicy for Policy {
     const CHECK: u16 = 4096;
     const TOLERANCE: f64 = 2e-4;
+    const WEIGHT_CHECKS: u8 = 2;
+    const GAP_WINDOWS: u8 = 6;
 }
 fn assert_sync<T: Sync>() {}
 

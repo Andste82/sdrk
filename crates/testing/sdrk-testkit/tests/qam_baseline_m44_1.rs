@@ -573,8 +573,13 @@ fn demod_cases() -> Vec<DemodCase> {
     cases
 }
 
+/// The receiver of a case with the recovery of M44.1 §6 off (`set_recovery(false)`): test 5 asks
+/// for the bits of step 1 (D1570; with the recovery on, the weight watch takes the receiver of
+/// `verify_carrier_noise_strong_taps11` out of its lock on the pure carrier in the noise, D1574).
 fn demod_block(case: &DemodCase) -> QamDemodBlock<VecStorage> {
-    QamDemodBlock::new(&case.cfg, case.fs, &mut VecStorage).unwrap()
+    let mut block = QamDemodBlock::new(&case.cfg, case.fs, &mut VecStorage).unwrap();
+    block.set_recovery(false);
+    block
 }
 
 #[test]

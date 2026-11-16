@@ -32,7 +32,7 @@ use crate::describe::{
 };
 use crate::design::{RRC_MAX_SPAN, RRC_MAX_SPS, RRC_MIN_ROLLOFF, RRC_MIN_SPAN, Rrc};
 use crate::error::{Error, Result};
-use crate::lock_watch::{LockPolicy, LockState, LockTransition, LockWatch};
+use crate::lock_watch::{LockCheck, LockPolicy, LockState, LockTransition, LockWatch};
 use crate::storage::{Plan, Storage};
 use crate::{SymbolSyncConfig, Ted};
 
@@ -94,7 +94,11 @@ pub static DESCRIPTION: BlockDescription = BlockDescription {
         symbols after that the lock of the carrier loop is checked, and after a check without \
         lock a new window of the fourth powers that shows a clear carrier more than 0.0002 \
         cycles per symbol away from the loops starts the equalizer again and the acquisition \
-        searches again), the adaptive equalizer \
+        searches again; so does an energy of the equalizer weights (times the power of its input over the \
+        pull-in, the energy at unit input power) below 0.75 for 16-QAM or 0.85 for 64-QAM at two \
+        checks in a row, and a clear window after six or more windows \
+        without a clear peak, a signal back after a gap, starts the equalizer again with the \
+        new estimate), the adaptive equalizer \
         equalize (constellation qam16 or qam64 of the order, equalizer_taps taps, no feedback \
         taps, mu_cma 0.05, mu_dd 0.005, 1000 CMA symbols, then decision-directed; its phase \
         tracker at 0.005 until the first check after the estimate, then at 0.0015, a narrow \
@@ -409,12 +413,39 @@ pub const QAM_ACQUISITION_VERIFY_TOLERANCE: f64 = 2e-4;
 /// which the hand-over measures the phase of its output (I44-17, [`QamDemodBlock`]).
 pub const QAM_HANDOVER_SYMBOLS: usize = 256;
 
-/// The thresholds and time limits of the controller of `qam_demod`.
-struct QamLock;
+/// The weight watch of `qam_demod` (M44.1 §6, condition 1) for 16-QAM: a check in `Track` at
+/// which the energy of the equalizer's weights (`sum |w|^2`) is below this value counts as low,
+/// and [`QAM_WATCH_CHECKS`] low checks in a row start the receiver again (the equalizer from its
+/// start weights, the loops at frequency 0, a new search; `LockTransition::Shrink`). The energy of
+/// correct weights falls with the signal-to-noise ratio (as the Wiener weights, about
+/// `(snr / (1 + snr))^2`): measured at the checks of the 120 receivers with the equalizer of the
+/// comparison of D1702, at least 0.808 in every 16-QAM receiver that keeps one alignment (11 dB)
+/// and 0.757 at 10 dB, while the false states of I44-17 shrink to 0.50 to 0.71 (D1567).
+pub const QAM_WATCH_WEIGHT_ENERGY_16: f32 = 0.75;
+/// The weight watch of `qam_demod` for 64-QAM (as [`QAM_WATCH_WEIGHT_ENERGY_16`]): every 64-QAM
+/// receiver of the comparison that keeps one alignment stays at 0.874 or above (16 dB), and the
+/// false state of D1700 falls below 0.85 within about 6000 symbols (D1567).
+pub const QAM_WATCH_WEIGHT_ENERGY_64: f32 = 0.85;
+/// The low checks in a row of the weight watch of `qam_demod` (M44.1 §6, condition 1): two, so
+/// that a single dip of the energy (multipath, a burst of noise) restarts nothing (D1567).
+pub const QAM_WATCH_CHECKS: u8 = 2;
+/// The signal back after a gap (M44.1 §6, condition 2): a clear verify window after at least this
+/// many acquisition windows in a row without a clear peak starts the equalizer again and hands it
+/// the new estimate (`LockTransition::Return`), a gap of the signal of about six checks (24576
+/// symbols) or more. A hysteresis: the verify windows of weak signals alternate between clear and
+/// not clear (D1619); over the 180 receivers of the comparison of D1702 at most 5 windows in a row
+/// had no clear peak before a clear one, at most 2 in a receiver that keeps one alignment (D1568).
+pub const QAM_WATCH_GAP_WINDOWS: u8 = 6;
 
-impl LockPolicy for QamLock {
+/// The thresholds and time limits of the controller of `qam_demod` ([`QamDemodBlock::watch`]).
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub struct QamDemodLock;
+
+impl LockPolicy for QamDemodLock {
     const CHECK: u16 = QAM_ACQUISITION_CHECK as u16;
     const TOLERANCE: f64 = QAM_ACQUISITION_VERIFY_TOLERANCE;
+    const WEIGHT_CHECKS: u8 = QAM_WATCH_CHECKS;
+    const GAP_WINDOWS: u8 = QAM_WATCH_GAP_WINDOWS;
 }
 
 // The check fits the counter of `LockWatch`, and the switch of the equalizer to the decision
@@ -536,8 +567,14 @@ impl HandOver {
 /// [`QAM_HANDOVER_SYMBOLS`] blind symbols after the estimate (I44-17, D1700); a check without lock
 /// takes a verify window, and when it shows the loops on a wrong frequency or not converged, the
 /// equalizer starts again from its start weights and blind symbols, the frequencies go to 0 and
-/// the acquisition searches again (D1421, D1605, D1618, D1623). The output is bit for bit that of
-/// the block of M44 with the fix of I44-17 (M44.1 test 5). Soft bits that do not fit into the
+/// the acquisition searches again (D1421, D1605, D1618, D1623). The recovery of M44.1 §6 adds two
+/// conditions (D1566 to D1569): the weight watch (the energy of the equalizer's weights below
+/// [`QAM_WATCH_WEIGHT_ENERGY_16`] or [`QAM_WATCH_WEIGHT_ENERGY_64`] at [`QAM_WATCH_CHECKS`] checks
+/// in a row in `Track` starts the receiver again as a verify window away from the loops does) and
+/// the signal back after a gap (a clear verify window within the tolerance after at least
+/// [`QAM_WATCH_GAP_WINDOWS`] windows without a clear peak starts the equalizer again and hands it
+/// the new estimate). With the recovery off ([`set_recovery`](QamDemodBlock::set_recovery)) the
+/// output is bit for bit that of the block of M44 with the fix of I44-17 (M44.1 test 5). Soft bits that do not fit into the
 /// output wait in a buffer and are written first by the next call (which then consumes no input).
 /// Timing: variable ratio `symbol_rate bits / fs`, delay `(span + equalizer_taps - 1) n / 2 + 1`
 /// input samples. Storage: the taps, the filter history, one work buffer of `512 + 128 bits` `C32`
@@ -656,6 +693,8 @@ impl<S: Storage> QamDemodBlock<S> {
                 costas,
                 watch: LockWatch::new(),
                 hand,
+                level: Level::default(),
+                reference: 1.0,
             },
             demap,
             work,
@@ -758,7 +797,7 @@ impl<S: Storage> QamDemodBlock<S> {
 
     /// How often the controller restarted the receiver since its start or `reset` (a verify
     /// window after a check without lock that found the loops on a wrong frequency, D1421,
-    /// D1605, D1618).
+    /// D1605, D1618; the weight watch and the signal back after a gap of M44.1 §6, D1569).
     pub fn restarts(&self) -> u32 {
         self.rx.watch.restarts()
     }
@@ -766,6 +805,44 @@ impl<S: Storage> QamDemodBlock<S> {
     /// The state of the equalizer (`None` for `equalizer_taps` 0).
     pub fn equalizer(&self) -> Option<&EqState<S>> {
         self.rx.eq.as_ref().map(EqualizeBlock::state)
+    }
+
+    /// The equalizer as a building block with its control interface (`None` for
+    /// `equalizer_taps` 0), for tests and experiments that put the receiver into a state (M44.1
+    /// test 7): the controller is not told of a call and reacts to it only through what it
+    /// watches.
+    pub fn equalizer_mut(&mut self) -> Option<&mut EqualizeBlock<S>> {
+        self.rx.eq.as_mut()
+    }
+
+    /// The controller: the lock state machine with its counters (M44.1 §2.3, §6).
+    pub fn watch(&self) -> &LockWatch<QamDemodLock> {
+        &self.rx.watch
+    }
+
+    /// Turns the recovery of M44.1 §6 (the weight watch and the signal back after a gap) on (the
+    /// default) or off. Off, the controller takes the transitions of §5 only and the soft bits are
+    /// those of the block before the recovery, bit for bit (the baselines of M44.1 test 5); kept
+    /// over `reset`.
+    ///
+    /// ```
+    /// use sdrk::Rate;
+    /// use sdrk_blocks::{ArenaStorage, QamDemodBlock, QamDemodConfig};
+    /// let cfg = QamDemodConfig { symbol_rate_hz: 1000.0, ..QamDemodConfig::default() };
+    /// let mut mem = vec![0u8; 1 << 16];
+    /// let mut d = QamDemodBlock::new(&cfg, Rate::hz(4000)?, &mut ArenaStorage::new(&mut mem))?;
+    /// assert!(d.recovery());
+    /// d.set_recovery(false);
+    /// assert!(!d.watch().recovery());
+    /// # Ok::<(), Box<dyn std::error::Error>>(())
+    /// ```
+    pub fn set_recovery(&mut self, on: bool) {
+        self.rx.watch.set_recovery(on);
+    }
+
+    /// Whether the recovery of M44.1 §6 is on.
+    pub fn recovery(&self) -> bool {
+        self.rx.watch.recovery()
     }
 
     /// The current estimate of the samples per symbol of the timing loop.
@@ -824,8 +901,55 @@ struct Loops<S: Storage> {
     /// The equalizer before the carrier loop; `None` for `equalizer_taps` 0.
     eq: Option<EqualizeBlock<S>>,
     costas: CostasBlock<S>,
-    watch: LockWatch<QamLock>,
+    watch: LockWatch<QamDemodLock>,
     hand: HandOver,
+    /// The power of the symbols into the equalizer over the pull-in (from the estimate to the
+    /// first check after it).
+    level: Level,
+    /// The power of the symbols into the equalizer over the last pull-in (1 before the first): the
+    /// scale of the weight watch.
+    reference: f32,
+}
+
+/// The mean power of the symbols into the equalizer over the pull-in, the symbols from an
+/// estimate to the first check after it (the signal that was acquired): the weight watch compares
+/// the energy of the weights at unit input power, `sum |w|^2` times this power, so that its floor
+/// holds at any level of the input (the AGC of the flow `qam16_receiver` holds the power at about
+/// 1.9), while noise after the end of a signal, whose power is lower, does not count as a
+/// shrinking of the weights (D1576).
+#[derive(Clone, Copy, Debug, Default)]
+struct Level {
+    /// The sum of `|x|^2` of the finite symbols.
+    sum: f64,
+    /// Those symbols.
+    count: u32,
+}
+
+impl Level {
+    /// Adds the symbols of a run (finite ones only).
+    #[inline]
+    fn add(&mut self, run: &[C32]) {
+        let mut sum = 0.0f32;
+        let mut count = 0u32;
+        for v in run {
+            let p = v.re * v.re + v.im * v.im;
+            if p.is_finite() {
+                sum += p;
+                count += 1;
+            }
+        }
+        self.sum += f64::from(sum);
+        self.count = self.count.saturating_add(count);
+    }
+
+    /// The mean power, 1 without a finite symbol.
+    fn mean(&self) -> f32 {
+        if self.count == 0 {
+            1.0
+        } else {
+            (self.sum / f64::from(self.count)) as f32
+        }
+    }
 }
 
 impl<S: Storage> Loops<S> {
@@ -847,6 +971,9 @@ impl<S: Storage> Loops<S> {
         let window = self.acquire.process_in_place(src)?;
         match self.eq.as_mut() {
             Some(eq) => {
+                if self.watch.state() == LockState::PullIn {
+                    self.level.add(src);
+                }
                 eq.process(src, dst)?;
                 if self.hand.blind_left != 0 {
                     self.hand.run(eq, dst);
@@ -863,14 +990,38 @@ impl<S: Storage> Loops<S> {
     /// the transition of the state machine (nothing between these points).
     #[inline]
     fn control(&mut self, n: usize, window: Option<AcquireWindow>) {
-        let t = match window {
-            Some(w) => {
-                let loops = loops_frequency(&self.costas, self.eq.as_ref());
-                self.watch.advance(n, false);
-                Some(self.watch.window(w.estimate, loops))
+        let t = if let Some(w) = window {
+            let loops = loops_frequency(&self.costas, self.eq.as_ref());
+            // No check falls at the end of a window (the windows are shorter than a check).
+            self.watch.advance(n, || LockCheck {
+                locked: false,
+                weight_energy: None,
+                weight_floor: 0.0,
+            });
+            Some(self.watch.window(w.estimate, loops))
+        } else {
+            let (costas, eq, reference) = (&self.costas, self.eq.as_ref(), self.reference);
+            let t = self.watch.advance(n, || LockCheck {
+                locked: costas.locked(),
+                // The energy at unit input power.
+                weight_energy: eq.map(|e| e.weight_energy() * reference),
+                weight_floor: match costas.state().constellation() {
+                    CostasConstellation::Qam64 => QAM_WATCH_WEIGHT_ENERGY_64,
+                    _ => QAM_WATCH_WEIGHT_ENERGY_16,
+                },
+            });
+            if matches!(
+                t,
+                Some(LockTransition::Settle | LockTransition::SettleUnlocked)
+            ) {
+                self.reference = self.level.mean();
             }
-            None => self.watch.advance(n, self.costas.locked()),
+            t
         };
+        if t.is_some_and(|t| t.frequency().is_some()) {
+            // A new pull-in.
+            self.level = Level::default();
+        }
         if let Some(t) = t {
             self.transition(t);
         }
@@ -882,10 +1033,14 @@ impl<S: Storage> Loops<S> {
     fn transition(&mut self, t: LockTransition) {
         match t {
             LockTransition::Acquire { frequency } => self.pull_in(frequency),
-            LockTransition::AcquireAfterMiss { frequency } => {
-                // The equalizer adapted to the noise of the windows without a clear peak.
+            // The equalizer adapted to the noise of the windows without a clear peak (in the
+            // search, or in a gap of the signal, M44.1 §6).
+            LockTransition::AcquireAfterMiss { frequency }
+            | LockTransition::Return { frequency } => {
                 if let Some(eq) = self.eq.as_mut() {
                     eq.restart();
+                    // A valid bandwidth: the call cannot fail.
+                    let _ = eq.set_phase_bw(QAM_TRACKER_PULL_BW);
                 }
                 self.hand = HandOver::start(self.eq.is_some());
                 self.pull_in(frequency);
@@ -896,7 +1051,7 @@ impl<S: Storage> Loops<S> {
                 self.acquire.verify();
             }
             LockTransition::Doubt => self.acquire.verify(),
-            LockTransition::Restart => {
+            LockTransition::Restart | LockTransition::Shrink => {
                 if let Some(eq) = self.eq.as_mut() {
                     eq.restart();
                     // A valid bandwidth: the call cannot fail.
@@ -1010,6 +1165,8 @@ impl<S: Storage> Block for QamDemodBlock<S> {
         self.rx.acquire.reset();
         self.rx.watch.reset();
         self.rx.hand = HandOver::start(self.rx.eq.is_some());
+        self.rx.level = Level::default();
+        self.rx.reference = 1.0;
     }
 
     fn set_param(&mut self, name: &str, _value: ParamValue) -> Result<()> {

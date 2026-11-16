@@ -23,8 +23,8 @@ use common::{check_block, rate, run_block, same_bits};
 use sdrk::{C32, Sdrk};
 use sdrk_blocks::{
     AcquireWindow, Block, CostasBlock, CostasConfig, CostasConstellation, EqConstellation,
-    EqualizeBlock, EqualizeConfig, LockPolicy, LockState, LockTransition, LockWatch,
-    QAM_ACQUISITION_SKIP, QAM_ACQUISITION_SYMBOLS, QamAcquireBlock, QamAcquireConfig,
+    EqualizeBlock, EqualizeConfig, LockAction, LockCheck, LockPolicy, LockState, LockTransition,
+    LockWatch, QAM_ACQUISITION_SKIP, QAM_ACQUISITION_SYMBOLS, QamAcquireBlock, QamAcquireConfig,
     SymbolSyncBlock, SymbolSyncConfig,
 };
 use sdrk_core::kernels::constellation::Qam;
@@ -539,6 +539,17 @@ struct Policy;
 impl LockPolicy for Policy {
     const CHECK: u16 = 4096;
     const TOLERANCE: f64 = 2e-4;
+    const WEIGHT_CHECKS: u8 = 2;
+    const GAP_WINDOWS: u8 = 6;
+}
+
+/// The inputs of a check: the lock, and a weight energy above the floor.
+fn chk(locked: bool) -> impl FnOnce() -> LockCheck {
+    move || LockCheck {
+        locked,
+        weight_energy: Some(1.0),
+        weight_floor: 0.75,
+    }
 }
 
 #[test]
@@ -549,29 +560,32 @@ fn lock_watch_takes_every_transition_of_step_one() {
         (LockState::Search, usize::MAX, None)
     );
     // Search: no check counts
-    assert_eq!(w.advance(5000, false), None);
+    assert_eq!(w.advance(5000, chk(false)), None);
     assert_eq!(
         w.window(Some(0.001), 0.0),
         LockTransition::Acquire { frequency: 0.001 }
     );
     assert_eq!((w.state(), w.remaining()), (LockState::PullIn, 4096));
-    assert_eq!(w.advance(4000, false), None);
+    assert_eq!(w.advance(4000, chk(false)), None);
     assert_eq!(w.remaining(), 96);
-    assert_eq!(w.advance(96, true), Some(LockTransition::Settle));
+    assert_eq!(w.advance(96, chk(true)), Some(LockTransition::Settle));
     assert_eq!(w.state(), LockState::Track);
-    assert_eq!(w.advance(4096, true), Some(LockTransition::Hold));
-    assert_eq!(w.advance(4096, false), Some(LockTransition::Doubt));
+    assert_eq!(w.advance(4096, chk(true)), Some(LockTransition::Hold));
+    assert_eq!(w.advance(4096, chk(false)), Some(LockTransition::Doubt));
     assert_eq!(w.state(), LockState::Verify);
     // a verify window without a clear peak, or within the tolerance (modulo a quarter cycle)
-    assert_eq!(w.advance(768, false), None);
+    assert_eq!(w.advance(768, chk(false)), None);
     assert_eq!(w.window(None, 0.001), LockTransition::Confirm);
     assert_eq!((w.state(), w.remaining()), (LockState::Track, 4096 - 768));
-    assert_eq!(w.advance(4096 - 768, false), Some(LockTransition::Doubt));
+    assert_eq!(
+        w.advance(4096 - 768, chk(false)),
+        Some(LockTransition::Doubt)
+    );
     assert_eq!(
         w.window(Some(0.0011), 0.001 - 0.25),
         LockTransition::Confirm
     );
-    assert_eq!(w.advance(4096, false), Some(LockTransition::Doubt));
+    assert_eq!(w.advance(4096, chk(false)), Some(LockTransition::Doubt));
     assert_eq!(w.window(Some(0.0013), 0.001), LockTransition::Restart);
     assert_eq!(
         (w.state(), w.restarts(), w.acquired()),
@@ -584,7 +598,10 @@ fn lock_watch_takes_every_transition_of_step_one() {
         w.window(Some(-0.002), 0.0),
         LockTransition::AcquireAfterMiss { frequency: -0.002 }
     );
-    assert_eq!(w.advance(4096, false), Some(LockTransition::SettleUnlocked));
+    assert_eq!(
+        w.advance(4096, chk(false)),
+        Some(LockTransition::SettleUnlocked)
+    );
     assert_eq!(w.state(), LockState::Verify);
     // the next search after a restart is fresh again
     assert_eq!(w.window(Some(0.01), -0.002), LockTransition::Restart);
@@ -593,9 +610,178 @@ fn lock_watch_takes_every_transition_of_step_one() {
         LockTransition::Acquire { frequency: 0.01 }
     );
     assert_eq!(w.restarts(), 2);
+    assert!(w.recovery());
     w.reset();
     assert_eq!(
         format!("{w:?}"),
         format!("{:?}", LockWatch::<Policy>::new())
     );
+}
+
+/// The inputs of a check with the weight energy `energy` against the floor 0.75.
+fn chk_e(locked: bool, energy: f32) -> impl FnOnce() -> LockCheck {
+    move || LockCheck {
+        locked,
+        weight_energy: Some(energy),
+        weight_floor: 0.75,
+    }
+}
+
+/// A watch in `Track` after an estimate of 0.001 cycles per symbol.
+fn tracking<P: LockPolicy>() -> LockWatch<P> {
+    let mut w = LockWatch::<P>::new();
+    assert_eq!(
+        w.window(Some(0.001), 0.0),
+        LockTransition::Acquire { frequency: 0.001 }
+    );
+    assert_eq!(w.advance(4096, chk(true)), Some(LockTransition::Settle));
+    w
+}
+
+#[test]
+fn lock_watch_takes_the_weight_watch_of_step_two() {
+    // the weight watch: low checks in a row in `Track`, with or without lock, also across a
+    // verify window; a check above the floor starts the count again
+    let mut w = tracking::<Policy>();
+    assert_eq!(
+        w.advance(4096, chk_e(true, 0.74)),
+        Some(LockTransition::Hold)
+    );
+    assert_eq!(w.low_checks(), 1);
+    assert_eq!(
+        w.advance(4096, chk_e(true, 0.75)),
+        Some(LockTransition::Hold)
+    );
+    assert_eq!(w.low_checks(), 0);
+    assert_eq!(
+        w.advance(4096, chk_e(false, 0.5)),
+        Some(LockTransition::Doubt)
+    );
+    assert_eq!(w.advance(768, chk_e(false, 0.5)), None);
+    assert_eq!(w.window(None, 0.001), LockTransition::Confirm);
+    assert_eq!(
+        (w.state(), w.low_checks(), w.misses()),
+        (LockState::Track, 1, 1)
+    );
+    assert_eq!(
+        w.advance(4096 - 768, chk_e(false, f32::NAN)),
+        Some(LockTransition::Shrink)
+    );
+    assert_eq!(LockTransition::Shrink.action(), LockAction::RestartAll);
+    assert_eq!(
+        (w.state(), w.restarts(), w.low_checks(), w.misses()),
+        (LockState::Search, 1, 0, 0)
+    );
+    assert_eq!(w.acquired(), Some(0.001));
+    // the first check after an estimate does not count; without an equalizer nothing counts
+    let mut w = LockWatch::<Policy>::new();
+    w.window(Some(0.001), 0.0);
+    assert_eq!(
+        w.advance(4096, chk_e(true, 0.1)),
+        Some(LockTransition::Settle)
+    );
+    assert_eq!(w.low_checks(), 0);
+    let none = || LockCheck {
+        locked: true,
+        weight_energy: None,
+        weight_floor: 0.75,
+    };
+    for _ in 0..10 {
+        assert_eq!(w.advance(4096, none), Some(LockTransition::Hold));
+    }
+    assert_eq!(w.restarts(), 0);
+}
+
+#[test]
+fn lock_watch_takes_the_signal_back_after_a_gap_and_names_the_actions() {
+    // the signal back after a gap: a clear verify window within the tolerance after at least
+    // `GAP_WINDOWS` verify windows in a row without a clear peak
+    let mut w = tracking::<Policy>();
+    for k in 1..=6u8 {
+        assert_eq!(w.advance(4096, chk(false)), Some(LockTransition::Doubt));
+        assert_eq!(w.window(None, 0.001), LockTransition::Confirm);
+        assert_eq!(w.misses(), k);
+    }
+    assert_eq!(w.advance(4096, chk(false)), Some(LockTransition::Doubt));
+    let back = w.window(Some(0.00105), 0.001);
+    assert_eq!(back, LockTransition::Return { frequency: 0.00105 });
+    assert_eq!(back.action(), LockAction::RestartEqualizer);
+    assert_eq!(back.frequency(), Some(0.00105));
+    assert_eq!(
+        (
+            w.state(),
+            w.remaining(),
+            w.acquired(),
+            w.restarts(),
+            w.misses()
+        ),
+        (LockState::PullIn, 4096, Some(0.00105), 1, 0)
+    );
+    assert_eq!(w.advance(4096, chk(true)), Some(LockTransition::Settle));
+    // five windows without a clear peak are not a gap; a clear one in between starts the count
+    // again (the hysteresis for weak signals, D1619)
+    let mut w = tracking::<Policy>();
+    for clear in [
+        false, false, false, false, false, true, false, false, false, false, false,
+    ] {
+        assert_eq!(w.advance(4096, chk(false)), Some(LockTransition::Doubt));
+        let est = clear.then_some(0.00101);
+        assert_eq!(w.window(est, 0.001), LockTransition::Confirm);
+    }
+    assert_eq!(w.advance(4096, chk(false)), Some(LockTransition::Doubt));
+    assert_eq!(w.window(Some(0.00101), 0.001), LockTransition::Confirm);
+    assert_eq!((w.restarts(), w.misses()), (0, 0));
+    // a clear verify window away from the loops after a gap is a full restart
+    let mut w = tracking::<Policy>();
+    for _ in 0..8 {
+        w.advance(4096, chk(false));
+        w.window(None, 0.001);
+    }
+    w.advance(4096, chk(false));
+    assert_eq!(w.window(Some(0.003), 0.001), LockTransition::Restart);
+    assert_eq!(w.state(), LockState::Search);
+
+    // the actions of the transitions of step one
+    for (t, a) in [
+        (LockTransition::Miss, LockAction::Keep),
+        (LockTransition::Acquire { frequency: 0.0 }, LockAction::Keep),
+        (
+            LockTransition::AcquireAfterMiss { frequency: 0.0 },
+            LockAction::RestartEqualizer,
+        ),
+        (LockTransition::Settle, LockAction::Keep),
+        (LockTransition::SettleUnlocked, LockAction::Verify),
+        (LockTransition::Hold, LockAction::Keep),
+        (LockTransition::Doubt, LockAction::Verify),
+        (LockTransition::Confirm, LockAction::Keep),
+        (LockTransition::Restart, LockAction::RestartAll),
+    ] {
+        assert_eq!(t.action(), a, "{t:?}");
+    }
+}
+
+/// A policy with both conditions of step two off.
+struct Off;
+
+impl LockPolicy for Off {
+    const CHECK: u16 = 4096;
+    const TOLERANCE: f64 = 2e-4;
+    const WEIGHT_CHECKS: u8 = 0;
+    const GAP_WINDOWS: u8 = 0;
+}
+
+#[test]
+fn lock_watch_without_the_conditions_of_step_two_keeps_step_one() {
+    let mut w = tracking::<Off>();
+    for _ in 0..100 {
+        assert_eq!(
+            w.advance(4096, chk_e(false, 0.0)),
+            Some(LockTransition::Doubt)
+        );
+        assert_eq!(w.window(None, 0.001), LockTransition::Confirm);
+    }
+    assert_eq!((w.misses(), w.low_checks()), (100, 31));
+    assert_eq!(w.advance(4096, chk(false)), Some(LockTransition::Doubt));
+    assert_eq!(w.window(Some(0.001), 0.001), LockTransition::Confirm);
+    assert_eq!((w.restarts(), w.misses(), w.low_checks()), (0, 0, 0));
 }

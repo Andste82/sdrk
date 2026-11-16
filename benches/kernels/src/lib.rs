@@ -357,7 +357,7 @@ pub trait Kernel {
 /// All kernel names. The position gives the seed of the input (`1000 + index`), so new kernels
 /// are appended; a `<kernel>_fallback` or `<kernel>_airspy` entry takes the seed of `<kernel>`, so that
 /// both entries filter the same input.
-pub const KERNELS: [&str; 231] = [
+pub const KERNELS: [&str; 232] = [
     "convert_cs8",
     "convert_cs16",
     "convert_out_cs16",
@@ -589,6 +589,7 @@ pub const KERNELS: [&str; 231] = [
     "costas_qam64_fallback",
     "equalize_qam64",
     "equalize_qam64_fallback",
+    "psk_mod_block",
 ];
 
 /// Prepares the measurement `name` with `layout` (the FFT sizes are fixed by the name).
@@ -835,6 +836,7 @@ pub fn prepare(name: &str, layout: Layout) -> Option<Box<dyn Kernel>> {
             name.ends_with("_fallback"),
         )),
         "qam_mod_block" => Box::new(qam_family::QamModBlockK::new(rng, layout)),
+        "psk_mod_block" => Box::new(qam_family::PskModBlockK::new(rng, layout)),
         "qam_demod_block" => Box::new(qam_family::QamDemodBlockK::new(rng, layout)),
         "qam_demod_search_block" => Box::new(qam_family::QamDemodSearchK::new(rng, layout)),
         "frame_decode_four_block" => Box::new(qam_family::FrameDecodeFourBlockK::new(rng, layout)),

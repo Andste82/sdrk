@@ -881,8 +881,9 @@ const fn spec_own(name: &'static str, family: Family, own: &'static str) -> Kern
 /// M44 (`symbol_demap_qam16_block`, `symbol_demap_qam64_block`, one input symbol each) is the block
 /// around the kernel `qam_soft_bits`, whose soft bits no library computes the same way (D1201,
 /// D1412): information too, as are the QAM blocks `qam_mod_block` (one output sample) and
-/// `qam_demod_block` (one input sample), chains of kernels with entries of their own (D1216), and
-/// `frame_decode_four_block` (one soft bit, `frame_decode` with `rotations` `four`).
+/// `qam_demod_block` (one input sample), chains of kernels with entries of their own (D1216), the
+/// PSK modulator block `psk_mod_block` of M44.1 (one output sample), and `frame_decode_four_block`
+/// (one soft bit, `frame_decode` with `rotations` `four`).
 const fn proto(name: &'static str, family: Family) -> KernelSpec {
     KernelSpec {
         name,
@@ -906,7 +907,7 @@ const fn fft(name: &'static str, family: Family, samples: u64) -> KernelSpec {
 }
 
 /// The kernels of the benchmark table, in report order.
-pub static KERNELS: [KernelSpec; 231] = [
+pub static KERNELS: [KernelSpec; 232] = [
     spec("convert_cs8", Family::Volk, true),
     spec("convert_cs16", Family::Volk, true),
     spec("convert_cu8", Family::VolkAndOwn, true),
@@ -1164,6 +1165,7 @@ pub static KERNELS: [KernelSpec; 231] = [
     proto("qam_mod_block", Family::Own),
     proto("qam_demod_block", Family::Own),
     proto("qam_demod_search_block", Family::Own),
+    proto("psk_mod_block", Family::Own),
     proto("frame_decode_four_block", Family::Own),
     spec("add", Family::Volk, false),
     spec("add_cq15", Family::Volk, false),
@@ -4804,6 +4806,7 @@ mod tests {
             "qam_demod_block",
             "qam_demod_search_block",
             "frame_decode_four_block",
+            "psk_mod_block",
         ];
         let names = crcs.iter().chain(&framing).copied().collect::<Vec<_>>();
         for level in ["sse2", "sse4.2", "avx2", "avx512", "neon", "simd128"] {

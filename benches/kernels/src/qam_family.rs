@@ -2,7 +2,7 @@
 //! `symbol_demap_qam16_block`, `symbol_demap_qam64_block`, `costas_qam16`, `costas_qam16_fallback`,
 //! `costas_qam64`, `costas_qam64_fallback`, `equalize_qam16`, `equalize_qam16_fallback`,
 //! `equalize_qam64`, `equalize_qam64_fallback`, `qam_mod_block`, `qam_demod_block` and
-//! `frame_decode_four_block`.
+//! `frame_decode_four_block`, and the PSK modulator entry of M44.1 `psk_mod_block`.
 //!
 //! | entry | measured | gate | unit of a "sample" |
 //! | --- | --- | --- | --- |
@@ -19,6 +19,7 @@
 //! | `equalize_qam64` | facade (= the fallback's loop, D841), 64-QAM | none (`info`) | one symbol |
 //! | `equalize_qam64_fallback` | our fallback, 64-QAM | GNU Radio's `linear_equalizer` on the 64-QAM `constellation_rect` | one symbol |
 //! | `qam_mod_block` | `sdrk_blocks::QamModBlock`, 16-QAM | none (`info`) | one output sample |
+//! | `psk_mod_block` | `sdrk_blocks::PskModBlock`, QPSK | none (`info`) | one output sample |
 //! | `qam_demod_block` | `sdrk_blocks::QamDemodBlock`, 16-QAM | none (`info`) | one input sample |
 //! | `frame_decode_four_block` | `sdrk_blocks::FrameDecodeBlock` with `rotations` `four` | none (`info`) | one input sample (one soft bit) |
 //!
@@ -45,6 +46,9 @@
 //! decision mode, the loops locked). `frame_decode_four_block` is the decoder of
 //! `frame_decode_block` with `rotations` `four` and 4 bits per symbol on frames turned by one
 //! quarter turn: the cost of the four inverse rotations and sync-word registers.
+//! `psk_mod_block` (M44.1 §8, the baseline before `psk_mod` becomes a composite) is the block
+//! `psk_mod` with coherent QPSK at 8 samples per symbol, roll-off 0.35 and span 10 (the flow
+//! `qpsk_transmitter`), writing 4096 output samples (512 symbols) per call, as `qam_mod_block`.
 //!
 //! Workload: 4096 symbols per call, random points of the constellation with uniform noise of
 //! ±0.05 per component, scale 1.
@@ -88,8 +92,8 @@ use sdrk::kernels::equalize::{EqConstellation, EqParams, Equalize, EqualizeState
 use sdrk::{C32, Fallback, Rate, Sdrk};
 use sdrk_blocks::{
     ArenaStorage, Block, FrameDecodeBlock, FrameDecodeConfig, FrameRotations, Packet, PacketFlags,
-    QamDemodBlock, QamDemodConfig, QamModBlock, QamModConfig, SymbolDemapBlock, SymbolDemapConfig,
-    SymbolDemapConstellation,
+    PskModBlock, PskModConfig, QamDemodBlock, QamDemodConfig, QamModBlock, QamModConfig,
+    SymbolDemapBlock, SymbolDemapConfig, SymbolDemapConstellation,
 };
 use sdrk_core::Reference;
 use sdrk_core::kernels::constellation::{Qam, QamSoftBits};
@@ -834,6 +838,125 @@ impl Kernel for QamModBlockK {
         self.block.reset();
         qam_mod_call(&mut self.block, &self.bits, &mut self.out);
         let want: Vec<f64> = qam_mod_f64(&self.bits)
+            .into_iter()
+            .flat_map(|(re, im)| [re, im])
+            .collect();
+        snr_db(&want, &c32s(&self.out))
+    }
+
+    fn supports(&self, which: Impl) -> bool {
+        matches!(which, Impl::Ours | Impl::Fallback)
+    }
+
+    fn describe(&self, which: Impl) -> &'static str {
+        match which {
+            Impl::Fallback => "sdrk fallback",
+            _ => "sdrk",
+        }
+    }
+}
+
+fn psk_mod_config() -> PskModConfig {
+    PskModConfig {
+        order: 4,
+        samples_per_symbol: BLOCK_SPS,
+        ..PskModConfig::default()
+    }
+}
+
+fn psk_mod_block() -> PskModBlock<ArenaStorage<'static>> {
+    let cfg = psk_mod_config();
+    let rate = block_rate(50_000);
+    let bytes = PskModBlock::<ArenaStorage<'static>>::storage_bytes(&cfg, rate).expect("storage");
+    PskModBlock::new(&cfg, rate, &mut leaked_arena(bytes)).expect("psk_mod block")
+}
+
+/// The block `psk_mod` (coherent QPSK, 8 samples per symbol, roll-off 0.35, span 10) writing `n`
+/// output samples (`n / 8` symbols of random bits) per call.
+pub(crate) struct PskModBlockK {
+    block: PskModBlock<ArenaStorage<'static>>,
+    bits: Vec<f32>,
+    out: Vec<C32>,
+}
+
+impl PskModBlockK {
+    pub(crate) fn new(rng: &mut Pcg32, layout: Layout) -> Self {
+        PskModBlockK {
+            block: psk_mod_block(),
+            bits: (0..2 * (layout.n / BLOCK_SPS))
+                .map(|_| if rng.next_u32() & 1 == 1 { 1.0 } else { -1.0 })
+                .collect(),
+            out: vec![C32::default(); layout.n],
+        }
+    }
+}
+
+#[inline(never)]
+fn psk_mod_call(block: &mut PskModBlock<ArenaStorage<'static>>, bits: &[f32], out: &mut [C32]) {
+    let _ = block.process(black_box(bits), out);
+}
+
+/// `psk_mod` with coherent QPSK in `f64` from a zero history: the Gray points of M40 at
+/// `(1, 1) -> pi / 4`, `(0, 1) -> 3 pi / 4`, `(0, 0) -> 5 pi / 4`, `(1, 0) -> 7 pi / 4` at every
+/// `sps`-th sample, filtered with `rrc(0.35, sps, 10) sqrt(sps)`.
+fn psk_mod_f64(bits: &[f32]) -> Vec<(f64, f64)> {
+    let cfg = psk_mod_config();
+    let sps = cfg.samples_per_symbol;
+    let mut taps = vec![0.0f64; sdrk_blocks::design::rrc_len(sps, cfg.span).expect("rrc")];
+    sdrk_blocks::design::rrc(cfg.rolloff, sps, cfg.span, &mut taps).expect("rrc");
+    #[allow(clippy::cast_precision_loss, reason = "a small integer")]
+    let gain = (sps as f64).sqrt();
+    let syms: Vec<(f64, f64)> = bits
+        .chunks_exact(2)
+        .map(|b| {
+            let k = match (b[0] > 0.0, b[1] > 0.0) {
+                (true, true) => 1.0,
+                (false, true) => 3.0,
+                (false, false) => 5.0,
+                (true, false) => 7.0,
+            };
+            let a = k * std::f64::consts::FRAC_PI_4;
+            (a.cos(), a.sin())
+        })
+        .collect();
+    let n = syms.len() * sps;
+    (0..n)
+        .map(|t| {
+            let (mut re, mut im) = (0.0, 0.0);
+            for (k, h) in taps.iter().enumerate() {
+                if let Some(j) = t.checked_sub(k).filter(|j| j % sps == 0)
+                    && let Some(&(sr, si)) = syms.get(j / sps)
+                {
+                    re += h * gain * sr;
+                    im += h * gain * si;
+                }
+            }
+            (re, im)
+        })
+        .collect()
+}
+
+impl Kernel for PskModBlockK {
+    fn run(&mut self, which: Impl, k: usize) {
+        for _ in 0..k {
+            match which {
+                Impl::Ours | Impl::Fallback => {
+                    psk_mod_call(&mut self.block, &self.bits, &mut self.out);
+                }
+                other => unreachable!("psk_mod_block has no {other:?}"),
+            }
+            black_box(&self.out);
+        }
+    }
+
+    /// One call from the reset state against the `f64` model.
+    fn accuracy(&mut self, which: Impl) -> f64 {
+        if !self.supports(which) {
+            return 0.0;
+        }
+        self.block.reset();
+        psk_mod_call(&mut self.block, &self.bits, &mut self.out);
+        let want: Vec<f64> = psk_mod_f64(&self.bits)
             .into_iter()
             .flat_map(|(re, im)| [re, im])
             .collect();

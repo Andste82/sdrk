@@ -309,6 +309,8 @@ dependencies = [
 name = "sdrk-proto"
 version = "0.1.0"
 dependencies = [
+ "bytemuck",
+ "libm",
  "sdrk-device",
 ]
 

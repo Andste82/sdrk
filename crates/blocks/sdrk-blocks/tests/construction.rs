@@ -43,9 +43,10 @@ use sdrk_blocks::{
     CostasBlock, CostasConfig, FrameRotations, FskDemodBlock, InterpolateBlock, IqOffsetBlock,
     IqOffsetConfig, IqPart, MorseDecodeBlock, MorseDecodeConfig, MorseEncodeBlock,
     MorseEncodeConfig, OokDemodBlock, PskDemodBlock, PskDemodConfig, PskModBlock, PskModConfig,
-    PskVariant, QamAcquireBlock, QamAcquireConfig, QamDemodBlock, QamDemodConfig, QamModBlock,
-    QamModConfig, RdsDecodeBlock, RdsDecodeConfig, RdsDemodBlock, RdsDemodConfig, SymbolMapBlock,
-    SymbolMapConfig, SymbolMapConstellation, SymbolMapVariant,
+    PskVariant, QamAcquireBlock, QamAcquireConfig, QamDemodBlock, QamDemodConfig,
+    QamFrameDecodeBlock, QamFrameDecodeConfig, QamFrameEncodeBlock, QamFrameEncodeConfig,
+    QamModBlock, QamModConfig, RdsDecodeBlock, RdsDecodeConfig, RdsDemodBlock, RdsDemodConfig,
+    SymbolMapBlock, SymbolMapConfig, SymbolMapConstellation, SymbolMapVariant,
 };
 use sdrk_device::{SdrkError, formats};
 
@@ -438,6 +439,28 @@ fn psk_blocks_storage_is_exact() {
             |a| QamDemodBlock::new(&cfg, r, a).map(|_| ()),
         );
     }
+    // M44.1 §7: the composites qam_frame_encode and qam_frame_decode
+    for (order, sps) in [(16usize, 8usize), (64, 4)] {
+        let mut cfg = QamFrameEncodeConfig::default();
+        cfg.qam.order = order as u32;
+        cfg.qam.samples_per_symbol = sps;
+        let r = rate(100_000);
+        check_exact_storage(
+            QamFrameEncodeBlock::<A<'_>>::storage_bytes(&cfg, r).unwrap(),
+            |a| QamFrameEncodeBlock::new(&cfg, r, a).map(|_| ()),
+        );
+    }
+    for (order, equalizer_taps) in [(16u32, 15usize), (64, 0)] {
+        let mut cfg = QamFrameDecodeConfig::default();
+        cfg.demod.order = order;
+        cfg.demod.symbol_rate_hz = 25_000.0;
+        cfg.demod.equalizer_taps = equalizer_taps;
+        let r = rate(200_000);
+        check_exact_storage(
+            QamFrameDecodeBlock::<A<'_>>::storage_bytes(&cfg, r).unwrap(),
+            |a| QamFrameDecodeBlock::new(&cfg, r, a).map(|_| ()),
+        );
+    }
     // M41: rds_demod at three rates, rds_decode needs no storage
     for fs in [128_000u64, 240_000, 1_000_000] {
         let cfg = RdsDemodConfig::default();
@@ -627,6 +650,8 @@ fn no_composite_block_is_larger_than_2048_bytes() {
         PskModBlock,
         QamModBlock,
         QamDemodBlock,
+        QamFrameEncodeBlock,
+        QamFrameDecodeBlock,
         FskDemodBlock,
         OokDemodBlock
     );
@@ -721,6 +746,14 @@ fn public_types_are_send() {
     assert_sync::<QamDemodBlock<A<'static>>>();
     assert_send::<QamDemodConfig>();
     assert_sync::<QamDemodConfig>();
+    assert_send::<QamFrameEncodeBlock<A<'static>>>();
+    assert_sync::<QamFrameEncodeBlock<sdrk_testkit::VecStorage>>();
+    assert_send::<QamFrameEncodeConfig>();
+    assert_send::<QamFrameDecodeBlock<A<'static>>>();
+    assert_sync::<QamFrameDecodeBlock<sdrk_testkit::VecStorage>>();
+    assert_send::<QamFrameDecodeConfig>();
+    assert_send::<sdrk_blocks::FrameWatch>();
+    assert_sync::<sdrk_blocks::FrameWatch>();
     assert_send::<RdsDemodBlock<A<'static>>>();
     assert_send::<RdsDemodBlock<sdrk_testkit::VecStorage>>();
     assert_sync::<RdsDemodBlock<A<'static>>>();

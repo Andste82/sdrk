@@ -3814,6 +3814,211 @@
           },
           {
             "additionalProperties": false,
+            "description": "Demodulates 16-QAM or 64-QAM and decodes the packets of the test framing, with a watch at frame level.",
+            "properties": {
+              "align": {
+                "$ref": "#/$defs/AlignMode"
+              },
+              "backend": {
+                "$ref": "#/$defs/BackendSpec"
+              },
+              "description": {
+                "maxLength": 2000,
+                "type": "string"
+              },
+              "group": {
+                "description": "The group of the node (a key of `groups`); nodes without one are in `main`.",
+                "pattern": "^[a-z][a-z0-9_]{0,63}$",
+                "type": "string"
+              },
+              "kind": {
+                "const": "qam_frame_decode"
+              },
+              "params": {
+                "additionalProperties": false,
+                "properties": {
+                  "carrier_bw": {
+                    "default": 0.0025,
+                    "description": "Loop bandwidth of the carrier loop, normalized to the symbol rate. Typical: 0.0025; wider for phase noise. Build-time.",
+                    "maximum": 0.2,
+                    "minimum": 0.0001,
+                    "type": "number"
+                  },
+                  "emit_bad": {
+                    "default": false,
+                    "description": "Also output frames whose CRC does not match, with the flag CRC_FAIL. Typical: false; true to count or inspect damaged frames. Build-time.",
+                    "type": "boolean"
+                  },
+                  "equalizer_taps": {
+                    "default": 11,
+                    "description": "Forward taps of the adaptive equalizer between the timing loop and the carrier loop: 0 (off) or odd from 3 to 63. Typical: 11; 15 against stronger multipath. Build-time.",
+                    "maximum": 63,
+                    "minimum": 0,
+                    "type": "integer"
+                  },
+                  "frame_timeout": {
+                    "default": 16384,
+                    "description": "Symbols without a frame with CRC_OK, after one since the start, a reset or the last restart by the watch, after which the demodulator starts again (the equalizer, the loops at frequency 0 and a new search of the acquisition); 0 turns the watch off. Typical: 16384 (four checks of the demodulator); above the longest pause of the sender between frames; 0 for off. Build-time.",
+                    "maximum": 1048576,
+                    "minimum": 0,
+                    "type": "integer"
+                  },
+                  "max_sync_errors": {
+                    "default": 0,
+                    "description": "Number of sync word bits that may differ. Typical: 0 for clean links, 2 for noisy ones. Build-time.",
+                    "maximum": 4,
+                    "minimum": 0,
+                    "type": "integer"
+                  },
+                  "order": {
+                    "default": 16,
+                    "description": "Order of the quadrature amplitude modulation: 16 (16-QAM, 4 bits per symbol) or 64 (64-QAM, 6 bits per symbol). Typical: 16 for 16-QAM, 64 for 64-QAM. Build-time.",
+                    "maximum": 64,
+                    "minimum": 16,
+                    "type": "integer"
+                  },
+                  "rolloff": {
+                    "default": 0.35,
+                    "description": "Roll-off of the matched root-raised-cosine filter. Typical: 0.35 (the roll-off of the transmitter). Build-time.",
+                    "maximum": 1.0,
+                    "minimum": 0.05,
+                    "type": "number"
+                  },
+                  "span": {
+                    "default": 10,
+                    "description": "Length of the matched filter in symbols. Typical: 10. Build-time.",
+                    "maximum": 32,
+                    "minimum": 4,
+                    "type": "integer"
+                  },
+                  "symbol_rate_hz": {
+                    "description": "Symbol rate in Hz; the sample rate must be within 1 % of an integer multiple (2 to 1024) of it and at least twice it. Required. Unit: Hz. Typical: 25000 for 100 kbit/s 16-QAM. Build-time.",
+                    "maximum": 1000000000000.0,
+                    "minimum": 0.001,
+                    "type": "number"
+                  },
+                  "sync_bw": {
+                    "default": 0.005,
+                    "description": "Loop bandwidth of the symbol timing, normalized to the symbol rate. Typical: 0.005; up to 0.01 for a faster acquisition. Build-time.",
+                    "maximum": 0.1,
+                    "minimum": 0.0001,
+                    "type": "number"
+                  },
+                  "whitening": {
+                    "default": "none",
+                    "description": "Whitening the sender applied to length, payload and CRC: none, or pn9 (the PN9 sequence is removed). Typical: none; pn9 for links whose data has long runs of equal bits. Build-time.",
+                    "enum": [
+                      "none",
+                      "pn9"
+                    ],
+                    "type": "string"
+                  }
+                },
+                "required": [
+                  "symbol_rate_hz"
+                ],
+                "type": "object"
+              }
+            },
+            "required": [
+              "kind",
+              "params"
+            ],
+            "type": "object"
+          },
+          {
+            "additionalProperties": false,
+            "description": "Frames packets and modulates them as 16-QAM or 64-QAM: frame_encode then qam_mod in one block.",
+            "properties": {
+              "align": {
+                "$ref": "#/$defs/AlignMode"
+              },
+              "backend": {
+                "$ref": "#/$defs/BackendSpec"
+              },
+              "description": {
+                "maxLength": 2000,
+                "type": "string"
+              },
+              "group": {
+                "description": "The group of the node (a key of `groups`); nodes without one are in `main`.",
+                "pattern": "^[a-z][a-z0-9_]{0,63}$",
+                "type": "string"
+              },
+              "kind": {
+                "const": "qam_frame_encode"
+              },
+              "params": {
+                "additionalProperties": false,
+                "properties": {
+                  "idle": {
+                    "default": "zero",
+                    "description": "What is sent between frames: zero sends 0.0, preamble the bits of 0x55 as +1/-1, pn9 the bits of the PN9 sequence as +1/-1. Typical: zero; preamble to keep a receiver's clock recovery busy; pn9 for QAM and PSK receivers. Build-time.",
+                    "enum": [
+                      "zero",
+                      "preamble",
+                      "pn9"
+                    ],
+                    "type": "string"
+                  },
+                  "order": {
+                    "default": 16,
+                    "description": "Order of the quadrature amplitude modulation: 16 (16-QAM, 4 bits per symbol) or 64 (64-QAM, 6 bits per symbol). Typical: 16 for 16-QAM, 64 for 64-QAM. Build-time.",
+                    "maximum": 64,
+                    "minimum": 16,
+                    "type": "integer"
+                  },
+                  "preamble_bytes": {
+                    "default": 4,
+                    "description": "Bytes 0x55 sent before the sync word of every frame. Typical: 4; more for receivers that need time to settle. Build-time.",
+                    "maximum": 32,
+                    "minimum": 0,
+                    "type": "integer"
+                  },
+                  "rolloff": {
+                    "default": 0.35,
+                    "description": "Roll-off of the root-raised-cosine pulse. Typical: 0.35; 0.2 for a narrow spectrum. Build-time.",
+                    "maximum": 1.0,
+                    "minimum": 0.05,
+                    "type": "number"
+                  },
+                  "samples_per_symbol": {
+                    "description": "Output samples per symbol, 2 to 64. Required. Typical: 8. Build-time.",
+                    "maximum": 64,
+                    "minimum": 2,
+                    "type": "integer"
+                  },
+                  "span": {
+                    "default": 10,
+                    "description": "Length of the pulse in symbols (span samples_per_symbol + 1 taps). Typical: 10; 16 or more for less intersymbol interference. Build-time.",
+                    "maximum": 32,
+                    "minimum": 4,
+                    "type": "integer"
+                  },
+                  "whitening": {
+                    "default": "none",
+                    "description": "Whitening of length, payload and CRC: none, or pn9 (XOR with the PN9 sequence). Typical: none; pn9 for links whose data has long runs of equal bits. Build-time.",
+                    "enum": [
+                      "none",
+                      "pn9"
+                    ],
+                    "type": "string"
+                  }
+                },
+                "required": [
+                  "samples_per_symbol"
+                ],
+                "type": "object"
+              }
+            },
+            "required": [
+              "kind",
+              "params"
+            ],
+            "type": "object"
+          },
+          {
+            "additionalProperties": false,
             "description": "Turns soft bits into 16-QAM or 64-QAM symbols shaped with a root-raised-cosine pulse.",
             "properties": {
               "align": {

@@ -64,6 +64,48 @@ pub(crate) fn order_of_value(value: &ParamValue) -> Result<u32> {
     Ok(o)
 }
 
+/// The `samples_per_symbol` parameter of `qam_mod` and `qam_frame_encode`.
+pub(crate) const SAMPLES_PER_SYMBOL_PARAM: ParamDesc = ParamDesc {
+    name: "samples_per_symbol",
+    unit: Unit::None,
+    kind: ParamKind::I64 {
+        min: 2,
+        max: MAX_SPS as i64,
+        default: None,
+    },
+    typical: "8",
+    mutability: Mutability::Build,
+    description: "Output samples per symbol, 2 to 64. Required.",
+};
+
+/// The `rolloff` parameter of `qam_mod` and `qam_frame_encode`.
+pub(crate) const MOD_ROLLOFF_PARAM: ParamDesc = ParamDesc {
+    name: "rolloff",
+    unit: Unit::None,
+    kind: ParamKind::F64 {
+        min: RRC_MIN_ROLLOFF,
+        max: 1.0,
+        default: Some(0.35),
+    },
+    typical: "0.35; 0.2 for a narrow spectrum",
+    mutability: Mutability::Build,
+    description: "Roll-off of the root-raised-cosine pulse.",
+};
+
+/// The `span` parameter of `qam_mod` and `qam_frame_encode`.
+pub(crate) const MOD_SPAN_PARAM: ParamDesc = ParamDesc {
+    name: "span",
+    unit: Unit::None,
+    kind: ParamKind::I64 {
+        min: RRC_MIN_SPAN as i64,
+        max: RRC_MAX_SPAN as i64,
+        default: Some(10),
+    },
+    typical: "10; 16 or more for less intersymbol interference",
+    mutability: Mutability::Build,
+    description: "Length of the pulse in symbols (span samples_per_symbol + 1 taps).",
+};
+
 /// Description of the `qam_mod` block.
 pub static DESCRIPTION: BlockDescription = BlockDescription {
     kind: "qam_mod",
@@ -96,42 +138,9 @@ pub static DESCRIPTION: BlockDescription = BlockDescription {
     }],
     params: &[
         ORDER_PARAM,
-        ParamDesc {
-            name: "samples_per_symbol",
-            unit: Unit::None,
-            kind: ParamKind::I64 {
-                min: 2,
-                max: MAX_SPS as i64,
-                default: None,
-            },
-            typical: "8",
-            mutability: Mutability::Build,
-            description: "Output samples per symbol, 2 to 64. Required.",
-        },
-        ParamDesc {
-            name: "rolloff",
-            unit: Unit::None,
-            kind: ParamKind::F64 {
-                min: RRC_MIN_ROLLOFF,
-                max: 1.0,
-                default: Some(0.35),
-            },
-            typical: "0.35; 0.2 for a narrow spectrum",
-            mutability: Mutability::Build,
-            description: "Roll-off of the root-raised-cosine pulse.",
-        },
-        ParamDesc {
-            name: "span",
-            unit: Unit::None,
-            kind: ParamKind::I64 {
-                min: RRC_MIN_SPAN as i64,
-                max: RRC_MAX_SPAN as i64,
-                default: Some(10),
-            },
-            typical: "10; 16 or more for less intersymbol interference",
-            mutability: Mutability::Build,
-            description: "Length of the pulse in symbols (span samples_per_symbol + 1 taps).",
-        },
+        SAMPLES_PER_SYMBOL_PARAM,
+        MOD_ROLLOFF_PARAM,
+        MOD_SPAN_PARAM,
     ],
     required: &["samples_per_symbol"],
 };
@@ -326,14 +335,24 @@ impl<S: Storage> QamModBlock<S> {
     /// # Errors
     /// As [`QamModConfig::validate`].
     pub fn storage_bytes(config: &QamModConfig, _rate_in: Rate) -> Result<usize> {
+        let mut plan = Plan::default();
+        Self::plan(config, &mut plan)?;
+        Ok(plan.bytes())
+    }
+
+    /// Adds the buffers of the block to `plan`, in the order `new` takes them.
+    pub(crate) fn plan(config: &QamModConfig, plan: &mut Plan) -> Result<()> {
         config.validate()?;
         let sps = config.samples_per_symbol;
         let n = config.span * sps + 1;
-        let mut plan = Plan::default();
         plan.add::<f32>(n)?;
         plan.add::<C32>(n.div_ceil(sps))?;
-        plan.add::<C32>(QAM_MOD_CHUNK)?;
-        Ok(plan.bytes())
+        plan.add::<C32>(QAM_MOD_CHUNK)
+    }
+
+    /// The configuration of the block.
+    pub fn config(&self) -> QamModConfig {
+        self.config
     }
 
     /// Output rate: the bit rate times `samples_per_symbol / bits_per_symbol`.

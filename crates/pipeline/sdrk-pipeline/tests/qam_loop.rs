@@ -1,4 +1,7 @@
-//! M44 test 7: the example flows `qam16_transmitter` -> channel -> `qam16_receiver`.
+//! M44 test 7 and M44.1 test 9: the example flows `qam16_transmitter` -> channel ->
+//! `qam16_receiver`, since M44.1 on the composites `qam_frame_encode` and `qam_frame_decode`
+//! (the transmitter's bytes and the receiver's soft bits keep the baseline of the pairs they
+//! replace).
 //!
 //! The transmitter runs in pull mode: the packet source is idle for the first
 //! [`LEAD_SYMBOLS`] symbols (the encoder sends its idle signal, the PN9 sequence, while the
@@ -122,7 +125,12 @@ fn random_packets() -> Vec<Packet> {
 /// Runs the transmitter until every counted packet is sent and the tail is out; returns the
 /// complex baseband (the `cs16` samples divided by 32768).
 fn transmit(packets: &[Packet]) -> Vec<Complex64> {
-    let mut tx = build(&flow("qam16_transmitter"));
+    transmit_with(&flow("qam16_transmitter"), packets)
+}
+
+/// [`transmit`] with the transmitter flow `spec`.
+fn transmit_with(spec: &str, packets: &[Packet]) -> Vec<Complex64> {
+    let mut tx = build(spec);
     let mut source = Sender {
         packets: packets.to_vec(),
         next: 0,
@@ -191,6 +199,9 @@ struct Received {
     rotations: Vec<u32>,
     /// Packets out (with `CRC_OK` or not).
     out: usize,
+    /// The longest interval in symbols between the sync words of two successive packets with
+    /// `CRC_OK` after the first (the measure of the default `frame_timeout`, D1575).
+    longest: u64,
 }
 
 /// Runs the receiver flow on `bytes`.
@@ -218,10 +229,18 @@ fn receive(bytes: &[u8], packets: &[Packet]) -> Received {
             }
         }
     }
+    // The packet index counts the 200 kHz input samples of `qam_frame_decode`, 8 per symbol.
+    let starts: Vec<u64> = got
+        .iter()
+        .filter(|p| p.flags.contains(PacketFlags::CRC_OK))
+        .map(|p| p.index / 8)
+        .collect();
+    let longest = starts.windows(2).map(|w| w[1] - w[0]).max().unwrap_or(0);
     Received {
         ok,
         rotations,
         out: got.len(),
+        longest,
     }
 }
 
@@ -230,11 +249,11 @@ fn the_qam16_flows_validate_without_warnings() {
     for (name, kinds) in [
         (
             "qam16_transmitter",
-            &["convert_out", "duc", "frame_encode", "qam_mod", "scale"][..],
+            &["convert_out", "duc", "qam_frame_encode", "scale"][..],
         ),
         (
             "qam16_receiver",
-            &["agc", "convert", "ddc", "frame_decode", "qam_demod"][..],
+            &["agc", "convert", "ddc", "qam_frame_decode"][..],
         ),
     ] {
         let report = Registry::standard().validate_json(&flow(name), &BuildOptions::default());
@@ -253,12 +272,11 @@ fn the_qam16_flows_validate_without_warnings() {
         };
         if name == "qam16_transmitter" {
             // 100 kbit/s, 8 samples per 16-QAM symbol of 4 bits: 200 kHz, then 1 MHz.
-            assert_eq!(rate("qam_mod"), Rate::hz(200_000).unwrap());
+            assert_eq!(rate("qam_frame_encode"), Rate::hz(200_000).unwrap());
             assert_eq!(rate("duc"), Rate::hz(1_000_000).unwrap());
         } else {
-            // 200 kHz into the demodulator, 100 kbit/s of soft bits out.
+            // 200 kHz into the demodulator.
             assert_eq!(rate("ddc"), Rate::hz(200_000).unwrap());
-            assert_eq!(rate("qam_demod"), Rate::hz(100_000).unwrap());
         }
         eprintln!(
             "{name}: cost {:.1} per input sample, {} bytes",
@@ -317,9 +335,9 @@ fn qam16_flows_carry_1000_packets_through_multipath_noise_and_a_carrier_offset()
             .collect();
         handles.into_iter().map(|h| h.join().unwrap()).collect()
     });
-    let summary: Vec<(usize, &[u32], usize)> = results
+    let summary: Vec<(usize, &[u32], usize, u64)> = results
         .iter()
-        .map(|r| (r.ok.len(), &r.rotations[..], r.out))
+        .map(|r| (r.ok.len(), &r.rotations[..], r.out, r.longest))
         .collect();
     let missing: Vec<Vec<usize>> = results
         .iter()
@@ -327,7 +345,8 @@ fn qam16_flows_carry_1000_packets_through_multipath_noise_and_a_carrier_offset()
         .collect();
     eprintln!(
         "qam_loop: {} samples, power {power:.4}, peak {peak:.4}; (correct, rotations, out) at \
-         0, 90, 180, 270 degrees: {summary:?}; missing packets {missing:?}",
+         0, 90, 180, 270 degrees (and the longest interval in symbols between packets with CRC_OK): \
+         {summary:?}; missing packets {missing:?}",
         tx.len()
     );
     for (q, r) in results.iter().enumerate() {
@@ -340,10 +359,46 @@ fn qam16_flows_carry_1000_packets_through_multipath_noise_and_a_carrier_offset()
     }
 }
 
-/// The receiver flow up to its `qam_demod` node, whose soft bits go to the stream output `soft`.
+/// The transmitter flow before M44.1: the pair `frame_encode` -> `qam_mod` with the parameters of
+/// the `qam_frame_encode` node.
+fn pair_transmitter() -> String {
+    let mut spec: serde_json::Value = serde_json::from_str(&flow("qam16_transmitter")).unwrap();
+    let nodes = spec["nodes"].as_object_mut().unwrap();
+    let tx = nodes.remove("tx").unwrap();
+    let p = &tx["params"];
+    nodes.insert(
+        "enc".to_string(),
+        serde_json::json!({ "kind": "frame_encode", "params": {
+            "idle": p["idle"], "preamble_bytes": p["preamble_bytes"] } }),
+    );
+    nodes.insert(
+        "mod".to_string(),
+        serde_json::json!({ "kind": "qam_mod", "params": {
+            "order": p["order"], "rolloff": p["rolloff"],
+            "samples_per_symbol": p["samples_per_symbol"], "span": p["span"] } }),
+    );
+    spec["edges"] = serde_json::json!([
+        { "from": "msg", "to": "enc" },
+        { "from": "enc", "to": "mod" },
+        { "from": "mod", "to": "level" },
+        { "from": "level", "to": "duc" },
+        { "from": "duc", "to": "rf" }
+    ]);
+    spec.to_string()
+}
+
+/// The receiver flow with the `qam_demod` of its `qam_frame_decode` node (the parameters of the
+/// demodulator), whose soft bits go to the stream output `soft`.
 fn soft_receiver() -> String {
     let mut spec: serde_json::Value = serde_json::from_str(&flow("qam16_receiver")).unwrap();
-    spec["nodes"].as_object_mut().unwrap().remove("dec");
+    let nodes = spec["nodes"].as_object_mut().unwrap();
+    let mut demod = nodes.remove("rx").unwrap();
+    demod["kind"] = serde_json::json!("qam_demod");
+    let params = demod["params"].as_object_mut().unwrap();
+    for name in ["frame_timeout", "max_sync_errors", "emit_bad", "whitening"] {
+        params.remove(name);
+    }
+    nodes.insert("demod".to_string(), demod);
     spec["edges"] = serde_json::json!([
         { "from": "rf", "to": "tune" },
         { "from": "tune", "to": "agc" },
@@ -382,17 +437,20 @@ fn the_qam16_flows_keep_the_baseline_of_m44_1() {
     )
     .unwrap();
     let packets = random_packets();
-    let tx = transmit(&packets);
-    // the `cs16` bytes of the transmitter (the samples of `transmit` are exactly the `cs16`
-    // values over 32768)
+    // the `cs16` bytes of the transmitter of the pair (the samples of `transmit` are exactly the
+    // `cs16` values over 32768): in pull mode the idle symbols between the frames follow the room
+    // the pipeline gives the encoder, which for `qam_frame_encode` counts samples, not bits, so
+    // the bytes of the composite flow are checked by the receiver below and by the equality of
+    // the blocks (`qam_frame_blocks`, D1578)
+    let pair = transmit_with(&pair_transmitter(), &packets);
     let mut digest = Digest::new();
-    for v in &tx {
+    for v in &pair {
         for x in [v.re, v.im] {
             digest.bytes(&((x * 32768.0) as i16).to_le_bytes());
         }
     }
     table.check("tx_cs16", &digest).unwrap();
-    let iq = channel(&tx);
+    let iq = channel(&pair);
     let digests: Vec<Digest> = std::thread::scope(|s| {
         let handles: Vec<_> = (0..4)
             .map(|q| {

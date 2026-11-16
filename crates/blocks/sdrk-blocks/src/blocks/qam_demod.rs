@@ -76,6 +76,92 @@ const DEFAULT_SYNC_BW: f64 = 0.005;
 const RATE_REASON: &str = "the sample rate must be within 1 % of an integer multiple (2 to \
     1024) of the symbol rate and at least twice it; put a resample before qam_demod";
 
+/// The `symbol_rate_hz` parameter of `qam_demod` and `qam_frame_decode`.
+pub(crate) const SYMBOL_RATE_PARAM: ParamDesc = ParamDesc {
+    name: "symbol_rate_hz",
+    unit: Unit::Hz,
+    kind: ParamKind::F64 {
+        min: MIN_SYMBOL_RATE_HZ,
+        max: HZ_LIMIT,
+        default: None,
+    },
+    typical: "25000 for 100 kbit/s 16-QAM",
+    mutability: Mutability::Build,
+    description: "Symbol rate in Hz; the sample rate must be within 1 % of an integer \
+            multiple (2 to 1024) of it and at least twice it. Required.",
+};
+
+/// The `rolloff` parameter of `qam_demod` and `qam_frame_decode`.
+pub(crate) const DEMOD_ROLLOFF_PARAM: ParamDesc = ParamDesc {
+    name: "rolloff",
+    unit: Unit::None,
+    kind: ParamKind::F64 {
+        min: RRC_MIN_ROLLOFF,
+        max: 1.0,
+        default: Some(0.35),
+    },
+    typical: "0.35 (the roll-off of the transmitter)",
+    mutability: Mutability::Build,
+    description: "Roll-off of the matched root-raised-cosine filter.",
+};
+
+/// The `span` parameter of `qam_demod` and `qam_frame_decode`.
+pub(crate) const DEMOD_SPAN_PARAM: ParamDesc = ParamDesc {
+    name: "span",
+    unit: Unit::None,
+    kind: ParamKind::I64 {
+        min: RRC_MIN_SPAN as i64,
+        max: RRC_MAX_SPAN as i64,
+        default: Some(10),
+    },
+    typical: "10",
+    mutability: Mutability::Build,
+    description: "Length of the matched filter in symbols.",
+};
+
+/// The `equalizer_taps` parameter of `qam_demod` and `qam_frame_decode`.
+pub(crate) const EQUALIZER_TAPS_PARAM: ParamDesc = ParamDesc {
+    name: "equalizer_taps",
+    unit: Unit::None,
+    kind: ParamKind::I64 {
+        min: 0,
+        max: EQ_TAPS.1 as i64,
+        default: Some(DEFAULT_TAPS as i64),
+    },
+    typical: "11; 15 against stronger multipath",
+    mutability: Mutability::Build,
+    description: "Forward taps of the adaptive equalizer between the timing loop and \
+            the carrier loop: 0 (off) or odd from 3 to 63.",
+};
+
+/// The `sync_bw` parameter of `qam_demod` and `qam_frame_decode`.
+pub(crate) const SYNC_BW_PARAM: ParamDesc = ParamDesc {
+    name: "sync_bw",
+    unit: Unit::None,
+    kind: ParamKind::F64 {
+        min: 0.0001,
+        max: 0.1,
+        default: Some(DEFAULT_SYNC_BW),
+    },
+    typical: "0.005; up to 0.01 for a faster acquisition",
+    mutability: Mutability::Build,
+    description: "Loop bandwidth of the symbol timing, normalized to the symbol rate.",
+};
+
+/// The `carrier_bw` parameter of `qam_demod` and `qam_frame_decode`.
+pub(crate) const CARRIER_BW_PARAM: ParamDesc = ParamDesc {
+    name: "carrier_bw",
+    unit: Unit::None,
+    kind: ParamKind::F64 {
+        min: MIN_LOOP_BW,
+        max: MAX_LOOP_BW,
+        default: Some(DEFAULT_CARRIER_BW),
+    },
+    typical: "0.0025; wider for phase noise",
+    mutability: Mutability::Build,
+    description: "Loop bandwidth of the carrier loop, normalized to the symbol rate.",
+};
+
 /// Description of the `qam_demod` block.
 pub static DESCRIPTION: BlockDescription = BlockDescription {
     kind: "qam_demod",
@@ -126,80 +212,12 @@ pub static DESCRIPTION: BlockDescription = BlockDescription {
     }],
     params: &[
         ORDER_PARAM,
-        ParamDesc {
-            name: "symbol_rate_hz",
-            unit: Unit::Hz,
-            kind: ParamKind::F64 {
-                min: MIN_SYMBOL_RATE_HZ,
-                max: HZ_LIMIT,
-                default: None,
-            },
-            typical: "25000 for 100 kbit/s 16-QAM",
-            mutability: Mutability::Build,
-            description: "Symbol rate in Hz; the sample rate must be within 1 % of an integer \
-                multiple (2 to 1024) of it and at least twice it. Required.",
-        },
-        ParamDesc {
-            name: "rolloff",
-            unit: Unit::None,
-            kind: ParamKind::F64 {
-                min: RRC_MIN_ROLLOFF,
-                max: 1.0,
-                default: Some(0.35),
-            },
-            typical: "0.35 (the roll-off of the transmitter)",
-            mutability: Mutability::Build,
-            description: "Roll-off of the matched root-raised-cosine filter.",
-        },
-        ParamDesc {
-            name: "span",
-            unit: Unit::None,
-            kind: ParamKind::I64 {
-                min: RRC_MIN_SPAN as i64,
-                max: RRC_MAX_SPAN as i64,
-                default: Some(10),
-            },
-            typical: "10",
-            mutability: Mutability::Build,
-            description: "Length of the matched filter in symbols.",
-        },
-        ParamDesc {
-            name: "equalizer_taps",
-            unit: Unit::None,
-            kind: ParamKind::I64 {
-                min: 0,
-                max: EQ_TAPS.1 as i64,
-                default: Some(DEFAULT_TAPS as i64),
-            },
-            typical: "11; 15 against stronger multipath",
-            mutability: Mutability::Build,
-            description: "Forward taps of the adaptive equalizer between the timing loop and \
-                the carrier loop: 0 (off) or odd from 3 to 63.",
-        },
-        ParamDesc {
-            name: "sync_bw",
-            unit: Unit::None,
-            kind: ParamKind::F64 {
-                min: 0.0001,
-                max: 0.1,
-                default: Some(DEFAULT_SYNC_BW),
-            },
-            typical: "0.005; up to 0.01 for a faster acquisition",
-            mutability: Mutability::Build,
-            description: "Loop bandwidth of the symbol timing, normalized to the symbol rate.",
-        },
-        ParamDesc {
-            name: "carrier_bw",
-            unit: Unit::None,
-            kind: ParamKind::F64 {
-                min: MIN_LOOP_BW,
-                max: MAX_LOOP_BW,
-                default: Some(DEFAULT_CARRIER_BW),
-            },
-            typical: "0.0025; wider for phase noise",
-            mutability: Mutability::Build,
-            description: "Loop bandwidth of the carrier loop, normalized to the symbol rate.",
-        },
+        SYMBOL_RATE_PARAM,
+        DEMOD_ROLLOFF_PARAM,
+        DEMOD_SPAN_PARAM,
+        EQUALIZER_TAPS_PARAM,
+        SYNC_BW_PARAM,
+        CARRIER_BW_PARAM,
     ],
     required: &["symbol_rate_hz"],
 };
@@ -695,6 +713,8 @@ impl<S: Storage> QamDemodBlock<S> {
                 hand,
                 level: Level::default(),
                 reference: 1.0,
+                symbols: 0,
+                restart_at: NO_RESTART,
             },
             demap,
             work,
@@ -710,17 +730,22 @@ impl<S: Storage> QamDemodBlock<S> {
     /// # Errors
     /// As [`QamDemodConfig::validate`].
     pub fn storage_bytes(config: &QamDemodConfig, rate_in: Rate) -> Result<usize> {
+        let mut plan = Plan::default();
+        Self::plan(config, rate_in, &mut plan)?;
+        Ok(plan.bytes())
+    }
+
+    /// Adds the buffers of the block to `plan`, in the order `new` takes them.
+    pub(crate) fn plan(config: &QamDemodConfig, rate_in: Rate, plan: &mut Plan) -> Result<()> {
         let n = config.derive(rate_in)?;
         let taps = config.span * n + 1;
-        let mut plan = Plan::default();
         plan.add::<f32>(taps)?;
         plan.add::<C32>(taps - 1)?;
         plan.add::<C32>(work_len(config.bits_per_symbol()))?;
         if let Some(e) = config.equalizer() {
-            e.plan(&mut plan)?;
+            e.plan(plan)?;
         }
-        QamAcquireBlock::<S>::plan(&mut plan)?;
-        Ok(plan.bytes())
+        QamAcquireBlock::<S>::plan(plan)
     }
 
     /// Output rate: the symbol rate (on the 1/1000 Hz grid) times the bits per symbol.
@@ -845,6 +870,41 @@ impl<S: Storage> QamDemodBlock<S> {
         self.rx.watch.recovery()
     }
 
+    /// Symbols of the loops (the timing loop's output) since the start or `reset`; the soft bits
+    /// of symbol `k` are the outputs `k bits .. (k + 1) bits`.
+    pub fn symbols(&self) -> u64 {
+        self.rx.symbols
+    }
+
+    /// Schedules a restart of the whole receiver by a watch outside the controller at the symbol
+    /// `at` of the loops ([`symbols`](QamDemodBlock::symbols)): the transition `Silence` of the
+    /// controller (the action `RestartAll`, counted in [`restarts`](QamDemodBlock::restarts)),
+    /// at that symbol however the input is cut. `None` cancels; a symbol already reached
+    /// restarts at once. Kept until it happens, replaced by the next call; `reset` cancels it.
+    /// The frame watch of `qam_frame_decode` (M44.1 §7) uses it.
+    ///
+    /// ```
+    /// use sdrk::Rate;
+    /// use sdrk_blocks::{ArenaStorage, LockState, QamDemodBlock, QamDemodConfig};
+    /// let cfg = QamDemodConfig { symbol_rate_hz: 1000.0, ..QamDemodConfig::default() };
+    /// let mut mem = vec![0u8; 1 << 16];
+    /// let mut d = QamDemodBlock::new(&cfg, Rate::hz(4000)?, &mut ArenaStorage::new(&mut mem))?;
+    /// d.restart_at(Some(0));
+    /// assert_eq!((d.state(), d.restarts()), (LockState::Search, 1));
+    /// # Ok::<(), Box<dyn std::error::Error>>(())
+    /// ```
+    pub fn restart_at(&mut self, at: Option<u64>) {
+        match at {
+            Some(s) if s <= self.rx.symbols => {
+                self.rx.restart_at = NO_RESTART;
+                let t = self.rx.watch.silence();
+                self.rx.transition(t);
+            }
+            Some(s) => self.rx.restart_at = s,
+            None => self.rx.restart_at = NO_RESTART,
+        }
+    }
+
     /// The current estimate of the samples per symbol of the timing loop.
     pub fn sps_estimate(&self) -> f64 {
         self.sync.sps_estimate()
@@ -868,7 +928,7 @@ impl<S: Storage> QamDemodBlock<S> {
 
     /// One piece of input samples: the symbols after the carrier loop in `b[..ns]`; returns
     /// `ns`.
-    fn symbols(&mut self, piece: &[C32]) -> Result<usize> {
+    fn piece_symbols(&mut self, piece: &[C32]) -> Result<usize> {
         let m = piece.len();
         let (a, b, _) = split_work(self.work.as_mut())?;
         <Sdrk as Fir<C32>>::fir(&Sdrk, &mut self.fir, piece, head_mut(a, m)?)?;
@@ -909,7 +969,15 @@ struct Loops<S: Storage> {
     /// The power of the symbols into the equalizer over the last pull-in (1 before the first): the
     /// scale of the weight watch.
     reference: f32,
+    /// Symbols of the loops since the start or `reset`.
+    symbols: u64,
+    /// The symbol at which a watch outside the controller restarts the receiver
+    /// ([`NO_RESTART`]: none).
+    restart_at: u64,
 }
+
+/// No restart scheduled by a watch outside the controller.
+const NO_RESTART: u64 = u64::MAX;
 
 /// The mean power of the symbols into the equalizer over the pull-in, the symbols from an
 /// estimate to the first check after it (the signal that was acquired): the weight watch compares
@@ -956,7 +1024,14 @@ impl<S: Storage> Loops<S> {
     /// Symbols until the controller acts next: the end of the acquisition window, the check, or
     /// the switch of the equalizer to the decision mode when that comes first (the hand-over).
     fn remaining(&self) -> usize {
-        let r = self.acquire.remaining().min(self.watch.remaining());
+        // `restart_at > symbols` (`restart_at` restarts at once otherwise).
+        let to_restart =
+            usize::try_from(self.restart_at.saturating_sub(self.symbols)).unwrap_or(usize::MAX);
+        let r = self
+            .acquire
+            .remaining()
+            .min(self.watch.remaining())
+            .min(to_restart);
         match self.hand.blind_left {
             0 => r,
             b => r.min(usize::from(b)),
@@ -990,6 +1065,7 @@ impl<S: Storage> Loops<S> {
     /// the transition of the state machine (nothing between these points).
     #[inline]
     fn control(&mut self, n: usize, window: Option<AcquireWindow>) {
+        self.symbols = self.symbols.saturating_add(n as u64);
         let t = if let Some(w) = window {
             let loops = loops_frequency(&self.costas, self.eq.as_ref());
             // No check falls at the end of a window (the windows are shorter than a check).
@@ -1025,6 +1101,11 @@ impl<S: Storage> Loops<S> {
         if let Some(t) = t {
             self.transition(t);
         }
+        if self.symbols == self.restart_at {
+            self.restart_at = NO_RESTART;
+            let t = self.watch.silence();
+            self.transition(t);
+        }
     }
 
     /// Carries out a transition of the state machine (out of line: once per window or check).
@@ -1051,7 +1132,7 @@ impl<S: Storage> Loops<S> {
                 self.acquire.verify();
             }
             LockTransition::Doubt => self.acquire.verify(),
-            LockTransition::Restart | LockTransition::Shrink => {
+            LockTransition::Restart | LockTransition::Shrink | LockTransition::Silence => {
                 if let Some(eq) = self.eq.as_mut() {
                     eq.restart();
                     // A valid bandwidth: the call cannot fail.
@@ -1116,7 +1197,7 @@ impl<S: Storage> Block for QamDemodBlock<S> {
             if m == 0 {
                 break;
             }
-            let ns = self.symbols(head(tail(input, consumed)?, m)?)?;
+            let ns = self.piece_symbols(head(tail(input, consumed)?, m)?)?;
             consumed += m;
             let (_, b, pending) = split_work(self.work.as_mut())?;
             let syms = head(b, ns)?;
@@ -1167,6 +1248,8 @@ impl<S: Storage> Block for QamDemodBlock<S> {
         self.rx.hand = HandOver::start(self.rx.eq.is_some());
         self.rx.level = Level::default();
         self.rx.reference = 1.0;
+        self.rx.symbols = 0;
+        self.rx.restart_at = NO_RESTART;
     }
 
     fn set_param(&mut self, name: &str, _value: ParamValue) -> Result<()> {

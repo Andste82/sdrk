@@ -18,11 +18,11 @@ use crate::kinds::{
     FskModKind, HalfbandDecimateKind, HdlcDecodeKind, HdlcEncodeKind, ImagPartKind,
     InterpolateKind, IqOffsetKind, Kind, MagKind, MakeComplexKind, MorseDecodeKind,
     MorseEncodeKind, MulKind, NcoKind, NoiseBlankKind, OokDemodKind, OokModKind, PreemphLimitKind,
-    PskDemodKind, PskModKind, PulseKeyKind, QamAcquireKind, QamDemodKind, QamModKind,
-    QuadDemodKind, RdsDecodeKind, RdsDemodKind, RdsEncodeKind, RealPartKind, RealToIqKind,
-    ResampleKind, RotateKind, ScaleKind, SensorDecodeKind, SensorEncodeKind, SpectrumKind,
-    SquelchKind, SsbDemodKind, SsbModKind, StereoMatrixKind, StereoPllKind, SymbolDemapKind,
-    SymbolMapKind, SymbolSyncKind, ToComplexKind,
+    PskDemodKind, PskModKind, PulseKeyKind, QamAcquireKind, QamDemodKind, QamFrameDecodeKind,
+    QamFrameEncodeKind, QamModKind, QuadDemodKind, RdsDecodeKind, RdsDemodKind, RdsEncodeKind,
+    RealPartKind, RealToIqKind, ResampleKind, RotateKind, ScaleKind, SensorDecodeKind,
+    SensorEncodeKind, SpectrumKind, SquelchKind, SsbDemodKind, SsbModKind, StereoMatrixKind,
+    StereoPllKind, SymbolDemapKind, SymbolMapKind, SymbolSyncKind, ToComplexKind,
 };
 use crate::model::{PipelineSpec, PortName, Precision};
 use crate::node::Node;
@@ -255,7 +255,7 @@ pub struct BuildOptions {
 /// ```
 /// use sdrk_pipeline::Registry;
 /// let registry = Registry::standard();
-/// assert_eq!(registry.descriptions().count(), 75);
+/// assert_eq!(registry.descriptions().count(), 77);
 /// assert!(registry.factory("fm_demod").is_some());
 /// ```
 pub struct Registry {
@@ -358,6 +358,8 @@ impl Registry {
         register::<SymbolMapKind>(&mut factories);
         register::<IqOffsetKind>(&mut factories);
         register::<QamAcquireKind>(&mut factories);
+        register::<QamFrameEncodeKind>(&mut factories);
+        register::<QamFrameDecodeKind>(&mut factories);
         Self { factories }
     }
 

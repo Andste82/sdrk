@@ -65,6 +65,44 @@ fn rotations_index(r: FrameRotations) -> u16 {
     }
 }
 
+/// The `max_sync_errors` parameter of `frame_decode` and `qam_frame_decode`.
+pub(crate) const MAX_SYNC_ERRORS_PARAM: ParamDesc = ParamDesc {
+    name: "max_sync_errors",
+    unit: Unit::None,
+    kind: ParamKind::I64 {
+        min: 0,
+        max: 4,
+        default: Some(0),
+    },
+    typical: "0 for clean links, 2 for noisy ones",
+    mutability: Mutability::Build,
+    description: "Number of sync word bits that may differ.",
+};
+
+/// The `emit_bad` parameter of `frame_decode` and `qam_frame_decode`.
+pub(crate) const EMIT_BAD_PARAM: ParamDesc = ParamDesc {
+    name: "emit_bad",
+    unit: Unit::None,
+    kind: ParamKind::Bool { default: false },
+    typical: "false; true to count or inspect damaged frames",
+    mutability: Mutability::Build,
+    description: "Also output frames whose CRC does not match, with the flag CRC_FAIL.",
+};
+
+/// The `whitening` parameter of `frame_decode` and `qam_frame_decode`.
+pub(crate) const DECODE_WHITENING_PARAM: ParamDesc = ParamDesc {
+    name: "whitening",
+    unit: Unit::None,
+    kind: ParamKind::Choice {
+        options: WHITENING_OPTIONS,
+        default: 0,
+    },
+    typical: "none; pn9 for links whose data has long runs of equal bits",
+    mutability: Mutability::Build,
+    description: "Whitening the sender applied to length, payload and CRC: none, or pn9 (the \
+            PN9 sequence is removed).",
+};
+
 /// Description of the `frame_decode` block.
 pub static DESCRIPTION: BlockDescription = BlockDescription {
     kind: "frame_decode",
@@ -101,38 +139,9 @@ pub static DESCRIPTION: BlockDescription = BlockDescription {
         description: "The decoded packets, at most one per 56 input samples.",
     }],
     params: &[
-        ParamDesc {
-            name: "max_sync_errors",
-            unit: Unit::None,
-            kind: ParamKind::I64 {
-                min: 0,
-                max: 4,
-                default: Some(0),
-            },
-            typical: "0 for clean links, 2 for noisy ones",
-            mutability: Mutability::Build,
-            description: "Number of sync word bits that may differ.",
-        },
-        ParamDesc {
-            name: "emit_bad",
-            unit: Unit::None,
-            kind: ParamKind::Bool { default: false },
-            typical: "false; true to count or inspect damaged frames",
-            mutability: Mutability::Build,
-            description: "Also output frames whose CRC does not match, with the flag CRC_FAIL.",
-        },
-        ParamDesc {
-            name: "whitening",
-            unit: Unit::None,
-            kind: ParamKind::Choice {
-                options: WHITENING_OPTIONS,
-                default: 0,
-            },
-            typical: "none; pn9 for links whose data has long runs of equal bits",
-            mutability: Mutability::Build,
-            description: "Whitening the sender applied to length, payload and CRC: none, or pn9 (the \
-                PN9 sequence is removed).",
-        },
+        MAX_SYNC_ERRORS_PARAM,
+        EMIT_BAD_PARAM,
+        DECODE_WHITENING_PARAM,
         ParamDesc {
             name: "rotations",
             unit: Unit::None,
@@ -360,6 +369,11 @@ impl<S: Storage> FrameDecodeBlock<S> {
     pub fn storage_bytes(config: &FrameDecodeConfig, _rate_in: Rate) -> Result<usize> {
         config.validate()?;
         Ok(Plan::default().bytes())
+    }
+
+    /// The configuration of the block.
+    pub fn config(&self) -> FrameDecodeConfig {
+        self.config
     }
 
     /// Input samples consumed since construction or the last reset.

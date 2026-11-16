@@ -1004,7 +1004,10 @@ fn qam_demod_block() -> QamDemodBlock<ArenaStorage<'static>> {
 }
 
 /// Calls of the warm-up of `qam_demod_block`: 6 calls of 512 symbols cover the 1000 CMA symbols
-/// of the equalizer and bring the loops to lock, so the counted calls run in the steady state.
+/// of the equalizer. The acquisition estimates at symbol 768, so the receiver is in `PullIn` until
+/// the first check at symbol 4864 and in `Track` after it: with the warm-up call of the count the
+/// counted calls take symbols 3584 to 11776, about 1280 of their 8192 symbols in `PullIn` (the
+/// workload of M44, kept so that the cycles before and after M44.1 compare).
 const DEMOD_WARMUP: usize = 6;
 
 /// The block `qam_demod` (16-QAM at 25 kBd and 200 kHz, the block defaults: 11 equalizer taps,

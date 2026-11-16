@@ -297,7 +297,8 @@ impl CostasConfig {
 /// ```
 #[derive(Debug)]
 pub struct CostasBlock<S: Storage> {
-    config: CostasConfig,
+    /// The kernel state, which holds the configuration as well (so that a composite of building
+    /// blocks stays small, M44.1 §1).
     state: CostasState,
     _storage: PhantomData<fn() -> S>,
 }
@@ -309,7 +310,6 @@ impl<S: Storage> CostasBlock<S> {
     /// As [`CostasConfig::validate`].
     pub fn new(config: &CostasConfig, _rate_in: Rate, _storage: &mut S) -> Result<Self> {
         Ok(Self {
-            config: *config,
             state: config.state()?,
             _storage: PhantomData,
         })
@@ -337,6 +337,48 @@ impl<S: Storage> CostasBlock<S> {
     /// The kernel state (for inspection).
     pub fn state(&self) -> &CostasState {
         &self.state
+    }
+
+    /// The configuration of the block (from the state).
+    pub fn config(&self) -> CostasConfig {
+        CostasConfig {
+            constellation: self.state.constellation(),
+            loop_bw: self.state.loop_bw(),
+            damping: self.state.damping(),
+            max_offset: self.state.max_offset(),
+        }
+    }
+
+    /// The smoothed lock metric of the lock detector (about 1 at lock, about 0 and below on
+    /// noise; `CostasState::lock_level`).
+    pub fn lock_level(&self) -> f32 {
+        self.state.lock_level()
+    }
+
+    /// Sets the frequency integrator in cycles per symbol (a frequency from outside, as the
+    /// acquisition of `qam_demod`; a control call of a composite, M44.1 §3): as `f32`, flushed
+    /// when subnormal and clamped to `max_offset`, NaN gives 0; the phase and the lock detector
+    /// stay. Forwards to `CostasState::set_frequency`.
+    ///
+    /// ```
+    /// use sdrk::Rate;
+    /// use sdrk_blocks::{ArenaStorage, CostasBlock, CostasConfig};
+    /// let mut costas = CostasBlock::new(&CostasConfig::default(), Rate::hz(1000)?, &mut ArenaStorage::new(&mut []))?;
+    /// costas.set_frequency(0.01);
+    /// assert_eq!(costas.frequency(), f64::from(0.01f32));
+    /// costas.restart();
+    /// assert_eq!((costas.frequency(), costas.lock_level(), costas.locked()), (0.0, 0.0, false));
+    /// # Ok::<(), Box<dyn std::error::Error>>(())
+    /// ```
+    pub fn set_frequency(&mut self, frequency: f64) {
+        self.state.set_frequency(frequency);
+    }
+
+    /// Starts the loop again: phase, frequency and lock detector at 0, as after construction.
+    /// The same as [`reset`](Block::reset), as a control call of a composite. Forwards to
+    /// `CostasState::reset`.
+    pub fn restart(&mut self) {
+        self.state.reset();
     }
 }
 
@@ -376,7 +418,7 @@ impl<S: Storage> Block for CostasBlock<S> {
     }
 
     fn param(&self, name: &str) -> Result<ParamValue> {
-        self.config.get(name)
+        self.config().get(name)
     }
 
     fn min_input(&self) -> usize {

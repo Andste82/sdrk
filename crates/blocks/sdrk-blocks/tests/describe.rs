@@ -48,15 +48,15 @@ use sdrk_blocks::{
     MorseEncodeConfig, MulBlock, MulRealBlock, Mutability, NcoBlock, NcoConfig, NcoRealBlock,
     NoiseBlankBlock, NoiseBlankConfig, OokDemodBlock, OokDemodConfig, OokModBlock, OokModConfig,
     ParamKind, ParamValue, PortType, PreemphLimitBlock, PreemphLimitConfig, PskDemodBlock,
-    PskDemodConfig, PskModBlock, PskModConfig, PulseKeyBlock, PulseKeyConfig, QamDemodConfig,
-    QamModConfig, QuadDemodConfig, RdsDecodeBlock, RdsDecodeConfig, RdsDemodBlock, RdsDemodConfig,
-    RdsEncodeBlock, RdsEncodeConfig, RealPartBlock, ResampleBlock, ResampleConfig,
-    ResampleRealBlock, RotateConfig, ScaleBlock, ScaleConfig, SensorDecodeBlock,
-    SensorDecodeConfig, SensorEncodeBlock, SensorEncodeConfig, SpectrumBlock, SpectrumConfig,
-    SquelchBlock, SquelchConfig, SsbDemodBlock, SsbDemodConfig, SsbModBlock, SsbModConfig,
-    StereoMatrixBlock, StereoPllBlock, StereoPllConfig, SymbolDemapBlock, SymbolDemapConfig,
-    SymbolDemapConstellation, SymbolMapBlock, SymbolMapConfig, SymbolSyncBlock, SymbolSyncConfig,
-    Ted, ToComplexBlock, all_descriptions,
+    PskDemodConfig, PskModBlock, PskModConfig, PulseKeyBlock, PulseKeyConfig, QamAcquireBlock,
+    QamAcquireConfig, QamDemodConfig, QamModConfig, QuadDemodConfig, RdsDecodeBlock,
+    RdsDecodeConfig, RdsDemodBlock, RdsDemodConfig, RdsEncodeBlock, RdsEncodeConfig, RealPartBlock,
+    ResampleBlock, ResampleConfig, ResampleRealBlock, RotateConfig, ScaleBlock, ScaleConfig,
+    SensorDecodeBlock, SensorDecodeConfig, SensorEncodeBlock, SensorEncodeConfig, SpectrumBlock,
+    SpectrumConfig, SquelchBlock, SquelchConfig, SsbDemodBlock, SsbDemodConfig, SsbModBlock,
+    SsbModConfig, StereoMatrixBlock, StereoPllBlock, StereoPllConfig, SymbolDemapBlock,
+    SymbolDemapConfig, SymbolDemapConstellation, SymbolMapBlock, SymbolMapConfig, SymbolSyncBlock,
+    SymbolSyncConfig, Ted, ToComplexBlock, all_descriptions,
 };
 use sdrk_testkit::VecStorage;
 
@@ -78,8 +78,8 @@ fn text_ok(what: &str, s: &str) {
 #[test]
 fn there_are_sixty_one_unique_kinds() {
     let kinds: BTreeSet<_> = all_descriptions().iter().map(|d| d.kind).collect();
-    assert_eq!(kinds.len(), 74);
-    assert_eq!(all_descriptions().len(), 74);
+    assert_eq!(kinds.len(), 75);
+    assert_eq!(all_descriptions().len(), 75);
     for kind in [
         "convert",
         "convert_out",
@@ -153,6 +153,7 @@ fn there_are_sixty_one_unique_kinds() {
         "pulse_key",
         "symbol_map",
         "iq_offset",
+        "qam_acquire",
     ] {
         assert!(kinds.contains(kind), "missing kind {kind}");
     }
@@ -415,6 +416,7 @@ fn config_defaults_match_the_descriptions() {
     defaults_match("pulse_key", |n| PulseKeyConfig::default().get(n), &[]);
     defaults_match("symbol_map", |n| SymbolMapConfig::default().get(n), &[]);
     defaults_match("iq_offset", |n| IqOffsetConfig::default().get(n), &[]);
+    defaults_match("qam_acquire", |n| QamAcquireConfig::default().get(n), &[]);
 }
 
 /// Every parameter of the description is known to the config: `get` finds it and `set` accepts
@@ -543,6 +545,7 @@ fn configs_accept_every_described_parameter() {
     round_trip!("pulse_key", PulseKeyConfig);
     round_trip!("symbol_map", SymbolMapConfig);
     round_trip!("iq_offset", IqOffsetConfig);
+    round_trip!("qam_acquire", QamAcquireConfig);
 }
 
 /// Every runtime parameter is accepted by `set_param` and readable by `param`; build parameters
@@ -934,6 +937,10 @@ fn blocks_accept_and_report_every_described_parameter() {
     check_block_params(
         "iq_offset",
         &mut IqOffsetBlock::new(&IqOffsetConfig::default(), rate(9600), &mut s).unwrap(),
+    );
+    check_block_params(
+        "qam_acquire",
+        &mut QamAcquireBlock::new(&QamAcquireConfig::default(), rate(9600), &mut s).unwrap(),
     );
     let pd = PskDemodConfig {
         order: 8,

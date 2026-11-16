@@ -417,14 +417,17 @@ impl EqualizeConfig {
 /// # Ok::<(), Box<dyn std::error::Error>>(())
 /// ```
 pub struct EqualizeBlock<S: Storage> {
-    config: EqualizeConfig,
+    /// The step sizes as configured (the kernel holds them as `f32`); every other parameter is
+    /// read from the state, so that a composite of building blocks stays small (M44.1 §1).
+    mu_cma: f64,
+    mu_dd: f64,
     state: EqualizeState<S::Buf<C32>, S::Buf<C32>>,
 }
 
 impl<S: Storage> core::fmt::Debug for EqualizeBlock<S> {
     fn fmt(&self, f: &mut core::fmt::Formatter<'_>) -> core::fmt::Result {
         f.debug_struct("EqualizeBlock")
-            .field("config", &self.config)
+            .field("config", &self.config())
             .finish_non_exhaustive()
     }
 }
@@ -436,7 +439,8 @@ impl<S: Storage> EqualizeBlock<S> {
     /// As [`EqualizeConfig::validate`]; `Storage` when the storage is too small.
     pub fn new(config: &EqualizeConfig, _rate_in: Rate, storage: &mut S) -> Result<Self> {
         Ok(Self {
-            config: *config,
+            mu_cma: config.mu_cma,
+            mu_dd: config.mu_dd,
             state: config.state(storage)?,
         })
     }
@@ -481,6 +485,83 @@ impl<S: Storage> EqualizeBlock<S> {
     pub fn state(&self) -> &EqualizeState<S::Buf<C32>, S::Buf<C32>> {
         &self.state
     }
+
+    /// The configuration of the block: the step sizes as configured, everything else from the
+    /// state (`phase_bw` the bandwidth of the tracker now, after [`set_phase_bw`]).
+    ///
+    /// [`set_phase_bw`]: EqualizeBlock::set_phase_bw
+    pub fn config(&self) -> EqualizeConfig {
+        let p = self.state.params();
+        EqualizeConfig {
+            taps: self.state.taps(),
+            feedback_taps: p.feedback_taps,
+            constellation: p.constellation,
+            mu_cma: self.mu_cma,
+            mu_dd: self.mu_dd,
+            cma_symbols: p.cma_symbols,
+            phase_bw: p.phase_bw,
+        }
+    }
+
+    /// Sets the frequency integrator of the phase tracker in cycles per symbol (as `f32`; the
+    /// output is turned back at that rate from the next symbol; a control call of a composite,
+    /// M44.1 §3, the acquired frequency of `qam_demod`). Forwards to
+    /// `EqualizeState::set_frequency`.
+    ///
+    /// ```
+    /// use sdrk::Rate;
+    /// use sdrk_blocks::{AlignedBytes, ArenaStorage, EqualizeBlock, EqualizeConfig};
+    /// let mut mem = AlignedBytes([0u8; 176]);
+    /// let mut arena = ArenaStorage::new(&mut mem.0);
+    /// let mut eq = EqualizeBlock::new(&EqualizeConfig::default(), Rate::hz(1000)?, &mut arena)?;
+    /// eq.set_frequency(0.001);
+    /// assert_eq!(eq.state().frequency(), 0.001f32);
+    /// eq.set_phase(1 << 30);
+    /// assert_eq!(eq.state().phase(), 1 << 30);
+    /// eq.set_phase_bw(0.0015)?;
+    /// assert_eq!(eq.config().phase_bw, 0.0015);
+    /// assert_eq!(eq.weight_energy(), 1.0); // the centre tap 1
+    /// eq.restart();
+    /// assert_eq!((eq.state().frequency(), eq.state().phase()), (0.0, 0));
+    /// # Ok::<(), Box<dyn std::error::Error>>(())
+    /// ```
+    pub fn set_frequency(&mut self, frequency: f64) {
+        self.state.set_frequency(frequency as f32);
+    }
+
+    /// Sets the phase of the tracker in units of `2^-32` turn (the hand-over of `qam_demod`,
+    /// D1700). Forwards to `EqualizeState::set_phase`.
+    pub fn set_phase(&mut self, phase: u32) {
+        self.state.set_phase(phase);
+    }
+
+    /// Changes the bandwidth of the phase tracker (0 = off, else 1e-4 to 0.2), its phase and
+    /// frequency kept (D1622). Forwards to `EqualizeState::set_phase_bw`.
+    ///
+    /// # Errors
+    /// `Core(InvalidParameter)` for a bandwidth out of range; nothing changes then.
+    pub fn set_phase_bw(&mut self, bw: f64) -> Result<()> {
+        Ok(self.state.set_phase_bw(bw)?)
+    }
+
+    /// Starts the equalizer again: the start weights, the history cleared, the start mode (the
+    /// blind CMA symbols counted again) and the tracker at phase and frequency 0; the
+    /// parameters, the step sizes and the bandwidth of the tracker are kept. The same as
+    /// [`reset`](Block::reset), as a control call of a composite. Forwards to
+    /// `EqualizeState::reset`.
+    pub fn restart(&mut self) {
+        self.state.reset();
+    }
+
+    /// The energy of the weights, `sum |w|^2` over the forward and the feedback weights (1 for
+    /// the start weights).
+    pub fn weight_energy(&self) -> f32 {
+        self.state
+            .weights()
+            .iter()
+            .map(|w| w.re * w.re + w.im * w.im)
+            .sum()
+    }
 }
 
 impl<S: Storage> Block for EqualizeBlock<S> {
@@ -521,13 +602,13 @@ impl<S: Storage> Block for EqualizeBlock<S> {
             "mu_cma" => {
                 let v = value.as_f64()?;
                 self.state.set_mu_cma(v as f32)?;
-                self.config.mu_cma = v;
+                self.mu_cma = v;
                 Ok(())
             }
             "mu_dd" => {
                 let v = value.as_f64()?;
                 self.state.set_mu_dd(v as f32)?;
-                self.config.mu_dd = v;
+                self.mu_dd = v;
                 Ok(())
             }
             _ => unknown(),
@@ -535,7 +616,7 @@ impl<S: Storage> Block for EqualizeBlock<S> {
     }
 
     fn param(&self, name: &str) -> Result<ParamValue> {
-        self.config.get(name)
+        self.config().get(name)
     }
 
     fn min_input(&self) -> usize {

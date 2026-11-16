@@ -396,7 +396,6 @@ pub(crate) fn soft_bits<T: SymbolDemapElem>(
 #[derive(Debug)]
 pub struct SymbolDemapBlock<T: SymbolDemapElem, S: Storage> {
     config: SymbolDemapConfig,
-    scale: f32,
     _marker: PhantomData<fn() -> (T, S)>,
 }
 
@@ -425,7 +424,6 @@ impl<T: SymbolDemapElem, S: Storage> SymbolDemapBlock<T, S> {
         Self::check(config)?;
         Ok(Self {
             config: *config,
-            scale: config.scale as f32,
             _marker: PhantomData,
         })
     }
@@ -447,6 +445,11 @@ impl<T: SymbolDemapElem, S: Storage> SymbolDemapBlock<T, S> {
         Self::check(config)?;
         multiply_rate(rate_in, config.constellation.bits_per_symbol())
     }
+
+    /// The configuration of the block.
+    pub fn config(&self) -> SymbolDemapConfig {
+        self.config
+    }
 }
 
 impl<T: SymbolDemapElem, S: Storage> Block for SymbolDemapBlock<T, S> {
@@ -458,7 +461,7 @@ impl<T: SymbolDemapElem, S: Storage> Block for SymbolDemapBlock<T, S> {
     }
 
     fn process(&mut self, input: &[T], output: &mut [f32]) -> Result<Progress> {
-        let s = self.scale;
+        let s = self.config.scale as f32;
         let n = match self.config.constellation {
             SymbolDemapConstellation::Qpsk => soft_bits(true, s, input, output),
             SymbolDemapConstellation::Fsk4 => {
@@ -503,7 +506,6 @@ impl<T: SymbolDemapElem, S: Storage> Block for SymbolDemapBlock<T, S> {
             "scale" => {
                 let v = value.as_f64()?;
                 self.config.scale = v;
-                self.scale = v as f32;
                 Ok(())
             }
             _ => unknown(),

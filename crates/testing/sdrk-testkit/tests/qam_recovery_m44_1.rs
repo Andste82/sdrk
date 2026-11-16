@@ -19,8 +19,9 @@
 //!   - a step of the carrier frequency by 0.002 cycles per symbol (seed 847).
 //!     The error states of the equalizer apply to the receivers with it.
 //! - **Chunk invariance of step 2** (seed 851, test 11): two receivers whose controller takes the
-//!   transitions of §6 (16-QAM without the equalizer after the gap of seed 844, `Return`; 16-QAM
-//!   at Es/N0 9 dB with the equalizer, `Shrink`) give the same soft bits in 20 random cut plans.
+//!   transitions of §6 (64-QAM at Es/N0 30 dB with the equalizer after the gap of seed 848,
+//!   `Return`; 64-QAM with the equalizer in the injected false state of seed 845, `Shrink`) give
+//!   the same soft bits in 20 random cut plans.
 //!
 //! The measured values are printed (run with `--nocapture`).
 #![cfg(feature = "std")]
@@ -494,20 +495,22 @@ fn run_plan(
 #[test]
 fn the_recovery_is_chunk_invariant() {
     // (order, Es/N0, equalizer_taps, symbols, the gap, the injected false state, the seed of the
-    // signal): 16-QAM without the equalizer after the gap of loud noise of the recovery test (the
-    // signal back after the gap, `Return`), and 64-QAM with the equalizer put into the false
+    // signal): the gap case of I44-17 (64-QAM at Es/N0 30 dB with the equalizer after the gap of
+    // loud noise of seed 848, which only the signal back after the gap, `Return`, brings back, at
+    // every SIMD level; the 16-QAM receiver without the equalizer of seed 844 takes `Return` at
+    // `avx2` but not at the fallback, D1586), and 64-QAM with the equalizer put into the false
     // state of seed 845 at symbol `BEFORE` (the weight watch, `Shrink`); the cut plans of seed 851
     // (the input split at the injection)
     let gap = Some(BEFORE..BEFORE + GAP);
     let cases = [
         (
-            16u32,
-            esn0_of(16, 14.0),
-            0usize,
+            64u32,
+            30.0,
+            11usize,
             BEFORE + GAP + QAM_RECOVERY_SYMBOLS + COUNTED,
             gap,
             false,
-            844,
+            848,
         ),
         (
             64,

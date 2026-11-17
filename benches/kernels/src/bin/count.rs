@@ -4,6 +4,7 @@
 //! count list
 //! count run <kernel> <impl> <k> [--n N] [--misaligned]
 //! count accuracy <kernel> <impl> [--n N] [--misaligned]
+//! count cycles <kernel> <impl> <k> [--n N] [--misaligned]
 //! count info <kernel>
 //! count volk-info
 //! count volk-impls <kernel>
@@ -49,6 +50,34 @@ fn main() {
                 kernel.run(which, k);
             }
             region_stop();
+        }
+        // Real core cycles and retired instructions of `k` calls, from the PMU (Linux). Pin the
+        // process (`taskset -c N`); the figures are for all `k` calls, divide by `k * n`.
+        #[cfg(all(target_os = "linux", any(target_arch = "x86_64", target_arch = "aarch64")))]
+        Some("cycles") => {
+            let (Some(name), Some(which), Some(k)) = (
+                a(1),
+                a(2).and_then(Impl::parse),
+                a(3).and_then(|s| s.parse::<usize>().ok()),
+            ) else {
+                usage()
+            };
+            let mut counters = kernels::pmu::Counters::new().unwrap_or_else(|e| {
+                eprintln!("{e}");
+                std::process::exit(4)
+            });
+            let mut kernel = kernel(name, which, &args[4..]);
+            kernel.run(which, 1);
+            counters.start();
+            kernel.run(which, k);
+            let c = counters.stop();
+            print(&json!({
+                "kernel": name,
+                "impl": which.name(),
+                "k": k,
+                "cycles": c.cycles,
+                "instructions": c.instructions,
+            }));
         }
         Some("accuracy") => {
             let (Some(name), Some(which)) = (a(1), a(2).and_then(Impl::parse)) else {
@@ -139,7 +168,7 @@ fn print(value: &Value) {
 
 fn usage() -> ! {
     eprintln!(
-        "usage: count list | run <kernel> <impl> <k> [--n N] [--misaligned] | accuracy <kernel> <impl> [--n N] [--misaligned] | info <kernel> | volk-info | volk-impls <kernel>"
+        "usage: count list | run <kernel> <impl> <k> [--n N] [--misaligned] | cycles <kernel> <impl> <k> [--n N] [--misaligned] | accuracy <kernel> <impl> [--n N] [--misaligned] | info <kernel> | volk-info | volk-impls <kernel>"
     );
     std::process::exit(2);
 }

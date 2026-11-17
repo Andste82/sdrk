@@ -288,7 +288,8 @@ What each kernel is compared with:
 | `qam_soft_bits_qam16`, `qam_soft_bits_qam64` (the kernel `qam_soft_bits`, M44 §2, I44-1), 4096 symbols per call, scale 1, per input symbol | our fallback as information (`info`, `Family::Own`, D1201, D1412): no library computes the piecewise-linear soft bits; the SIMD paths are judged by their efficiency and must not be slower than the fallback; [QAM slicer](#qam-slicer-m44) |
 | `symbol_demap_qam16_block`, `symbol_demap_qam64_block` (the block `symbol_demap` with the constellations `qam16` and `qam64`, M44 §2, around the kernel `qam_soft_bits`), 4096 symbols per call, per input symbol | our own code as information (`info`, `Family::Own`, D1201): no library computes the piecewise-linear soft bits (liquid-dsp's `modemcf_demodulate_soft` and GNU Radio's `calc_soft_dec` search the points for the exact max-log or log-sum value); [QAM slicer](#qam-slicer-m44) |
 | `qam_mod_block`, `qam_demod_block`, `qam_demod_search_block` (the blocks `qam_mod` and `qam_demod`, M44 §4, 16-QAM at 8 samples per symbol; the search entry on noise without a signal, D1422), 4096 output samples (`qam_mod`) or 4096 input samples (`qam_demod`) per call, per sample; `frame_decode_four_block` (`frame_decode` with `rotations` `four`, 4 bits per symbol), per soft bit | our own code as information (`info`, `Family::Own`, D1216): the blocks are chains of kernels whose library comparisons are their own entries (`fir_interpolate`, `fir`, `symbol_sync`, `costas_qam16_fallback`, `equalize_qam16_fallback`); no library has the same blocks or the test framing; [QAM blocks](#qam-blocks-m44) |
-| `psk_mod_block` (the block `psk_mod`, coherent QPSK at 8 samples per symbol), `symbol_map_block` (`symbol_map` with `qam16`), `iq_offset_block` (`iq_offset`, `imag`, 4 samples, in place), `qam_acquire_block` (`qam_acquire`, `correct` false, searching on noise, in place), `qam_frame_encode_block` and `qam_frame_decode_block` (the composites `qam_frame_encode` and `qam_frame_decode`, 16-QAM at 8 samples per symbol, 32-byte frames) (M44.1), 4096 output samples, symbols or input samples per call | our own code as information (`info`, `Family::Own`, D1216): the building blocks and composites of M44.1 have no counterpart in a library (GNU Radio builds the same chains from separate blocks), their kernels have entries of their own; [QAM building blocks and composites](#qam-building-blocks-and-composites-m441) |
+| `psk_mod_block` (the block `psk_mod`, coherent QPSK at 8 samples per symbol), `symbol_map_block` (`symbol_map` with `qam16`), `iq_offset_block` (`iq_offset`, `imag`, a delay of 4 samples, in place), `qam_acquire_block` (`qam_acquire`, `correct` false, searching on noise, in place), `qam_frame_encode_block` and `qam_frame_decode_block` (the composites `qam_frame_encode` and `qam_frame_decode`, 16-QAM at 8 samples per symbol, 32-byte frames) (M44.1), 4096 output samples, symbols or input samples per call | our own code as information (`info`, `Family::Own`, D1216): the building blocks and composites of M44.1 have no counterpart in a library (GNU Radio builds the same chains from separate blocks), their kernels have entries of their own; [QAM building blocks and composites](#qam-building-blocks-and-composites-m441) |
+| `pulse_shape_block` (the block `pulse_shape` with the pulse of `qam_mod_block`, 8 samples per symbol, roll-off 0.35, span 10, per output sample), `pulse_match_block` (the block `pulse_match`, the matched filter of `qam_demod_block`, 25 kBd at 200 kHz, per input sample) (M44.1.1), 4096 output or input samples per call | our own code as information (`info`, `Family::Own`, D1216): the building blocks of M44.1.1 with their design; their kernels have entries of their own against library references (`fir_interpolate_short`, `fir`); [Pulse filters as building blocks](#pulse-filters-as-building-blocks-m4411) |
 | `fft` C32, N = 64, 1024, 4096 | FFTW at `sse2`, rustfft (`FftPlanner`, forward, in place) elsewhere |
 | `fft` CQ15, N = 1024, block float and fixed scaling (noise of 8000 LSB, and of full scale for fixed scaling) | KissFFT `FIXED_POINT=16`; Ne10 int16 as information on `neon` |
 | `rfft` f32, N = 1024 | FFTW's real-input transform (`fftwf_plan_dft_r2c_1d`, out of place) at `sse2` and `sse4.2` (FFTW has no codelets above SSE2, so it is the stronger reference there too), rustfft's real-input planner (`realfft` 3.5, forward, out of place) elsewhere; the other of the two and our fallback as information (FFTW also on `neon`) |
@@ -592,6 +593,8 @@ Instructions per sample of our kernel divided by those of the comparison (lower 
 | `qam_acquire_block` (our code, per input symbol) | 1.00 info | 1.00 info | 1.00 info | 1.00 info | 1.00 info | 1.00 info |
 | `qam_frame_encode_block` (our code, per output sample) | 1.00 info | 1.00 info | 1.00 info | 1.00 info | 1.00 info | 1.00 info |
 | `qam_frame_decode_block` (our code, per input sample) | 1.00 info | 1.00 info | 1.00 info | 1.00 info | 1.00 info | 1.00 info |
+| `pulse_shape_block` (our code, per output sample) | 1.00 info | 1.00 info | 1.00 info | 1.00 info | 1.00 info | 1.00 info |
+| `pulse_match_block` (our code, per input sample) | 1.00 info | 1.00 info | 1.00 info | 1.00 info | 1.00 info | 1.00 info |
 
 Instructions per sample, ours / comparison (`avx2-runtime`: ours only, judged against ours at `avx2`):
 
@@ -817,15 +820,17 @@ Instructions per sample, ours / comparison (`avx2-runtime`: ours only, judged ag
 | `channel_bank_ddc` (our code, per input sample) | 721.18 / 721.18 | 721.77 / 721.77 | 234.33 / 234.33 | 241.94 | 178.06 / 178.06 | 436.60 / 436.60 | 1657.26 / 1657.26 |
 | `band_pulse_detect_block` (our code, per lane value) | 138.25 / 138.25 | 136.69 / 136.69 | 128.20 / 128.20 | 136.86 | 127.50 / 127.50 | 124.69 / 124.69 | 324.05 / 324.05 |
 | `frame_decode_four_block` (our code, per soft bit) | 87.06 / 87.06 | 86.07 / 86.07 | 83.82 / 83.82 | 86.76 | 83.19 / 83.19 | 77.21 / 77.21 | 166.41 / 166.41 |
-| `qam_demod_block` (our code, per input sample) | 295.30 / 295.30 | 291.81 / 291.81 | 164.48 / 164.48 | 171.22 | 145.65 / 145.65 | 181.82 / 181.82 | 560.67 / 560.67 |
-| `qam_demod_search_block` (our code, per input sample) | 317.30 / 317.30 | 313.24 / 313.25 | 180.75 / 180.75 | 189.33 | 160.90 / 160.90 | 198.54 / 198.54 | 607.64 / 607.64 |
-| `qam_mod_block` (our code, per output sample) | 44.20 / 44.20 | 41.33 / 41.33 | 24.00 / 24.00 | 24.68 | 20.51 / 20.51 | 28.84 / 28.84 | 93.09 / 93.09 |
-| `psk_mod_block` (our code, per output sample) | 44.28 / 44.28 | 41.41 / 41.41 | 24.66 / 24.66 | 24.76 | 23.24 / 23.24 | 29.29 / 29.29 | 96.35 / 96.35 |
+| `qam_demod_block` (our code, per input sample) | 295.94 / 295.94 | 292.47 / 292.47 | 164.62 / 164.62 | 171.35 | 146.07 / 146.07 | 181.97 / 181.97 | 560.89 / 560.89 |
+| `qam_demod_search_block` (our code, per input sample) | 317.95 / 317.95 | 313.90 / 313.90 | 180.90 / 180.90 | 189.47 | 161.32 / 161.32 | 198.68 / 198.68 | 607.85 / 607.85 |
+| `qam_mod_block` (our code, per output sample) | 44.21 / 44.21 | 41.33 / 41.33 | 24.00 / 24.00 | 24.69 | 20.52 / 20.52 | 28.85 / 28.85 | 93.11 / 93.11 |
+| `psk_mod_block` (our code, per output sample) | 44.28 / 44.28 | 41.41 / 41.41 | 24.66 / 24.66 | 24.77 | 23.25 / 23.25 | 29.30 / 29.30 | 96.37 / 96.37 |
 | `symbol_map_block` (our code, per output symbol) | 26.02 / 26.02 | 26.02 / 26.02 | 20.52 / 20.52 | 26.02 | 4.77 / 4.77 | 16.01 / 16.01 | 33.53 / 33.53 |
 | `iq_offset_block` (our code, per sample) | 11.26 / 11.26 | 12.01 / 12.01 | 12.01 / 12.01 | 11.26 | 12.01 / 12.01 | 11.76 / 11.76 | 40.77 / 40.77 |
 | `qam_acquire_block` (our code, per input symbol) | 155.21 / 155.21 | 150.21 / 150.21 | 109.88 / 109.88 | 124.13 | 98.69 / 98.69 | 107.67 / 107.67 | 348.39 / 348.39 |
-| `qam_frame_encode_block` (our code, per output sample) | 45.93 / 45.93 | 43.06 / 43.06 | 25.70 / 25.70 | 26.41 | 22.20 / 22.20 | 30.26 / 30.26 | 97.79 / 97.79 |
-| `qam_frame_decode_block` (our code, per input sample) | 340.31 / 340.31 | 336.22 / 336.22 | 207.75 / 207.75 | 216.13 | 188.53 / 188.53 | 221.57 / 221.57 | 645.21 / 645.21 |
+| `qam_frame_encode_block` (our code, per output sample) | 45.94 / 45.94 | 43.06 / 43.06 | 25.70 / 25.70 | 26.42 | 22.21 / 22.21 | 30.27 / 30.27 | 97.80 / 97.80 |
+| `qam_frame_decode_block` (our code, per input sample) | 340.90 / 340.91 | 336.82 / 336.82 | 207.86 / 207.86 | 216.20 | 188.90 / 188.90 | 221.66 / 221.66 | 645.42 / 645.42 |
+| `pulse_shape_block` (our code, per output sample) | 40.71 / 40.71 | 37.84 / 37.84 | 21.04 / 21.04 | 21.05 | 19.55 / 19.55 | 26.66 / 26.66 | 88.47 / 88.47 |
+| `pulse_match_block` (our code, per input sample) | 153.36 / 153.36 | 153.36 / 153.36 | 32.66 / 32.66 | 32.67 | 15.08 / 15.08 | 72.50 / 72.50 | 266.12 / 266.12 |
 | `qam_soft_bits_qam16` C32 (our fallback, per input symbol) | 5.91 / 9.52 | 5.91 / 9.52 | 2.47 / 2.46 | 2.48 | 1.13 / 1.71 | 3.52 / 3.52 | 14.79 / 15.54 |
 | `qam_soft_bits_qam64` C32 (our fallback, per input symbol) | 11.54 / 14.52 | 11.54 / 14.02 | 5.22 / 7.02 | 5.23 | 2.16 / 4.02 | 4.52 / 5.02 | 23.79 / 47.54 |
 | `symbol_demap_qam16_block` (our code, per input symbol) | 5.91 / 5.91 | 5.91 / 5.91 | 2.47 / 2.47 | 2.47 | 1.13 / 1.13 | 3.52 / 3.52 | 14.79 / 14.79 |
@@ -1068,6 +1073,8 @@ Accuracy (SNR in dB against the f64 reference), ours / comparison:
 | `qam_acquire_block` (our code, per input symbol; the input bit for bit, no estimate taken from the noise) | exact | exact | exact | exact | exact | exact |
 | `qam_frame_encode_block` (our code, per output sample) | 143.8 / 143.8 | 143.8 / 143.8 | 144.0 / 144.0 | 144.0 / 144.0 | 144.0 / 144.0 | 143.8 / 143.8 |
 | `qam_frame_decode_block` (our code, per input sample; every frame of a call but at most one with `CRC_OK`) | exact | exact | exact | exact | exact | exact |
+| `pulse_shape_block` (our code, per output sample) | 143.8 / 143.8 | 143.8 / 143.8 | 144.1 / 144.1 | 144.1 / 144.1 | 144.1 / 144.1 | 143.8 / 143.8 |
+| `pulse_match_block` (our code, per input sample) | 142.3 / 142.3 | 142.3 / 142.3 | 142.2 / 142.2 | 142.2 / 142.2 | 142.2 / 142.2 | 142.0 / 142.0 |
 
 Simulated cycles per sample on every level with a core model (`cargo measure <kernel> --no-count --no-golden`, llvm-mca 23.1.1, mode `whole-loop`; D33, D35, D68): the execution counts come from the counter of the level in the environment of its count (callgrind at `avx2`, Intel SDE at `sse2`, `sse4.2` and `avx512`, QEMU at `neon`), and ours and the comparison of an entry run in the same emulator on the same CPU. Only the ratio ours / comparison on one model means something; the cycles are shown so that the ratios can be checked and are no hardware figures. The ratios against the comparisons are not judged (the gate there stays the instruction ratio above); one rule is gated on these tables (D321): every entry `<k>` with a row `<k>_fallback` on the same level must have at most the cycles of that row in the column "ours" on both models, as published (two decimals); a level delegated to the fallback (comparison `sdrk fallback`, both ratios 1.00) passes, and an exception needs a `cycle_waiver` in `benches/limits.json` naming an open item. `cargo xtask check cycles` (part of `cargo xtask check`, so CI) reads the committed tables, so a merged row that breaks the rule fails CI without running `llvm-mca`; `cargo measure` prints the verdict (`SIMD vs fallback ...`) for every pair it simulates. The tables are written by `python3 -I benches/cycle_tables.py <the JSON files>` from the `cargo measure` documents (`target/measure/<kernel>.json`). The script **merges**: it replaces or inserts the rows of the entries in the given documents at their place in the order of the results tables and keeps every other row, note and level byte for byte, because `target/measure` is not committed and holds only what was measured in this checkout (a partial set never removes rows). `--rebuild` writes the block from the given documents alone and refuses to drop entries of the block unless `--force` is given (every kernel measured, or entries retired); `--doc FILE` writes another file. Its tests: `python3 -I benches/test_cycle_tables.py`. The `endbr64` of the references built with `-fcf-protection` is simulated as the `nop` it executes as (D64, [How the cycles are simulated](#how-the-cycles-are-simulated)). One artifact of the model remains at `avx2`: GNU Radio's `quadrature_demod_cf` zero-fills its temporary with a `rep stosb` that `znver3` rates at 100 and `alderlake` at 8 cycles per byte, so its 865.81 / 131.57 are about 62 / 65 without it; `znver4` rates the same instruction alike at `avx512` (868.77 there), so the ratios of `quad_demod_fallback` at `avx2` and `avx512` on the reference model are artifacts. The `C32` FFT fallbacks above 1.10 at `sse2` and `sse4.2` (radix-2 contract, 16 `xmm` registers; D170 fuses three stages per pass only off x86), the `CQ15` FIR family fallbacks above 1.10 at `sse2`, `sse4.2` and `neon` (`fir_decimate` `CQ15` on `neon` 1.80 / 1.63 after D172, against a CMSIS-DSP that GCC auto-vectorizes with NEON), and the `convert_out` fallbacks on every level, are above CMSIS-DSP in the instructions too.
 
@@ -1303,11 +1310,13 @@ Reference model `skylake`, counter-model `znver2`, mode `whole-loop`; execution 
 | `preemph_limit_q15` | 51.64 | 51.64 | 1.00 | 43.84 | 43.84 | 1.00 | sdrk fallback |
 | `preemph_limit_stereo` | 21.13 | 21.13 | 1.00 | 22.70 | 22.70 | 1.00 | sdrk fallback |
 | `psk_mod_block` | 8.95 | 8.95 | 1.00 | 11.40 | 11.40 | 1.00 | sdrk fallback |
+| `pulse_match_block` | 42.97 | 42.97 | 1.00 | 38.69 | 38.69 | 1.00 | sdrk fallback |
+| `pulse_shape_block` | 8.15 | 8.15 | 1.00 | 10.37 | 10.37 | 1.00 | sdrk fallback |
 | `qam_acquire_block` | 52.13 | 52.13 | 1.00 | 44.16 | 44.16 | 1.00 | sdrk fallback |
-| `qam_demod_block` | 114.00 | 114.00 | 1.00 | 103.46 | 103.46 | 1.00 | sdrk fallback |
-| `qam_demod_search_block` | 121.14 | 121.14 | 1.00 | 109.46 | 109.46 | 1.00 | sdrk fallback |
-| `qam_frame_decode_block` | 131.96 | 131.95 | 1.00 | 120.75 | 120.75 | 1.00 | sdrk fallback |
-| `qam_frame_encode_block` | 10.09 | 10.09 | 1.00 | 12.22 | 12.22 | 1.00 | sdrk fallback |
+| `qam_demod_block` | 113.89 | 113.89 | 1.00 | 103.52 | 103.52 | 1.00 | sdrk fallback |
+| `qam_demod_search_block` | 121.06 | 121.06 | 1.00 | 109.54 | 109.54 | 1.00 | sdrk fallback |
+| `qam_frame_decode_block` | 131.80 | 131.80 | 1.00 | 120.79 | 120.79 | 1.00 | sdrk fallback |
+| `qam_frame_encode_block` | 10.10 | 10.10 | 1.00 | 12.22 | 12.22 | 1.00 | sdrk fallback |
 | `qam_mod_block` | 9.08 | 9.08 | 1.00 | 11.25 | 11.25 | 1.00 | sdrk fallback |
 | `qam_soft_bits_qam16` | 1.35 | 2.04 | 0.66 | 1.49 | 2.42 | 0.61 | sdrk fallback |
 | `qam_soft_bits_qam64` | 3.03 | 4.57 | 0.66 | 3.33 | 4.31 | 0.77 | sdrk fallback |
@@ -1546,13 +1555,15 @@ Reference model `skylake`, counter-model `znver2`, mode `whole-loop`; execution 
 | `preemph_limit` | 16.10 | 16.10 | 1.00 | 11.44 | 11.44 | 1.00 | sdrk fallback |
 | `preemph_limit_q15` | 51.64 | 51.64 | 1.00 | 43.84 | 43.84 | 1.00 | sdrk fallback |
 | `preemph_limit_stereo` | 20.85 | 20.85 | 1.00 | 21.65 | 21.65 | 1.00 | sdrk fallback |
-| `psk_mod_block` | 8.60 | 8.60 | 1.00 | 10.62 | 10.62 | 1.00 | sdrk fallback |
+| `psk_mod_block` | 8.61 | 8.61 | 1.00 | 10.62 | 10.62 | 1.00 | sdrk fallback |
+| `pulse_match_block` | 42.97 | 42.97 | 1.00 | 38.69 | 38.69 | 1.00 | sdrk fallback |
+| `pulse_shape_block` | 7.80 | 7.80 | 1.00 | 9.59 | 9.59 | 1.00 | sdrk fallback |
 | `qam_acquire_block` | 51.31 | 51.31 | 1.00 | 43.49 | 43.49 | 1.00 | sdrk fallback |
-| `qam_demod_block` | 113.74 | 113.80 | 1.00 | 102.24 | 102.27 | 1.00 | sdrk fallback |
-| `qam_demod_search_block` | 119.66 | 119.66 | 1.00 | 107.06 | 107.06 | 1.00 | sdrk fallback |
-| `qam_frame_decode_block` | 131.78 | 131.79 | 1.00 | 119.41 | 119.42 | 1.00 | sdrk fallback |
-| `qam_frame_encode_block` | 9.76 | 9.76 | 1.00 | 11.44 | 11.44 | 1.00 | sdrk fallback |
-| `qam_mod_block` | 8.74 | 8.74 | 1.00 | 10.47 | 10.47 | 1.00 | sdrk fallback |
+| `qam_demod_block` | 113.65 | 113.60 | 1.00 | 102.20 | 102.17 | 1.00 | sdrk fallback |
+| `qam_demod_search_block` | 119.52 | 119.52 | 1.00 | 107.09 | 107.09 | 1.00 | sdrk fallback |
+| `qam_frame_decode_block` | 131.57 | 131.57 | 1.00 | 119.31 | 119.31 | 1.00 | sdrk fallback |
+| `qam_frame_encode_block` | 9.77 | 9.77 | 1.00 | 11.45 | 11.45 | 1.00 | sdrk fallback |
+| `qam_mod_block` | 8.74 | 8.74 | 1.00 | 10.48 | 10.48 | 1.00 | sdrk fallback |
 | `qam_soft_bits_qam16` | 1.35 | 2.04 | 0.66 | 1.49 | 2.42 | 0.61 | sdrk fallback |
 | `qam_soft_bits_qam64` | 3.03 | 4.06 | 0.74 | 3.33 | 3.92 | 0.85 | sdrk fallback |
 | `rds_decode_block` | 8.74 | 8.74 | 1.00 | 11.50 | 11.50 | 1.00 | sdrk fallback |
@@ -1792,11 +1803,13 @@ Reference model `znver3`, counter-model `alderlake`, mode `whole-loop`; executio
 | `preemph_limit_q15` | 27.62 | 27.62 | 1.00 | 18.69 | 18.69 | 1.00 | sdrk fallback |
 | `preemph_limit_stereo` | 16.71 | 16.71 | 1.00 | 22.32 | 22.32 | 1.00 | sdrk fallback |
 | `psk_mod_block` | 4.36 | 4.36 | 1.00 | 4.24 | 4.24 | 1.00 | sdrk fallback |
+| `pulse_match_block` | 12.41 | 12.41 | 1.00 | 11.36 | 11.36 | 1.00 | sdrk fallback |
+| `pulse_shape_block` | 3.56 | 3.56 | 1.00 | 3.51 | 3.51 | 1.00 | sdrk fallback |
 | `qam_acquire_block` | 26.89 | 26.89 | 1.00 | 32.64 | 32.64 | 1.00 | sdrk fallback |
-| `qam_demod_block` | 64.03 | 64.03 | 1.00 | 72.18 | 72.18 | 1.00 | sdrk fallback |
-| `qam_demod_search_block` | 66.84 | 66.84 | 1.00 | 75.71 | 75.71 | 1.00 | sdrk fallback |
-| `qam_frame_decode_block` | 76.13 | 76.13 | 1.00 | 83.02 | 83.02 | 1.00 | sdrk fallback |
-| `qam_frame_encode_block` | 5.25 | 5.25 | 1.00 | 5.45 | 5.45 | 1.00 | sdrk fallback |
+| `qam_demod_block` | 64.24 | 64.24 | 1.00 | 72.23 | 72.23 | 1.00 | sdrk fallback |
+| `qam_demod_search_block` | 67.05 | 67.05 | 1.00 | 75.82 | 75.82 | 1.00 | sdrk fallback |
+| `qam_frame_decode_block` | 76.29 | 76.29 | 1.00 | 83.11 | 83.11 | 1.00 | sdrk fallback |
+| `qam_frame_encode_block` | 5.26 | 5.26 | 1.00 | 5.45 | 5.45 | 1.00 | sdrk fallback |
 | `qam_mod_block` | 4.39 | 4.39 | 1.00 | 4.54 | 4.54 | 1.00 | sdrk fallback |
 | `qam_soft_bits_qam16` | 0.52 | 0.54 | 0.95 | 1.02 | 1.02 | 1.00 | sdrk fallback |
 | `qam_soft_bits_qam64` | 1.55 | 1.79 | 0.86 | 1.42 | 1.80 | 0.79 | sdrk fallback |
@@ -2037,10 +2050,12 @@ Reference model `znver4`, counter-model `sapphirerapids`, mode `whole-loop`; exe
 | `preemph_limit_q15` | 26.71 | 26.71 | 1.00 | 18.69 | 18.69 | 1.00 | sdrk fallback |
 | `preemph_limit_stereo` | 15.64 | 15.64 | 1.00 | 13.07 | 13.07 | 1.00 | sdrk fallback |
 | `psk_mod_block` | 4.65 | 4.65 | 1.00 | 3.57 | 3.57 | 1.00 | sdrk fallback |
+| `pulse_match_block` | 11.00 | 11.00 | 1.00 | 6.23 | 6.23 | 1.00 | sdrk fallback |
+| `pulse_shape_block` | 3.91 | 3.91 | 1.00 | 2.86 | 2.86 | 1.00 | sdrk fallback |
 | `qam_acquire_block` | 26.62 | 26.62 | 1.00 | 30.31 | 30.31 | 1.00 | sdrk fallback |
-| `qam_demod_block` | 62.11 | 62.10 | 1.00 | 67.07 | 67.07 | 1.00 | sdrk fallback |
-| `qam_demod_search_block` | 65.46 | 65.43 | 1.00 | 70.85 | 70.81 | 1.00 | sdrk fallback |
-| `qam_frame_decode_block` | 73.57 | 73.57 | 1.00 | 78.07 | 78.07 | 1.00 | sdrk fallback |
+| `qam_demod_block` | 62.36 | 62.36 | 1.00 | 67.11 | 67.11 | 1.00 | sdrk fallback |
+| `qam_demod_search_block` | 65.68 | 65.68 | 1.00 | 70.87 | 70.87 | 1.00 | sdrk fallback |
+| `qam_frame_decode_block` | 73.77 | 73.77 | 1.00 | 78.11 | 78.11 | 1.00 | sdrk fallback |
 | `qam_frame_encode_block` | 5.02 | 5.02 | 1.00 | 4.12 | 4.12 | 1.00 | sdrk fallback |
 | `qam_mod_block` | 4.17 | 4.17 | 1.00 | 3.21 | 3.21 | 1.00 | sdrk fallback |
 | `qam_soft_bits_qam16` | 0.36 | 0.43 | 0.84 | 0.33 | 0.52 | 0.63 | sdrk fallback |
@@ -2282,12 +2297,14 @@ Reference model `cortex-a72`, counter-model `cortex-a76`, mode `whole-loop`; exe
 | `preemph_limit_q15` | 55.11 | 55.11 | 1.00 | 40.70 | 40.70 | 1.00 | sdrk fallback |
 | `preemph_limit_stereo` | 24.12 | 24.12 | 1.00 | 22.90 | 22.90 | 1.00 | sdrk fallback |
 | `psk_mod_block` | 13.98 | 13.98 | 1.00 | 13.05 | 13.05 | 1.00 | sdrk fallback |
+| `pulse_match_block` | 48.91 | 48.91 | 1.00 | 31.64 | 31.64 | 1.00 | sdrk fallback |
+| `pulse_shape_block` | 12.99 | 12.99 | 1.00 | 11.83 | 11.83 | 1.00 | sdrk fallback |
 | `qam_acquire_block` | 61.74 | 61.74 | 1.00 | 48.40 | 48.40 | 1.00 | sdrk fallback |
-| `qam_demod_block` | 127.34 | 127.34 | 1.00 | 91.58 | 91.58 | 1.00 | sdrk fallback |
-| `qam_demod_search_block` | 136.35 | 136.35 | 1.00 | 100.08 | 100.08 | 1.00 | sdrk fallback |
-| `qam_frame_decode_block` | 152.02 | 152.02 | 1.00 | 115.23 | 115.23 | 1.00 | sdrk fallback |
-| `qam_frame_encode_block` | 15.09 | 15.09 | 1.00 | 14.12 | 14.12 | 1.00 | sdrk fallback |
-| `qam_mod_block` | 13.96 | 13.96 | 1.00 | 13.04 | 13.04 | 1.00 | sdrk fallback |
+| `qam_demod_block` | 127.38 | 127.38 | 1.00 | 91.70 | 91.70 | 1.00 | sdrk fallback |
+| `qam_demod_search_block` | 136.63 | 136.63 | 1.00 | 100.31 | 100.31 | 1.00 | sdrk fallback |
+| `qam_frame_decode_block` | 152.03 | 152.03 | 1.00 | 115.20 | 115.20 | 1.00 | sdrk fallback |
+| `qam_frame_encode_block` | 15.10 | 15.10 | 1.00 | 14.13 | 14.13 | 1.00 | sdrk fallback |
+| `qam_mod_block` | 13.98 | 13.98 | 1.00 | 13.08 | 13.08 | 1.00 | sdrk fallback |
 | `qam_soft_bits_qam16` | 3.03 | 3.03 | 1.00 | 2.03 | 2.03 | 1.00 | sdrk fallback |
 | `qam_soft_bits_qam64` | 4.54 | 4.54 | 1.00 | 3.03 | 3.03 | 1.00 | sdrk fallback |
 | `rds_decode_block` | 12.14 | 12.14 | 1.00 | 13.67 | 13.67 | 1.00 | sdrk fallback |
@@ -2769,6 +2786,85 @@ Instructions per sample at `simd128` (no core model; instructions, not cycles), 
   The "before" run is the code of `main` before M44.1 (f7cc667, its cycles within 0.05 of the baseline above). The controller adds 0.08 to 0.09 branches per input sample (once per run, and the finiteness test of the pull-in power per symbol in `PullIn`) and no mispredictions beyond the noise of the count; `avx512` and `neon` are not branch-simulated (D1616).
 - **The composites of §7.** `qam_frame_decode_block` is `qam_demod_block` plus the decoder with four rotations at 4 soft bits per 8 samples: 76.13 / 83.02 at `avx2` against 64.03 / 72.18 + 23.43 / 20.77 / 2 = 75.75 / 82.57 for the two entries apart (0.5 % / 0.5 % for the buffer of soft bits between the stages and the frame watch). `qam_frame_encode_block` is `qam_mod_block` plus `frame_encode` at 0.5 bits per sample (5.25 / 5.45 against 4.39 / 4.54).
 - **Accuracy.** `psk_mod_block` 145.2 / 144.7 dB and `qam_frame_encode_block` 143.8 / 144.0 dB against the `f64` model of the points and the root-raised-cosine interpolation (`sse2`, `sse4.2` and `simd128` / the levels with FMA), `symbol_map_block` 152.6 dB against the points in `f64` (the rounding of `f32`); `iq_offset_block` and `qam_acquire_block` bit for bit, `qam_frame_decode_block` every frame of a call but at most one with `CRC_OK`.
+
+## Pulse filters as building blocks (M44.1.1)
+
+M44.1.1 §3 turns the pulse filters into the building blocks `pulse_shape` (the interpolation of `qam_mod` and `psk_mod`) and `pulse_match` (the matched filter of `qam_demod`); the composites hold them instead of the kernel states with taps they designed, and `iq_offset` takes `samples_per_symbol`. The two new entries are our own code as information (`Family::Own`, `info` on every level, ours and fallback the same block code; D1216, D1817). Simulated on 2026-11-17 with `cargo measure <entry> --no-count --no-golden --branches --platform x86_64 --platform x86_64-avx512 --platform aarch64` (the corrected `llvm-mca` of D942; the check `cargo measure costas --platform aarch64 --level neon` gave the committed 86.13 / 54.09 first) and counted on all four platforms (`cargo xtask count --platform <p> --kernel <the ten entries> --merge`, the levels of x86_64 one at a time). The reference "before" is the code of M44.1 (`main` ead7a42 with the baseline commit of M44.1.1, the same entries and inputs), measured the same way.
+
+Workloads (a sample is the unit of the second column):
+
+| Entry | Unit | Workload |
+| --- | --- | --- |
+| `pulse_shape_block` | one output sample | `pulse_shape` with the pulse of `qam_mod_block` (8 samples per symbol, roll-off 0.35, span 10: 81 taps) on the 16-QAM points of 512 random symbols, 4096 output samples per call |
+| `pulse_match_block` | one input sample | `pulse_match` with the matched filter of `qam_demod_block` (25 kBd at 200 kHz, roll-off 0.35, span 10: 81 taps) on the input of `qam_demod_block`, 4096 input samples per call |
+
+Simulated cycles per sample, before -> after, reference model / counter model, mode `whole-loop`:
+
+| Entry | sse2 (skylake / znver2) | sse4.2 (skylake / znver2) | avx2 (znver3 / alderlake) | avx512 (znver4 / sapphirerapids) | neon (cortex-a72 / cortex-a76) |
+| --- | --- | --- | --- | --- | --- |
+| `qam_mod_block` | 9.08 / 11.25 -> 9.08 / 11.25 | 8.74 / 10.47 -> 8.74 / 10.48 | 4.39 / 4.54 -> 4.39 / 4.54 | 4.17 / 3.21 -> 4.17 / 3.21 | 13.96 / 13.04 -> 13.98 / 13.08 |
+| `psk_mod_block` | 8.95 / 11.40 -> 8.95 / 11.40 | 8.60 / 10.62 -> 8.61 / 10.62 | 4.36 / 4.24 -> 4.36 / 4.24 | 4.65 / 3.57 -> 4.65 / 3.57 | 13.98 / 13.05 -> 13.98 / 13.05 |
+| `qam_demod_block` | 114.00 / 103.46 -> 113.89 / 103.52 | 113.74 / 102.24 -> 113.65 / 102.20 | 64.03 / 72.18 -> 64.24 / 72.23 | 62.10 / 67.07 -> 62.36 / 67.11 | 127.34 / 91.58 -> 127.38 / 91.70 |
+| `qam_demod_search_block` | 121.14 / 109.46 -> 121.06 / 109.54 | 119.66 / 107.06 -> 119.52 / 107.09 | 66.84 / 75.71 -> 67.05 / 75.82 | 65.46 / 70.86 -> 65.68 / 70.87 | 136.35 / 100.08 -> 136.63 / 100.31 |
+| `qam_frame_encode_block` | 10.09 / 12.22 -> 10.10 / 12.22 | 9.76 / 11.44 -> 9.77 / 11.45 | 5.25 / 5.45 -> 5.26 / 5.45 | 5.02 / 4.12 -> 5.02 / 4.12 | 15.09 / 14.12 -> 15.10 / 14.13 |
+| `qam_frame_decode_block` | 131.95 / 120.75 -> 131.80 / 120.79 | 131.78 / 119.41 -> 131.57 / 119.31 | 76.14 / 83.02 -> 76.29 / 83.11 | 73.57 / 78.07 -> 73.77 / 78.11 | 152.02 / 115.23 -> 152.03 / 115.20 |
+| `symbol_map_block` | 7.10 / 6.61 -> 7.10 / 6.61 | 7.10 / 6.61 -> 7.10 / 6.61 | 5.78 / 7.55 -> 5.78 / 7.55 | 1.28 / 2.17 -> 1.28 / 2.17 | 7.08 / 9.07 -> 7.08 / 9.07 |
+| `iq_offset_block` | 2.27 / 2.89 -> 2.27 / 2.89 | 3.55 / 3.56 -> 3.55 / 3.56 | 2.89 / 2.95 -> 2.89 / 2.95 | 2.89 / 2.95 -> 2.89 / 2.95 | 7.95 / 7.44 -> 7.95 / 7.44 |
+
+Change in percent, reference model / counter model:
+
+| Entry | sse2 | sse4.2 | avx2 | avx512 | neon |
+| --- | --- | --- | --- | --- | --- |
+| `qam_mod_block` | +0.01 / +0.01 | +0.01 / +0.01 | -0.00 / +0.03 | +0.04 / +0.08 | +0.18 / +0.31 |
+| `psk_mod_block` | +0.01 / +0.01 | +0.01 / +0.01 | -0.00 / +0.03 | +0.01 / +0.07 | +0.04 / +0.04 |
+| `qam_demod_block` | -0.09 / +0.06 | -0.09 / -0.04 | +0.32 / +0.07 | +0.41 / +0.07 | +0.03 / +0.13 |
+| `qam_demod_search_block` | -0.07 / +0.07 | -0.11 / +0.03 | +0.33 / +0.15 | +0.33 / +0.01 | +0.20 / +0.23 |
+| `qam_frame_encode_block` | +0.19 / +0.06 | +0.13 / +0.06 | +0.02 / +0.00 | +0.10 / +0.09 | +0.06 / +0.06 |
+| `qam_frame_decode_block` | -0.11 / +0.04 | -0.16 / -0.09 | +0.20 / +0.11 | +0.27 / +0.06 | +0.01 / -0.03 |
+| `symbol_map_block` | 0.00 / 0.00 | 0.00 / 0.00 | 0.00 / 0.00 | 0.00 / 0.00 | 0.00 / 0.00 |
+| `iq_offset_block` | 0.00 / 0.00 | 0.00 / 0.00 | 0.00 / 0.00 | 0.00 / 0.00 | 0.00 / 0.00 |
+
+The new entries, simulated cycles per sample, reference model / counter model:
+
+| Entry | sse2 (skylake / znver2) | sse4.2 (skylake / znver2) | avx2 (znver3 / alderlake) | avx512 (znver4 / sapphirerapids) | neon (cortex-a72 / cortex-a76) |
+| --- | --- | --- | --- | --- | --- |
+| `pulse_shape_block` (per output sample) | 8.15 / 10.37 | 7.80 / 9.59 | 3.56 / 3.51 | 3.91 / 2.86 | 12.99 / 11.83 |
+| `pulse_match_block` (per input sample) | 42.97 / 38.69 | 42.97 / 38.69 | 12.41 / 11.36 | 11.00 / 6.23 | 48.91 / 31.64 |
+
+Instructions per sample at `simd128` (no core model; instructions, not cycles), before -> after:
+
+| Entry | simd128 (instructions per sample) |
+| --- | --- |
+| `qam_mod_block` | 93.09 -> 93.11 |
+| `psk_mod_block` | 96.35 -> 96.37 |
+| `qam_demod_block` | 560.67 -> 560.89 |
+| `qam_demod_search_block` | 607.64 -> 607.85 |
+| `qam_frame_encode_block` | 97.79 -> 97.80 |
+| `qam_frame_decode_block` | 645.21 -> 645.42 |
+| `symbol_map_block` | 33.53 -> 33.53 |
+| `iq_offset_block` | 40.77 -> 40.77 |
+| `pulse_shape_block` | 88.47 (new) |
+| `pulse_match_block` | 266.12 (new) |
+
+Branches (D1611; `--branches`, cachegrind's branch simulation, `sse2`, `sse4.2` and `avx2`), before -> after, mispredictions per sample and the cost `cycles + mispredictions x penalty` on the reference / counter model:
+
+| Entry | Level | Mispredictions per sample | Cost (cycles per sample) |
+| --- | --- | --- | --- |
+| `qam_demod_block` | sse2 (skylake / znver2) | 0.3146 -> 0.2871 | 120.29 / 108.49 -> 119.63 / 108.11 |
+| `qam_demod_block` | sse4.2 (skylake / znver2) | 0.3165 -> 0.2885 | 120.08 / 107.30 -> 119.42 / 106.82 |
+| `qam_demod_block` | avx2 (znver3 / alderlake) | 0.4357 -> 0.2834 | 69.70 / 80.90 -> 67.92 / 77.90 |
+| `qam_demod_search_block` | sse2 (skylake / znver2) | 0.4045 -> 0.3621 | 129.23 / 115.93 -> 128.30 / 115.33 |
+| `qam_demod_search_block` | sse4.2 (skylake / znver2) | 0.3857 -> 0.3607 | 127.37 / 113.23 -> 126.74 / 112.87 |
+| `qam_demod_search_block` | avx2 (znver3 / alderlake) | 0.3739 -> 0.3459 | 71.70 / 83.19 -> 71.55 / 82.74 |
+| `qam_frame_decode_block` | sse2 (skylake / znver2) | 0.6208 -> 0.5850 | 144.36 / 130.68 -> 143.50 / 130.16 |
+| `qam_frame_decode_block` | sse4.2 (skylake / znver2) | 0.6051 -> 0.5751 | 143.88 / 129.09 -> 143.07 / 128.51 |
+| `qam_frame_decode_block` | avx2 (znver3 / alderlake) | 0.7354 -> 0.5744 | 85.70 / 97.73 -> 83.76 / 94.60 |
+| `pulse_shape_block` | sse2 / sse4.2 / avx2 | 0.1260 / 0.1260 / 0.0641 (new) | 10.67 / 12.38, 10.32 / 11.60, 4.39 / 4.79 (new) |
+| `pulse_match_block` | sse2 / sse4.2 / avx2 | 0.1611 / 0.1611 / 0.0598 (new) | 46.19 / 41.27, 46.19 / 41.27, 13.19 / 12.56 (new) |
+
+- **Within 1 %.** No entry is slower by more than 1 % on any level and model (the largest rise is `qam_demod_block` on `znver4`, +0.41 %; on `znver3` +0.32 %, 64.03 -> 64.24, so the entry stays above the value before M44.1 that D1589 accepted, 63.32). The modulators run the same kernel calls as before (the chain calls `pulse_shape`, which calls `fir_interpolate` with the same state); `qam_demod` calls the kernel `fir` through `PulseMatchBlock::process` instead of directly, one more `min` of the lengths per piece of 256 samples. `symbol_map_block` and `iq_offset_block` run unchanged code (`iq_offset_block` with `samples_per_symbol` 8, the same delay of 4 samples).
+- **Branches.** The modulator entries keep their mispredictions (`qam_mod_block` at `avx2` 0.0654 -> 0.0658, `psk_mod_block` 0.1607 -> 0.1606, `qam_frame_encode_block` 0.0705 -> 0.0698); the receivers have fewer, and their cost is lower on every level and model. The block adds no data-dependent branch on the hot path (D1611).
+- **The building blocks.** `pulse_shape_block` is the short-branch interpolation of `fir_interpolate` (81 taps by 8) with the block around it: 3.56 / 3.51 against 4.39 / 4.54 for `qam_mod_block` at `avx2`, which adds the mapping of `symbol_map` and the buffer of the chain. `pulse_match_block` is the 81-tap `fir` per input sample: 12.41 / 11.36 at `avx2`, about a fifth of `qam_demod_block`. Accuracy: `pulse_shape_block` 143.8 / 144.1 dB against the `f64` model of the points and the interpolation (`sse2`, `sse4.2` and `simd128` / the levels with FMA), `pulse_match_block` 142.0 to 142.3 dB against the filter in `f64`.
 
 ## Sensor decoder (M46)
 

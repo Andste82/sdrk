@@ -21,6 +21,9 @@
 //!   carrier and after noise, and the link through `frame_decode` turned by 0 to 270 degrees),
 //!   whole, and three of them (a restart by the verify window, the restart after a carrier
 //!   with the noise between, and a large offset) in the 20 cut plans of seed 843.
+//! - **The matched filter of `qam_demod`** (M44.1.1 test 2, set `tests/baseline/m44_1_1/`,
+//!   table `pulse_match`): its output on the same signals, recorded from the code of M44.1
+//!   before M44.1.1 moves the filter into the building block `pulse_match`.
 //!
 //! The signals are those of `sdrk-blocks/tests/qam_blocks.rs` (seed 607 and its streams), with
 //! the sines and cosines of `libm` instead of the platform's, so that the inputs are the same
@@ -38,12 +41,15 @@
     clippy::useless_vec
 )]
 
-use sdrk::Rate;
+use sdrk::{Rate, Sdrk};
+use sdrk_blocks::design::{rrc, rrc_len};
 use sdrk_blocks::{
     Block, PskModBlock, PskModConfig, PskVariant, QAM_ACQUISITION_CHECK, QAM_ACQUISITION_SKIP,
-    QAM_ACQUISITION_SYMBOLS, QamDemodBlock, QamDemodConfig, QamModBlock, QamModConfig, StreamElem,
+    QAM_ACQUISITION_SYMBOLS, QAM_DEMOD_CHUNK, QamDemodBlock, QamDemodConfig, QamModBlock,
+    QamModConfig, StreamElem,
 };
 use sdrk_core::C32;
+use sdrk_core::kernels::filter::{Fir, FirState};
 use sdrk_proto::frame::{Whitening, encode, frame_bits};
 use sdrk_proto::{Packet, PacketFlags};
 use sdrk_testkit::baseline::{self, Baseline, Digest};
@@ -690,4 +696,84 @@ fn qam_demod_keeps_its_acquired_frequencies() {
     for (name, digest) in &results {
         t.check(name, digest).unwrap();
     }
+}
+
+// ---- the matched filter of qam_demod (M44.1.1 test 2) -----------------------------------
+
+/// The baseline set of M44.1.1: outputs recorded from the code of M44.1 before M44.1.1 moves
+/// them into building blocks of their own.
+const SET_M44_1_1: &str = "m44_1_1";
+
+/// The output of the matched filter of `qam_demod` as M44.1 runs it inside the block: the taps
+/// `rrc(rolloff, n, span) / sqrt(n)` rounded once to `f32` (`n` the integer samples per symbol of
+/// the block), the kernel `fir` of the facade, the input in pieces of [`QAM_DEMOD_CHUNK`]
+/// samples. The block is built from the same configuration first and gives `n` and the number of
+/// taps, so that the filter is the one of the block.
+fn matched_filter(cfg: &QamDemodConfig, fs: Rate, input: &[C32]) -> Vec<C32> {
+    let block = QamDemodBlock::new(cfg, fs, &mut VecStorage).unwrap();
+    let n = block.samples_per_symbol();
+    let len = rrc_len(n, cfg.span).unwrap();
+    assert_eq!(len, block.num_taps());
+    let mut h = vec![0.0f64; len];
+    rrc(cfg.rolloff, n, cfg.span, &mut h).unwrap();
+    let gain = 1.0 / libm::sqrt(n as f64);
+    let taps: Vec<f32> = h.iter().map(|t| (t * gain) as f32).collect();
+    let mut state = FirState::<C32, _, _>::new(taps, vec![C32::default(); len - 1]).unwrap();
+    let mut out = vec![C32::default(); input.len()];
+    for (x, y) in input
+        .chunks(QAM_DEMOD_CHUNK)
+        .zip(out.chunks_mut(QAM_DEMOD_CHUNK))
+    {
+        <Sdrk as Fir<C32>>::fir(&Sdrk, &mut state, x, y).unwrap();
+    }
+    out
+}
+
+/// The matched filter of `qam_demod` (M44.1.1 test 2, recorded from M44.1 for `pulse_match`):
+/// every signal of `qam_blocks` with its configuration (roll-off 0.35, span 10), and the four
+/// signals of the comparison with the kernels (2, 4, 5 and 8 samples per symbol) with the other
+/// two pulses of the modulator cases (roll-off 0.2 and span 6, roll-off 0.5 and span 32).
+#[test]
+fn the_matched_filter_of_qam_demod_keeps_its_baseline() {
+    let t = Baseline::load(SET_M44_1_1, "pulse_match", level()).unwrap();
+    let mut cases: Vec<DemodCase> = demod_cases();
+    let extra: Vec<DemodCase> = cases
+        .iter()
+        .filter(|c| c.name.starts_with("kernels"))
+        .flat_map(|c| {
+            SHAPES[1..].iter().map(move |&(rolloff, span)| DemodCase {
+                name: format!("{}_r{rolloff}_s{span}", c.name),
+                cfg: QamDemodConfig {
+                    rolloff,
+                    span,
+                    ..c.cfg
+                },
+                fs: c.fs,
+                input: c.input.clone(),
+            })
+        })
+        .collect();
+    cases.extend(extra);
+    let results: Vec<(String, Digest)> = std::thread::scope(|s| {
+        let handles: Vec<_> = cases
+            .iter()
+            .map(|case| {
+                s.spawn(move || {
+                    let y = matched_filter(&case.cfg, case.fs, &case.input);
+                    (case.name.clone(), Digest::of_c32(&y))
+                })
+            })
+            .collect();
+        handles.into_iter().map(|h| h.join().unwrap()).collect()
+    });
+    for (name, digest) in &results {
+        assert!(!digest.is_empty(), "{name}: no output");
+        t.check(name, digest).unwrap();
+    }
+    // the full output of the matched filter on the short signal of
+    // `qam_demod_keeps_its_full_output_on_a_short_signal`
+    let cfg = config(16, 9600.0, 11);
+    let y = matched_filter(&cfg, rate(38_400), &received(16, 4, 1500, 0.02, 20));
+    t.check_vector("short_qam16_sps4", &baseline::c32_bytes(&y))
+        .unwrap();
 }

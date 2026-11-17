@@ -37,7 +37,7 @@ use super::psk_mod::{PskModBlock, PskModConfig, PskVariant};
 use super::qam_demod::{QamDemodBlock, QamDemodConfig};
 use super::qam_frame_decode::{FRAME_TIMEOUT_PARAM, QamFrameDecodeBlock, QamFrameDecodeConfig};
 use super::qam_frame_encode::{QamFrameEncodeBlock, QamFrameEncodeConfig};
-use super::qam_mod::{QamModBlock, QamModConfig};
+use super::qam_mod::{QAM_MOD_PARAMS, QamModBlock, QamModConfig};
 use super::symbol_map::SymbolMapConstellation;
 use super::{
     costas, equalize, frame_decode, frame_encode, iq_offset, pulse_match, pulse_shape, qam_demod,
@@ -46,7 +46,7 @@ use super::{
 use crate::block::{Block, ParamValue};
 use crate::describe::{ParamDesc, ParamKind};
 use crate::error::Error;
-use crate::param_map::Stages;
+use crate::param_map::{ParamMap, Stages};
 use crate::storage::ArenaStorage;
 
 /// The description of the building-block parameter a path reaches.
@@ -113,14 +113,16 @@ fn range_holds(c: &ParamDesc, s: &ParamDesc, off: bool) -> bool {
 
 /// The checks of the module documentation on one composite; `built` are the values it was
 /// built with (every public parameter).
-fn check<T: Block + Stages>(
+/// `map` is the composite's map and `stage` reads the building-block parameter at a path of it.
+fn check<T: Block>(
     label: &str,
     block: &mut T,
+    map: ParamMap,
+    stage: fn(&T, &str) -> crate::error::Result<ParamValue>,
     resolve: Resolve,
     built: &[(&str, ParamValue)],
 ) {
     let desc = block.description();
-    let map = T::PARAMS;
     let names: Vec<&str> = desc.params.iter().map(|p| p.name).collect();
     let mut flat: Vec<&str> = Vec::new();
     for (name, _) in map.entries() {
@@ -186,7 +188,7 @@ fn check<T: Block + Stages>(
                     p.name
                 );
             }
-            match block.stage_param(path) {
+            match stage(block, path) {
                 Ok(v) => {
                     assert_eq!(v, value, "{label}.{}: {path} holds the same value", p.name);
                     reached += 1;
@@ -203,7 +205,7 @@ fn check<T: Block + Stages>(
         }
         assert!(reached > 0, "{label}.{}: no building block answers", p.name);
         assert_eq!(
-            map.path(p.name).map(|f| block.stage_param(f).unwrap()),
+            map.path(p.name).map(|f| stage(block, f).unwrap()),
             Some(value),
             "{label}.{}: param reads the first path",
             p.name
@@ -221,7 +223,7 @@ fn check<T: Block + Stages>(
             "{label}"
         );
         for path in map.paths(p.name) {
-            if let Ok(v) = block.stage_param(path) {
+            if let Ok(v) = stage(block, path) {
                 assert_eq!(v, value, "{label}.{}: {path} after a refused set", p.name);
             }
         }
@@ -242,7 +244,7 @@ fn check<T: Block + Stages>(
             "{label}: {path}"
         );
     }
-    assert!(block.stage_param("0.no_such_parameter").is_err(), "{label}");
+    assert!(stage(block, "0.no_such_parameter").is_err(), "{label}");
 }
 
 fn rate(hz: u64) -> Rate {
@@ -296,7 +298,14 @@ fn the_parameters_of_every_composite_follow_the_naming_rule() {
         let mut mem = arena();
         let mut st = ArenaStorage::new(&mut mem);
         let mut b = QamModBlock::new(&cfg, rate(48_000), &mut st).unwrap();
-        check("qam_mod", &mut b, mod_stage, &mod_values(&cfg));
+        check(
+            "qam_mod",
+            &mut b,
+            QAM_MOD_PARAMS,
+            |b, p| b.stages.param(p),
+            mod_stage,
+            &mod_values(&cfg),
+        );
     }
     // psk_mod: plain, pi/4-DQPSK, offset
     for cfg in [
@@ -341,7 +350,14 @@ fn the_parameters_of_every_composite_follow_the_naming_rule() {
             assert_eq!(b.param("variant"), Ok(ParamValue::Choice(2)));
             assert_eq!(b.config(), cfg);
         }
-        check("psk_mod", &mut b, mod_stage, &values);
+        check(
+            "psk_mod",
+            &mut b,
+            PskModBlock::<ArenaStorage<'_>>::PARAMS,
+            Stages::stage_param,
+            mod_stage,
+            &values,
+        );
     }
     // qam_demod: with and without the equalizer
     for cfg in [
@@ -362,7 +378,14 @@ fn the_parameters_of_every_composite_follow_the_naming_rule() {
         let mut mem = arena();
         let mut st = ArenaStorage::new(&mut mem);
         let mut b = QamDemodBlock::new(&cfg, rate(200_000), &mut st).unwrap();
-        check("qam_demod", &mut b, demod_stage, &demod_values(&cfg));
+        check(
+            "qam_demod",
+            &mut b,
+            QamDemodBlock::<ArenaStorage<'_>>::PARAMS,
+            Stages::stage_param,
+            demod_stage,
+            &demod_values(&cfg),
+        );
     }
     // qam_frame_encode
     let mut enc = QamFrameEncodeConfig::default();
@@ -383,7 +406,14 @@ fn the_parameters_of_every_composite_follow_the_naming_rule() {
             ("whitening", ParamValue::Choice(0)),
         ];
         values.extend(mod_values(&enc.qam));
-        check("qam_frame_encode", &mut b, encode_stage, &values);
+        check(
+            "qam_frame_encode",
+            &mut b,
+            QamFrameEncodeBlock::<ArenaStorage<'_>>::PARAMS,
+            Stages::stage_param,
+            encode_stage,
+            &values,
+        );
     }
     // qam_frame_decode
     let mut dec = QamFrameDecodeConfig {
@@ -406,7 +436,14 @@ fn the_parameters_of_every_composite_follow_the_naming_rule() {
             ("whitening", ParamValue::Choice(0)),
             ("frame_timeout", ParamValue::I64(8192)),
         ]);
-        check("qam_frame_decode", &mut b, decode_stage, &values);
+        check(
+            "qam_frame_decode",
+            &mut b,
+            QamFrameDecodeBlock::<ArenaStorage<'_>>::PARAMS,
+            Stages::stage_param,
+            decode_stage,
+            &values,
+        );
     }
 }
 
@@ -415,11 +452,7 @@ fn the_parameters_of_every_composite_follow_the_naming_rule() {
 #[test]
 fn every_path_of_every_map_is_resolved() {
     let maps: [(&str, crate::param_map::ParamMap, Resolve); 5] = [
-        (
-            "qam_mod",
-            QamModBlock::<ArenaStorage<'static>>::PARAMS,
-            mod_stage,
-        ),
+        ("qam_mod", QAM_MOD_PARAMS, mod_stage),
         (
             "psk_mod",
             PskModBlock::<ArenaStorage<'static>>::PARAMS,

@@ -1018,6 +1018,30 @@ fn qam_demod_block() -> QamDemodBlock<ArenaStorage<'static>> {
 /// workload of M44, kept so that the cycles before and after M44.1 compare).
 const DEMOD_WARMUP: usize = 6;
 
+/// The input of `qam_demod_block` (and `pulse_match_block`, with the seed of its own entry):
+/// the soft bits of `n / 8` random 16-QAM symbols and the output of `qam_mod` for them, turned by
+/// 0.3 rad with uniform noise of ±0.02 per component.
+fn qam_demod_input(rng: &mut Pcg32, n: usize) -> (Vec<f32>, Vec<C32>) {
+    let bits = qam16_bits(rng, n / BLOCK_SPS);
+    let mut tx = qam_mod_block();
+    let mut sig = vec![C32::default(); n];
+    // Two passes: the second starts with the pulse tails of the first, as the repeated input
+    // does at every call.
+    let _ = tx.process(&bits, &mut sig);
+    let _ = tx.process(&bits, &mut sig);
+    let (s, c) = 0.3f32.sin_cos();
+    let input = sig
+        .iter()
+        .map(|x| {
+            C32::new(
+                x.re * c - x.im * s + 0.02 * rng.unit(),
+                x.re * s + x.im * c + 0.02 * rng.unit(),
+            )
+        })
+        .collect();
+    (bits, input)
+}
+
 /// The block `qam_demod` (16-QAM at 25 kBd and 200 kHz, the block defaults: 11 equalizer taps,
 /// `carrier_bw` 0.0025, `sync_bw` 0.005) reading `n` input samples per call: the output of
 /// `qam_mod` for `n / 8` random symbols (repeated every call; `n / 8` is whole symbols, so the
@@ -1045,26 +1069,10 @@ fn qam_demod_call(
 impl QamDemodBlockK {
     pub(crate) fn new(rng: &mut Pcg32, layout: Layout) -> Self {
         let n = layout.n;
-        let bits = qam16_bits(rng, n / BLOCK_SPS);
+        let (bits, input) = qam_demod_input(rng, n);
         let symbols = bits
             .chunks_exact(4)
             .map(|b| b.iter().fold(0u32, |g, &x| (g << 1) | u32::from(x > 0.0)))
-            .collect();
-        let mut tx = qam_mod_block();
-        let mut sig = vec![C32::default(); n];
-        // Two passes: the second starts with the pulse tails of the first, as the repeated
-        // input does at every call.
-        let _ = tx.process(&bits, &mut sig);
-        let _ = tx.process(&bits, &mut sig);
-        let (s, c) = 0.3f32.sin_cos();
-        let input = sig
-            .iter()
-            .map(|x| {
-                C32::new(
-                    x.re * c - x.im * s + 0.02 * rng.unit(),
-                    x.re * s + x.im * c + 0.02 * rng.unit(),
-                )
-            })
             .collect();
         let mut k = QamDemodBlockK {
             block: qam_demod_block(),
@@ -1892,9 +1900,9 @@ impl Kernel for PulseShapeBlockK {
 }
 
 /// The block `pulse_match` of `qam_demod_block` (25 kBd at 200 kHz, roll-off 0.35, span 10: 81
-/// taps; the first stage of `qam_demod`, M44.1.1 §3.2) reading `n` input samples per call of the
-/// input of `qam_demod_block` (the output of `qam_mod` turned by 0.3 rad with uniform noise of
-/// ±0.02 per component). The filter history lives across the calls.
+/// taps; the first stage of `qam_demod`, M44.1.1 §3.2) reading `n` input samples per call of an
+/// input made like that of `qam_demod_block` (`qam_demod_input`, with the seed of this entry).
+/// The filter history lives across the calls.
 pub(crate) struct PulseMatchBlockK {
     block: PulseMatchBlock<ArenaStorage<'static>>,
     input: Vec<C32>,
@@ -1904,21 +1912,7 @@ pub(crate) struct PulseMatchBlockK {
 impl PulseMatchBlockK {
     pub(crate) fn new(rng: &mut Pcg32, layout: Layout) -> Self {
         let n = layout.n;
-        let bits = qam16_bits(rng, n / BLOCK_SPS);
-        let mut tx = qam_mod_block();
-        let mut sig = vec![C32::default(); n];
-        let _ = tx.process(&bits, &mut sig);
-        let _ = tx.process(&bits, &mut sig);
-        let (s, c) = 0.3f32.sin_cos();
-        let input = sig
-            .iter()
-            .map(|x| {
-                C32::new(
-                    x.re * c - x.im * s + 0.02 * rng.unit(),
-                    x.re * s + x.im * c + 0.02 * rng.unit(),
-                )
-            })
-            .collect();
+        let (_, input) = qam_demod_input(rng, n);
         let cfg = pulse_match_config();
         let rate = block_rate(200_000);
         let bytes =

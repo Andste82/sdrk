@@ -19,7 +19,8 @@ use crate::storage::{Plan, Storage};
 /// `psk_mod` that use it).
 pub const PULSE_SHAPE_MAX_SPS: usize = 64;
 
-/// The `samples_per_symbol` parameter of `pulse_shape`, `qam_mod` and `qam_frame_encode`.
+/// The `samples_per_symbol` parameter of `pulse_shape`, `qam_mod`, `psk_mod` and
+/// `qam_frame_encode`.
 pub(crate) const SAMPLES_PER_SYMBOL_PARAM: ParamDesc = ParamDesc {
     name: "samples_per_symbol",
     unit: Unit::None,
@@ -33,7 +34,7 @@ pub(crate) const SAMPLES_PER_SYMBOL_PARAM: ParamDesc = ParamDesc {
     description: "Output samples per symbol, 2 to 64. Required.",
 };
 
-/// The `rolloff` parameter of `pulse_shape`, `qam_mod` and `qam_frame_encode`.
+/// The `rolloff` parameter of `pulse_shape`, `qam_mod`, `psk_mod` and `qam_frame_encode`.
 pub(crate) const ROLLOFF_PARAM: ParamDesc = ParamDesc {
     name: "rolloff",
     unit: Unit::None,
@@ -42,12 +43,12 @@ pub(crate) const ROLLOFF_PARAM: ParamDesc = ParamDesc {
         max: 1.0,
         default: Some(0.35),
     },
-    typical: "0.35; 0.2 for a narrow spectrum",
+    typical: "0.35; 0.2 for a narrow spectrum, 0.5 to 1 for easy timing recovery",
     mutability: Mutability::Build,
     description: "Roll-off of the root-raised-cosine pulse.",
 };
 
-/// The `span` parameter of `pulse_shape`, `qam_mod` and `qam_frame_encode`.
+/// The `span` parameter of `pulse_shape`, `qam_mod`, `psk_mod` and `qam_frame_encode`.
 pub(crate) const SPAN_PARAM: ParamDesc = ParamDesc {
     name: "span",
     unit: Unit::None,

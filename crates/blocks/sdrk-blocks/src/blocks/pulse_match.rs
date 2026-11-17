@@ -20,6 +20,49 @@ use crate::storage::{Plan, Storage};
 const RATE_REASON: &str = "the sample rate must be within 1 % of an integer multiple (2 to \
     1024) of the symbol rate; put a resample before the matched filter";
 
+/// The `symbol_rate_hz` parameter of `pulse_match`, `qam_demod` and `qam_frame_decode`.
+pub(crate) const SYMBOL_RATE_PARAM: ParamDesc = ParamDesc {
+    name: "symbol_rate_hz",
+    unit: Unit::Hz,
+    kind: ParamKind::F64 {
+        min: MIN_SYMBOL_RATE_HZ,
+        max: HZ_LIMIT,
+        default: None,
+    },
+    typical: "25000",
+    mutability: Mutability::Build,
+    description: "Symbol rate in Hz; the sample rate must be within 1 % of an integer \
+            multiple (2 to 1024) of it. Required.",
+};
+
+/// The `rolloff` parameter of `pulse_match`, `qam_demod` and `qam_frame_decode`.
+pub(crate) const MATCH_ROLLOFF_PARAM: ParamDesc = ParamDesc {
+    name: "rolloff",
+    unit: Unit::None,
+    kind: ParamKind::F64 {
+        min: RRC_MIN_ROLLOFF,
+        max: 1.0,
+        default: Some(0.35),
+    },
+    typical: "0.35 (the roll-off of the transmitter)",
+    mutability: Mutability::Build,
+    description: "Roll-off of the root-raised-cosine pulse.",
+};
+
+/// The `span` parameter of `pulse_match`, `qam_demod` and `qam_frame_decode`.
+pub(crate) const MATCH_SPAN_PARAM: ParamDesc = ParamDesc {
+    name: "span",
+    unit: Unit::None,
+    kind: ParamKind::I64 {
+        min: RRC_MIN_SPAN as i64,
+        max: RRC_MAX_SPAN as i64,
+        default: Some(10),
+    },
+    typical: "10 (the span of the transmitter)",
+    mutability: Mutability::Build,
+    description: "Length of the filter in symbols (span n + 1 taps).",
+};
+
 /// Description of the `pulse_match` block.
 pub static DESCRIPTION: BlockDescription = BlockDescription {
     kind: "pulse_match",
@@ -42,45 +85,7 @@ pub static DESCRIPTION: BlockDescription = BlockDescription {
         types: &[PortType::C32],
         description: "The filtered signal at the input rate.",
     }],
-    params: &[
-        ParamDesc {
-            name: "symbol_rate_hz",
-            unit: Unit::Hz,
-            kind: ParamKind::F64 {
-                min: MIN_SYMBOL_RATE_HZ,
-                max: HZ_LIMIT,
-                default: None,
-            },
-            typical: "25000",
-            mutability: Mutability::Build,
-            description: "Symbol rate in Hz; the sample rate must be within 1 % of an integer \
-                multiple (2 to 1024) of it. Required.",
-        },
-        ParamDesc {
-            name: "rolloff",
-            unit: Unit::None,
-            kind: ParamKind::F64 {
-                min: RRC_MIN_ROLLOFF,
-                max: 1.0,
-                default: Some(0.35),
-            },
-            typical: "0.35 (the roll-off of the transmitter)",
-            mutability: Mutability::Build,
-            description: "Roll-off of the root-raised-cosine pulse.",
-        },
-        ParamDesc {
-            name: "span",
-            unit: Unit::None,
-            kind: ParamKind::I64 {
-                min: RRC_MIN_SPAN as i64,
-                max: RRC_MAX_SPAN as i64,
-                default: Some(10),
-            },
-            typical: "10 (the span of the transmitter)",
-            mutability: Mutability::Build,
-            description: "Length of the filter in symbols (span n + 1 taps).",
-        },
-    ],
+    params: &[SYMBOL_RATE_PARAM, MATCH_ROLLOFF_PARAM, MATCH_SPAN_PARAM],
     required: &["symbol_rate_hz"],
 };
 

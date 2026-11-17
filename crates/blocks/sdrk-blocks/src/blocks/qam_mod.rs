@@ -17,9 +17,7 @@ use crate::describe::{
     BlockDescription, Mutability, ParamDesc, ParamKind, PortDesc, PortType, Unit,
 };
 use crate::error::{Error, Result};
-use crate::param_map::{
-    ParamMap, Stages, check_composite_param, composite_param, composite_set_param, stage_of,
-};
+use crate::param_map::ParamMap;
 use crate::storage::{Plan, Storage};
 
 /// The capacity in symbols of the buffer between `symbol_map` and the interpolation.
@@ -251,7 +249,7 @@ pub const QAM_MOD_PARAMS: ParamMap = ParamMap::new(&[
 pub struct QamModBlock<S: Storage> {
     bps: usize,
     ratio: Ratio,
-    stages: QamModStages<S>,
+    pub(super) stages: QamModStages<S>,
 }
 
 impl<S: Storage> core::fmt::Debug for QamModBlock<S> {
@@ -386,47 +384,20 @@ impl<S: Storage> Block for QamModBlock<S> {
         self.stages.reset();
     }
 
+    // Through the map alone: the chain routes its paths to `symbol_map` and `pulse_shape`.
     fn set_param(&mut self, name: &str, value: ParamValue) -> Result<()> {
-        composite_set_param(self, name, value)
+        QAM_MOD_PARAMS.set(&mut self.stages, name, value)
     }
 
     fn param(&self, name: &str) -> Result<ParamValue> {
-        composite_param(self, name)
+        QAM_MOD_PARAMS.get(&self.stages, name)
     }
 
     fn check_param(&self, name: &str, value: &ParamValue) -> Result<()> {
-        check_composite_param(self, name, value)
+        QAM_MOD_PARAMS.check(&self.stages, name, value)
     }
 
     fn min_input(&self) -> usize {
         self.bps
-    }
-}
-
-impl<S: Storage> Stages for QamModBlock<S> {
-    const PARAMS: ParamMap = QAM_MOD_PARAMS;
-
-    fn stage_param(&self, path: &str) -> Result<ParamValue> {
-        match stage_of(&Self::PARAMS, path)? {
-            ("0", n) => self.stages.first().param(n),
-            ("1", n) => self.stages.second().param(n),
-            _ => unknown(),
-        }
-    }
-
-    fn check_stage_param(&self, path: &str, value: &ParamValue) -> Result<()> {
-        match stage_of(&Self::PARAMS, path)? {
-            ("0", n) => self.stages.first().check_param(n, value),
-            ("1", n) => self.stages.second().check_param(n, value),
-            _ => unknown(),
-        }
-    }
-
-    fn set_stage_param(&mut self, path: &str, value: ParamValue) -> Result<()> {
-        match stage_of(&Self::PARAMS, path)? {
-            ("0", n) => self.stages.first_mut().set_param(n, value),
-            ("1", n) => self.stages.second_mut().set_param(n, value),
-            _ => unknown(),
-        }
     }
 }

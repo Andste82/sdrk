@@ -77,7 +77,11 @@ fn one_flat_name_reaches_every_path_in_the_order_of_the_table() {
     let mut c = stages();
     assert!(MAP.paths("gain_db").eq(["0.gain_db", "1.1.gain_db"]));
     assert_eq!(MAP.path("gain_db"), Some("0.gain_db"));
-    assert!(MAP.has_path("1.0.gain_db") && !MAP.has_path("gain_db"));
+    assert_eq!(MAP.check(&c, "gain_db", &ParamValue::F64(-6.0)), Ok(()));
+    assert_eq!(
+        MAP.check(&c, "gain", &ParamValue::F64(-6.0)),
+        Err(Error::UnknownParameter)
+    );
     MAP.set(&mut c, "gain_db", ParamValue::F64(-6.0)).unwrap();
     for path in MAP.paths("gain_db") {
         assert_eq!(c.path_param(path).unwrap(), ParamValue::F64(-6.0), "{path}");

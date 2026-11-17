@@ -15,26 +15,24 @@ use super::costas::{
 use super::equalize::{
     DEFAULT_CMA_SYMBOLS, DEFAULT_MU_CMA, DEFAULT_TAPS, EQ_TAPS, EqualizeBlock, EqualizeConfig,
 };
-use super::psk_demod::{
-    MIN_SYMBOL_RATE_HZ, SYNC_MAX_DEVIATION, check_equalizer_taps, split_work, work_len,
+use super::psk_demod::{SYNC_MAX_DEVIATION, check_equalizer_taps, split_work, work_len};
+use super::pulse_match::{
+    MATCH_ROLLOFF_PARAM, MATCH_SPAN_PARAM, PulseMatchBlock, PulseMatchConfig, SYMBOL_RATE_PARAM,
 };
-use super::pulse_match::{PulseMatchBlock, PulseMatchConfig};
 use super::qam_acquire::{AcquireWindow, QamAcquireBlock, QamAcquireConfig};
 use super::qam_mod::{QAM_CONSTELLATION_PARAM, qam_constellation_of_value, qam_of};
 use super::symbol_demap::{SymbolDemapBlock, SymbolDemapConfig};
 use super::symbol_map::SymbolMapConstellation;
 use super::symbol_sync::SymbolSyncBlock;
-use super::{HZ_LIMIT, check_count, head, head_mut, tail, tail_mut, unknown};
-use crate::block::{Block, BlockTiming, ParamValue};
+use super::{head, head_mut, tail, tail_mut, unknown};
+use crate::block::{Block, BlockTiming, ParamValue, check_runtime};
 use crate::describe::{
     BlockDescription, Mutability, ParamDesc, ParamKind, PortDesc, PortType, Unit,
 };
-use crate::design::{RRC_MAX_SPAN, RRC_MIN_ROLLOFF, RRC_MIN_SPAN};
 use crate::error::{Error, Result};
 use crate::lock_watch::{LockAction, LockCheck, LockPolicy, LockState, LockTransition, LockWatch};
 use crate::param_map::{
-    ParamMap, Stages, check_build_param, check_composite_param, composite_param,
-    composite_set_param, stage_of,
+    ParamMap, Stages, check_composite_param, composite_param, composite_set_param, stage_of,
 };
 use crate::storage::{Plan, Storage};
 use crate::{SymbolSyncConfig, Ted};
@@ -78,49 +76,6 @@ const DEFAULT_SYNC_BW: f64 = 0.005;
 /// The reason of the rate error (a hint to resample).
 const RATE_REASON: &str = "the sample rate must be within 1 % of an integer multiple (2 to \
     1024) of the symbol rate and at least twice it; put a resample before qam_demod";
-
-/// The `symbol_rate_hz` parameter of `qam_demod` and `qam_frame_decode`.
-pub(crate) const SYMBOL_RATE_PARAM: ParamDesc = ParamDesc {
-    name: "symbol_rate_hz",
-    unit: Unit::Hz,
-    kind: ParamKind::F64 {
-        min: MIN_SYMBOL_RATE_HZ,
-        max: HZ_LIMIT,
-        default: None,
-    },
-    typical: "25000 for 100 kbit/s 16-QAM",
-    mutability: Mutability::Build,
-    description: "Symbol rate in Hz; the sample rate must be within 1 % of an integer \
-            multiple (2 to 1024) of it and at least twice it. Required.",
-};
-
-/// The `rolloff` parameter of `qam_demod` and `qam_frame_decode`.
-pub(crate) const DEMOD_ROLLOFF_PARAM: ParamDesc = ParamDesc {
-    name: "rolloff",
-    unit: Unit::None,
-    kind: ParamKind::F64 {
-        min: RRC_MIN_ROLLOFF,
-        max: 1.0,
-        default: Some(0.35),
-    },
-    typical: "0.35 (the roll-off of the transmitter)",
-    mutability: Mutability::Build,
-    description: "Roll-off of the matched root-raised-cosine filter.",
-};
-
-/// The `span` parameter of `qam_demod` and `qam_frame_decode`.
-pub(crate) const DEMOD_SPAN_PARAM: ParamDesc = ParamDesc {
-    name: "span",
-    unit: Unit::None,
-    kind: ParamKind::I64 {
-        min: RRC_MIN_SPAN as i64,
-        max: RRC_MAX_SPAN as i64,
-        default: Some(10),
-    },
-    typical: "10",
-    mutability: Mutability::Build,
-    description: "Length of the matched filter in symbols.",
-};
 
 /// The `equalizer_taps` parameter of `qam_demod` and `qam_frame_decode`.
 pub(crate) const EQUALIZER_TAPS_PARAM: ParamDesc = ParamDesc {
@@ -215,8 +170,8 @@ pub static DESCRIPTION: BlockDescription = BlockDescription {
     params: &[
         QAM_CONSTELLATION_PARAM,
         SYMBOL_RATE_PARAM,
-        DEMOD_ROLLOFF_PARAM,
-        DEMOD_SPAN_PARAM,
+        MATCH_ROLLOFF_PARAM,
+        MATCH_SPAN_PARAM,
         EQUALIZER_TAPS_PARAM,
         SYNC_BW_PARAM,
         CARRIER_BW_PARAM,
@@ -309,18 +264,11 @@ impl QamDemodConfig {
     fn derive(&self, rate_in: Rate) -> Result<usize> {
         qam_of(self.constellation)?;
         check_equalizer_taps(self.equalizer_taps)?;
-        check_f64(
-            "symbol_rate_hz",
-            self.symbol_rate_hz,
-            MIN_SYMBOL_RATE_HZ,
-            HZ_LIMIT,
-        )?;
-        check_f64("rolloff", self.rolloff, RRC_MIN_ROLLOFF, 1.0)?;
-        check_count("span", self.span, RRC_MIN_SPAN, RRC_MAX_SPAN)?;
+        // The ranges of `symbol_rate_hz`, `rolloff` and `span` and the rate rule are those of
+        // `pulse_match` (M44.1.1 §3.2).
+        let n = self.pulse().samples_per_symbol(rate_in)?;
         check_f64("sync_bw", self.sync_bw, 0.0001, 0.1)?;
         check_f64("carrier_bw", self.carrier_bw, MIN_LOOP_BW, MAX_LOOP_BW)?;
-        // The rate rule of `pulse_match` (M44.1.1 §3.2).
-        let n = self.pulse().samples_per_symbol(rate_in)?;
         // The exact checks of the timing loop, reported with the hint to resample (as in
         // `psk_demod`).
         match self.sync().validate(rate_in) {
@@ -1290,7 +1238,7 @@ impl<S: Storage> Stages for QamDemodBlock<S> {
     const PARAMS: ParamMap = QAM_DEMOD_PARAMS;
 
     fn stage_param(&self, path: &str) -> Result<ParamValue> {
-        match stage_of(&Self::PARAMS, path)? {
+        match stage_of(path)? {
             ("pulse", n) => self.pulse.param(n),
             ("sync", n) => self.sync.param(n),
             ("eq", n) => match (self.rx.eq.as_ref(), n) {
@@ -1305,13 +1253,13 @@ impl<S: Storage> Stages for QamDemodBlock<S> {
     }
 
     fn check_stage_param(&self, path: &str, value: &ParamValue) -> Result<()> {
-        match stage_of(&Self::PARAMS, path)? {
+        match stage_of(path)? {
             ("pulse", n) => self.pulse.check_param(n, value),
             ("sync", n) => self.sync.check_param(n, value),
             // Left out: what `equalize` would answer (its description).
             ("eq", n) => match self.rx.eq.as_ref() {
                 Some(eq) => eq.check_param(n, value),
-                None => check_build_param(
+                None => check_runtime(
                     super::equalize::DESCRIPTION
                         .param(n)
                         .ok_or(Error::UnknownParameter)?,
@@ -1325,7 +1273,7 @@ impl<S: Storage> Stages for QamDemodBlock<S> {
     }
 
     fn set_stage_param(&mut self, path: &str, value: ParamValue) -> Result<()> {
-        match stage_of(&Self::PARAMS, path)? {
+        match stage_of(path)? {
             ("pulse", n) => self.pulse.set_param(n, value),
             ("sync", n) => self.sync.set_param(n, value),
             ("eq", n) => self

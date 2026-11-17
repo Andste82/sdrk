@@ -111,16 +111,22 @@ impl QamFrameEncodeConfig {
     /// `UnknownParameter`, `WrongParamType`, `OutOfRange`; `InvalidParameter` for a
     /// constellation other than `qam16` and `qam64`.
     pub fn set(&mut self, name: &str, value: ParamValue) -> Result<()> {
+        // Every path on a copy, kept only if all of them took the value (all or none, §4).
+        let mut next = *self;
         let mut any = false;
         for path in QAM_FRAME_ENCODE_PARAMS.paths(name) {
             match path.split_once('.') {
-                Some(("0", n)) => self.frame.set(n, value)?,
-                Some(("1", n)) => self.qam.set(n, value)?,
+                Some(("0", n)) => next.frame.set(n, value)?,
+                Some(("1", n)) => next.qam.set(n, value)?,
                 _ => return unknown(),
             }
             any = true;
         }
-        if any { Ok(()) } else { unknown() }
+        if !any {
+            return unknown();
+        }
+        *self = next;
+        Ok(())
     }
 
     /// Current value of a parameter by its flat name.
@@ -382,7 +388,7 @@ impl<S: Storage> Stages for QamFrameEncodeBlock<S> {
     const PARAMS: ParamMap = QAM_FRAME_ENCODE_PARAMS;
 
     fn stage_param(&self, path: &str) -> Result<ParamValue> {
-        match stage_of(&Self::PARAMS, path)? {
+        match stage_of(path)? {
             ("0", n) => self.enc.param(n),
             ("1", n) => self.qam.param(n),
             _ => unknown(),
@@ -390,7 +396,7 @@ impl<S: Storage> Stages for QamFrameEncodeBlock<S> {
     }
 
     fn check_stage_param(&self, path: &str, value: &ParamValue) -> Result<()> {
-        match stage_of(&Self::PARAMS, path)? {
+        match stage_of(path)? {
             ("0", n) => self.enc.check_param(n, value),
             ("1", n) => self.qam.check_param(n, value),
             _ => unknown(),
@@ -398,7 +404,7 @@ impl<S: Storage> Stages for QamFrameEncodeBlock<S> {
     }
 
     fn set_stage_param(&mut self, path: &str, value: ParamValue) -> Result<()> {
-        match stage_of(&Self::PARAMS, path)? {
+        match stage_of(path)? {
             ("0", n) => self.enc.set_param(n, value),
             ("1", n) => self.qam.set_param(n, value),
             _ => unknown(),

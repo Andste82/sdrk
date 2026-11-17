@@ -40,8 +40,8 @@ use sdrk_blocks::{
     SensorDecodeConfig, SensorEncodeBlock, SensorEncodeConfig, SpectrumBlock, SpectrumConfig,
     SquelchBlock, SquelchConfig, SsbDemodBlock, SsbDemodConfig, SsbModBlock, SsbModConfig,
     StereoMatrixBlock, StereoPllBlock, StereoPllConfig, SymbolDemapBlock, SymbolDemapConfig,
-    SymbolDemapConstellation, SymbolMapBlock, SymbolMapConfig, SymbolSyncBlock, SymbolSyncConfig,
-    ToComplexBlock,
+    SymbolDemapConstellation, SymbolMapBlock, SymbolMapConfig, SymbolMapConstellation,
+    SymbolSyncBlock, SymbolSyncConfig, ToComplexBlock,
 };
 use sdrk_device::Layout;
 use serde_json::{Map, Value};
@@ -3499,7 +3499,11 @@ impl Kind for PskDemodKind {
             // its max-log soft bits (D644), `pi4` nothing (D651), `offset` the 6 per sample of
             // the derotation of its carrier loop (the cost of `rotate`, D686).
             cost: 4.0 * cfg.span as f64
-                + if cfg.order == 8 { 56.0 } else { 40.0 } / sps
+                + if cfg.constellation == SymbolMapConstellation::Psk8 {
+                    56.0
+                } else {
+                    40.0
+                } / sps
                 + if cfg.variant == PskVariant::Offset {
                     6.0
                 } else {
@@ -3796,7 +3800,13 @@ impl Kind for QamDemodKind {
             // `psk_demod` less the 30 of its `costas`), `costas` with QAM 45 (D1206), the soft bits
             // of `symbol_demap` 10 or 18 (D1200) and the equalizer 8 per weight (D830; D1212).
             cost: 4.0 * cfg.span as f64
-                + (55.0 + if cfg.order == 64 { 18.0 } else { 10.0 }) / sps
+                + (55.0
+                    + if cfg.constellation == SymbolMapConstellation::Qam64 {
+                        18.0
+                    } else {
+                        10.0
+                    })
+                    / sps
                 + 8.0 * cfg.equalizer_taps as f64 / sps,
             taps: block.num_taps(),
             delay: block.timing().delay,

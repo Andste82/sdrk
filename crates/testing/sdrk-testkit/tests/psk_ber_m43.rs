@@ -48,6 +48,7 @@
 
 use num_complex::Complex64;
 use sdrk::Rate;
+use sdrk_blocks::SymbolMapConstellation;
 use sdrk_blocks::{
     Block, EqMode, PSK8_GRAY, PskDemodBlock, PskDemodConfig, PskModBlock, PskModConfig,
 };
@@ -155,7 +156,7 @@ impl Preset {
 
 fn mod_config(order: u32) -> PskModConfig {
     PskModConfig {
-        order,
+        constellation: c_of(order),
         samples_per_symbol: SPS,
         ..PskModConfig::default()
     }
@@ -163,7 +164,7 @@ fn mod_config(order: u32) -> PskModConfig {
 
 fn demod(order: u32, taps: usize, feedback: usize) -> PskDemodBlock<VecStorage> {
     let cfg = PskDemodConfig {
-        order,
+        constellation: c_of(order),
         symbol_rate_hz: SYMBOL_RATE as f64,
         equalizer_taps: taps,
         equalizer_feedback_taps: feedback,
@@ -664,4 +665,16 @@ fn mse_on_mild_below_minus_20_db_within_2000_symbols() {
         first <= CONVERGENCE_LIMIT,
         "first below -20 dB after symbol {first}"
     );
+}
+
+/// The constellation of a numeric order of the tables of this file (2, 4, 8, 16 or 64).
+fn c_of(order: u32) -> SymbolMapConstellation {
+    match order {
+        2 => SymbolMapConstellation::Bpsk,
+        4 => SymbolMapConstellation::Qpsk,
+        8 => SymbolMapConstellation::Psk8,
+        16 => SymbolMapConstellation::Qam16,
+        64 => SymbolMapConstellation::Qam64,
+        other => unreachable!("no constellation of the order {other}"),
+    }
 }

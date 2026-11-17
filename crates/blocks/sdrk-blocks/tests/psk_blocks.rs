@@ -27,6 +27,7 @@ mod common;
 
 use common::{check_block, rate, run_block, same_bits};
 use sdrk::{C32, Delay, Ratio, RatioKind, Sdrk};
+use sdrk_blocks::SymbolMapConstellation;
 use sdrk_blocks::design::{rrc, rrc_len};
 use sdrk_blocks::{
     Block, CostasBlock, CostasConfig, Error, FrameDecodeBlock, FrameDecodeConfig, FrameRotations,
@@ -169,7 +170,12 @@ fn mod_kernels(cfg: &PskModConfig, bits: &[f32]) -> Vec<C32> {
     let n = taps.len();
     let mut st =
         FirInterpState::<C32, _, _>::new(taps, vec![C32::default(); n.div_ceil(sps)], sps).unwrap();
-    let syms = symbols_v(bits, cfg.order, cfg.differential, cfg.variant);
+    let syms = symbols_v(
+        bits,
+        order_of(cfg.constellation),
+        cfg.differential,
+        cfg.variant,
+    );
     let mut out = vec![C32::default(); syms.len() * sps];
     let p =
         <Sdrk as FirInterpolate<C32>>::fir_interpolate(&Sdrk, &mut st, &syms, &mut out).unwrap();
@@ -222,8 +228,13 @@ fn demod_kernels(cfg: &PskDemodConfig, fs: Rate, input: &[C32]) -> Vec<f32> {
     } else {
         // The equalizer before the carrier loop (D825).
         let syms = eq_kernel(cfg, syms);
-        let mut st =
-            CostasState::new(psk(cfg.order), cfg.carrier_bw, 0.7071, cfg.max_offset).unwrap();
+        let mut st = CostasState::new(
+            psk(order_of(cfg.constellation)),
+            cfg.carrier_bw,
+            0.7071,
+            cfg.max_offset,
+        )
+        .unwrap();
         <Sdrk as Costas>::costas(&Sdrk, &mut st, &syms, &mut y).unwrap();
     }
     soft_of(cfg, y)
@@ -238,7 +249,7 @@ fn eq_kernel(cfg: &PskDemodConfig, x: Vec<C32>) -> Vec<C32> {
     if t == 0 {
         return x;
     }
-    let c = match cfg.order {
+    let c = match order_of(cfg.constellation) {
         2 => EqConstellation::Bpsk,
         4 => EqConstellation::Qpsk,
         _ => EqConstellation::Psk8,
@@ -272,7 +283,7 @@ fn eq_kernel(cfg: &PskDemodConfig, x: Vec<C32>) -> Vec<C32> {
 fn soft_of(cfg: &PskDemodConfig, y: Vec<C32>) -> Vec<f32> {
     let mut bits = Vec::new();
     for s in y {
-        match (cfg.order, cfg.variant) {
+        match (order_of(cfg.constellation), cfg.variant) {
             (8, _) => bits.extend_from_slice(&psk8_reference(1.0, s)),
             (4, PskVariant::Pi4) => bits.extend_from_slice(&[-s.im, -s.re]),
             (4, _) => bits.extend_from_slice(&[s.re, s.im]),
@@ -387,7 +398,7 @@ fn received_v(
     stream: u64,
 ) -> Vec<C32> {
     let cfg = PskModConfig {
-        order,
+        constellation: c_of(order),
         samples_per_symbol: sps,
         differential,
         variant,
@@ -526,7 +537,7 @@ fn psk_mod_maps_gray_symbols_and_the_differential_phase() {
     // mapping itself is checked against the explicit tables below.
     for (order, differential) in [(2, false), (2, true), (4, false), (4, true)] {
         let cfg = PskModConfig {
-            order,
+            constellation: c_of(order),
             samples_per_symbol: 4,
             differential,
             ..PskModConfig::default()
@@ -580,7 +591,7 @@ fn psk_mod_maps_gray_symbols_and_the_differential_phase() {
 fn psk_mod_symbol_centres_and_timing() {
     // An isolated symbol: the output is the pulse times the symbol, its peak sqrt(sps) h[c].
     let cfg = PskModConfig {
-        order: 4,
+        constellation: SymbolMapConstellation::Qpsk,
         samples_per_symbol: 8,
         span: 10,
         ..PskModConfig::default()
@@ -635,7 +646,10 @@ fn psk_mod_symbol_centres_and_timing() {
             rolloff: 1.01,
             ..cfg
         },
-        PskModConfig { order: 9, ..cfg },
+        PskModConfig {
+            constellation: SymbolMapConstellation::Qam16,
+            ..cfg
+        },
     ] {
         assert!(
             PskModBlock::<VecStorage>::new(&bad, r, &mut VecStorage).is_err(),
@@ -663,7 +677,7 @@ fn psk_demod_equals_the_kernels_whole_and_in_cut_plans() {
     {
         let fs = rate(9600 * sps as u64);
         let cfg = PskDemodConfig {
-            order,
+            constellation: c_of(order),
             symbol_rate_hz: 9600.0,
             differential,
             ..PskDemodConfig::default()
@@ -685,7 +699,7 @@ fn psk_demod_equals_the_kernels_whole_and_in_cut_plans() {
 fn psk_demod_keeps_soft_bits_that_do_not_fit() {
     let fs = rate(38_400);
     let cfg = PskDemodConfig {
-        order: 4,
+        constellation: SymbolMapConstellation::Qpsk,
         symbol_rate_hz: 9600.0,
         ..PskDemodConfig::default()
     };
@@ -718,7 +732,7 @@ fn psk_demod_keeps_soft_bits_that_do_not_fit() {
 #[test]
 fn psk_demod_timing_rates_and_parameters() {
     let cfg = PskDemodConfig {
-        order: 4,
+        constellation: SymbolMapConstellation::Qpsk,
         symbol_rate_hz: 25_000.0,
         ..PskDemodConfig::default()
     };
@@ -780,7 +794,10 @@ fn psk_demod_timing_rates_and_parameters() {
         }
     }
     for bad in [
-        PskDemodConfig { order: 3, ..cfg },
+        PskDemodConfig {
+            constellation: SymbolMapConstellation::Qam64,
+            ..cfg
+        },
         PskDemodConfig { span: 33, ..cfg },
         PskDemodConfig {
             rolloff: 0.01,
@@ -804,7 +821,10 @@ fn psk_demod_timing_rates_and_parameters() {
             "{bad:?}"
         );
     }
-    let bpsk = PskDemodConfig { order: 2, ..cfg };
+    let bpsk = PskDemodConfig {
+        constellation: SymbolMapConstellation::Bpsk,
+        ..cfg
+    };
     assert_eq!(
         PskDemodBlock::<VecStorage>::new(&bpsk, fs, &mut VecStorage)
             .unwrap()
@@ -849,14 +869,14 @@ fn psk_mod_to_psk_demod_without_noise_is_error_free() {
     ] {
         let sps = 4;
         let m = PskModConfig {
-            order,
+            constellation: c_of(order),
             samples_per_symbol: sps,
             differential,
             variant,
             ..PskModConfig::default()
         };
         let d = PskDemodConfig {
-            order,
+            constellation: c_of(order),
             symbol_rate_hz: 1000.0,
             differential,
             variant,
@@ -911,7 +931,7 @@ fn extremes_nan_infinity_silence_and_full_scale() {
     // psk_mod: NaN and infinite soft bits are bits (NaN and -inf a 0, +inf a 1); the output is
     // finite.
     let cfg = PskModConfig {
-        order: 4,
+        constellation: SymbolMapConstellation::Qpsk,
         samples_per_symbol: 4,
         ..PskModConfig::default()
     };
@@ -943,7 +963,7 @@ fn extremes_nan_infinity_silence_and_full_scale() {
         (4, false, PskVariant::Offset),
     ] {
         let d = PskDemodConfig {
-            order,
+            constellation: c_of(order),
             symbol_rate_hz: 1000.0,
             differential,
             variant,
@@ -958,7 +978,7 @@ fn extremes_nan_infinity_silence_and_full_scale() {
         );
         assert!(!rx.locked());
         let m = PskModConfig {
-            order,
+            constellation: c_of(order),
             samples_per_symbol: 4,
             differential,
             variant,
@@ -1127,10 +1147,11 @@ fn symbol_demap_8psk_gives_max_log_soft_bits() {
         SymbolDemapBlock::<C32, VecStorage>::rate_out(&cfg, rate(1200)).unwrap(),
         rate(3600)
     );
+    // 8psk at the index of symbol_map, costas and equalize (M44.1.1 §1)
     let mut c = SymbolDemapConfig::default();
-    c.set("constellation", ParamValue::Choice(4)).unwrap();
+    c.set("constellation", ParamValue::Choice(2)).unwrap();
     assert_eq!(c.constellation, SymbolDemapConstellation::Psk8);
-    assert_eq!(c.get("constellation"), Ok(ParamValue::Choice(4)));
+    assert_eq!(c.get("constellation"), Ok(ParamValue::Choice(2)));
 }
 
 // ---- M40.1: 8PSK, pi/4-DQPSK and OQPSK ---------------------------------------------------
@@ -1208,9 +1229,9 @@ fn costas_block_takes_order_8() {
     );
 }
 
-/// The combinations of `order`, `differential`, `variant` and the samples per symbol (M40.1 §4,
-/// D648): `true` where the configuration is valid; otherwise it must be `InvalidParameter` of
-/// `variant` (the orders are all valid ones).
+/// The combinations of the constellation (by its order), `differential`, `variant` and the
+/// samples per symbol (M40.1 §4, D648): `true` where the configuration is valid; otherwise it
+/// must be `InvalidParameter` of `variant` (the constellations are all valid ones).
 const COMBINATIONS: &[(u32, bool, PskVariant, usize, bool)] = &[
     (2, false, PskVariant::Plain, 4, true),
     (8, false, PskVariant::Plain, 4, true),
@@ -1232,14 +1253,14 @@ const COMBINATIONS: &[(u32, bool, PskVariant, usize, bool)] = &[
 fn psk_variant_combinations_are_checked() {
     for &(order, differential, variant, sps, ok) in COMBINATIONS {
         let m = PskModConfig {
-            order,
+            constellation: c_of(order),
             samples_per_symbol: sps,
             differential,
             variant,
             ..PskModConfig::default()
         };
         let d = PskDemodConfig {
-            order,
+            constellation: c_of(order),
             symbol_rate_hz: 1000.0,
             differential,
             variant,
@@ -1268,7 +1289,7 @@ fn psk_variant_combinations_are_checked() {
     }
     // The demodulator checks the rounded samples per symbol: 6.05 is 6 (even), 4.96 is 5.
     let d = PskDemodConfig {
-        order: 4,
+        constellation: SymbolMapConstellation::Qpsk,
         symbol_rate_hz: 1000.0,
         variant: PskVariant::Offset,
         ..PskDemodConfig::default()
@@ -1297,23 +1318,29 @@ fn psk_variant_combinations_are_checked() {
     assert_eq!(PskModConfig::default().variant, PskVariant::Plain);
     assert_eq!(PskDemodConfig::default().variant, PskVariant::Plain);
     assert!(m.set("variant", ParamValue::Choice(3)).is_err());
-    // the orders 5, 6 and 7 are no PSK order; 8 is
-    for order in [5u32, 6, 7] {
+    // qam16 and qam64 are in the choice of the constellation but no PSK
+    for constellation in [SymbolMapConstellation::Qam16, SymbolMapConstellation::Qam64] {
         assert!(matches!(
             PskModConfig {
-                order,
+                constellation,
                 ..PskModConfig::default()
             }
             .validate(),
-            Err(Error::InvalidParameter { name: "order", .. })
+            Err(Error::InvalidParameter {
+                name: "constellation",
+                ..
+            })
         ));
         assert!(matches!(
             PskDemodConfig {
-                order,
+                constellation,
                 ..PskDemodConfig::default()
             }
             .validate(rate(8000)),
-            Err(Error::InvalidParameter { name: "order", .. })
+            Err(Error::InvalidParameter {
+                name: "constellation",
+                ..
+            })
         ));
     }
 }
@@ -1330,7 +1357,7 @@ fn psk_mod_maps_8psk_and_pi4_symbols() {
         out
     };
     let psk8 = PskModConfig {
-        order: 8,
+        constellation: SymbolMapConstellation::Psk8,
         samples_per_symbol: 8,
         ..PskModConfig::default()
     };
@@ -1362,7 +1389,7 @@ fn psk_mod_maps_8psk_and_pi4_symbols() {
     // pi/4-DQPSK from the start phase 0: 00 -> +pi/4, 01 -> +3 pi/4, 11 -> -3 pi/4,
     // 10 -> -pi/4
     let pi4 = PskModConfig {
-        order: 4,
+        constellation: SymbolMapConstellation::Qpsk,
         samples_per_symbol: 8,
         differential: true,
         variant: PskVariant::Pi4,
@@ -1406,7 +1433,7 @@ fn psk_mod_variants_equal_the_reference_whole_and_in_twenty_plans() {
     .enumerate()
     {
         let cfg = PskModConfig {
-            order,
+            constellation: c_of(order),
             samples_per_symbol: sps,
             differential,
             variant,
@@ -1434,7 +1461,7 @@ fn psk_variant_timing_and_rates() {
     // psk_mod: 8PSK at 9600 bit/s and 8 samples per symbol is 25.6 kHz (ratio 8 / 3);
     // OQPSK adds half a symbol (one bit) to the delay.
     let psk8 = PskModConfig {
-        order: 8,
+        constellation: SymbolMapConstellation::Psk8,
         samples_per_symbol: 8,
         ..PskModConfig::default()
     };
@@ -1447,7 +1474,7 @@ fn psk_variant_timing_and_rates() {
         rate(25_600)
     );
     let oq = PskModConfig {
-        order: 4,
+        constellation: SymbolMapConstellation::Qpsk,
         samples_per_symbol: 8,
         span: 10,
         variant: PskVariant::Offset,
@@ -1457,7 +1484,7 @@ fn psk_variant_timing_and_rates() {
     assert_eq!(b.timing().ratio, Ratio::new(4, 1).unwrap());
     assert_eq!(b.timing().delay, Delay::new(22, 2).unwrap());
     let pi4 = PskModConfig {
-        order: 4,
+        constellation: SymbolMapConstellation::Qpsk,
         differential: true,
         variant: PskVariant::Pi4,
         ..oq
@@ -1467,7 +1494,7 @@ fn psk_variant_timing_and_rates() {
     // psk_demod: 8PSK gives 3 bits per symbol; OQPSK has the delay of plain QPSK (D658).
     let fs = rate(200_000);
     let d8 = PskDemodConfig {
-        order: 8,
+        constellation: SymbolMapConstellation::Psk8,
         symbol_rate_hz: 25_000.0,
         ..PskDemodConfig::default()
     };
@@ -1479,7 +1506,7 @@ fn psk_variant_timing_and_rates() {
         rate(75_000)
     );
     let doq = PskDemodConfig {
-        order: 4,
+        constellation: SymbolMapConstellation::Qpsk,
         symbol_rate_hz: 25_000.0,
         variant: PskVariant::Offset,
         ..PskDemodConfig::default()
@@ -1503,7 +1530,7 @@ fn psk_demod_variants_equal_the_kernels_whole_and_in_twenty_plans() {
     {
         let fs = rate(9600 * sps as u64);
         let cfg = PskDemodConfig {
-            order,
+            constellation: c_of(order),
             symbol_rate_hz: 9600.0,
             differential,
             variant,
@@ -1538,7 +1565,7 @@ fn psk_demod_variants_equal_the_kernels_whole_and_in_twenty_plans() {
 fn psk_demod_8psk_keeps_soft_bits_that_do_not_fit() {
     let fs = rate(38_400);
     let cfg = PskDemodConfig {
-        order: 8,
+        constellation: SymbolMapConstellation::Psk8,
         symbol_rate_hz: 9600.0,
         ..PskDemodConfig::default()
     };
@@ -1574,13 +1601,13 @@ fn oqpsk_chain_delay_counts_the_half_symbol_once() {
         let mut sums = Vec::new();
         for variant in [PskVariant::Plain, PskVariant::Offset] {
             let m = PskModConfig {
-                order: 4,
+                constellation: SymbolMapConstellation::Qpsk,
                 samples_per_symbol: sps,
                 variant,
                 ..PskModConfig::default()
             };
             let d = PskDemodConfig {
-                order: 4,
+                constellation: SymbolMapConstellation::Qpsk,
                 symbol_rate_hz: 1000.0,
                 variant,
                 ..PskDemodConfig::default()
@@ -1629,7 +1656,7 @@ fn psk_demod_with_equalizer_taps_0_is_unchanged() {
     {
         let fs = rate(9600 * sps as u64);
         let base = PskDemodConfig {
-            order,
+            constellation: c_of(order),
             symbol_rate_hz: 9600.0,
             differential,
             variant,
@@ -1670,7 +1697,7 @@ fn psk_demod_with_equalizer_equals_the_kernels_whole_and_in_twenty_plans() {
     {
         let fs = rate(9600 * sps as u64);
         let cfg = PskDemodConfig {
-            order,
+            constellation: c_of(order),
             symbol_rate_hz: 9600.0,
             differential,
             variant,
@@ -1740,14 +1767,14 @@ fn psk_demod_with_equalizer_decodes_a_clean_signal() {
     ] {
         let sps = 4;
         let m = PskModConfig {
-            order,
+            constellation: c_of(order),
             samples_per_symbol: sps,
             differential,
             variant,
             ..PskModConfig::default()
         };
         let d = PskDemodConfig {
-            order,
+            constellation: c_of(order),
             symbol_rate_hz: 1000.0,
             differential,
             variant,
@@ -1788,5 +1815,28 @@ fn psk(order: u32) -> CostasConstellation {
         4 => CostasConstellation::Qpsk,
         8 => CostasConstellation::Psk8,
         _ => panic!("no PSK order {order}"),
+    }
+}
+
+/// The constellation of a numeric order of the tables of this file (2, 4, 8, 16 or 64).
+fn c_of(order: u32) -> SymbolMapConstellation {
+    match order {
+        2 => SymbolMapConstellation::Bpsk,
+        4 => SymbolMapConstellation::Qpsk,
+        8 => SymbolMapConstellation::Psk8,
+        16 => SymbolMapConstellation::Qam16,
+        64 => SymbolMapConstellation::Qam64,
+        other => unreachable!("no constellation of the order {other}"),
+    }
+}
+
+/// The numeric order of a constellation (the inverse of `c_of`).
+fn order_of(c: SymbolMapConstellation) -> u32 {
+    match c {
+        SymbolMapConstellation::Bpsk => 2,
+        SymbolMapConstellation::Qpsk => 4,
+        SymbolMapConstellation::Psk8 => 8,
+        SymbolMapConstellation::Qam16 => 16,
+        _ => 64,
     }
 }

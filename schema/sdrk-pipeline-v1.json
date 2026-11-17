@@ -3474,6 +3474,18 @@
                     "minimum": 0.0001,
                     "type": "number"
                   },
+                  "constellation": {
+                    "default": "bpsk",
+                    "description": "The constellation: bpsk (1 bit per symbol), qpsk (2 bits per symbol) or 8psk (3 bits per symbol); qam16 and qam64 are those of qam_mod and qam_demod. Typical: bpsk, qpsk or 8psk (qam16 and qam64 are refused: qam_mod). Build-time.",
+                    "enum": [
+                      "bpsk",
+                      "qpsk",
+                      "8psk",
+                      "qam16",
+                      "qam64"
+                    ],
+                    "type": "string"
+                  },
                   "differential": {
                     "default": false,
                     "description": "Differential detection instead of the carrier loop. Typical: false; true for differentially coded signals (no carrier loop). Build-time.",
@@ -3499,13 +3511,6 @@
                     "maximum": 0.25,
                     "minimum": 0.0,
                     "type": "number"
-                  },
-                  "order": {
-                    "default": 2,
-                    "description": "Order of the phase-shift keying: 2 (BPSK), 4 (QPSK) or 8 (8PSK). Typical: 2 for BPSK, 4 for QPSK, 8 for 8PSK. Build-time.",
-                    "maximum": 8,
-                    "minimum": 2,
-                    "type": "integer"
                   },
                   "rolloff": {
                     "default": 0.35,
@@ -3536,7 +3541,7 @@
                   },
                   "variant": {
                     "default": "plain",
-                    "description": "plain, pi4 (pi/4-DQPSK: needs order 4 and differential) or offset (OQPSK: needs order 4, not differential and an even number of samples per symbol). Typical: plain; pi4 for pi/4-DQPSK (TETRA), offset for OQPSK (IEEE 802.15.4). Build-time.",
+                    "description": "plain, pi4 (pi/4-DQPSK: needs qpsk and differential) or offset (OQPSK: needs qpsk, not differential and an even number of samples per symbol). Typical: plain; pi4 for pi/4-DQPSK (TETRA), offset for OQPSK (IEEE 802.15.4). Build-time.",
                     "enum": [
                       "plain",
                       "pi4",
@@ -3582,17 +3587,22 @@
               "params": {
                 "additionalProperties": false,
                 "properties": {
+                  "constellation": {
+                    "default": "bpsk",
+                    "description": "The constellation: bpsk (1 bit per symbol), qpsk (2 bits per symbol) or 8psk (3 bits per symbol); qam16 and qam64 are those of qam_mod and qam_demod. Typical: bpsk, qpsk or 8psk (qam16 and qam64 are refused: qam_mod). Build-time.",
+                    "enum": [
+                      "bpsk",
+                      "qpsk",
+                      "8psk",
+                      "qam16",
+                      "qam64"
+                    ],
+                    "type": "string"
+                  },
                   "differential": {
                     "default": false,
                     "description": "Differential coding: each symbol adds its phase to the previous one. Typical: false; true for a receiver without carrier recovery. Build-time.",
                     "type": "boolean"
-                  },
-                  "order": {
-                    "default": 2,
-                    "description": "Order of the phase-shift keying: 2 (BPSK, 1 bit per symbol), 4 (QPSK, 2 bits per symbol) or 8 (8PSK, 3 bits per symbol). Typical: 2 for BPSK, 4 for QPSK, 8 for 8PSK. Build-time.",
-                    "maximum": 8,
-                    "minimum": 2,
-                    "type": "integer"
                   },
                   "rolloff": {
                     "default": 0.35,
@@ -3616,7 +3626,7 @@
                   },
                   "variant": {
                     "default": "plain",
-                    "description": "plain, pi4 (pi/4-DQPSK: needs order 4 and differential) or offset (OQPSK: needs order 4, not differential and an even number of samples per symbol). Typical: plain; pi4 for pi/4-DQPSK (TETRA), offset for OQPSK (IEEE 802.15.4). Build-time.",
+                    "description": "plain, pi4 (pi/4-DQPSK: needs qpsk and differential) or offset (OQPSK: needs qpsk, not differential and an even number of samples per symbol). Typical: plain; pi4 for pi/4-DQPSK (TETRA), offset for OQPSK (IEEE 802.15.4). Build-time.",
                     "enum": [
                       "plain",
                       "pi4",
@@ -3758,18 +3768,23 @@
                     "minimum": 0.0001,
                     "type": "number"
                   },
+                  "constellation": {
+                    "default": "qam16",
+                    "description": "The constellation: qam16 (16-QAM, 4 bits per symbol) or qam64 (64-QAM, 6 bits per symbol); bpsk, qpsk and 8psk are those of psk_mod and psk_demod. Typical: qam16 or qam64 (bpsk, qpsk and 8psk are refused: psk_mod). Build-time.",
+                    "enum": [
+                      "bpsk",
+                      "qpsk",
+                      "8psk",
+                      "qam16",
+                      "qam64"
+                    ],
+                    "type": "string"
+                  },
                   "equalizer_taps": {
                     "default": 11,
                     "description": "Forward taps of the adaptive equalizer between the timing loop and the carrier loop: 0 (off) or odd from 3 to 63. Typical: 11; 15 against stronger multipath. Build-time.",
                     "maximum": 63,
                     "minimum": 0,
-                    "type": "integer"
-                  },
-                  "order": {
-                    "default": 16,
-                    "description": "Order of the quadrature amplitude modulation: 16 (16-QAM, 4 bits per symbol) or 64 (64-QAM, 6 bits per symbol). Typical: 16 for 16-QAM, 64 for 64-QAM. Build-time.",
-                    "maximum": 64,
-                    "minimum": 16,
                     "type": "integer"
                   },
                   "rolloff": {
@@ -3844,6 +3859,18 @@
                     "minimum": 0.0001,
                     "type": "number"
                   },
+                  "constellation": {
+                    "default": "qam16",
+                    "description": "The constellation: qam16 (16-QAM, 4 bits per symbol) or qam64 (64-QAM, 6 bits per symbol); bpsk, qpsk and 8psk are those of psk_mod and psk_demod. Typical: qam16 or qam64 (bpsk, qpsk and 8psk are refused: psk_mod). Build-time.",
+                    "enum": [
+                      "bpsk",
+                      "qpsk",
+                      "8psk",
+                      "qam16",
+                      "qam64"
+                    ],
+                    "type": "string"
+                  },
                   "emit_bad": {
                     "default": false,
                     "description": "Also output frames whose CRC does not match, with the flag CRC_FAIL. Typical: false; true to count or inspect damaged frames. Build-time.",
@@ -3868,13 +3895,6 @@
                     "description": "Number of sync word bits that may differ. Typical: 0 for clean links, 2 for noisy ones. Build-time.",
                     "maximum": 4,
                     "minimum": 0,
-                    "type": "integer"
-                  },
-                  "order": {
-                    "default": 16,
-                    "description": "Order of the quadrature amplitude modulation: 16 (16-QAM, 4 bits per symbol) or 64 (64-QAM, 6 bits per symbol). Typical: 16 for 16-QAM, 64 for 64-QAM. Build-time.",
-                    "maximum": 64,
-                    "minimum": 16,
                     "type": "integer"
                   },
                   "rolloff": {
@@ -3951,6 +3971,18 @@
               "params": {
                 "additionalProperties": false,
                 "properties": {
+                  "constellation": {
+                    "default": "qam16",
+                    "description": "The constellation: qam16 (16-QAM, 4 bits per symbol) or qam64 (64-QAM, 6 bits per symbol); bpsk, qpsk and 8psk are those of psk_mod and psk_demod. Typical: qam16 or qam64 (bpsk, qpsk and 8psk are refused: psk_mod). Build-time.",
+                    "enum": [
+                      "bpsk",
+                      "qpsk",
+                      "8psk",
+                      "qam16",
+                      "qam64"
+                    ],
+                    "type": "string"
+                  },
                   "idle": {
                     "default": "zero",
                     "description": "What is sent between frames: zero sends 0.0, preamble the bits of 0x55 as +1/-1, pn9 the bits of the PN9 sequence as +1/-1. Typical: zero; preamble to keep a receiver's clock recovery busy; pn9 for QAM and PSK receivers. Build-time.",
@@ -3960,13 +3992,6 @@
                       "pn9"
                     ],
                     "type": "string"
-                  },
-                  "order": {
-                    "default": 16,
-                    "description": "Order of the quadrature amplitude modulation: 16 (16-QAM, 4 bits per symbol) or 64 (64-QAM, 6 bits per symbol). Typical: 16 for 16-QAM, 64 for 64-QAM. Build-time.",
-                    "maximum": 64,
-                    "minimum": 16,
-                    "type": "integer"
                   },
                   "preamble_bytes": {
                     "default": 4,
@@ -4042,12 +4067,17 @@
               "params": {
                 "additionalProperties": false,
                 "properties": {
-                  "order": {
-                    "default": 16,
-                    "description": "Order of the quadrature amplitude modulation: 16 (16-QAM, 4 bits per symbol) or 64 (64-QAM, 6 bits per symbol). Typical: 16 for 16-QAM, 64 for 64-QAM. Build-time.",
-                    "maximum": 64,
-                    "minimum": 16,
-                    "type": "integer"
+                  "constellation": {
+                    "default": "qam16",
+                    "description": "The constellation: qam16 (16-QAM, 4 bits per symbol) or qam64 (64-QAM, 6 bits per symbol); bpsk, qpsk and 8psk are those of psk_mod and psk_demod. Typical: qam16 or qam64 (bpsk, qpsk and 8psk are refused: psk_mod). Build-time.",
+                    "enum": [
+                      "bpsk",
+                      "qpsk",
+                      "8psk",
+                      "qam16",
+                      "qam64"
+                    ],
+                    "type": "string"
                   },
                   "rolloff": {
                     "default": 0.35,
@@ -5043,13 +5073,13 @@
                     "default": "bpsk",
                     "description": "The symbol alphabet: real (f32, 1 bit), bpsk (C32, 1 bit), qpsk (C32, 2 bits, re then im), fsk4 (f32, 2 bits, -v then |v| - 2/3), 8psk (C32, 3 bits, max-log, Gray), qam16 (C32, 4 bits) or qam64 (C32, 6 bits; both Gray, in-phase bits first, piecewise-linear max-log). Typical: bpsk; real after an FSK discriminator, qpsk for QPSK, fsk4 for 4-FSK, 8psk for 8PSK, qam16 and qam64 for QAM. Build-time.",
                     "enum": [
-                      "real",
                       "bpsk",
                       "qpsk",
-                      "fsk4",
                       "8psk",
                       "qam16",
-                      "qam64"
+                      "qam64",
+                      "real",
+                      "fsk4"
                     ],
                     "type": "string"
                   },

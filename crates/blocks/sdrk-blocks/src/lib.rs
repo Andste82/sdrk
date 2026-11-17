@@ -112,7 +112,7 @@ pub use blocks::ook_demod::{
 pub use blocks::ook_mod::{OOK_MOD_CHUNK, OokModBlock, OokModConfig};
 pub use blocks::preemph_limit::{PreemphLimitBlock, PreemphLimitConfig, PreemphLimitElem};
 pub use blocks::psk_demod::{PSK_DEMOD_CHUNK, PskDemodBlock, PskDemodConfig};
-pub use blocks::psk_mod::{PSK_MOD_CHUNK, PskModBlock, PskModConfig, PskVariant};
+pub use blocks::psk_mod::{PSK_MOD_CHUNK, PSK_MOD_PARAMS, PskModBlock, PskModConfig, PskVariant};
 pub use blocks::pulse_key::{
     PULSE_KEY_OFF, PULSE_KEY_ON, PULSE_KEY_PAIRS, PULSE_KEY_QUEUE, PulseKeyBlock, PulseKeyConfig,
     PulseKeyMode,
@@ -121,10 +121,10 @@ pub use blocks::qam_acquire::{
     AcquireWindow, QAM_ACQUISITION_SKIP, QAM_ACQUISITION_SYMBOLS, QamAcquireBlock, QamAcquireConfig,
 };
 pub use blocks::qam_demod::{
-    QAM_ACQUISITION_CHECK, QAM_ACQUISITION_VERIFY_TOLERANCE, QAM_DEMOD_CHUNK, QAM_HANDOVER_SYMBOLS,
-    QAM_TRACKER_HOLD_BW, QAM_TRACKER_PULL_BW, QAM_WATCH_CHECKS, QAM_WATCH_GAP_WINDOWS,
-    QAM_WATCH_WEIGHT_ENERGY_16, QAM_WATCH_WEIGHT_ENERGY_64, QamDemodBlock, QamDemodConfig,
-    QamDemodLock,
+    QAM_ACQUISITION_CHECK, QAM_ACQUISITION_VERIFY_TOLERANCE, QAM_DEMOD_CHUNK, QAM_DEMOD_PARAMS,
+    QAM_HANDOVER_SYMBOLS, QAM_TRACKER_HOLD_BW, QAM_TRACKER_PULL_BW, QAM_WATCH_CHECKS,
+    QAM_WATCH_GAP_WINDOWS, QAM_WATCH_WEIGHT_ENERGY_16, QAM_WATCH_WEIGHT_ENERGY_64, QamDemodBlock,
+    QamDemodConfig, QamDemodLock,
 };
 pub use blocks::qam_frame_decode::{
     QAM_FRAME_DECODE_PARAMS, QAM_FRAME_TIMEOUT, QAM_FRAME_WATCH_LAG, QamFrameDecodeBlock,
@@ -133,7 +133,7 @@ pub use blocks::qam_frame_decode::{
 pub use blocks::qam_frame_encode::{
     QAM_FRAME_ENCODE_PARAMS, QamFrameEncodeBlock, QamFrameEncodeConfig,
 };
-pub use blocks::qam_mod::{QAM_MOD_CHUNK, QamModBlock, QamModConfig};
+pub use blocks::qam_mod::{QAM_MOD_CHUNK, QAM_MOD_PARAMS, QamModBlock, QamModConfig};
 pub use blocks::quad_demod::{QuadDemodBlock, QuadDemodConfig};
 pub use blocks::rds_decode::{RdsDecodeBlock, RdsDecodeConfig};
 pub use blocks::rds_demod::{

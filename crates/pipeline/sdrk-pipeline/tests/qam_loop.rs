@@ -380,7 +380,7 @@ fn pair_transmitter() -> String {
     nodes.insert(
         "mod".to_string(),
         serde_json::json!({ "kind": "qam_mod", "params": {
-            "order": p["order"], "rolloff": p["rolloff"],
+            "constellation": p["constellation"], "rolloff": p["rolloff"],
             "samples_per_symbol": p["samples_per_symbol"], "span": p["span"] } }),
     );
     spec["edges"] = serde_json::json!([

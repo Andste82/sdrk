@@ -28,6 +28,7 @@ use sdrk_testkit::Pcg32;
 use serde_json::{Value, json};
 
 use common::build;
+use sdrk_blocks::SymbolMapConstellation;
 
 /// Seed of the chunk plans and the random data of M44 (test 8).
 const SEED: u64 = 607;
@@ -138,7 +139,7 @@ fn qam_mod_costs_4_span_and_multiplies_the_rate() {
             "qam_mod",
             "f32",
             48_000,
-            json!({ "order": order, "samples_per_symbol": sps, "span": span }),
+            json!({ "constellation": cname(order), "samples_per_symbol": sps, "span": span }),
         ));
         assert!(report.is_ok(), "{}", report.to_json());
         assert_eq!(report.cost_per_input_sample, 4.0 * span as f64);
@@ -165,15 +166,15 @@ fn qam_mod_costs_4_span_and_multiplies_the_rate() {
         "qam_mod",
         "f32",
         1000,
-        json!({ "samples_per_symbol": 4, "order": 32 }),
+        json!({ "samples_per_symbol": 4, "constellation": "8psk" }),
     ));
     assert_eq!(
         (path.as_str(), code),
-        ("nodes.n.params.order", DiagCode::InvalidValue)
+        ("nodes.n.params.constellation", DiagCode::InvalidValue)
     );
     for bad in [
         json!({ "samples_per_symbol": 65 }),
-        json!({ "samples_per_symbol": 4, "order": 4 }),
+        json!({ "samples_per_symbol": 4, "constellation": "qpsk" }),
         json!({ "samples_per_symbol": 4, "span": 3 }),
         json!({ "samples_per_symbol": 4, "rolloff": 1.5 }),
     ] {
@@ -195,7 +196,7 @@ fn qam_demod_costs_and_rate_rule() {
             "qam_demod",
             "c32",
             fs,
-            json!({ "order": order, "symbol_rate_hz": sym, "span": span, "equalizer_taps": taps }),
+            json!({ "constellation": cname(order), "symbol_rate_hz": sym, "span": span, "equalizer_taps": taps }),
         ));
         assert!(report.is_ok(), "{}", report.to_json());
         let sps = fs as f64 / sym;
@@ -229,7 +230,10 @@ fn qam_demod_costs_and_rate_rule() {
         assert!(message.contains("resample"), "{message}");
     }
     for (params, name) in [
-        (json!({ "symbol_rate_hz": 25_000, "order": 20 }), "order"),
+        (
+            json!({ "symbol_rate_hz": 25_000, "constellation": "bpsk" }),
+            "constellation",
+        ),
         (
             json!({ "symbol_rate_hz": 25_000, "equalizer_taps": 12 }),
             "equalizer_taps",
@@ -321,7 +325,7 @@ fn push_all<I, O: Copy + Default + sdrk::Sample>(
 fn qam_mod_and_qam_demod_kinds_equal_the_blocks() {
     for (order, stream) in [(16u32, 1u64), (64, 5)] {
         let m = QamModConfig {
-            order,
+            constellation: c_of(order),
             samples_per_symbol: 8,
             ..QamModConfig::default()
         };
@@ -337,7 +341,7 @@ fn qam_mod_and_qam_demod_kinds_equal_the_blocks() {
                 "qam_mod",
                 "f32",
                 25_000 * k as u64,
-                json!({ "order": order, "samples_per_symbol": 8 }),
+                json!({ "constellation": cname(order), "samples_per_symbol": 8 }),
             )
             .to_string(),
         );
@@ -348,7 +352,7 @@ fn qam_mod_and_qam_demod_kinds_equal_the_blocks() {
         );
 
         let d = QamDemodConfig {
-            order,
+            constellation: c_of(order),
             symbol_rate_hz: 25_000.0,
             ..QamDemodConfig::default()
         };
@@ -373,7 +377,7 @@ fn qam_mod_and_qam_demod_kinds_equal_the_blocks() {
                 "qam_demod",
                 "c32",
                 200_000,
-                json!({ "order": order, "symbol_rate_hz": 25_000 }),
+                json!({ "constellation": cname(order), "symbol_rate_hz": 25_000 }),
             )
             .to_string(),
         );
@@ -386,5 +390,29 @@ fn qam_mod_and_qam_demod_kinds_equal_the_blocks() {
             "{order}: qam_demod pipeline differs from the block"
         );
         assert!(rx.set_param("n", "carrier_bw", json!(0.01)).is_err());
+    }
+}
+
+/// The constellation of a numeric order of the tables of this file (2, 4, 8, 16 or 64).
+fn c_of(order: u32) -> SymbolMapConstellation {
+    match order {
+        2 => SymbolMapConstellation::Bpsk,
+        4 => SymbolMapConstellation::Qpsk,
+        8 => SymbolMapConstellation::Psk8,
+        16 => SymbolMapConstellation::Qam16,
+        64 => SymbolMapConstellation::Qam64,
+        other => unreachable!("no constellation of the order {other}"),
+    }
+}
+
+/// The constellation name of a numeric order of the tables of this file (2, 4, 8, 16 or 64).
+fn cname(order: u32) -> &'static str {
+    match order {
+        2 => "bpsk",
+        4 => "qpsk",
+        8 => "8psk",
+        16 => "qam16",
+        64 => "qam64",
+        other => unreachable!("no constellation of the order {other}"),
     }
 }

@@ -12,6 +12,8 @@ pub mod band_pulse_detect;
 pub mod biquad;
 pub mod channel_select;
 pub mod channelize;
+#[cfg(test)]
+mod composite_params;
 pub mod convert;
 pub mod convert_out;
 pub mod costas;

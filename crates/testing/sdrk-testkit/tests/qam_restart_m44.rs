@@ -80,6 +80,7 @@
 
 use num_complex::Complex64;
 use sdrk::Rate;
+use sdrk_blocks::SymbolMapConstellation;
 use sdrk_blocks::{Block, QamDemodBlock, QamDemodConfig, QamModBlock, QamModConfig};
 use sdrk_core::C32;
 use sdrk_core::kernels::constellation::rotate_symbol;
@@ -134,7 +135,7 @@ fn theory(order: u32, esn0_db: f64) -> f64 {
 
 fn demod(order: u32, taps: usize) -> QamDemodBlock<VecStorage> {
     let cfg = QamDemodConfig {
-        order,
+        constellation: c_of(order),
         symbol_rate_hz: SYMBOL_RATE as f64,
         equalizer_taps: taps,
         ..QamDemodConfig::default()
@@ -183,7 +184,7 @@ fn weak_signal(
         .map(|_| if rng.next_u32() & 1 == 1 { 1.0 } else { -1.0 })
         .collect();
     let cfg = QamModConfig {
-        order,
+        constellation: c_of(order),
         samples_per_symbol: SPS,
         ..QamModConfig::default()
     };
@@ -580,7 +581,7 @@ fn drifting_signal(
         .map(|_| if rng.next_u32() & 1 == 1 { 1.0 } else { -1.0 })
         .collect();
     let cfg = QamModConfig {
-        order,
+        constellation: c_of(order),
         samples_per_symbol: SPS,
         ..QamModConfig::default()
     };
@@ -635,7 +636,7 @@ fn the_decision_mode_starts_at_the_phase_of_the_output() {
                 s.spawn(move || {
                     let (input, sent) = drifting_signal(order, n, esn0, offset, ppm, 817);
                     let cfg = QamDemodConfig {
-                        order,
+                        constellation: c_of(order),
                         symbol_rate_hz: SYMBOL_RATE as f64,
                         equalizer_taps: taps,
                         sync_bw,
@@ -675,5 +676,17 @@ fn the_decision_mode_starts_at_the_phase_of_the_output() {
         assert_eq!(*slips, 0, "{what}: one alignment from symbol 10000 on");
         assert_eq!(*restarts, 0, "{what}");
         assert!(*ber <= theory(*order, esn0 - 1.0), "{what}: BER {ber}");
+    }
+}
+
+/// The constellation of a numeric order of the tables of this file (2, 4, 8, 16 or 64).
+fn c_of(order: u32) -> SymbolMapConstellation {
+    match order {
+        2 => SymbolMapConstellation::Bpsk,
+        4 => SymbolMapConstellation::Qpsk,
+        8 => SymbolMapConstellation::Psk8,
+        16 => SymbolMapConstellation::Qam16,
+        64 => SymbolMapConstellation::Qam64,
+        other => unreachable!("no constellation of the order {other}"),
     }
 }

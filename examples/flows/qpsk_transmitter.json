@@ -38,7 +38,7 @@
     "mod": {
       "kind": "psk_mod",
       "params": {
-        "order": 4,
+        "constellation": "qpsk",
         "rolloff": 0.35,
         "samples_per_symbol": 8,
         "span": 10

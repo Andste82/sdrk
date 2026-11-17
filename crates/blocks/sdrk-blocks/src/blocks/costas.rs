@@ -179,15 +179,6 @@ fn constellation_index(c: CostasConstellation) -> u16 {
     }
 }
 
-/// The carrier-loop constellation of a PSK order (2, 4, 8) of `psk_demod` and `rds_demod`.
-pub(crate) fn costas_constellation_of_order(order: u32) -> CostasConstellation {
-    match order {
-        4 => CostasConstellation::Qpsk,
-        8 => CostasConstellation::Psk8,
-        _ => CostasConstellation::Bpsk,
-    }
-}
-
 /// `min <= v <= max`, otherwise `OutOfRange` (NaN included).
 pub(crate) fn check_f64(name: &'static str, v: f64, min: f64, max: f64) -> Result<()> {
     if v >= min && v <= max {
@@ -199,24 +190,6 @@ pub(crate) fn check_f64(name: &'static str, v: f64, min: f64, max: f64) -> Resul
             max,
             got: v,
         })
-    }
-}
-
-/// The order of a PSK block: 2, 4 or 8, otherwise `InvalidParameter` (3, 5, 6 and 7 are
-/// inside the range of the description but not supported orders) or `OutOfRange`.
-pub(crate) fn check_order(order: u32) -> Result<()> {
-    match order {
-        2 | 4 | 8 => Ok(()),
-        o if (2..=8).contains(&o) => Err(Error::InvalidParameter {
-            name: "order",
-            reason: "the order must be 2 (bpsk), 4 (qpsk) or 8 (8psk)",
-        }),
-        o => Err(Error::OutOfRange {
-            name: "order",
-            min: 2.0,
-            max: 8.0,
-            got: f64::from(o),
-        }),
     }
 }
 

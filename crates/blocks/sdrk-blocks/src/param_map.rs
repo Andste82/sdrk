@@ -226,3 +226,104 @@ impl<B: Block + ?Sized> ParamPathsMut for B {
         self.set_param(path, value)
     }
 }
+
+/// The building blocks of a composite block that holds them in fields of its own, reached by the
+/// paths of its [`ParamMap`] (crate-internal: the composite routes the paths of its map; no
+/// other path is answered).
+pub(crate) trait Stages {
+    /// The map of the composite: its public parameters and the paths they reach.
+    const PARAMS: ParamMap;
+
+    /// The current value of the building-block parameter at `path`.
+    fn stage_param(&self, path: &str) -> Result<ParamValue>;
+
+    /// Checks whether the building block at `path` would take `value`, without changing it.
+    fn check_stage_param(&self, path: &str, value: &ParamValue) -> Result<()>;
+
+    /// Sets the building-block parameter at `path`.
+    fn set_stage_param(&mut self, path: &str, value: ParamValue) -> Result<()>;
+}
+
+/// A shared view of the building blocks of a composite: the target of [`ParamMap::get`].
+pub(crate) struct Via<'a, T: ?Sized>(pub(crate) &'a T);
+
+/// A mutable view of the building blocks of a composite: the target of [`ParamMap::set`].
+pub(crate) struct ViaMut<'a, T: ?Sized>(pub(crate) &'a mut T);
+
+impl<T: Stages + ?Sized> ParamPaths for Via<'_, T> {
+    fn path_param(&self, path: &str) -> Result<ParamValue> {
+        self.0.stage_param(path)
+    }
+    fn check_path_param(&self, path: &str, value: &ParamValue) -> Result<()> {
+        self.0.check_stage_param(path, value)
+    }
+}
+
+impl<T: Stages + ?Sized> ParamPaths for ViaMut<'_, T> {
+    fn path_param(&self, path: &str) -> Result<ParamValue> {
+        self.0.stage_param(path)
+    }
+    fn check_path_param(&self, path: &str, value: &ParamValue) -> Result<()> {
+        self.0.check_stage_param(path, value)
+    }
+}
+
+impl<T: Stages + ?Sized> ParamPathsMut for ViaMut<'_, T> {
+    fn set_path_param(&mut self, path: &str, value: ParamValue) -> Result<()> {
+        self.0.set_stage_param(path, value)
+    }
+}
+
+/// `param` of a composite through its map.
+pub(crate) fn composite_param<T: Stages>(block: &T, name: &str) -> Result<ParamValue> {
+    T::PARAMS.get(&Via(block), name)
+}
+
+/// `set_param` of a composite through its map.
+pub(crate) fn composite_set_param<T: Stages>(
+    block: &mut T,
+    name: &str,
+    value: ParamValue,
+) -> Result<()> {
+    T::PARAMS.set(&mut ViaMut(block), name, value)
+}
+
+/// The check of a parameter that only a build of the block can set: `ReadOnlyParameter` (after
+/// the type and the range, as [`Block::check_param`] reports a build parameter).
+pub(crate) fn check_build_param(
+    desc: &crate::describe::ParamDesc,
+    value: &ParamValue,
+) -> Result<()> {
+    if desc.mutability == crate::describe::Mutability::Runtime {
+        desc.check(value)
+    } else {
+        Err(Error::ReadOnlyParameter)
+    }
+}
+
+/// `check_param` of a composite: every path of `name` checked, nothing changed.
+pub(crate) fn check_composite_param<T: Stages>(
+    block: &T,
+    name: &str,
+    value: &ParamValue,
+) -> Result<()> {
+    let mut any = false;
+    for path in T::PARAMS.paths(name) {
+        block.check_stage_param(path, value)?;
+        any = true;
+    }
+    if any {
+        Ok(())
+    } else {
+        Err(Error::UnknownParameter)
+    }
+}
+
+/// The stage and the parameter name of a path of `map` (`"1.rolloff"` -> `("1", "rolloff")`);
+/// `UnknownParameter` for a path that is not in the map.
+pub(crate) fn stage_of<'a>(map: &ParamMap, path: &'a str) -> Result<(&'a str, &'a str)> {
+    if !map.has_path(path) {
+        return Err(Error::UnknownParameter);
+    }
+    path.split_once('.').ok_or(Error::UnknownParameter)
+}

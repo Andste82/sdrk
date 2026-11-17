@@ -15,7 +15,8 @@ clock) over the kernels of benches/kernels and every implementation each support
 x86-64 level: pass the same -C target-cpu in CARGO_ENCODED_RUSTFLAGS as xtask does for the level
 (x86-64-v2 for sse4.2, x86-64-v3 for avx2). Reports cycles per sample, instructions per sample
 and IPC (median of the repetitions, with the spread), and for every other implementation the
-ratio ours / other (below 1: ours is faster). Implementations of different kernels are
+ratio ours / other (below 1: ours is faster). For a `<kernel>_fallback` entry "ours" is the
+implementation `fallback` (the portable code), see `ours_of`. Implementations of different kernels are
 interleaved across the repetitions so that thermal drift hits all of them alike.
 """
 import argparse, json, math, os, platform, re, statistics as st, subprocess, sys, time
@@ -32,6 +33,13 @@ def fft_sizes():
     src = (HERE.parent / "xtask" / "src" / "count.rs").read_text()
     return {m.group(1): int(m.group(3))
             for m in re.finditer(r'\bfft\(\s*"([^"]+)",\s*(?:Family::)?(\w+),\s*(\d+)\s*,?\s*\)', src)}
+
+
+def ours_of(kernel):
+    """The implementation that is "ours" in a kernel's row. A `<kernel>_fallback` entry measures
+    the portable code, which on x86-64 and AArch64 is the implementation `fallback` (`ours` there
+    is the SIMD backend, the fallback only runs by default without a SIMD level)."""
+    return "fallback" if kernel.endswith("_fallback") else "ours"
 
 
 def read(path, default="n/a"):
@@ -139,7 +147,6 @@ def main():
                 "k": v[0][2], "reps": len(v),
             }
         results[kernel] = entry
-        o = entry["impls"].get("ours", {}).get("cycles_per_sample")
         brief = "  ".join(f"{i}={d['cycles_per_sample']:.2f}" if "cycles_per_sample" in d else f"{i}=ERR" for i, d in entry["impls"].items())
         print(f"[{idx}/{len(kernels)}] {kernel}: {brief}", file=sys.stderr, flush=True)
 
@@ -151,19 +158,20 @@ def main():
     path.write_text(json.dumps(doc, indent=1))
 
     # The table: cycles per sample, and ours / other for every other implementation.
-    cols = sorted({i for e in results.values() for i in e.get("impls", {}) if i != "ours"})
+    cols = sorted({i for k, e in results.items() for i in e.get("impls", {}) if i not in ("ours", ours_of(k))} | {"fallback"})
     print(f"\n{'kernel':34} {'ours':>9} {'ipc':>5}  " + "  ".join(f"{c:>18}" for c in cols))
     for kernel, e in results.items():
         impls = e.get("impls", {})
-        ours = impls.get("ours", {}).get("cycles_per_sample")
+        me = ours_of(kernel)
+        ours = impls.get(me, {}).get("cycles_per_sample")
         cells = []
         for c in cols:
             d = impls.get(c, {})
-            if "cycles_per_sample" not in d:
+            if c == me or "cycles_per_sample" not in d:
                 cells.append(f"{'':>18}"); continue
             ratio = f"{ours / d['cycles_per_sample']:.2f}" if ours and d["cycles_per_sample"] else "-"
             cells.append(f"{d['cycles_per_sample']:>9.2f} ({ratio:>5})")
-        print(f"{kernel:34} {ours if ours is not None else float('nan'):>9.2f} {impls.get('ours', {}).get('ipc', 0):>5.2f}  " + "  ".join(f"{c:>18}" for c in cells))
+        print(f"{kernel:34} {ours if ours is not None else float('nan'):>9.2f} {impls.get(me, {}).get('ipc', 0):>5.2f}  " + "  ".join(f"{c:>18}" for c in cells))
     print("\ncycles per sample; in brackets ours / other (below 1: ours needs fewer cycles)")
     print(f"env at start {start_env}\nenv at end   {end_env}\nsaved to {path}")
 

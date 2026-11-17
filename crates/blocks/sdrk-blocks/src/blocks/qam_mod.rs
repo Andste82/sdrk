@@ -4,30 +4,26 @@ use sdrk::{Delay, Progress, Rate, Ratio, RatioKind};
 use sdrk_core::C32;
 use sdrk_core::kernels::constellation::Qam;
 
-use super::costas::check_f64;
-use super::interpolate::InterpolateBlock;
+use super::pulse_shape::{
+    PulseShapeBlock, PulseShapeConfig, ROLLOFF_PARAM, SAMPLES_PER_SYMBOL_PARAM, SPAN_PARAM,
+};
 use super::symbol_map::{
     CONSTELLATION_OPTIONS, SymbolMapBlock, SymbolMapConfig, SymbolMapConstellation,
 };
-use super::{check_count, head, head_mut, unknown};
+use super::{head, head_mut, unknown};
 use crate::block::{Block, BlockTiming, ParamValue};
 use crate::chain::Chain;
 use crate::describe::{
     BlockDescription, Mutability, ParamDesc, ParamKind, PortDesc, PortType, Unit,
 };
-use crate::design::{RRC_MAX_SPAN, RRC_MIN_ROLLOFF, RRC_MIN_SPAN, Rrc};
 use crate::error::{Error, Result};
 use crate::param_map::{
-    ParamMap, Stages, check_build_param, check_composite_param, composite_param,
-    composite_set_param, stage_of,
+    ParamMap, Stages, check_composite_param, composite_param, composite_set_param, stage_of,
 };
 use crate::storage::{Plan, Storage};
 
 /// The capacity in symbols of the buffer between `symbol_map` and the interpolation.
 pub const QAM_MOD_CHUNK: usize = 256;
-
-/// The largest `samples_per_symbol` of `qam_mod`.
-const MAX_SPS: usize = 64;
 
 /// The `constellation` parameter of `qam_mod`, `qam_demod`, `qam_frame_encode` and
 /// `qam_frame_decode`: the choice of `symbol_map` (the same names at the same indices in
@@ -66,48 +62,6 @@ pub(crate) fn qam_constellation_of_value(value: &ParamValue) -> Result<SymbolMap
     Ok(c)
 }
 
-/// The `samples_per_symbol` parameter of `qam_mod` and `qam_frame_encode`.
-pub(crate) const SAMPLES_PER_SYMBOL_PARAM: ParamDesc = ParamDesc {
-    name: "samples_per_symbol",
-    unit: Unit::None,
-    kind: ParamKind::I64 {
-        min: 2,
-        max: MAX_SPS as i64,
-        default: None,
-    },
-    typical: "8",
-    mutability: Mutability::Build,
-    description: "Output samples per symbol, 2 to 64. Required.",
-};
-
-/// The `rolloff` parameter of `qam_mod` and `qam_frame_encode`.
-pub(crate) const MOD_ROLLOFF_PARAM: ParamDesc = ParamDesc {
-    name: "rolloff",
-    unit: Unit::None,
-    kind: ParamKind::F64 {
-        min: RRC_MIN_ROLLOFF,
-        max: 1.0,
-        default: Some(0.35),
-    },
-    typical: "0.35; 0.2 for a narrow spectrum",
-    mutability: Mutability::Build,
-    description: "Roll-off of the root-raised-cosine pulse.",
-};
-
-/// The `span` parameter of `qam_mod` and `qam_frame_encode`.
-pub(crate) const MOD_SPAN_PARAM: ParamDesc = ParamDesc {
-    name: "span",
-    unit: Unit::None,
-    kind: ParamKind::I64 {
-        min: RRC_MIN_SPAN as i64,
-        max: RRC_MAX_SPAN as i64,
-        default: Some(10),
-    },
-    typical: "10; 16 or more for less intersymbol interference",
-    mutability: Mutability::Build,
-    description: "Length of the pulse in symbols (span samples_per_symbol + 1 taps).",
-};
-
 /// Description of the `qam_mod` block.
 pub static DESCRIPTION: BlockDescription = BlockDescription {
     kind: "qam_mod",
@@ -140,8 +94,8 @@ pub static DESCRIPTION: BlockDescription = BlockDescription {
     params: &[
         QAM_CONSTELLATION_PARAM,
         SAMPLES_PER_SYMBOL_PARAM,
-        MOD_ROLLOFF_PARAM,
-        MOD_SPAN_PARAM,
+        ROLLOFF_PARAM,
+        SPAN_PARAM,
     ],
     required: &["samples_per_symbol"],
 };
@@ -200,9 +154,7 @@ impl QamModConfig {
     /// than `qam16` and `qam64`.
     pub fn validate(&self) -> Result<()> {
         qam_of(self.constellation)?;
-        check_count("samples_per_symbol", self.samples_per_symbol, 2, MAX_SPS)?;
-        check_f64("rolloff", self.rolloff, RRC_MIN_ROLLOFF, 1.0)?;
-        check_count("span", self.span, RRC_MIN_SPAN, RRC_MAX_SPAN)
+        self.pulse().validate()
     }
 
     /// Sets a parameter by its description name; checks kind and range.
@@ -237,9 +189,9 @@ impl QamModConfig {
         }
     }
 
-    /// The pulse filter of the configuration.
-    pub(crate) fn pulse(&self) -> RrcPulse {
-        RrcPulse {
+    /// The configuration of the building block `pulse_shape`.
+    pub fn pulse(&self) -> PulseShapeConfig {
+        PulseShapeConfig {
             samples_per_symbol: self.samples_per_symbol,
             rolloff: self.rolloff,
             span: self.span,
@@ -255,13 +207,11 @@ impl QamModConfig {
     }
 }
 
-/// The stages of `qam_mod`: `symbol_map` then the interpolation with the pulse.
-type QamModStages<S> = Chain<SymbolMapBlock<S>, InterpolateBlock<C32, S>, S>;
+/// The stages of `qam_mod`: `symbol_map` then `pulse_shape`.
+type QamModStages<S> = Chain<SymbolMapBlock<S>, PulseShapeBlock<S>, S>;
 
 /// The flat parameter names of `qam_mod` and the building blocks they reach (M44.1.1 §4): `0` is
-/// `symbol_map`, `1` the root-raised-cosine pulse filter (the interpolation with the taps of
-/// [`QamModConfig`]'s `rolloff`, `span` and `samples_per_symbol`; the building block
-/// `pulse_shape` of M44.1.1 §3 takes these parameters over).
+/// `symbol_map`, `1` `pulse_shape`.
 pub const QAM_MOD_PARAMS: ParamMap = ParamMap::new(&[
     ("constellation", "0.constellation"),
     ("samples_per_symbol", "1.samples_per_symbol"),
@@ -269,65 +219,14 @@ pub const QAM_MOD_PARAMS: ParamMap = ParamMap::new(&[
     ("span", "1.span"),
 ]);
 
-/// The root-raised-cosine pulse of the modulators `qam_mod` and `psk_mod`: its parameters and
-/// the design of its taps (the stage `1` of their maps). The building block `pulse_shape` of
-/// M44.1.1 §3 replaces it.
-#[derive(Debug, Clone, Copy, PartialEq)]
-pub(crate) struct RrcPulse {
-    /// Output samples per symbol (2 to 64).
-    pub(crate) samples_per_symbol: usize,
-    /// Roll-off (0.05 to 1).
-    pub(crate) rolloff: f64,
-    /// Length in symbols (4 to 32).
-    pub(crate) span: usize,
-}
-
-impl RrcPulse {
-    /// The description of a parameter of the pulse.
-    pub(crate) fn desc(name: &str) -> Option<&'static ParamDesc> {
-        [
-            &SAMPLES_PER_SYMBOL_PARAM,
-            &MOD_ROLLOFF_PARAM,
-            &MOD_SPAN_PARAM,
-        ]
-        .into_iter()
-        .find(|p| p.name == name)
-    }
-
-    /// The current value of a parameter of the pulse.
-    pub(crate) fn param(&self, name: &str) -> Result<ParamValue> {
-        match name {
-            "samples_per_symbol" => Ok(ParamValue::I64(self.samples_per_symbol as i64)),
-            "rolloff" => Ok(ParamValue::F64(self.rolloff)),
-            "span" => Ok(ParamValue::I64(self.span as i64)),
-            _ => unknown(),
-        }
-    }
-
-    /// Checks a value of a parameter of the pulse: all are build parameters.
-    pub(crate) fn check_param(name: &str, value: &ParamValue) -> Result<()> {
-        check_build_param(Self::desc(name).ok_or(Error::UnknownParameter)?, value)
-    }
-
-    /// The interpolation by `samples_per_symbol` with the `span sps + 1` taps
-    /// `rrc(rolloff, sps, span) sqrt(sps)` in `f64`, rounded once to `f32` by
-    /// [`InterpolateBlock::with_taps`].
-    pub(crate) fn stage<S: Storage>(&self, storage: &mut S) -> Result<InterpolateBlock<C32, S>> {
-        let sps = self.samples_per_symbol;
-        let rrc = Rrc::new(self.rolloff, sps, self.span)?;
-        let gain = libm::sqrt(sps as f64);
-        InterpolateBlock::with_taps((0..rrc.len()).map(|k| rrc.tap(k) * gain), sps, storage)
-    }
-}
-
 /// 16-QAM and 64-QAM modulator: `f32` soft bits in (one per sample), `C32` out at
 /// `samples_per_symbol` samples per symbol.
 ///
-/// A composite block (M44.1 §4): [`SymbolMapBlock`] (the `constellation` `qam16` or `qam64`, the `f32`
-/// points of `sdrk_core::kernels::constellation::Qam`, M44 §1) then
-/// [`InterpolateBlock::with_taps`] with the taps `rrc(rolloff, sps, span) sqrt(sps)` as `f32`
-/// (the kernel `fir_interpolate` through the facade, as in `psk_mod`), as a [`Chain`] whose
-/// buffer holds [`QAM_MOD_CHUNK`] symbols. A call takes `min(input / bits, output / sps)` whole
+/// A composite block (M44.1 §4, M44.1.1 §3.3): [`SymbolMapBlock`] (the `constellation` `qam16`
+/// or `qam64`, the `f32` points of `sdrk_core::kernels::constellation::Qam`, M44 §1) then
+/// [`PulseShapeBlock`] (the taps `rrc(rolloff, sps, span) sqrt(sps)` as `f32`, the kernel
+/// `fir_interpolate` through the facade, as in `psk_mod`), as a [`Chain`] whose buffer holds
+/// [`QAM_MOD_CHUNK`] symbols. A call takes `min(input / bits, output / sps)` whole
 /// symbols. Timing: constant ratio `sps / bits`, delay `span bits / 2` input samples. Storage:
 /// the taps, the filter history and the buffer of the chain. Its parameters are answered by
 /// its building blocks through [`QAM_MOD_PARAMS`] (M44.1.1 §4).
@@ -350,7 +249,6 @@ impl RrcPulse {
 /// # Ok::<(), Box<dyn std::error::Error>>(())
 /// ```
 pub struct QamModBlock<S: Storage> {
-    pulse: RrcPulse,
     bps: usize,
     ratio: Ratio,
     stages: QamModStages<S>,
@@ -365,8 +263,8 @@ impl<S: Storage> core::fmt::Debug for QamModBlock<S> {
 }
 
 impl<S: Storage> QamModBlock<S> {
-    /// Designs the pulse and creates the block; taps, history and the buffer of the chain
-    /// come from `storage`.
+    /// Creates the block of its building blocks; the taps and history of `pulse_shape` and the
+    /// buffer of the chain come from `storage`.
     ///
     /// # Errors
     /// As [`QamModConfig::validate`]; `Storage` when the storage is too small.
@@ -380,13 +278,11 @@ impl<S: Storage> QamModBlock<S> {
             rate_in,
             storage,
         )?;
-        let pulse = config.pulse();
-        let interp = pulse.stage(storage)?;
+        let pulse = PulseShapeBlock::new(&config.pulse(), rate_in, storage)?;
         Ok(Self {
-            pulse,
             bps: config.bits_per_symbol(),
             ratio: config.ratio()?,
-            stages: Chain::new(map, interp, QAM_MOD_CHUNK, storage)?,
+            stages: Chain::new(map, pulse, QAM_MOD_CHUNK, storage)?,
         })
     }
 
@@ -404,20 +300,18 @@ impl<S: Storage> QamModBlock<S> {
     /// Adds the buffers of the block to `plan`, in the order `new` takes them.
     pub(crate) fn plan(config: &QamModConfig, plan: &mut Plan) -> Result<()> {
         config.validate()?;
-        let sps = config.samples_per_symbol;
-        let n = config.span * sps + 1;
-        plan.add::<f32>(n)?;
-        plan.add::<C32>(n.div_ceil(sps))?;
+        PulseShapeBlock::<S>::plan(&config.pulse(), plan)?;
         plan.add::<C32>(QAM_MOD_CHUNK)
     }
 
     /// The configuration of the block, from its building blocks.
     pub fn config(&self) -> QamModConfig {
+        let pulse = self.stages.second().config();
         QamModConfig {
             constellation: self.stages.first().config().constellation,
-            samples_per_symbol: self.pulse.samples_per_symbol,
-            rolloff: self.pulse.rolloff,
-            span: self.pulse.span,
+            samples_per_symbol: pulse.samples_per_symbol,
+            rolloff: pulse.rolloff,
+            span: pulse.span,
         }
     }
 
@@ -467,10 +361,11 @@ impl<S: Storage> Block for QamModBlock<S> {
     }
 
     fn process(&mut self, input: &[f32], output: &mut [C32]) -> Result<Progress> {
+        let sps = self.stages.second().samples_per_symbol();
         modulate(
             &mut self.stages,
             self.bps,
-            self.pulse.samples_per_symbol,
+            sps,
             input,
             output,
             "qam_mod stages did not take the whole piece",
@@ -483,7 +378,7 @@ impl<S: Storage> Block for QamModBlock<S> {
         BlockTiming {
             ratio: self.ratio,
             kind: RatioKind::Constant,
-            delay: Delay::new((self.pulse.span * self.bps) as u64, 2).unwrap_or(Delay::ZERO),
+            delay: Delay::new((self.config().span * self.bps) as u64, 2).unwrap_or(Delay::ZERO),
         }
     }
 
@@ -514,7 +409,7 @@ impl<S: Storage> Stages for QamModBlock<S> {
     fn stage_param(&self, path: &str) -> Result<ParamValue> {
         match stage_of(&Self::PARAMS, path)? {
             ("0", n) => self.stages.first().param(n),
-            ("1", n) => self.pulse.param(n),
+            ("1", n) => self.stages.second().param(n),
             _ => unknown(),
         }
     }
@@ -522,7 +417,7 @@ impl<S: Storage> Stages for QamModBlock<S> {
     fn check_stage_param(&self, path: &str, value: &ParamValue) -> Result<()> {
         match stage_of(&Self::PARAMS, path)? {
             ("0", n) => self.stages.first().check_param(n, value),
-            ("1", n) => RrcPulse::check_param(n, value),
+            ("1", n) => self.stages.second().check_param(n, value),
             _ => unknown(),
         }
     }
@@ -530,7 +425,7 @@ impl<S: Storage> Stages for QamModBlock<S> {
     fn set_stage_param(&mut self, path: &str, value: ParamValue) -> Result<()> {
         match stage_of(&Self::PARAMS, path)? {
             ("0", n) => self.stages.first_mut().set_param(n, value),
-            ("1", _) => Err(Error::ReadOnlyParameter),
+            ("1", n) => self.stages.second_mut().set_param(n, value),
             _ => unknown(),
         }
     }

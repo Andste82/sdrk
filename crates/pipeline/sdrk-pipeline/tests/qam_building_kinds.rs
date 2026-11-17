@@ -1,7 +1,8 @@
 //! The kinds `symbol_map`, `iq_offset` and `qam_acquire` (M44.1 §2.1, §2.2, §2.4): registration
 //! (without kernels; `qam_acquire` with `fft`), the costs `1 / bits`, 1 and 20 or 40, the rates,
 //! the type checks (`symbol_map` takes `f32` soft bits, `iq_offset` and `qam_acquire` `c32`),
-//! `invalid_value` for the invalid combinations of `symbol_map` and the range of `samples`, and
+//! `invalid_value` for the invalid combinations of `symbol_map` and an odd `samples_per_symbol`
+//! of `iq_offset` (its range: `out_of_range`; `samples_per_symbol` since M44.1.1 §3.3), and
 //! push-mode chains `symbol_map` -> `iq_offset` and `symbol_map` -> `qam_acquire` that equal the
 //! blocks in pieces of 1 to 1000 samples (seed 852).
 #![allow(
@@ -62,7 +63,7 @@ fn the_kinds_are_registered_without_kernels() {
         assert!(f.kernels().is_empty(), "{kind}");
         assert_eq!(f.description().kind, kind);
     }
-    assert_eq!(registry.descriptions().count(), 77);
+    assert_eq!(registry.descriptions().count(), 79);
 }
 
 #[test]
@@ -139,37 +140,62 @@ fn symbol_map_checks_its_combinations_and_its_input() {
 }
 
 #[test]
-fn iq_offset_costs_one_and_needs_its_samples() {
-    let report = validate(&single("iq_offset", "c32", 9600, json!({ "samples": 4 })));
+fn iq_offset_costs_one_and_needs_its_samples_per_symbol() {
+    let report = validate(&single(
+        "iq_offset",
+        "c32",
+        9600,
+        json!({ "samples_per_symbol": 8 }),
+    ));
     assert!(report.is_ok(), "{}", report.to_json());
     assert_eq!(report.cost_per_input_sample, 1.0);
     let node = &report.nodes[0];
     assert_eq!(node.rate_out, Rate::hz(9600).unwrap());
     assert_eq!(node.delay_samples_in.reduced(), Delay::ZERO);
-    // Required, 1 to 512.
+    // Required, even, 2 to 1024; the old name `samples` is unknown.
     assert!(!validate(&single("iq_offset", "c32", 9600, json!({}))).is_ok());
-    for samples in [0, 513] {
-        assert!(
-            !validate(&single(
-                "iq_offset",
-                "c32",
-                9600,
-                json!({ "samples": samples })
-            ))
-            .is_ok()
+    for (sps, code) in [
+        (0, DiagCode::OutOfRange),
+        (1026, DiagCode::OutOfRange),
+        (3, DiagCode::InvalidValue),
+        (1023, DiagCode::InvalidValue),
+    ] {
+        let (p, c) = first_error(&single(
+            "iq_offset",
+            "c32",
+            9600,
+            json!({ "samples_per_symbol": sps }),
+        ));
+        assert_eq!(
+            (p.as_str(), c),
+            ("nodes.n.params.samples_per_symbol", code),
+            "{sps}"
         );
     }
+    let report = validate(&single("iq_offset", "c32", 9600, json!({ "samples": 4 })));
+    assert!(
+        report.errors.iter().any(
+            |e| (e.path.as_str(), e.code) == ("nodes.n.params.samples", DiagCode::UnknownParam)
+        ),
+        "{}",
+        report.to_json()
+    );
     assert!(
         validate(&single(
             "iq_offset",
             "c32",
             9600,
-            json!({ "samples": 512, "part": "real" })
+            json!({ "samples_per_symbol": 1024, "part": "real" })
         ))
         .is_ok()
     );
     for ty in ["f32", "cq15"] {
-        let (_, code) = first_error(&single("iq_offset", ty, 9600, json!({ "samples": 2 })));
+        let (_, code) = first_error(&single(
+            "iq_offset",
+            ty,
+            9600,
+            json!({ "samples_per_symbol": 4 }),
+        ));
         assert_eq!(code, DiagCode::TypeMismatch, "{ty}");
     }
 }
@@ -194,7 +220,7 @@ fn the_chain_equals_the_blocks() {
         points.len()
     );
     let off_cfg = IqOffsetConfig {
-        samples: 3,
+        samples_per_symbol: 6,
         part: IqPart::Real,
     };
     let mut off = IqOffsetBlock::<VecStorage>::new(&off_cfg, r, &mut VecStorage).unwrap();
@@ -209,7 +235,10 @@ fn the_chain_equals_the_blocks() {
                 "kind": "symbol_map",
                 "params": { "constellation": "qpsk", "differential": true, "variant": "pi4" }
             },
-            "offset": { "kind": "iq_offset", "params": { "samples": 3, "part": "real" } }
+            "offset": {
+                "kind": "iq_offset",
+                "params": { "samples_per_symbol": 6, "part": "real" }
+            }
         },
         "edges": [
             { "from": "in", "to": "map" },

@@ -24,6 +24,11 @@
 //! - **The matched filter of `qam_demod`** (M44.1.1 test 2, set `tests/baseline/m44_1_1/`,
 //!   table `pulse_match`): its output on the same signals, recorded from the code of M44.1
 //!   before M44.1.1 moves the filter into the building block `pulse_match`.
+//! - **The building blocks `pulse_shape` and `pulse_match`** (M44.1.1 test 2, seed 861): the
+//!   block `pulse_match` gives the recorded output of the matched filter of `qam_demod` (whole
+//!   and four signals in 20 cut plans of seed 861), and `symbol_map` then `pulse_shape` (then
+//!   `iq_offset` for OQPSK), run one after the other, give the recorded output of every
+//!   modulator case of `qam_mod` and `psk_mod`.
 //!
 //! The signals are those of `sdrk-blocks/tests/qam_blocks.rs` (seed 607 and its streams), with
 //! the sines and cosines of `libm` instead of the platform's, so that the inputs are the same
@@ -45,9 +50,10 @@ use sdrk::{Rate, Sdrk};
 use sdrk_blocks::SymbolMapConstellation;
 use sdrk_blocks::design::{rrc, rrc_len};
 use sdrk_blocks::{
-    Block, PskModBlock, PskModConfig, PskVariant, QAM_ACQUISITION_CHECK, QAM_ACQUISITION_SKIP,
-    QAM_ACQUISITION_SYMBOLS, QAM_DEMOD_CHUNK, QamDemodBlock, QamDemodConfig, QamModBlock,
-    QamModConfig, StreamElem,
+    Block, IqOffsetBlock, PskModBlock, PskModConfig, PskVariant, PulseMatchBlock, PulseShapeBlock,
+    QAM_ACQUISITION_CHECK, QAM_ACQUISITION_SKIP, QAM_ACQUISITION_SYMBOLS, QAM_DEMOD_CHUNK,
+    QamDemodBlock, QamDemodConfig, QamModBlock, QamModConfig, StreamElem, SymbolMapBlock,
+    SymbolMapConfig, SymbolMapVariant,
 };
 use sdrk_core::C32;
 use sdrk_core::kernels::filter::{Fir, FirState};
@@ -737,24 +743,7 @@ fn matched_filter(cfg: &QamDemodConfig, fs: Rate, input: &[C32]) -> Vec<C32> {
 #[test]
 fn the_matched_filter_of_qam_demod_keeps_its_baseline() {
     let t = Baseline::load(SET_M44_1_1, "pulse_match", level()).unwrap();
-    let mut cases: Vec<DemodCase> = demod_cases();
-    let extra: Vec<DemodCase> = cases
-        .iter()
-        .filter(|c| c.name.starts_with("kernels"))
-        .flat_map(|c| {
-            SHAPES[1..].iter().map(move |&(rolloff, span)| DemodCase {
-                name: format!("{}_r{rolloff}_s{span}", c.name),
-                cfg: QamDemodConfig {
-                    rolloff,
-                    span,
-                    ..c.cfg
-                },
-                fs: c.fs,
-                input: c.input.clone(),
-            })
-        })
-        .collect();
-    cases.extend(extra);
+    let cases = matched_filter_cases();
     let results: Vec<(String, Digest)> = std::thread::scope(|s| {
         let handles: Vec<_> = cases
             .iter()
@@ -777,6 +766,190 @@ fn the_matched_filter_of_qam_demod_keeps_its_baseline() {
     let y = matched_filter(&cfg, rate(38_400), &received(16, 4, 1500, 0.02, 20));
     t.check_vector("short_qam16_sps4", &baseline::c32_bytes(&y))
         .unwrap();
+}
+
+// ---- the building blocks pulse_shape and pulse_match (M44.1.1 test 2) ------------------
+
+/// The seed of the cut plans of M44.1.1 test 2.
+const SEED_PULSE: u64 = 861;
+
+/// The cases of [`the_matched_filter_of_qam_demod_keeps_its_baseline`]: every signal of
+/// `qam_blocks`, and the four signals of the comparison with the kernels with the two other
+/// pulses.
+fn matched_filter_cases() -> Vec<DemodCase> {
+    let mut cases: Vec<DemodCase> = demod_cases();
+    let extra: Vec<DemodCase> = cases
+        .iter()
+        .filter(|c| c.name.starts_with("kernels"))
+        .flat_map(|c| {
+            SHAPES[1..].iter().map(move |&(rolloff, span)| DemodCase {
+                name: format!("{}_r{rolloff}_s{span}", c.name),
+                cfg: QamDemodConfig {
+                    rolloff,
+                    span,
+                    ..c.cfg
+                },
+                fs: c.fs,
+                input: c.input.clone(),
+            })
+        })
+        .collect();
+    cases.extend(extra);
+    cases
+}
+
+fn pulse_match_block(cfg: &QamDemodConfig, fs: Rate) -> PulseMatchBlock<VecStorage> {
+    PulseMatchBlock::new(&cfg.pulse(), fs, &mut VecStorage).unwrap()
+}
+
+/// The block `pulse_match` with the pulse of each `qam_demod` configuration gives the recorded
+/// output of the matched filter inside `qam_demod` of M44.1: every case whole (output room 4096),
+/// the four signals of the comparison with the kernels (2, 4, 5 and 8 samples per symbol) also in
+/// the 20 cut plans of seed 861 (alternately with small output room), and the full output of
+/// the short signal.
+#[test]
+fn pulse_match_gives_the_matched_filter_of_qam_demod() {
+    let t = Baseline::load(SET_M44_1_1, "pulse_match", level()).unwrap();
+    let cases = matched_filter_cases();
+    for case in &cases {
+        let block = pulse_match_block(&case.cfg, case.fs);
+        let demod = QamDemodBlock::new(&case.cfg, case.fs, &mut VecStorage).unwrap();
+        assert_eq!(
+            (block.samples_per_symbol(), block.num_taps()),
+            (demod.samples_per_symbol(), demod.num_taps()),
+            "{}",
+            case.name
+        );
+        let y = run(
+            &mut pulse_match_block(&case.cfg, case.fs),
+            &case.input,
+            None,
+            false,
+            1,
+        );
+        assert_eq!(y.len(), case.input.len(), "{}", case.name);
+        t.check(&case.name, &Digest::of_c32(&y)).unwrap();
+    }
+    let planned: Vec<&DemodCase> = cases
+        .iter()
+        .filter(|c| c.name.starts_with("kernels") && !c.name.contains("_r0."))
+        .collect();
+    assert_eq!(planned.len(), 4);
+    for case in planned {
+        for (i, plan) in twenty_plans(SEED_PULSE).into_iter().enumerate() {
+            let y = run(
+                &mut pulse_match_block(&case.cfg, case.fs),
+                &case.input,
+                Some(plan),
+                i % 2 == 1,
+                1,
+            );
+            t.check(&case.name, &Digest::of_c32(&y))
+                .unwrap_or_else(|e| panic!("{plan:?}: {e}"));
+        }
+    }
+    let cfg = config(16, 9600.0, 11);
+    let input = received(16, 4, 1500, 0.02, 20);
+    let y = run(
+        &mut pulse_match_block(&cfg, rate(38_400)),
+        &input,
+        None,
+        false,
+        1,
+    );
+    t.check_vector("short_qam16_sps4", &baseline::c32_bytes(&y))
+        .unwrap();
+}
+
+/// `symbol_map` then `pulse_shape` (then `iq_offset` with the `imag` part for the variant
+/// `offset`), each run on the whole output of the one before.
+fn map_then_shape(
+    map: SymbolMapConfig,
+    pulse: &sdrk_blocks::PulseShapeConfig,
+    offset: Option<sdrk_blocks::IqOffsetConfig>,
+    bits: &[f32],
+) -> Vec<C32> {
+    let r = rate(48_000);
+    let mut m = SymbolMapBlock::<VecStorage>::new(&map, r, &mut VecStorage).unwrap();
+    let symbols = run(&mut m, bits, None, false, 1);
+    let mut shape = PulseShapeBlock::<VecStorage>::new(pulse, r, &mut VecStorage).unwrap();
+    let y = run(&mut shape, &symbols, None, false, pulse.samples_per_symbol);
+    match offset {
+        Some(c) => run(
+            &mut IqOffsetBlock::<VecStorage>::new(&c, r, &mut VecStorage).unwrap(),
+            &y,
+            None,
+            false,
+            1,
+        ),
+        None => y,
+    }
+}
+
+/// The building blocks of `qam_mod` and `psk_mod` (M44.1.1 §3.3) run one after the other give
+/// the recorded output of every modulator case of M44.1 (the inputs of
+/// `qam_mod_keeps_its_baseline` and `psk_mod_keeps_its_baseline`, the same streams).
+#[test]
+fn symbol_map_then_pulse_shape_gives_the_modulators() {
+    let t = table("qam_mod");
+    let mut stream = 0u64;
+    for order in [16u32, 64] {
+        for (rolloff, span) in SHAPES {
+            for sps in SPS {
+                let cfg = QamModConfig {
+                    constellation: c_of(order),
+                    samples_per_symbol: sps,
+                    rolloff,
+                    span,
+                };
+                let bits = mod_bits(MOD_SYMBOLS * cfg.bits_per_symbol(), stream);
+                stream += 1;
+                let map = SymbolMapConfig {
+                    constellation: cfg.constellation,
+                    ..SymbolMapConfig::default()
+                };
+                let y = map_then_shape(map, &cfg.pulse(), None, &bits);
+                let case = format!("qam{order}_sps{sps}_r{rolloff}_s{span}");
+                t.check(&case, &Digest::of_c32(&y)).unwrap();
+            }
+        }
+    }
+    let t = table("psk_mod");
+    let mut stream = 1000u64;
+    for (order, differential, variant) in PSK {
+        for (rolloff, span) in SHAPES {
+            for sps in SPS {
+                if variant == PskVariant::Offset && sps % 2 == 1 {
+                    continue;
+                }
+                let cfg = PskModConfig {
+                    constellation: c_of(order),
+                    samples_per_symbol: sps,
+                    rolloff,
+                    span,
+                    differential,
+                    variant,
+                };
+                let bits = mod_bits(MOD_SYMBOLS * cfg.bits_per_symbol(), stream);
+                stream += 1;
+                let map = SymbolMapConfig {
+                    constellation: cfg.constellation,
+                    differential,
+                    variant: if variant == PskVariant::Pi4 {
+                        SymbolMapVariant::Pi4
+                    } else {
+                        SymbolMapVariant::Plain
+                    },
+                };
+                let y = map_then_shape(map, &cfg.pulse(), cfg.offset(), &bits);
+                let case = format!(
+                    "{}_sps{sps}_r{rolloff}_s{span}",
+                    psk_name(order, differential, variant)
+                );
+                t.check(&case, &Digest::of_c32(&y)).unwrap();
+            }
+        }
+    }
 }
 
 /// The constellation of a numeric order of the tables of this file (2, 4, 8, 16 or 64).

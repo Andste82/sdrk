@@ -97,7 +97,7 @@ pub use blocks::hdlc_decode::{HdlcDecodeBlock, HdlcDecodeConfig};
 pub use blocks::hdlc_encode::{HdlcEncodeBlock, HdlcEncodeConfig};
 pub use blocks::imag_part::ImagPartBlock;
 pub use blocks::interpolate::{InterpolateBlock, InterpolateConfig, InterpolateRealBlock};
-pub use blocks::iq_offset::{IQ_OFFSET_MAX_SAMPLES, IqOffsetBlock, IqOffsetConfig, IqPart};
+pub use blocks::iq_offset::{IQ_OFFSET_MAX_SPS, IqOffsetBlock, IqOffsetConfig, IqPart};
 pub use blocks::mag::{MagBlock, MagConfig};
 pub use blocks::make_complex::MakeComplexBlock;
 pub use blocks::morse_decode::{MorseDecodeBlock, MorseDecodeConfig};
@@ -117,6 +117,8 @@ pub use blocks::pulse_key::{
     PULSE_KEY_OFF, PULSE_KEY_ON, PULSE_KEY_PAIRS, PULSE_KEY_QUEUE, PulseKeyBlock, PulseKeyConfig,
     PulseKeyMode,
 };
+pub use blocks::pulse_match::{PulseMatchBlock, PulseMatchConfig};
+pub use blocks::pulse_shape::{PULSE_SHAPE_MAX_SPS, PulseShapeBlock, PulseShapeConfig};
 pub use blocks::qam_acquire::{
     AcquireWindow, QAM_ACQUISITION_SKIP, QAM_ACQUISITION_SYMBOLS, QamAcquireBlock, QamAcquireConfig,
 };

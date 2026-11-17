@@ -31,8 +31,9 @@ use sdrk_blocks::{
     MulBlock, MulRealBlock, NcoBlock, NcoConfig, NcoRealBlock, NoiseBlankBlock, NoiseBlankConfig,
     OokDemodBlock, OokDemodConfig, OokModBlock, OokModConfig, ParamValue, PortType,
     PreemphLimitBlock, PreemphLimitConfig, PskDemodBlock, PskDemodConfig, PskModBlock,
-    PskModConfig, PskVariant, PulseKeyBlock, PulseKeyConfig, QamAcquireBlock, QamAcquireConfig,
-    QamDemodBlock, QamDemodConfig, QamFrameDecodeBlock, QamFrameDecodeConfig, QamFrameEncodeBlock,
+    PskModConfig, PskVariant, PulseKeyBlock, PulseKeyConfig, PulseMatchBlock, PulseMatchConfig,
+    PulseShapeBlock, PulseShapeConfig, QamAcquireBlock, QamAcquireConfig, QamDemodBlock,
+    QamDemodConfig, QamFrameDecodeBlock, QamFrameDecodeConfig, QamFrameEncodeBlock,
     QamFrameEncodeConfig, QamModBlock, QamModConfig, QuadDemodBlock, QuadDemodConfig,
     RESAMPLE_TUNED_PHASES, RdsDecodeBlock, RdsDecodeConfig, RdsDemodBlock, RdsDemodConfig,
     RdsEncodeBlock, RdsEncodeConfig, RealPartBlock, RealToIqBlock, ResampleBlock, ResampleConfig,
@@ -3687,6 +3688,122 @@ impl Kind for IqOffsetKind {
         st: &mut VecStorage,
     ) -> BlockResult<Box<dyn Node>> {
         Ok(Box::new(StreamNode::new(IqOffsetBlock::new(
+            cfg, rate, st,
+        )?)))
+    }
+}
+
+// ------------------------------------------------------------------ pulse_shape
+
+pub(crate) struct PulseShapeKind;
+
+impl Kind for PulseShapeKind {
+    type Cfg = PulseShapeConfig;
+
+    const KIND: &'static str = "pulse_shape";
+    fn kernels() -> &'static [&'static str] {
+        &["fir_interpolate"]
+    }
+    fn default_cfg() -> PulseShapeConfig {
+        PulseShapeConfig::default()
+    }
+    fn set(cfg: &mut PulseShapeConfig, name: &str, value: ParamValue) -> BlockResult<()> {
+        cfg.set(name, value)
+    }
+    fn plan(
+        cfg: &PulseShapeConfig,
+        input: PortType,
+        rate: Rate,
+        _p: Precision,
+    ) -> BlockResult<Figures> {
+        if input != PortType::C32 {
+            return Err(mismatch("pulse_shape needs c32 symbols"));
+        }
+        let block = PulseShapeBlock::<VecStorage>::new(cfg, rate, &mut VecStorage)?;
+        let taps = block.num_taps();
+        Ok(Figures {
+            rate_out: PulseShapeBlock::<VecStorage>::rate_out(cfg, rate)?,
+            memory_bytes: PulseShapeBlock::<VecStorage>::storage_bytes(cfg, rate)?,
+            // As `interpolate`: every tap once per input symbol.
+            cost: taps as f64,
+            taps,
+            delay: block.timing().delay,
+            min_input: 1,
+            output: stream(PortType::C32),
+        })
+    }
+    fn build(
+        cfg: &PulseShapeConfig,
+        _input: PortType,
+        rate: Rate,
+        _p: Precision,
+        st: &mut VecStorage,
+    ) -> BlockResult<Box<dyn Node>> {
+        Ok(Box::new(StreamNode::new(PulseShapeBlock::new(
+            cfg, rate, st,
+        )?)))
+    }
+}
+
+// ------------------------------------------------------------------ pulse_match
+
+pub(crate) struct PulseMatchKind;
+
+impl Kind for PulseMatchKind {
+    type Cfg = PulseMatchConfig;
+
+    const KIND: &'static str = "pulse_match";
+    fn kernels() -> &'static [&'static str] {
+        &["fir"]
+    }
+    fn default_cfg() -> PulseMatchConfig {
+        PulseMatchConfig::default()
+    }
+    fn set(cfg: &mut PulseMatchConfig, name: &str, value: ParamValue) -> BlockResult<()> {
+        cfg.set(name, value)
+    }
+    fn plan(
+        cfg: &PulseMatchConfig,
+        input: PortType,
+        rate: Rate,
+        _p: Precision,
+    ) -> BlockResult<Figures> {
+        if input != PortType::C32 {
+            return Err(mismatch("pulse_match needs c32 samples"));
+        }
+        let block = PulseMatchBlock::<VecStorage>::new(cfg, rate, &mut VecStorage)?;
+        let taps = block.num_taps();
+        Ok(Figures {
+            rate_out: PulseMatchBlock::<VecStorage>::rate_out(cfg, rate)?,
+            memory_bytes: PulseMatchBlock::<VecStorage>::storage_bytes(cfg, rate)?,
+            // As `fir`: every tap once per input sample.
+            cost: taps as f64,
+            taps,
+            delay: block.timing().delay,
+            min_input: 1,
+            output: stream(PortType::C32),
+        })
+    }
+    fn adjust(e: &sdrk_blocks::Error, d: &mut Diagnostic) {
+        // The rate rule: `InvalidParameter` of `symbol_rate_hz`, the hint to resample.
+        if matches!(
+            e,
+            sdrk_blocks::Error::InvalidParameter {
+                name: "symbol_rate_hz",
+                ..
+            }
+        ) {
+            d.code = DiagCode::RateUnsupported;
+        }
+    }
+    fn build(
+        cfg: &PulseMatchConfig,
+        _input: PortType,
+        rate: Rate,
+        _p: Precision,
+        st: &mut VecStorage,
+    ) -> BlockResult<Box<dyn Node>> {
+        Ok(Box::new(StreamNode::new(PulseMatchBlock::new(
             cfg, rate, st,
         )?)))
     }

@@ -62,7 +62,7 @@ fn the_kinds_are_registered_without_kernels() {
         assert!(f.kernels().is_empty(), "{kind}");
         assert_eq!(f.description().kind, kind);
     }
-    assert_eq!(registry.descriptions().count(), 77);
+    assert_eq!(registry.descriptions().count(), 79);
 }
 
 #[test]

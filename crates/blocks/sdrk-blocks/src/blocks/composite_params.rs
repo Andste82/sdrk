@@ -7,7 +7,8 @@
 //! public parameters (a building block parameter that the composite exposes is reached by
 //! exactly one); every path reaches a parameter of a building block of the same type, unit and
 //! mutability whose range holds the range of the composite (a choice: the same names at the
-//! same indices; `equalizer_taps` adds the value 0, which leaves the optional equalizer out);
+//! same indices; `equalizer_taps` adds the value 0, which leaves the optional equalizer out;
+//! the `iq_offset` of `psk_mod` is there for the variant `offset` only);
 //! `param` answers the value of the first path, all paths hold the same value, and the value is
 //! the one the composite was built with; a `set` reaches all paths or none (all parameters are
 //! build parameters: `ReadOnlyParameter`, nothing changes); the old name `order` is unknown.
@@ -33,14 +34,14 @@ use sdrk::Rate;
 
 use super::frame_decode::FrameRotations;
 use super::psk_mod::{PskModBlock, PskModConfig, PskVariant};
-use super::qam_demod::{MatchedPulse, QamDemodBlock, QamDemodConfig};
+use super::qam_demod::{QamDemodBlock, QamDemodConfig};
 use super::qam_frame_decode::{FRAME_TIMEOUT_PARAM, QamFrameDecodeBlock, QamFrameDecodeConfig};
 use super::qam_frame_encode::{QamFrameEncodeBlock, QamFrameEncodeConfig};
-use super::qam_mod::{QamModBlock, QamModConfig, RrcPulse};
+use super::qam_mod::{QamModBlock, QamModConfig};
 use super::symbol_map::SymbolMapConstellation;
 use super::{
-    costas, equalize, frame_decode, frame_encode, qam_demod, qam_mod, symbol_demap, symbol_map,
-    symbol_sync,
+    costas, equalize, frame_decode, frame_encode, iq_offset, pulse_match, pulse_shape, qam_demod,
+    qam_mod, symbol_demap, symbol_map, symbol_sync,
 };
 use crate::block::{Block, ParamValue};
 use crate::describe::{ParamDesc, ParamKind};
@@ -58,14 +59,15 @@ fn split(path: &str) -> (&str, &str) {
 fn mod_stage(path: &str) -> Option<&'static ParamDesc> {
     match split(path) {
         ("0", n) => symbol_map::DESCRIPTION.param(n),
-        ("1", n) => RrcPulse::desc(n),
+        ("1", n) => pulse_shape::DESCRIPTION.param(n),
+        ("2", n) => iq_offset::DESCRIPTION.param(n),
         _ => None,
     }
 }
 
 fn demod_stage(path: &str) -> Option<&'static ParamDesc> {
     match split(path) {
-        ("pulse", n) => MatchedPulse::desc(n),
+        ("pulse", n) => pulse_match::DESCRIPTION.param(n),
         ("sync", n) => symbol_sync::DESCRIPTION.param(n),
         ("eq", n) => equalize::DESCRIPTION.param(n),
         ("costas", n) => costas::DESCRIPTION.param(n),
@@ -189,9 +191,11 @@ fn check<T: Block + Stages>(
                     assert_eq!(v, value, "{label}.{}: {path} holds the same value", p.name);
                     reached += 1;
                 }
-                // Only an optional stage that is left out has nothing to read.
+                // Only an optional stage that is left out has nothing to read: the equalizer of
+                // `qam_demod` and the `iq_offset` of `psk_mod`.
                 Err(e) => assert!(
-                    path.starts_with("eq.") && e == Error::UnknownParameter,
+                    (path.starts_with("eq.") || (label == "psk_mod" && path.starts_with("2.")))
+                        && e == Error::UnknownParameter,
                     "{label}.{}: {path}: {e:?}",
                     p.name
                 ),

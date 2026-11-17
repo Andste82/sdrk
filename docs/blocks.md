@@ -671,6 +671,7 @@ The kinds that later milestones add have their names reserved here, so that ever
 | `iq_offset` | delay of the imaginary or the real part (OQPSK, both sides) | M44.1 (delivered) |
 | `qam_acquire` | QAM frequency acquisition by the fourth power | M44.1 (delivered) |
 | `qam_frame_encode`/`qam_frame_decode` | packets to QAM samples and back, with a frame-level lock watch (composite blocks) | M44.1 (delivered) |
+| `pulse_shape`/`pulse_match` | the root-raised-cosine pulse filter of a linear modulation: interpolation by the samples per symbol (transmit) and the matched filter (receive) | M44.1.1 |
 | `channelize`, `channel_select` | polyphase channelizer to a lane stream (M channels through one output); one lane to a stream | M45 (delivered) |
 | `band_pulse_detect` | pulse detection in every lane of a channelizer, merged across channels | M45.1 (delivered) |
 | `sensor_decode` | pulse trains to sensor readings as JSON text packets (433 MHz OOK and 868 MHz FSK devices, repeats merged) | M46 (block, kind and the flows `ism433_sensors` / `ism868_sensors` delivered, D1145) |

@@ -89,16 +89,46 @@ impl ParamMap {
             .map(|(_, path)| *path)
     }
 
-    /// Whether `path` is a path of the map (of any flat name).
+    /// Checks whether every path of the flat name `flat` would take `value`
+    /// ([`ParamPaths::check_path_param`]), without changing anything.
+    ///
+    /// # Errors
+    /// `UnknownParameter` if `flat` is not in the map; otherwise the first error of a building
+    /// block, unchanged.
     ///
     /// ```
-    /// use sdrk_blocks::ParamMap;
-    /// const MAP: ParamMap = ParamMap::new(&[("cutoff_hz", "1.0.cutoff_hz")]);
-    /// assert!(MAP.has_path("1.0.cutoff_hz"));
-    /// assert!(!MAP.has_path("cutoff_hz"));
+    /// use sdrk::{Rate, C32};
+    /// use sdrk_blocks::{
+    ///     AlignedBytes, ArenaStorage, Chain, Error, ParamMap, ParamValue, ScaleBlock, ScaleConfig,
+    /// };
+    /// const MAP: ParamMap = ParamMap::new(&[("gain_db", "0.gain_db"), ("gain_db", "1.gain_db")]);
+    /// let rate = Rate::hz(48_000)?;
+    /// let mut mem = AlignedBytes([0u8; 4096]);
+    /// let mut arena = ArenaStorage::new(&mut mem.0);
+    /// let a = ScaleBlock::<C32, _>::new(&ScaleConfig::default(), rate, &mut arena)?;
+    /// let b = ScaleBlock::<C32, _>::new(&ScaleConfig::default(), rate, &mut arena)?;
+    /// let chain = Chain::new(a, b, 16, &mut arena)?;
+    /// assert_eq!(MAP.check(&chain, "gain_db", &ParamValue::F64(-6.0)), Ok(()));
+    /// assert_eq!(MAP.check(&chain, "gain_db", &ParamValue::Bool(true)), Err(Error::WrongParamType));
+    /// assert_eq!(MAP.check(&chain, "gain", &ParamValue::F64(0.0)), Err(Error::UnknownParameter));
+    /// # Ok::<(), Box<dyn std::error::Error>>(())
     /// ```
-    pub fn has_path(&self, path: &str) -> bool {
-        self.entries.iter().any(|(_, p)| *p == path)
+    pub fn check<T: ParamPaths + ?Sized>(
+        &self,
+        target: &T,
+        flat: &str,
+        value: &ParamValue,
+    ) -> Result<()> {
+        let mut any = false;
+        for path in self.paths(flat) {
+            target.check_path_param(path, value)?;
+            any = true;
+        }
+        if any {
+            Ok(())
+        } else {
+            Err(Error::UnknownParameter)
+        }
     }
 
     /// Sets the parameter `flat` of `target` through all its paths: every path is checked
@@ -137,10 +167,8 @@ impl ParamMap {
         flat: &str,
         value: ParamValue,
     ) -> Result<()> {
+        self.check(target, flat, &value)?;
         let first = self.path(flat).ok_or(Error::UnknownParameter)?;
-        for path in self.paths(flat) {
-            target.check_path_param(path, &value)?;
-        }
         let before = target.path_param(first)?;
         for (written, path) in self.paths(flat).enumerate() {
             if let Err(e) = target.set_path_param(path, value) {
@@ -288,42 +316,17 @@ pub(crate) fn composite_set_param<T: Stages>(
     T::PARAMS.set(&mut ViaMut(block), name, value)
 }
 
-/// The check of a parameter that only a build of the block can set: `ReadOnlyParameter` (after
-/// the type and the range, as [`Block::check_param`] reports a build parameter).
-pub(crate) fn check_build_param(
-    desc: &crate::describe::ParamDesc,
-    value: &ParamValue,
-) -> Result<()> {
-    if desc.mutability == crate::describe::Mutability::Runtime {
-        desc.check(value)
-    } else {
-        Err(Error::ReadOnlyParameter)
-    }
-}
-
 /// `check_param` of a composite: every path of `name` checked, nothing changed.
 pub(crate) fn check_composite_param<T: Stages>(
     block: &T,
     name: &str,
     value: &ParamValue,
 ) -> Result<()> {
-    let mut any = false;
-    for path in T::PARAMS.paths(name) {
-        block.check_stage_param(path, value)?;
-        any = true;
-    }
-    if any {
-        Ok(())
-    } else {
-        Err(Error::UnknownParameter)
-    }
+    T::PARAMS.check(&Via(block), name, value)
 }
 
-/// The stage and the parameter name of a path of `map` (`"1.rolloff"` -> `("1", "rolloff")`);
-/// `UnknownParameter` for a path that is not in the map.
-pub(crate) fn stage_of<'a>(map: &ParamMap, path: &'a str) -> Result<(&'a str, &'a str)> {
-    if !map.has_path(path) {
-        return Err(Error::UnknownParameter);
-    }
+/// The stage and the parameter name of a path (`"1.rolloff"` -> `("1", "rolloff")`). Only the
+/// paths of the composite's own map reach it (through [`Via`] and [`ViaMut`]).
+pub(crate) fn stage_of(path: &str) -> Result<(&str, &str)> {
     path.split_once('.').ok_or(Error::UnknownParameter)
 }

@@ -4,35 +4,31 @@
 use sdrk::{Delay, Progress, Rate, Ratio, RatioKind};
 use sdrk_core::C32;
 
-use super::costas::check_f64;
+use super::head_mut;
 use super::iq_offset::{IqOffsetBlock, IqOffsetConfig, IqPart};
-use super::pulse_shape::{PulseShapeBlock, PulseShapeConfig};
+use super::pulse_shape::{
+    PulseShapeBlock, PulseShapeConfig, ROLLOFF_PARAM, SAMPLES_PER_SYMBOL_PARAM, SPAN_PARAM,
+};
 use super::qam_mod::modulate;
 use super::symbol_map::{
     CONSTELLATION_OPTIONS, SymbolMapBlock, SymbolMapConfig, SymbolMapConstellation,
     SymbolMapVariant,
 };
 use super::unknown;
-use super::{check_count, head_mut};
-use crate::block::{Block, BlockTiming, ParamValue};
+use crate::block::{Block, BlockTiming, ParamValue, check_runtime};
 use crate::chain::Chain;
 use crate::describe::{
     BlockDescription, Mutability, ParamDesc, ParamKind, PortDesc, PortType, Unit,
 };
-use crate::design::{RRC_MAX_SPAN, RRC_MIN_ROLLOFF, RRC_MIN_SPAN};
 use crate::error::{Error, Result};
 use crate::param_map::{
-    ParamMap, Stages, check_build_param, check_composite_param, composite_param,
-    composite_set_param, stage_of,
+    ParamMap, Stages, check_composite_param, composite_param, composite_set_param, stage_of,
 };
 use crate::storage::{Plan, Storage};
 
 /// The capacity in symbols of the buffer between `symbol_map` and the interpolation (and with
 /// `offset` in samples of the buffer between the interpolation and `iq_offset`).
 pub const PSK_MOD_CHUNK: usize = 256;
-
-/// The largest `samples_per_symbol` of `psk_mod`.
-const MAX_SPS: usize = 64;
 
 /// The names of the `variant` choice, in index order.
 const VARIANT_OPTIONS: &[&str] = &["plain", "pi4", "offset"];
@@ -194,42 +190,9 @@ pub static DESCRIPTION: BlockDescription = BlockDescription {
     }],
     params: &[
         PSK_CONSTELLATION_PARAM,
-        ParamDesc {
-            name: "samples_per_symbol",
-            unit: Unit::None,
-            kind: ParamKind::I64 {
-                min: 2,
-                max: MAX_SPS as i64,
-                default: None,
-            },
-            typical: "8",
-            mutability: Mutability::Build,
-            description: "Output samples per symbol, 2 to 64. Required.",
-        },
-        ParamDesc {
-            name: "rolloff",
-            unit: Unit::None,
-            kind: ParamKind::F64 {
-                min: RRC_MIN_ROLLOFF,
-                max: 1.0,
-                default: Some(0.35),
-            },
-            typical: "0.35; 0.2 for a narrow spectrum, 0.5 to 1 for easy timing recovery",
-            mutability: Mutability::Build,
-            description: "Roll-off of the root-raised-cosine pulse.",
-        },
-        ParamDesc {
-            name: "span",
-            unit: Unit::None,
-            kind: ParamKind::I64 {
-                min: RRC_MIN_SPAN as i64,
-                max: RRC_MAX_SPAN as i64,
-                default: Some(10),
-            },
-            typical: "10; 16 or more for less intersymbol interference",
-            mutability: Mutability::Build,
-            description: "Length of the pulse in symbols (span samples_per_symbol + 1 taps).",
-        },
+        SAMPLES_PER_SYMBOL_PARAM,
+        ROLLOFF_PARAM,
+        SPAN_PARAM,
         ParamDesc {
             name: "differential",
             unit: Unit::None,
@@ -309,9 +272,8 @@ impl PskModConfig {
     /// without `qpsk`, with `differential` or with an odd `samples_per_symbol`).
     pub fn validate(&self) -> Result<()> {
         check_psk(self.constellation)?;
-        check_count("samples_per_symbol", self.samples_per_symbol, 2, MAX_SPS)?;
-        check_f64("rolloff", self.rolloff, RRC_MIN_ROLLOFF, 1.0)?;
-        check_count("span", self.span, RRC_MIN_SPAN, RRC_MAX_SPAN)?;
+        // The ranges of the pulse are those of `pulse_shape`.
+        self.pulse().validate()?;
         check_variant(
             self.variant,
             self.constellation,
@@ -554,7 +516,7 @@ impl<S: Storage> Stages for PskModBlock<S> {
     const PARAMS: ParamMap = PSK_MOD_PARAMS;
 
     fn stage_param(&self, path: &str) -> Result<ParamValue> {
-        match stage_of(&Self::PARAMS, path)? {
+        match stage_of(path)? {
             ("0", "variant") => Ok(ParamValue::Choice(self.variant().index())),
             ("0", n) => self.stages.first().param(n),
             ("1", n) => self.stages.second().param(n),
@@ -564,13 +526,13 @@ impl<S: Storage> Stages for PskModBlock<S> {
     }
 
     fn check_stage_param(&self, path: &str, value: &ParamValue) -> Result<()> {
-        match stage_of(&Self::PARAMS, path)? {
+        match stage_of(path)? {
             ("0", n) => self.stages.first().check_param(n, value),
             ("1", n) => self.stages.second().check_param(n, value),
             // Left out: what `iq_offset` would answer (its description).
             ("2", n) => match self.offset.as_ref() {
                 Some(o) => o.check_param(n, value),
-                None => check_build_param(
+                None => check_runtime(
                     super::iq_offset::DESCRIPTION
                         .param(n)
                         .ok_or(Error::UnknownParameter)?,
@@ -582,7 +544,7 @@ impl<S: Storage> Stages for PskModBlock<S> {
     }
 
     fn set_stage_param(&mut self, path: &str, value: ParamValue) -> Result<()> {
-        match stage_of(&Self::PARAMS, path)? {
+        match stage_of(path)? {
             ("0", n) => self.stages.first_mut().set_param(n, value),
             ("1", n) => self.stages.second_mut().set_param(n, value),
             ("2", n) => self

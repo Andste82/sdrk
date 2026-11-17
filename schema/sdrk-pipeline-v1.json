@@ -3782,7 +3782,7 @@
                 "properties": {
                   "rolloff": {
                     "default": 0.35,
-                    "description": "Roll-off of the root-raised-cosine pulse. Typical: 0.35; 0.2 for a narrow spectrum. Build-time.",
+                    "description": "Roll-off of the root-raised-cosine pulse. Typical: 0.35; 0.2 for a narrow spectrum, 0.5 to 1 for easy timing recovery. Build-time.",
                     "maximum": 1.0,
                     "minimum": 0.05,
                     "type": "number"
@@ -3905,20 +3905,20 @@
                   },
                   "rolloff": {
                     "default": 0.35,
-                    "description": "Roll-off of the matched root-raised-cosine filter. Typical: 0.35 (the roll-off of the transmitter). Build-time.",
+                    "description": "Roll-off of the root-raised-cosine pulse. Typical: 0.35 (the roll-off of the transmitter). Build-time.",
                     "maximum": 1.0,
                     "minimum": 0.05,
                     "type": "number"
                   },
                   "span": {
                     "default": 10,
-                    "description": "Length of the matched filter in symbols. Typical: 10. Build-time.",
+                    "description": "Length of the filter in symbols (span n + 1 taps). Typical: 10 (the span of the transmitter). Build-time.",
                     "maximum": 32,
                     "minimum": 4,
                     "type": "integer"
                   },
                   "symbol_rate_hz": {
-                    "description": "Symbol rate in Hz; the sample rate must be within 1 % of an integer multiple (2 to 1024) of it and at least twice it. Required. Unit: Hz. Typical: 25000 for 100 kbit/s 16-QAM. Build-time.",
+                    "description": "Symbol rate in Hz; the sample rate must be within 1 % of an integer multiple (2 to 1024) of it. Required. Unit: Hz. Typical: 25000. Build-time.",
                     "maximum": 1000000000000.0,
                     "minimum": 0.001,
                     "type": "number"
@@ -4015,20 +4015,20 @@
                   },
                   "rolloff": {
                     "default": 0.35,
-                    "description": "Roll-off of the matched root-raised-cosine filter. Typical: 0.35 (the roll-off of the transmitter). Build-time.",
+                    "description": "Roll-off of the root-raised-cosine pulse. Typical: 0.35 (the roll-off of the transmitter). Build-time.",
                     "maximum": 1.0,
                     "minimum": 0.05,
                     "type": "number"
                   },
                   "span": {
                     "default": 10,
-                    "description": "Length of the matched filter in symbols. Typical: 10. Build-time.",
+                    "description": "Length of the filter in symbols (span n + 1 taps). Typical: 10 (the span of the transmitter). Build-time.",
                     "maximum": 32,
                     "minimum": 4,
                     "type": "integer"
                   },
                   "symbol_rate_hz": {
-                    "description": "Symbol rate in Hz; the sample rate must be within 1 % of an integer multiple (2 to 1024) of it and at least twice it. Required. Unit: Hz. Typical: 25000 for 100 kbit/s 16-QAM. Build-time.",
+                    "description": "Symbol rate in Hz; the sample rate must be within 1 % of an integer multiple (2 to 1024) of it. Required. Unit: Hz. Typical: 25000. Build-time.",
                     "maximum": 1000000000000.0,
                     "minimum": 0.001,
                     "type": "number"
@@ -4118,7 +4118,7 @@
                   },
                   "rolloff": {
                     "default": 0.35,
-                    "description": "Roll-off of the root-raised-cosine pulse. Typical: 0.35; 0.2 for a narrow spectrum. Build-time.",
+                    "description": "Roll-off of the root-raised-cosine pulse. Typical: 0.35; 0.2 for a narrow spectrum, 0.5 to 1 for easy timing recovery. Build-time.",
                     "maximum": 1.0,
                     "minimum": 0.05,
                     "type": "number"
@@ -4197,7 +4197,7 @@
                   },
                   "rolloff": {
                     "default": 0.35,
-                    "description": "Roll-off of the root-raised-cosine pulse. Typical: 0.35; 0.2 for a narrow spectrum. Build-time.",
+                    "description": "Roll-off of the root-raised-cosine pulse. Typical: 0.35; 0.2 for a narrow spectrum, 0.5 to 1 for easy timing recovery. Build-time.",
                     "maximum": 1.0,
                     "minimum": 0.05,
                     "type": "number"

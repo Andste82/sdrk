@@ -109,11 +109,17 @@ pub(crate) fn runtime_param(
     value: &ParamValue,
 ) -> Result<&'static str> {
     let p = desc.param(name).ok_or(Error::UnknownParameter)?;
+    check_runtime(p, value)?;
+    Ok(p.name)
+}
+
+/// Checks that a block may change the parameter `p` at run time (`ReadOnlyParameter` for a
+/// build parameter, before the type and the range) and that `value` has its type and range.
+pub(crate) fn check_runtime(p: &crate::describe::ParamDesc, value: &ParamValue) -> Result<()> {
     if p.mutability != crate::describe::Mutability::Runtime {
         return Err(Error::ReadOnlyParameter);
     }
-    p.check(value)?;
-    Ok(p.name)
+    p.check(value)
 }
 
 /// A processing block. Its input and output are port types ([`Ports`]): a stream of one sample

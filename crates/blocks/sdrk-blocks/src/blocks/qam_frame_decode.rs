@@ -10,21 +10,21 @@ use super::frame_decode::{
     DECODE_WHITENING_PARAM, EMIT_BAD_PARAM, FrameDecodeBlock, FrameDecodeConfig, FrameRotations,
     MAX_SYNC_ERRORS_PARAM,
 };
+use super::pulse_match::{MATCH_ROLLOFF_PARAM, MATCH_SPAN_PARAM, SYMBOL_RATE_PARAM};
 use super::qam_demod::{
-    CARRIER_BW_PARAM, DEMOD_ROLLOFF_PARAM, DEMOD_SPAN_PARAM, EQUALIZER_TAPS_PARAM, QAM_DEMOD_CHUNK,
-    QamDemodBlock, QamDemodConfig, SYMBOL_RATE_PARAM, SYNC_BW_PARAM,
+    CARRIER_BW_PARAM, EQUALIZER_TAPS_PARAM, QAM_DEMOD_CHUNK, QamDemodBlock, QamDemodConfig,
+    SYNC_BW_PARAM,
 };
 use super::qam_mod::QAM_CONSTELLATION_PARAM;
 use super::{check_count, head, head_mut, tail, tail_mut, unknown};
-use crate::block::{Block, BlockTiming, ParamValue};
+use crate::block::{Block, BlockTiming, ParamValue, check_runtime};
 use crate::describe::{
     BlockDescription, Mutability, ParamDesc, ParamKind, PortDesc, PortType, Unit,
 };
 use crate::error::{Error, Result};
 use crate::lock_watch::FrameWatch;
 use crate::param_map::{
-    ParamMap, Stages, check_build_param, check_composite_param, composite_param,
-    composite_set_param, stage_of,
+    ParamMap, Stages, check_composite_param, composite_param, composite_set_param, stage_of,
 };
 use crate::ports::Packets;
 use crate::storage::{Plan, Storage};
@@ -113,8 +113,8 @@ pub static DESCRIPTION: BlockDescription = BlockDescription {
     params: &[
         QAM_CONSTELLATION_PARAM,
         SYMBOL_RATE_PARAM,
-        DEMOD_ROLLOFF_PARAM,
-        DEMOD_SPAN_PARAM,
+        MATCH_ROLLOFF_PARAM,
+        MATCH_SPAN_PARAM,
         EQUALIZER_TAPS_PARAM,
         SYNC_BW_PARAM,
         CARRIER_BW_PARAM,
@@ -191,20 +191,26 @@ impl QamFrameDecodeConfig {
     /// `UnknownParameter`, `WrongParamType`, `OutOfRange`; `InvalidParameter` as
     /// [`QamDemodConfig::set`].
     pub fn set(&mut self, name: &str, value: ParamValue) -> Result<()> {
+        // Every path on a copy, kept only if all of them took the value (all or none, §4).
+        let mut next = *self;
         let mut any = false;
         for path in QAM_FRAME_DECODE_PARAMS.paths(name) {
             match path.split_once('.') {
-                Some(("0", n)) => self.demod.set(n, value)?,
-                Some(("1", n)) => self.frame.set(n, value)?,
+                Some(("0", n)) => next.demod.set(n, value)?,
+                Some(("1", n)) => next.frame.set(n, value)?,
                 Some(("2", _)) => {
                     FRAME_TIMEOUT_PARAM.check(&value)?;
-                    self.frame_timeout = value.as_usize()?;
+                    next.frame_timeout = value.as_usize()?;
                 }
                 _ => return unknown(),
             }
             any = true;
         }
-        if any { Ok(()) } else { unknown() }
+        if !any {
+            return unknown();
+        }
+        *self = next;
+        Ok(())
     }
 
     /// Current value of a parameter by its flat name.
@@ -489,7 +495,7 @@ impl<S: Storage> Stages for QamFrameDecodeBlock<S> {
     const PARAMS: ParamMap = QAM_FRAME_DECODE_PARAMS;
 
     fn stage_param(&self, path: &str) -> Result<ParamValue> {
-        match stage_of(&Self::PARAMS, path)? {
+        match stage_of(path)? {
             ("0", n) => self.demod.param(n),
             ("1", n) => self.decode.param(n),
             ("2", _) => Ok(ParamValue::I64(i64::from(self.watch.timeout()))),
@@ -498,16 +504,16 @@ impl<S: Storage> Stages for QamFrameDecodeBlock<S> {
     }
 
     fn check_stage_param(&self, path: &str, value: &ParamValue) -> Result<()> {
-        match stage_of(&Self::PARAMS, path)? {
+        match stage_of(path)? {
             ("0", n) => self.demod.check_param(n, value),
             ("1", n) => self.decode.check_param(n, value),
-            ("2", _) => check_build_param(&FRAME_TIMEOUT_PARAM, value),
+            ("2", _) => check_runtime(&FRAME_TIMEOUT_PARAM, value),
             _ => unknown(),
         }
     }
 
     fn set_stage_param(&mut self, path: &str, value: ParamValue) -> Result<()> {
-        match stage_of(&Self::PARAMS, path)? {
+        match stage_of(path)? {
             ("0", n) => self.demod.set_param(n, value),
             ("1", n) => self.decode.set_param(n, value),
             ("2", _) => Err(Error::ReadOnlyParameter),

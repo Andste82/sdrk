@@ -182,7 +182,7 @@ pub use fork::{FORK_DESCRIPTION, Fork};
 pub use lock_watch::{
     FrameWatch, LockAction, LockCheck, LockPolicy, LockState, LockTransition, LockWatch,
 };
-pub use param_map::ParamMap;
+pub use param_map::{ParamMap, ParamPaths, ParamPathsMut};
 pub use ports::{
     ChainEnd, ChainItem, Clocked, Frame, FrameOut, Lanes, LanesMut, LanesRef, Packets, Ports,
     StreamElem, Two,

@@ -281,16 +281,27 @@ fn frame_decode_four_costs_4() {
     for (params, cost) in [
         (json!({}), 1.0),
         (json!({ "rotations": "both" }), 1.0),
-        (json!({ "rotations": "four", "bits_per_symbol": 4 }), 4.0),
+        (
+            json!({ "rotations": "four", "constellation": "qam16" }),
+            4.0,
+        ),
     ] {
         let report = validate(&doc(params.clone()));
         assert!(report.is_ok(), "{params}: {}", report.to_json());
         assert_eq!(report.cost_per_input_sample, cost, "{params}");
     }
-    let (path, code, _) = first_error(&doc(json!({ "rotations": "four", "bits_per_symbol": 3 })));
+    let (path, code, _) = first_error(&doc(
+        json!({ "rotations": "four", "constellation": "8psk" }),
+    ));
     assert_eq!(
         (path.as_str(), code),
-        ("nodes.n.params.bits_per_symbol", DiagCode::InvalidValue)
+        ("nodes.n.params.constellation", DiagCode::InvalidValue)
+    );
+    // M44.1.1: `bits_per_symbol` is gone (no alias)
+    let (path, code, _) = first_error(&doc(json!({ "rotations": "four", "bits_per_symbol": 4 })));
+    assert_eq!(
+        (path.as_str(), code),
+        ("nodes.n.params.bits_per_symbol", DiagCode::UnknownParam)
     );
 }
 

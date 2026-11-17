@@ -1430,7 +1430,8 @@ fn the_rds_tx_kinds_describe_their_ports_and_parameters() {
 /// `constellation` of M44 §3, which replaced `order`), `psk_mod` (`f32` soft
 /// bits to `c32`, `samples_per_symbol` required), `psk_demod` (`c32` to `f32` soft bits,
 /// `symbol_rate_hz` required) and the parameters `rotations` (M44, formerly `polarity`; build,
-/// choice `normal`/`both`/`four`) and `bits_per_symbol` of `frame_decode`.
+/// choice `normal`/`both`/`four`) and `constellation` of `frame_decode` (M44.1.1, before
+/// `bits_per_symbol`).
 #[test]
 fn the_psk_kinds_describe_their_ports_and_parameters() {
     let costas = find("costas");
@@ -1543,8 +1544,8 @@ fn the_psk_kinds_describe_their_ports_and_parameters() {
     ] {
         assert!(d.details.contains(word), "psk_demod details: {word}");
     }
-    // M44 §4: `rotations` replaced `polarity` (the last two parameters are `rotations` and
-    // `bits_per_symbol`)
+    // M44 §4: `rotations` replaced `polarity`; M44.1.1: `constellation` replaced
+    // `bits_per_symbol` (the last two parameters are `rotations` and `constellation`)
     let fd = find("frame_decode");
     assert!(fd.param("polarity").is_none());
     let rot = fd.param("rotations").unwrap();
@@ -1556,15 +1557,15 @@ fn the_psk_kinds_describe_their_ports_and_parameters() {
             default: 0
         }
     );
+    assert!(fd.param("bits_per_symbol").is_none());
     let last = fd.params.last().unwrap();
-    assert_eq!(last.name, "bits_per_symbol");
+    assert_eq!(last.name, "constellation");
     assert_eq!(last.mutability, Mutability::Build);
     assert_eq!(
         last.kind,
-        ParamKind::I64 {
-            min: 1,
-            max: 6,
-            default: Some(2)
+        ParamKind::Choice {
+            options: &["bpsk", "qpsk", "8psk", "qam16", "qam64"],
+            default: 1
         }
     );
     let mut cfg = FrameDecodeConfig::default();
@@ -1573,18 +1574,25 @@ fn the_psk_kinds_describe_their_ports_and_parameters() {
     assert_eq!(cfg.get("rotations"), Ok(ParamValue::Choice(1)));
     cfg.set("rotations", ParamValue::Choice(2)).unwrap();
     assert_eq!(cfg.rotations, FrameRotations::Four);
-    cfg.set("bits_per_symbol", ParamValue::I64(6)).unwrap();
-    assert_eq!(cfg.get("bits_per_symbol"), Ok(ParamValue::I64(6)));
+    cfg.set("constellation", ParamValue::Choice(4)).unwrap();
+    assert_eq!(cfg.get("constellation"), Ok(ParamValue::Choice(4)));
+    assert_eq!(cfg.bits_per_symbol(), 6);
     assert!(cfg.validate().is_ok());
-    cfg.set("bits_per_symbol", ParamValue::I64(5)).unwrap();
-    assert!(matches!(
-        cfg.validate(),
-        Err(Error::InvalidParameter {
-            name: "bits_per_symbol",
-            ..
-        })
-    ));
-    assert!(cfg.set("bits_per_symbol", ParamValue::I64(7)).is_err());
+    for odd in [0, 2] {
+        cfg.set("constellation", ParamValue::Choice(odd)).unwrap();
+        assert!(matches!(
+            cfg.validate(),
+            Err(Error::InvalidParameter {
+                name: "constellation",
+                ..
+            })
+        ));
+    }
+    assert!(cfg.set("constellation", ParamValue::Choice(5)).is_err());
+    assert_eq!(
+        cfg.set("bits_per_symbol", ParamValue::I64(4)),
+        Err(Error::UnknownParameter)
+    );
     // qam16 and qam64 lie inside the choice but are no PSK constellations; the old name is
     // gone
     for (kind, r) in [

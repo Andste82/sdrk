@@ -153,7 +153,7 @@ pub static DESCRIPTION: BlockDescription = BlockDescription {
         damping 0.7071, max_offset 0.05 cycles per symbol) and the soft bits of symbol_demap \
         (the constellation, scale 1): above 0 is a 1. This is the order of psk_demod (equalizer before the \
         carrier loop). The 90 degree ambiguity of the square constellation is not resolved: use \
-        frame_decode with rotations four and bits_per_symbol 4 (qam16) or 6 (qam64). The output rate is the \
+        frame_decode with rotations four and the same constellation. The output rate is the \
         symbol rate times the bits per symbol and follows the clock of the signal (variable \
         ratio); the equalizer adds (equalizer_taps - 1) / 2 symbols of delay.",
     inputs: &[PortDesc {

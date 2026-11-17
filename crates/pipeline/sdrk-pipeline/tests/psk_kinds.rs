@@ -342,44 +342,59 @@ fn psk_demod_costs_and_rate_rule() {
 
 #[test]
 fn frame_decode_has_the_rotations_choice() {
-    let doc = |rotations: &str, bits: i64| {
+    let doc = |rotations: &str, constellation: &str| {
         json!({
             "sdrk": 1, "name": "t", "settings": { "precision": "f32", "max_chunk": 1024 },
             "inputs": { "in": { "type": "f32", "rate_hz": 50_000 } },
             "nodes": { "n": { "kind": "frame_decode", "params": {
-                "rotations": rotations, "bits_per_symbol": bits
+                "rotations": rotations, "constellation": constellation
             } } },
             "edges": [ { "from": "in", "to": "n" }, { "from": "n", "to": "out" } ],
             "outputs": { "out": { "type": "packets" } }
         })
     };
-    for (rotations, bits) in [
-        ("normal", 2),
-        ("both", 1),
-        ("both", 3),
-        ("four", 2),
-        ("four", 6),
+    for (rotations, constellation) in [
+        ("normal", "qpsk"),
+        ("both", "bpsk"),
+        ("both", "8psk"),
+        ("four", "qpsk"),
+        ("four", "qam16"),
+        ("four", "qam64"),
     ] {
-        let report = validate(&doc(rotations, bits));
-        assert!(report.is_ok(), "{rotations} {bits}: {}", report.to_json());
-    }
-    assert!(!validate(&doc("inverted", 2)).is_ok());
-    // four needs an even count; 7 is outside 1 to 6
-    for (rotations, bits) in [("four", 3), ("normal", 7), ("four", 0)] {
+        let report = validate(&doc(rotations, constellation));
         assert!(
-            !validate(&doc(rotations, bits)).is_ok(),
-            "{rotations} {bits}"
+            report.is_ok(),
+            "{rotations} {constellation}: {}",
+            report.to_json()
         );
     }
-    // the former name is gone (M44, no alias)
-    let old = json!({
-        "sdrk": 1, "name": "t", "settings": { "precision": "f32", "max_chunk": 1024 },
-        "inputs": { "in": { "type": "f32", "rate_hz": 50_000 } },
-        "nodes": { "n": { "kind": "frame_decode", "params": { "polarity": "both" } } },
-        "edges": [ { "from": "in", "to": "n" }, { "from": "n", "to": "out" } ],
-        "outputs": { "out": { "type": "packets" } }
-    });
-    assert!(!validate(&old).is_ok());
+    assert!(!validate(&doc("inverted", "qpsk")).is_ok());
+    // four needs a square constellation; real and fsk4 are not in the choice (M44.1.1)
+    for (rotations, constellation) in [
+        ("four", "8psk"),
+        ("four", "bpsk"),
+        ("normal", "real"),
+        ("normal", "fsk4"),
+    ] {
+        assert!(
+            !validate(&doc(rotations, constellation)).is_ok(),
+            "{rotations} {constellation}"
+        );
+    }
+    // the former names are gone (M44 `polarity`, M44.1.1 `bits_per_symbol`; no alias)
+    for old in [
+        json!({ "polarity": "both" }),
+        json!({ "rotations": "four", "bits_per_symbol": 2 }),
+    ] {
+        let old = json!({
+            "sdrk": 1, "name": "t", "settings": { "precision": "f32", "max_chunk": 1024 },
+            "inputs": { "in": { "type": "f32", "rate_hz": 50_000 } },
+            "nodes": { "n": { "kind": "frame_decode", "params": old } },
+            "edges": [ { "from": "in", "to": "n" }, { "from": "n", "to": "out" } ],
+            "outputs": { "out": { "type": "packets" } }
+        });
+        assert!(!validate(&old).is_ok(), "{old}");
+    }
 }
 
 /// Pushes `input` in pieces of 1 to 1024 samples (seed 559, stream `stream`) and reads the

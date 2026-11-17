@@ -33,8 +33,8 @@ nodes:
   # bandwidth for a carrier 1 kHz off. The values that differ from the defaults:
   # - equalizer_taps 15 (default 11): the multipath of the test channel reaches 2.7 symbols.
   # - sync_bw 0.002 (default 0.005): less timing jitter on 16-QAM.
-  # Decoder: rotations four with bits_per_symbol 4 (set by the block from the constellation) tests the
-  # sync word in the four rotations of the 16-QAM symbols: the decision-directed carrier loop
+  # Decoder: rotations four with the constellation of the node (4 bits per symbol for qam16)
+  # tests the sync word in the four rotations of the 16-QAM symbols: the decision-directed carrier loop
   # may lock 0, 90, 180 or 270 degrees off, and the decoder undoes the rotation it found; the
   # quarter turns are reported in bits 16 and 17 of the packet flags. max_sync_errors 2 accepts
   # a sync word with up to 2 wrong bits on a noisy link.

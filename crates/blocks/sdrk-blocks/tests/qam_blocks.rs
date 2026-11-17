@@ -1374,12 +1374,26 @@ fn turned_soft(bits: &[u8], k: usize, r: u32) -> Vec<f32> {
         .collect()
 }
 
+/// The constellation of `frame_decode` with `k` bits per symbol (M44.1.1: `constellation`
+/// replaced `bits_per_symbol`).
+fn constellation_of(k: usize) -> SymbolMapConstellation {
+    match k {
+        1 => SymbolMapConstellation::Bpsk,
+        2 => SymbolMapConstellation::Qpsk,
+        3 => SymbolMapConstellation::Psk8,
+        4 => SymbolMapConstellation::Qam16,
+        6 => SymbolMapConstellation::Qam64,
+        _ => panic!("no constellation of {k} bits per symbol"),
+    }
+}
+
 fn decoder(rotations: FrameRotations, k: usize) -> FrameDecodeBlock<VecStorage> {
     let cfg = FrameDecodeConfig {
         rotations,
-        bits_per_symbol: k,
+        constellation: constellation_of(k),
         ..FrameDecodeConfig::default()
     };
+    assert_eq!(cfg.bits_per_symbol(), k);
     FrameDecodeBlock::<VecStorage>::new(&cfg, rate(9600), &mut VecStorage).unwrap()
 }
 
@@ -1505,11 +1519,11 @@ fn frame_decode_four_finds_frames_of_different_rotations_in_cut_plans() {
 }
 
 #[test]
-fn frame_decode_rotations_and_bits_per_symbol_are_checked() {
-    let make = |rotations, bits_per_symbol| {
+fn frame_decode_rotations_and_constellation_are_checked() {
+    let make = |rotations, k| {
         let cfg = FrameDecodeConfig {
             rotations,
-            bits_per_symbol,
+            constellation: constellation_of(k),
             ..FrameDecodeConfig::default()
         };
         FrameDecodeBlock::<VecStorage>::new(&cfg, rate(9600), &mut VecStorage).map(|_| ())
@@ -1517,26 +1531,33 @@ fn frame_decode_rotations_and_bits_per_symbol_are_checked() {
     for k in [2, 4, 6] {
         assert!(make(FrameRotations::Four, k).is_ok(), "{k}");
     }
-    for k in [1, 3, 5] {
+    // bpsk and 8psk are not square: refused by the rotations four, used by normal and both
+    for k in [1, 3] {
         assert!(matches!(
             make(FrameRotations::Four, k),
             Err(Error::InvalidParameter {
-                name: "bits_per_symbol",
+                name: "constellation",
                 ..
             })
         ));
         assert!(make(FrameRotations::Normal, k).is_ok());
         assert!(make(FrameRotations::Both, k).is_ok());
     }
-    for k in [0, 7] {
+    // the choice has the five names of symbol_map, nothing beyond
+    let mut cfg = FrameDecodeConfig::default();
+    for i in [5, 6] {
         assert!(matches!(
-            make(FrameRotations::Normal, k),
+            cfg.set("constellation", ParamValue::Choice(i)),
             Err(Error::OutOfRange {
-                name: "bits_per_symbol",
+                name: "constellation",
                 ..
             })
         ));
     }
+    assert_eq!(
+        cfg.set("bits_per_symbol", ParamValue::I64(4)),
+        Err(Error::UnknownParameter)
+    );
 }
 
 /// Packets through `frame_encode` -> `qam_mod` -> a channel turned by 0, 90, 180 and 270

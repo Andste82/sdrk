@@ -1251,7 +1251,7 @@ impl FrameDecodeFourBlockK {
             .collect();
         let cfg = FrameDecodeConfig {
             rotations: FrameRotations::Four,
-            bits_per_symbol: 4,
+            constellation: SymbolMapConstellation::Qam16,
             ..FrameDecodeConfig::default()
         };
         let block =

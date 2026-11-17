@@ -23,7 +23,7 @@ nodes:
   # rotations both also accepts the inverted sync word and inverts the frame: the carrier loop
   # may lock 180 degrees off. A lock 90 or 270 degrees off swaps and inverts the bits of the
   # pairs, which rotations both does not resolve; the receiver then decodes nothing until the
-  # loop slips (rotations four with bits_per_symbol 2 resolves all four, or use differential:
+  # loop slips (rotations four with constellation qpsk resolves all four, or use differential:
   # true on both sides).
   dec:
     kind: frame_decode

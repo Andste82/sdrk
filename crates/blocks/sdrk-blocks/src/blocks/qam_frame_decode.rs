@@ -61,11 +61,12 @@ pub(crate) const FRAME_TIMEOUT_PARAM: ParamDesc = ParamDesc {
 };
 
 /// The flat parameter names of `qam_frame_decode` and the stages they stand for: `0` is
-/// `qam_demod`, `1` is `frame_decode` (`rotations` is `four` and `bits_per_symbol` that of the
-/// constellation, fixed by the composite; `frame_decode` has no `constellation`, open item
-/// I44.1.1-2), `2` the frame watch (`FrameWatch`, a crate-internal building block).
+/// `qam_demod`, `1` is `frame_decode` (its `rotations` are `four`, fixed by the composite; its
+/// bits per symbol follow from its `constellation`), `2` the frame watch (`FrameWatch`, a
+/// crate-internal building block). `constellation` reaches both `qam_demod` and `frame_decode`.
 pub const QAM_FRAME_DECODE_PARAMS: ParamMap = ParamMap::new(&[
     ("constellation", "0.constellation"),
+    ("constellation", "1.constellation"),
     ("symbol_rate_hz", "0.symbol_rate_hz"),
     ("rolloff", "0.rolloff"),
     ("span", "0.span"),
@@ -85,8 +86,8 @@ pub static DESCRIPTION: BlockDescription = BlockDescription {
         watch at frame level.",
     details: "The receive side of qam_frame_encode, a composite of qam_demod (matched filter, \
         symbol timing, frequency acquisition, equalizer, carrier loop and soft bits, with its \
-        parameters) and frame_decode with rotations four and bits_per_symbol of the constellation (4 or \
-        6), which resolves the 90 degree ambiguity of the square constellation and reports the \
+        parameters) and frame_decode with rotations four and the same constellation (4 or 6 bits per \
+        symbol), which resolves the 90 degree ambiguity of the square constellation and reports the \
         quarter turns in bits 16 and 17 of the packet flags (max_sync_errors, emit_bad and \
         whitening as frame_decode). The watch at frame level: after a first frame with CRC_OK \
         since the start, a reset or its last restart, frames are expected, and when no frame \
@@ -126,8 +127,8 @@ pub static DESCRIPTION: BlockDescription = BlockDescription {
     required: &["symbol_rate_hz"],
 };
 
-/// Configuration of [`QamFrameDecodeBlock`]: the demodulator, the decoder (its `rotations` and
-/// `bits_per_symbol` are set by the composite) and the frame watch.
+/// Configuration of [`QamFrameDecodeBlock`]: the demodulator, the decoder (its `rotations` are
+/// `four` and its `constellation` that of the demodulator) and the frame watch.
 ///
 /// ```
 /// use sdrk_blocks::{ParamValue, QamFrameDecodeConfig};
@@ -144,8 +145,8 @@ pub static DESCRIPTION: BlockDescription = BlockDescription {
 pub struct QamFrameDecodeConfig {
     /// The demodulator.
     pub demod: QamDemodConfig,
-    /// The decoder: `max_sync_errors`, `emit_bad` and `whitening` (`rotations` and
-    /// `bits_per_symbol` are replaced by `four` and the bits per symbol of the constellation).
+    /// The decoder: `max_sync_errors`, `emit_bad` and `whitening` (`rotations` is replaced by
+    /// `four` and `constellation` by the one field `demod.constellation`).
     pub frame: FrameDecodeConfig,
     /// Symbols without a frame with `CRC_OK` after which the demodulator starts again (0 to
     /// 1048576; 0 = off).
@@ -164,11 +165,12 @@ impl Default for QamFrameDecodeConfig {
 }
 
 impl QamFrameDecodeConfig {
-    /// The configuration of the decoder: `rotations` `four`, `bits_per_symbol` of the constellation.
+    /// The configuration of the decoder: `rotations` `four`, the constellation of the
+    /// demodulator.
     pub fn decoder(&self) -> FrameDecodeConfig {
         FrameDecodeConfig {
             rotations: FrameRotations::Four,
-            bits_per_symbol: self.demod.bits_per_symbol(),
+            constellation: self.demod.constellation,
             ..self.frame
         }
     }
@@ -239,7 +241,7 @@ fn buffer_len(bps: usize) -> usize {
 ///
 /// A composite block: [`QamDemodBlock`] writes the soft bits of each piece of at most
 /// [`QAM_DEMOD_CHUNK`] input samples into a buffer, which [`FrameDecodeBlock`] (`rotations`
-/// `four`, `bits_per_symbol` 4 or 6) reads before the next piece; a packet output that is full
+/// `four`, the same constellation) reads before the next piece; a packet output that is full
 /// keeps the rest of the buffer for the next call. The watch at frame level ([`FrameWatch`]):
 /// after a frame with `CRC_OK` (since the start, a reset or its last restart) frames are
 /// expected; when none ends within `frame_timeout` symbols after the last one, the demodulator

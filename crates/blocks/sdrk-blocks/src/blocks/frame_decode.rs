@@ -4,10 +4,9 @@ use core::marker::PhantomData;
 
 use sdrk::{Delay, Progress, Rate, Ratio, RatioKind};
 use sdrk_proto::Packet;
-use sdrk_proto::frame::{
-    Decoder, MAX_BITS_PER_SYMBOL, MAX_SYNC_ERRORS, RotatingDecoder, Whitening, frame_bits,
-};
+use sdrk_proto::frame::{Decoder, MAX_SYNC_ERRORS, RotatingDecoder, Whitening, frame_bits};
 
+use super::symbol_map::{CONSTELLATION_OPTIONS, SymbolMapConstellation};
 use super::{WHITENING_OPTIONS, check_count, unknown, whitening_choice, whitening_from_choice};
 use crate::block::{Block, BlockTiming, ParamValue};
 use crate::describe::{
@@ -22,9 +21,6 @@ pub(crate) const MIN_FRAME_BITS: usize = frame_bits(0, 0);
 
 /// The names of the `rotations` choice, in index order.
 const ROTATIONS_OPTIONS: &[&str] = &["normal", "both", "four"];
-
-/// The largest `bits_per_symbol`.
-const MAX_BPS: usize = MAX_BITS_PER_SYMBOL as usize;
 
 /// The sync-word rotations a [`FrameDecodeBlock`] accepts (parameter `rotations`, M44; `Normal`
 /// and `Both` are the former `polarity` of M40).
@@ -42,8 +38,8 @@ pub enum FrameRotations {
     /// The sync word and its inverse; the bits of a frame found by the inverse are inverted
     /// (`sdrk_proto::frame::Decoder::with_both_polarities`).
     Both,
-    /// The four rotations by 90 degrees of symbols of `bits_per_symbol` bits; the rotation is
-    /// reported in bits 16 and 17 of the packet flags (`sdrk_proto::frame::RotatingDecoder`).
+    /// The four rotations by 90 degrees of the symbols of a square constellation (`qpsk`,
+    /// `qam16`, `qam64`), of its bits per symbol each; the rotation is reported in bits 16 and 17 of the packet flags (`sdrk_proto::frame::RotatingDecoder`).
     Four,
 }
 
@@ -119,12 +115,12 @@ pub static DESCRIPTION: BlockDescription = BlockDescription {
         setting sends it. With rotations both the hunt also accepts the inverted sync word and \
         then inverts the bits of the frame, which resolves the 180 degree ambiguity of a \
         coherent psk_demod (not the 90 degree one of QPSK). With rotations four the soft bits \
-        are taken in symbols of bits_per_symbol bits (counted from the first input sample \
+        are taken in symbols of the bits per symbol of the constellation (counted from the first input sample \
         since construction or reset; the in-phase half first), and the hunt tests the sync \
         word in the four rotations by 90 degrees of a square constellation with Gray coded \
         axes (one quarter turn maps the bit halves (I, Q) to (Q with its first bit inverted, \
-        I)), which resolves the ambiguity of QPSK (bits_per_symbol 2) and of qam_demod (4 for \
-        16-QAM, 6 for 64-QAM); the frame is read under the inverse rotation, and the packet \
+        I)), which resolves the ambiguity of QPSK (constellation qpsk, 2 bits per symbol) and of \
+        qam_demod (qam16, 4 bits; qam64, 6 bits); the frame is read under the inverse rotation, and the packet \
         flags carry the quarter turns 0 to 3 in bits 16 and 17. Pitfall: max_sync_errors above 0 \
         finds frames with damaged sync words but also false syncs in noise; those mostly fail \
         the CRC.",
@@ -154,21 +150,22 @@ pub static DESCRIPTION: BlockDescription = BlockDescription {
             mutability: Mutability::Build,
             description: "normal accepts only the sync word; both also accepts the inverted \
                 sync word and inverts the bits of that frame; four accepts the sync word in \
-                the four 90 degree rotations of symbols of bits_per_symbol bits and reports the \
+                the four 90 degree rotations of the symbols of the constellation and reports the \
                 rotation in the flags (bits 16 and 17).",
         },
         ParamDesc {
-            name: "bits_per_symbol",
+            name: "constellation",
             unit: Unit::None,
-            kind: ParamKind::I64 {
-                min: 1,
-                max: MAX_BPS as i64,
-                default: Some(2),
+            kind: ParamKind::Choice {
+                options: CONSTELLATION_OPTIONS,
+                default: 1,
             },
-            typical: "2 for QPSK, 4 for 16-QAM, 6 for 64-QAM",
+            typical: "qpsk; qam16 or qam64 behind qam_demod",
             mutability: Mutability::Build,
-            description: "Bits per symbol of the rotations four (even, 2 to 6); not used by \
-                normal and both.",
+            description: "The constellation of the soft bits, the names of symbol_demap: the \
+                rotations four take the soft bits in symbols of its bits per symbol (qpsk 2, \
+                qam16 4, qam64 6; bpsk and 8psk are not square and are refused there); not \
+                used by normal and both.",
         },
     ],
     required: &[],
@@ -177,16 +174,23 @@ pub static DESCRIPTION: BlockDescription = BlockDescription {
 /// Configuration of [`FrameDecodeBlock`].
 ///
 /// ```
-/// use sdrk_blocks::{FrameDecodeConfig, FrameRotations};
+/// use sdrk_blocks::{FrameDecodeConfig, FrameRotations, SymbolMapConstellation};
 /// let cfg = FrameDecodeConfig::default();
 /// assert_eq!((cfg.max_sync_errors, cfg.emit_bad), (0, false));
-/// assert_eq!((cfg.rotations, cfg.bits_per_symbol), (FrameRotations::Normal, 2));
+/// assert_eq!(cfg.rotations, FrameRotations::Normal);
+/// assert_eq!(cfg.constellation, SymbolMapConstellation::Qpsk);
 /// assert!(cfg.validate().is_ok());
 /// assert!(FrameDecodeConfig { max_sync_errors: 5, ..cfg }.validate().is_err());
-/// // four rotations need an even number of bits per symbol
-/// let four = FrameDecodeConfig { rotations: FrameRotations::Four, bits_per_symbol: 4, ..cfg };
+/// // four rotations need a square constellation
+/// let four = FrameDecodeConfig {
+///     rotations: FrameRotations::Four,
+///     constellation: SymbolMapConstellation::Qam16,
+///     ..cfg
+/// };
 /// assert!(four.validate().is_ok());
-/// assert!(FrameDecodeConfig { bits_per_symbol: 3, ..four }.validate().is_err());
+/// assert_eq!(four.bits_per_symbol(), 4);
+/// let psk8 = FrameDecodeConfig { constellation: SymbolMapConstellation::Psk8, ..four };
+/// assert!(psk8.validate().is_err());
 /// ```
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub struct FrameDecodeConfig {
@@ -198,29 +202,37 @@ pub struct FrameDecodeConfig {
     pub whitening: Whitening,
     /// The accepted sync-word rotations (M44; `Both` is the former polarity `both` of M40).
     pub rotations: FrameRotations,
-    /// Bits per symbol of [`FrameRotations::Four`] (1 to 6, even for `Four`; M44).
-    pub bits_per_symbol: usize,
+    /// The constellation of the soft bits, whose bits per symbol the rotations
+    /// [`FrameRotations::Four`] use (`qpsk`, `qam16` or `qam64` for `Four`; M44.1.1, before
+    /// `bits_per_symbol`).
+    pub constellation: SymbolMapConstellation,
 }
 
 impl Default for FrameDecodeConfig {
-    /// No sync errors, no bad frames, no whitening, rotations `Normal`, 2 bits per symbol.
+    /// No sync errors, no bad frames, no whitening, rotations `Normal`, constellation `qpsk`.
     fn default() -> Self {
         Self {
             max_sync_errors: 0,
             emit_bad: false,
             whitening: Whitening::None,
             rotations: FrameRotations::Normal,
-            bits_per_symbol: 2,
+            constellation: SymbolMapConstellation::Qpsk,
         }
     }
 }
 
 impl FrameDecodeConfig {
-    /// Checks the ranges and the combination of `rotations` and `bits_per_symbol`.
+    /// The bits per symbol of the constellation (1, 2, 3, 4 or 6), the symbol of the rotations
+    /// `four`.
+    pub const fn bits_per_symbol(&self) -> usize {
+        self.constellation.bits_per_symbol()
+    }
+
+    /// Checks the ranges and the combination of `rotations` and `constellation`.
     ///
     /// # Errors
-    /// `OutOfRange` for `max_sync_errors` above 4 and `bits_per_symbol` outside 1 to 6;
-    /// `InvalidParameter` of `bits_per_symbol` for an odd count with `rotations` `four`.
+    /// `OutOfRange` for `max_sync_errors` above 4; `InvalidParameter` of `constellation` for
+    /// `bpsk` or `8psk` with `rotations` `four`.
     pub fn validate(&self) -> Result<()> {
         check_count(
             "max_sync_errors",
@@ -228,11 +240,10 @@ impl FrameDecodeConfig {
             0,
             MAX_SYNC_ERRORS as usize,
         )?;
-        check_count("bits_per_symbol", self.bits_per_symbol, 1, MAX_BPS)?;
-        if self.rotations == FrameRotations::Four && !self.bits_per_symbol.is_multiple_of(2) {
+        if self.rotations == FrameRotations::Four && !self.bits_per_symbol().is_multiple_of(2) {
             return Err(Error::InvalidParameter {
-                name: "bits_per_symbol",
-                reason: "the rotations four need an even number of bits per symbol",
+                name: "constellation",
+                reason: "the rotations four need a square constellation: qpsk, qam16 or qam64",
             });
         }
         Ok(())
@@ -251,7 +262,9 @@ impl FrameDecodeConfig {
             "emit_bad" => self.emit_bad = value.as_bool()?,
             "whitening" => self.whitening = whitening_from_choice(value.as_choice()?),
             "rotations" => self.rotations = rotations_of(value.as_choice()?),
-            "bits_per_symbol" => self.bits_per_symbol = value.as_usize()?,
+            "constellation" => {
+                self.constellation = SymbolMapConstellation::from_index(value.as_choice()?);
+            }
             _ => return unknown(),
         }
         Ok(())
@@ -267,7 +280,7 @@ impl FrameDecodeConfig {
             "emit_bad" => Ok(ParamValue::Bool(self.emit_bad)),
             "whitening" => Ok(ParamValue::Choice(whitening_choice(self.whitening))),
             "rotations" => Ok(ParamValue::Choice(rotations_index(self.rotations))),
-            "bits_per_symbol" => Ok(ParamValue::I64(self.bits_per_symbol as i64)),
+            "constellation" => Ok(ParamValue::Choice(self.constellation.index())),
             _ => unknown(),
         }
     }
@@ -303,7 +316,7 @@ impl Hunt {
     #[inline(never)]
     fn four(config: &FrameDecodeConfig, max: u32) -> Result<Self> {
         let d = Decoder::new(max, config.emit_bad, config.whitening)?;
-        let k = u32::try_from(config.bits_per_symbol).unwrap_or(0);
+        let k = u32::try_from(config.bits_per_symbol()).unwrap_or(0);
         Ok(Self::Four(RotatingDecoder::new(d, k)?))
     }
 }

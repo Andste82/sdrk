@@ -244,9 +244,20 @@ fn the_flat_parameters_go_through_the_param_maps() {
         cfg.set("frame_timeout", ParamValue::I64(-1)),
         Err(Error::OutOfRange { .. })
     ));
-    assert_eq!(cfg.decoder().bits_per_symbol, 6);
+    // `constellation` reaches the demodulator and the decoder (M44.1.1, D1824)
+    assert_eq!(
+        QAM_FRAME_DECODE_PARAMS
+            .paths("constellation")
+            .collect::<Vec<_>>(),
+        ["0.constellation", "1.constellation"]
+    );
+    assert_eq!(cfg.frame.get("constellation"), Ok(ParamValue::Choice(4)));
+    assert_eq!(cfg.decoder().bits_per_symbol(), 6);
+    // a value the demodulator refuses reaches neither (all or none)
+    assert!(cfg.set("constellation", ParamValue::Choice(1)).is_err());
+    assert_eq!(cfg.frame.get("constellation"), Ok(ParamValue::Choice(4)));
     let rx = QamFrameDecodeBlock::new(&cfg, rate, &mut VecStorage).unwrap();
-    // `rotations` and `bits_per_symbol` of the decoder are set by the composite
+    // `rotations` of the decoder is set by the composite, its constellation is the demodulator's
     let got = rx.config();
     assert_eq!(
         (got.demod, got.decoder(), got.frame_timeout),

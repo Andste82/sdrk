@@ -819,7 +819,7 @@ Instructions per sample, ours / comparison (`avx2-runtime`: ours only, judged ag
 | `channel_bank_channelize` (our code, per input sample) | 193.80 / 193.80 | 193.79 / 193.79 | 83.51 / 83.51 | 83.64 | 104.25 / 104.25 | 81.92 / 81.92 | 534.31 / 534.31 |
 | `channel_bank_ddc` (our code, per input sample) | 721.18 / 721.18 | 721.77 / 721.77 | 234.33 / 234.33 | 241.94 | 178.06 / 178.06 | 436.60 / 436.60 | 1657.26 / 1657.26 |
 | `band_pulse_detect_block` (our code, per lane value) | 138.25 / 138.25 | 136.69 / 136.69 | 128.20 / 128.20 | 136.86 | 127.50 / 127.50 | 124.69 / 124.69 | 324.05 / 324.05 |
-| `frame_decode_four_block` (our code, per soft bit) | 87.06 / 87.06 | 86.07 / 86.07 | 83.82 / 83.82 | 86.76 | 83.19 / 83.19 | 77.21 / 77.21 | 166.41 / 166.41 |
+| `frame_decode_four_block` (our code, per soft bit) | 87.06 / 87.06 | 86.07 / 86.07 | 83.85 / 83.85 | 86.79 | 83.19 / 83.19 | 77.21 / 77.21 | 166.41 / 166.41 |
 | `qam_demod_block` (our code, per input sample) | 295.94 / 295.94 | 292.47 / 292.47 | 164.62 / 164.62 | 171.35 | 146.07 / 146.07 | 181.97 / 181.97 | 560.89 / 560.89 |
 | `qam_demod_search_block` (our code, per input sample) | 317.95 / 317.95 | 313.90 / 313.90 | 180.90 / 180.90 | 189.47 | 161.32 / 161.32 | 198.68 / 198.68 | 607.85 / 607.85 |
 | `qam_mod_block` (our code, per output sample) | 44.21 / 44.21 | 41.33 / 41.33 | 24.00 / 24.00 | 24.69 | 20.52 / 20.52 | 28.85 / 28.85 | 93.11 / 93.11 |
@@ -828,7 +828,7 @@ Instructions per sample, ours / comparison (`avx2-runtime`: ours only, judged ag
 | `iq_offset_block` (our code, per sample) | 11.26 / 11.26 | 12.01 / 12.01 | 12.01 / 12.01 | 11.26 | 12.01 / 12.01 | 11.76 / 11.76 | 40.77 / 40.77 |
 | `qam_acquire_block` (our code, per input symbol) | 155.21 / 155.21 | 150.21 / 150.21 | 109.88 / 109.88 | 124.13 | 98.69 / 98.69 | 107.67 / 107.67 | 348.39 / 348.39 |
 | `qam_frame_encode_block` (our code, per output sample) | 45.94 / 45.94 | 43.06 / 43.06 | 25.70 / 25.70 | 26.42 | 22.21 / 22.21 | 30.27 / 30.27 | 97.80 / 97.80 |
-| `qam_frame_decode_block` (our code, per input sample) | 340.90 / 340.91 | 336.82 / 336.82 | 207.86 / 207.86 | 216.20 | 188.90 / 188.90 | 221.66 / 221.66 | 645.42 / 645.42 |
+| `qam_frame_decode_block` (our code, per input sample) | 340.91 / 340.90 | 336.82 / 336.82 | 207.86 / 207.86 | 216.20 | 188.90 / 188.90 | 221.66 / 221.66 | 645.43 / 645.43 |
 | `pulse_shape_block` (our code, per output sample) | 40.71 / 40.71 | 37.84 / 37.84 | 21.04 / 21.04 | 21.05 | 19.55 / 19.55 | 26.66 / 26.66 | 88.47 / 88.47 |
 | `pulse_match_block` (our code, per input sample) | 153.36 / 153.36 | 153.36 / 153.36 | 32.66 / 32.66 | 32.67 | 15.08 / 15.08 | 72.50 / 72.50 | 266.12 / 266.12 |
 | `qam_soft_bits_qam16` C32 (our fallback, per input symbol) | 5.91 / 9.52 | 5.91 / 9.52 | 2.47 / 2.46 | 2.48 | 1.13 / 1.71 | 3.52 / 3.52 | 14.79 / 15.54 |
@@ -1315,7 +1315,7 @@ Reference model `skylake`, counter-model `znver2`, mode `whole-loop`; execution 
 | `qam_acquire_block` | 52.13 | 52.13 | 1.00 | 44.16 | 44.16 | 1.00 | sdrk fallback |
 | `qam_demod_block` | 113.89 | 113.89 | 1.00 | 103.52 | 103.52 | 1.00 | sdrk fallback |
 | `qam_demod_search_block` | 121.06 | 121.06 | 1.00 | 109.54 | 109.54 | 1.00 | sdrk fallback |
-| `qam_frame_decode_block` | 131.80 | 131.80 | 1.00 | 120.79 | 120.79 | 1.00 | sdrk fallback |
+| `qam_frame_decode_block` | 131.81 | 131.80 | 1.00 | 120.80 | 120.79 | 1.00 | sdrk fallback |
 | `qam_frame_encode_block` | 10.10 | 10.10 | 1.00 | 12.22 | 12.22 | 1.00 | sdrk fallback |
 | `qam_mod_block` | 9.08 | 9.08 | 1.00 | 11.25 | 11.25 | 1.00 | sdrk fallback |
 | `qam_soft_bits_qam16` | 1.35 | 2.04 | 0.66 | 1.49 | 2.42 | 0.61 | sdrk fallback |
@@ -1531,7 +1531,7 @@ Reference model `skylake`, counter-model `znver2`, mode `whole-loop`; execution 
 | `equalize_qam16_fallback` | 157.16 | 191.52 | 0.82 | 152.86 | 213.78 | 0.72 | GNU Radio linear_equalizer with adaptive_algorithm_nlms on constellation_rect 16-QAM (linear_equalizer_impl.cc and constellation.cc of gr-digital, VOLK generic dot products, generic compiler flags) |
 | `equalize_qam64` | 157.15 | 157.15 | 1.00 | 152.86 | 152.86 | 1.00 | sdrk fallback |
 | `equalize_qam64_fallback` | 157.15 | 191.52 | 0.82 | 152.86 | 213.78 | 0.72 | GNU Radio linear_equalizer with adaptive_algorithm_nlms on constellation_rect 64-QAM (linear_equalizer_impl.cc and constellation.cc of gr-digital, VOLK generic dot products, generic compiler flags) |
-| `frame_decode` | 6.27 | 6.27 | 1.00 | 8.52 | 8.52 | 1.00 | sdrk fallback |
+| `frame_decode` | 6.27 | 6.26 | 1.00 | 8.52 | 8.52 | 1.00 | sdrk fallback |
 | `frame_decode_block` | 6.06 | 6.06 | 1.00 | 7.98 | 7.98 | 1.00 | sdrk fallback |
 | `frame_decode_four_block` | 34.82 | 34.82 | 1.00 | 33.27 | 33.27 | 1.00 | sdrk fallback |
 | `frame_encode_block` | 1.86 | 1.86 | 1.00 | 1.82 | 1.82 | 1.00 | sdrk fallback |
@@ -1780,7 +1780,7 @@ Reference model `znver3`, counter-model `alderlake`, mode `whole-loop`; executio
 | `equalize_qam64_fallback` | 120.91 | 944.25 | 0.13 | 138.30 | 277.26 | 0.50 | GNU Radio linear_equalizer with adaptive_algorithm_nlms on constellation_rect 64-QAM (linear_equalizer_impl.cc and constellation.cc of gr-digital, VOLK generic dot products, generic compiler flags) |
 | `frame_decode` | 5.57 | 5.57 | 1.00 | 6.18 | 6.18 | 1.00 | sdrk fallback |
 | `frame_decode_block` | 6.91 | 6.91 | 1.00 | 5.80 | 5.80 | 1.00 | sdrk fallback |
-| `frame_decode_four_block` | 23.43 | 23.43 | 1.00 | 20.77 | 20.77 | 1.00 | sdrk fallback |
+| `frame_decode_four_block` | 23.43 | 23.43 | 1.00 | 20.78 | 20.78 | 1.00 | sdrk fallback |
 | `frame_encode_block` | 1.64 | 1.64 | 1.00 | 1.72 | 1.72 | 1.00 | sdrk fallback |
 | `halfband_decimate` | 3.40 | 87.24 | 0.04 | 2.97 | 34.43 | 0.09 | liquid-dsp 1.8.3 resamp2_crcf_decim_execute (dotprod_crcf) with its AVX dot product (-O3 -ffp-contract=off, avx2) |
 | `halfband_decimate_cq15` | 6.55 | 12.86 | 0.51 | 7.12 | 13.27 | 0.54 | sdrk fallback |
@@ -2865,6 +2865,16 @@ Branches (D1611; `--branches`, cachegrind's branch simulation, `sse2`, `sse4.2` 
 - **Within 1 %.** No entry is slower by more than 1 % on any level and model (the largest rise is `qam_demod_block` on `znver4`, +0.41 %; on `znver3` +0.32 %, 64.03 -> 64.24, so the entry stays above the value before M44.1 that D1589 accepted, 63.32). The modulators run the same kernel calls as before (the chain calls `pulse_shape`, which calls `fir_interpolate` with the same state). The rise of `qam_demod_block` is +0.21 cycles per input sample at `znver3` and +0.14 instructions per input sample at `avx2` (164.48 -> 164.62), about 54 cycles and 36 instructions per piece of 256 input samples (`QAM_DEMOD_CHUNK`). The only change on its path is that `qam_demod` calls the kernel `fir` through `PulseMatchBlock::process` (the slice checks of the block and its `Progress`) instead of directly; the difference was not broken down further, because it is far inside the 1 % of the acceptance. `symbol_map_block` and `iq_offset_block` run unchanged code (`iq_offset_block` with `samples_per_symbol` 8, the same delay of 4 samples).
 - **Branches.** The modulator entries keep their mispredictions (`qam_mod_block` at `avx2` 0.0654 -> 0.0658, `psk_mod_block` 0.1607 -> 0.1606, `qam_frame_encode_block` 0.0705 -> 0.0698); the receivers show fewer (`qam_demod_block` at `avx2` 0.4357 -> 0.2834, `qam_frame_decode_block` 0.7354 -> 0.5744). That drop has no cause in the processing code: the call through `PulseMatchBlock::process` adds no data-dependent branch and removes none, so it is most likely an effect of the code layout on the simple predictor of cachegrind (aliasing), not a gain of M44.1.1, and it is not counted as one. What counts is that no data-dependent branch was added on the hot path (D1611).
 - **The building blocks.** `pulse_shape_block` is the short-branch interpolation of `fir_interpolate` (81 taps by 8) with the block around it: 3.56 / 3.51 against 4.39 / 4.54 for `qam_mod_block` at `avx2`, which adds the mapping of `symbol_map` and the buffer of the chain. `pulse_match_block` is the 81-tap `fir` per input sample: 12.41 / 11.36 at `avx2`, about a fifth of `qam_demod_block`. Accuracy: `pulse_shape_block` 143.8 / 144.1 dB against the `f64` model of the points and the interpolation (`sse2`, `sse4.2` and `simd128` / the levels with FMA), `pulse_match_block` 142.0 to 142.3 dB against the filter in `f64`.
+
+**`frame_decode` with `constellation` (D1824).** `frame_decode` takes `constellation` instead of `bits_per_symbol` and derives its bits per symbol from it when it is built; the bit loops are unchanged. The three entries on its path were simulated again with the corrected `llvm-mca` on every level with a core model and counted with `--merge` on all four platforms (2026-11-17). Simulated cycles per sample, before (the committed rows at 09c0219) -> after, reference model / counter model, mode `whole-loop`:
+
+| Entry | sse2 (skylake / znver2) | sse4.2 (skylake / znver2) | avx2 (znver3 / alderlake) | avx512 (znver4 / sapphirerapids) | neon (cortex-a72 / cortex-a76) |
+| --- | --- | --- | --- | --- | --- |
+| `frame_decode_block` | 6.03 / 7.98 -> 6.03 / 7.98 | 6.06 / 7.98 -> 6.06 / 7.98 | 6.91 / 5.80 -> 6.91 / 5.80 | 6.90 / 5.79 -> 6.90 / 5.79 | 8.81 / 9.48 -> 8.81 / 9.48 |
+| `frame_decode_four_block` | 34.77 / 33.53 -> 34.77 / 33.53 | 34.82 / 33.27 -> 34.82 / 33.27 | 23.43 / 20.77 -> 23.43 / 20.78 | 22.08 / 21.17 -> 22.08 / 21.17 | 47.75 / 45.47 -> 47.75 / 45.47 |
+| `qam_frame_decode_block` | 131.80 / 120.79 -> 131.81 / 120.80 | 131.57 / 119.31 -> 131.57 / 119.31 | 76.29 / 83.11 -> 76.29 / 83.11 | 73.77 / 78.11 -> 73.77 / 78.11 | 152.03 / 115.20 -> 152.03 / 115.20 |
+
+Instructions per sample that changed (all others are equal): `frame_decode_four_block` at `avx2` 83.82 -> 83.85 (+0.04 %, `avx2-runtime` 86.76 -> 86.79), `qam_frame_decode_block` at `sse2` 340.90 -> 340.91 and at `simd128` (instructions, no cycle model) 645.42 -> 645.43. The largest change is +0.05 % (`frame_decode_four_block` on `alderlake`), far inside the 1 % of the acceptance; the decoder of a configuration is the same as before, so the outputs are bit-identical.
 
 ## Sensor decoder (M46)
 

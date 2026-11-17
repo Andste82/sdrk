@@ -885,8 +885,9 @@ const fn spec_own(name: &'static str, family: Family, own: &'static str) -> Kern
 /// PSK modulator block `psk_mod_block` of M44.1 (one output sample), the building blocks and
 /// composites of M44.1 `symbol_map_block` (one output symbol), `iq_offset_block` (one sample),
 /// `qam_acquire_block` (one input symbol), `qam_frame_encode_block` (one output sample) and
-/// `qam_frame_decode_block` (one input sample), and `frame_decode_four_block` (one soft bit,
-/// `frame_decode` with `rotations` `four`).
+/// `qam_frame_decode_block` (one input sample), the building blocks of M44.1.1
+/// `pulse_shape_block` (one output sample) and `pulse_match_block` (one input sample), and
+/// `frame_decode_four_block` (one soft bit, `frame_decode` with `rotations` `four`).
 const fn proto(name: &'static str, family: Family) -> KernelSpec {
     KernelSpec {
         name,
@@ -910,7 +911,7 @@ const fn fft(name: &'static str, family: Family, samples: u64) -> KernelSpec {
 }
 
 /// The kernels of the benchmark table, in report order.
-pub static KERNELS: [KernelSpec; 237] = [
+pub static KERNELS: [KernelSpec; 239] = [
     spec("convert_cs8", Family::Volk, true),
     spec("convert_cs16", Family::Volk, true),
     spec("convert_cu8", Family::VolkAndOwn, true),
@@ -1174,6 +1175,8 @@ pub static KERNELS: [KernelSpec; 237] = [
     proto("qam_acquire_block", Family::Own),
     proto("qam_frame_encode_block", Family::Own),
     proto("qam_frame_decode_block", Family::Own),
+    proto("pulse_shape_block", Family::Own),
+    proto("pulse_match_block", Family::Own),
     proto("frame_decode_four_block", Family::Own),
     spec("add", Family::Volk, false),
     spec("add_cq15", Family::Volk, false),
@@ -4820,6 +4823,8 @@ mod tests {
             "qam_acquire_block",
             "qam_frame_encode_block",
             "qam_frame_decode_block",
+            "pulse_shape_block",
+            "pulse_match_block",
         ];
         let names = crcs.iter().chain(&framing).copied().collect::<Vec<_>>();
         for level in ["sse2", "sse4.2", "avx2", "avx512", "neon", "simd128"] {

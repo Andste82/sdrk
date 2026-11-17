@@ -40,13 +40,14 @@ use sdrk_blocks::{
     SymbolSyncBlock, SymbolSyncConfig, Ted,
 };
 use sdrk_blocks::{
-    CostasBlock, CostasConfig, FrameRotations, FskDemodBlock, InterpolateBlock, IqOffsetBlock,
-    IqOffsetConfig, IqPart, MorseDecodeBlock, MorseDecodeConfig, MorseEncodeBlock,
-    MorseEncodeConfig, OokDemodBlock, PskDemodBlock, PskDemodConfig, PskModBlock, PskModConfig,
-    PskVariant, QamAcquireBlock, QamAcquireConfig, QamDemodBlock, QamDemodConfig,
-    QamFrameDecodeBlock, QamFrameDecodeConfig, QamFrameEncodeBlock, QamFrameEncodeConfig,
-    QamModBlock, QamModConfig, RdsDecodeBlock, RdsDecodeConfig, RdsDemodBlock, RdsDemodConfig,
-    SymbolMapBlock, SymbolMapConfig, SymbolMapConstellation, SymbolMapVariant,
+    CostasBlock, CostasConfig, FrameRotations, FskDemodBlock, IqOffsetBlock, IqOffsetConfig,
+    IqPart, MorseDecodeBlock, MorseDecodeConfig, MorseEncodeBlock, MorseEncodeConfig,
+    OokDemodBlock, PskDemodBlock, PskDemodConfig, PskModBlock, PskModConfig, PskVariant,
+    PulseMatchBlock, PulseMatchConfig, PulseShapeBlock, PulseShapeConfig, QamAcquireBlock,
+    QamAcquireConfig, QamDemodBlock, QamDemodConfig, QamFrameDecodeBlock, QamFrameDecodeConfig,
+    QamFrameEncodeBlock, QamFrameEncodeConfig, QamModBlock, QamModConfig, RdsDecodeBlock,
+    RdsDecodeConfig, RdsDemodBlock, RdsDemodConfig, SymbolMapBlock, SymbolMapConfig,
+    SymbolMapConstellation, SymbolMapVariant,
 };
 use sdrk_device::{SdrkError, formats};
 
@@ -369,8 +370,8 @@ fn psk_blocks_storage_is_exact() {
             |a| PskDemodBlock::new(&cfg, r, a).map(|_| ()),
         );
     }
-    // M44.1: symbol_map (no storage), iq_offset (its ring) and the interpolation with given
-    // taps
+    // M44.1: symbol_map (no storage) and iq_offset (its ring of half a symbol); M44.1.1:
+    // pulse_shape and pulse_match (taps and history)
     for constellation in [
         SymbolMapConstellation::Bpsk,
         SymbolMapConstellation::Psk8,
@@ -384,10 +385,13 @@ fn psk_blocks_storage_is_exact() {
         assert_eq!(bytes, 0);
         check_exact_storage(bytes, |a| SymbolMapBlock::new(&cfg, r, a).map(|_| ()));
     }
-    for (samples, part) in [(1, IqPart::Imag), (4, IqPart::Real), (512, IqPart::Imag)] {
-        let cfg = IqOffsetConfig { samples, part };
+    for (sps, part) in [(2, IqPart::Imag), (8, IqPart::Real), (1024, IqPart::Imag)] {
+        let cfg = IqOffsetConfig {
+            samples_per_symbol: sps,
+            part,
+        };
         let bytes = IqOffsetBlock::<A<'_>>::storage_bytes(&cfg, r).unwrap();
-        assert_eq!(bytes, 4 * samples);
+        assert_eq!(bytes, 4 * (sps / 2));
         check_exact_storage(bytes, |a| IqOffsetBlock::new(&cfg, r, a).map(|_| ()));
     }
     for correct in [false, true] {
@@ -396,16 +400,32 @@ fn psk_blocks_storage_is_exact() {
         assert_eq!(bytes, 8 * (512 + 1024));
         check_exact_storage(bytes, |a| QamAcquireBlock::new(&cfg, r, a).map(|_| ()));
     }
-    for (n, factor) in [(1, 1), (81, 8), (2049, 64)] {
-        let taps = || (0..n).map(|k| k as f64 / n as f64);
-        check_exact_storage(
-            InterpolateBlock::<C32, A<'_>>::storage_bytes_with_taps(n, factor).unwrap(),
-            |a| InterpolateBlock::<C32, _>::with_taps(taps(), factor, a).map(|_| ()),
-        );
-        check_exact_storage(
-            InterpolateBlock::<CQ15, A<'_>>::storage_bytes_with_taps(n, factor).unwrap(),
-            |a| InterpolateBlock::<CQ15, _>::with_taps(taps(), factor, a).map(|_| ()),
-        );
+    for (sps, span) in [(2, 4), (8, 10), (64, 32)] {
+        let cfg = PulseShapeConfig {
+            samples_per_symbol: sps,
+            span,
+            ..PulseShapeConfig::default()
+        };
+        let n = span * sps + 1;
+        let bytes = PulseShapeBlock::<A<'_>>::storage_bytes(&cfg, r).unwrap();
+        assert_eq!(bytes, 4 * n + 8 * n.div_ceil(sps));
+        check_exact_storage(bytes, |a| PulseShapeBlock::new(&cfg, r, a).map(|_| ()));
+    }
+    for (fs, symbol_rate_hz, span) in [
+        (9600, 4800.0, 4),
+        (200_000, 25_000.0, 10),
+        (1_024_000, 1000.0, 32),
+    ] {
+        let cfg = PulseMatchConfig {
+            symbol_rate_hz,
+            span,
+            ..PulseMatchConfig::default()
+        };
+        let r = rate(fs);
+        let n = span * (fs as usize / symbol_rate_hz as usize) + 1;
+        let bytes = PulseMatchBlock::<A<'_>>::storage_bytes(&cfg, r).unwrap();
+        assert_eq!(bytes, 4 * n + 8 * (n - 1));
+        check_exact_storage(bytes, |a| PulseMatchBlock::new(&cfg, r, a).map(|_| ()));
     }
     // M44: qam_mod and qam_demod (with and without the equalizer)
     for (order, sps, span) in [(16, 8, 10), (64, 2, 4), (16, 64, 32)] {
@@ -618,6 +638,10 @@ fn no_block_is_larger_than_512_bytes() {
     check::<SymbolMapBlock<sdrk_testkit::VecStorage>>("SymbolMapBlock<Vec>");
     check::<IqOffsetBlock<A<'static>>>("IqOffsetBlock");
     check::<IqOffsetBlock<sdrk_testkit::VecStorage>>("IqOffsetBlock<Vec>");
+    check::<PulseShapeBlock<A<'static>>>("PulseShapeBlock");
+    check::<PulseShapeBlock<sdrk_testkit::VecStorage>>("PulseShapeBlock<Vec>");
+    check::<PulseMatchBlock<A<'static>>>("PulseMatchBlock");
+    check::<PulseMatchBlock<sdrk_testkit::VecStorage>>("PulseMatchBlock<Vec>");
     check::<QamAcquireBlock<A<'static>>>("QamAcquireBlock");
     check::<QamAcquireBlock<sdrk_testkit::VecStorage>>("QamAcquireBlock<Vec>");
     check::<DcBlockRealBlock<f32, A<'static>>>("DcBlockRealBlock<f32>");
@@ -866,6 +890,14 @@ fn public_types_are_send() {
     assert_send::<IqOffsetBlock<sdrk_testkit::VecStorage>>();
     assert_sync::<IqOffsetBlock<A<'static>>>();
     assert_sync::<IqOffsetConfig>();
+    assert_send::<PulseShapeBlock<A<'static>>>();
+    assert_send::<PulseShapeBlock<sdrk_testkit::VecStorage>>();
+    assert_sync::<PulseShapeBlock<A<'static>>>();
+    assert_sync::<PulseShapeConfig>();
+    assert_send::<PulseMatchBlock<A<'static>>>();
+    assert_send::<PulseMatchBlock<sdrk_testkit::VecStorage>>();
+    assert_sync::<PulseMatchBlock<A<'static>>>();
+    assert_sync::<PulseMatchConfig>();
     assert_send::<QamAcquireBlock<A<'static>>>();
     assert_send::<QamAcquireBlock<sdrk_testkit::VecStorage>>();
     assert_sync::<QamAcquireBlock<A<'static>>>();

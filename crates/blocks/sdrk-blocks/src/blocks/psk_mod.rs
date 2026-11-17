@@ -5,9 +5,9 @@ use sdrk::{Delay, Progress, Rate, Ratio, RatioKind};
 use sdrk_core::C32;
 
 use super::costas::check_f64;
-use super::interpolate::InterpolateBlock;
 use super::iq_offset::{IqOffsetBlock, IqOffsetConfig, IqPart};
-use super::qam_mod::{RrcPulse, modulate};
+use super::pulse_shape::{PulseShapeBlock, PulseShapeConfig};
+use super::qam_mod::modulate;
 use super::symbol_map::{
     CONSTELLATION_OPTIONS, SymbolMapBlock, SymbolMapConfig, SymbolMapConstellation,
     SymbolMapVariant,
@@ -22,7 +22,8 @@ use crate::describe::{
 use crate::design::{RRC_MAX_SPAN, RRC_MIN_ROLLOFF, RRC_MIN_SPAN};
 use crate::error::{Error, Result};
 use crate::param_map::{
-    ParamMap, Stages, check_composite_param, composite_param, composite_set_param, stage_of,
+    ParamMap, Stages, check_build_param, check_composite_param, composite_param,
+    composite_set_param, stage_of,
 };
 use crate::storage::{Plan, Storage};
 
@@ -370,22 +371,22 @@ impl PskModConfig {
         }
     }
 
-    /// The pulse filter of the configuration.
-    fn pulse(&self) -> RrcPulse {
-        RrcPulse {
+    /// The configuration of the building block `pulse_shape`.
+    pub fn pulse(&self) -> PulseShapeConfig {
+        PulseShapeConfig {
             samples_per_symbol: self.samples_per_symbol,
             rolloff: self.rolloff,
             span: self.span,
         }
     }
 
-    /// The half symbol of the `offset` delay in output samples (0 for the other variants).
-    fn half(&self) -> usize {
-        if self.variant == PskVariant::Offset {
-            self.samples_per_symbol / 2
-        } else {
-            0
-        }
+    /// The configuration of the building block `iq_offset` for the variant `offset` (the
+    /// imaginary part delayed by half a symbol); `None` for the other variants.
+    pub fn offset(&self) -> Option<IqOffsetConfig> {
+        (self.variant == PskVariant::Offset).then_some(IqOffsetConfig {
+            samples_per_symbol: self.samples_per_symbol,
+            part: IqPart::Imag,
+        })
     }
 
     /// The output/input ratio `samples_per_symbol / bits_per_symbol`.
@@ -397,20 +398,20 @@ impl PskModConfig {
     }
 }
 
-/// The stages of `psk_mod`: `symbol_map` then the interpolation.
-type PskModStages<S> = Chain<SymbolMapBlock<S>, InterpolateBlock<C32, S>, S>;
+/// The stages of `psk_mod`: `symbol_map` then `pulse_shape`.
+type PskModStages<S> = Chain<SymbolMapBlock<S>, PulseShapeBlock<S>, S>;
 
 /// BPSK, QPSK and 8PSK modulator: `f32` soft bits in (one per sample), `C32` out at
 /// `samples_per_symbol` samples per symbol.
 ///
-/// A composite block (M44.1 §4): [`SymbolMapBlock`] (the `constellation` `bpsk`, `qpsk` or `8psk`,
-/// with `differential` and the variant `plain` or `pi4`: one of the sixteen `f32` points at
-/// multiples of 22.5 degrees, the differential phase in units of `pi / 8`) then
-/// [`InterpolateBlock::with_taps`] with the taps `rrc(rolloff, sps, span) sqrt(sps)` as `f32`
-/// (the kernel `fir_interpolate` through the facade), as a [`Chain`] whose buffer holds
-/// [`PSK_MOD_CHUNK`] symbols; with the variant `offset` the output of the chain then passes
-/// [`IqOffsetBlock`] in place with `samples` `sps / 2` (the imaginary part delayed through a
-/// ring of `sps / 2` `f32`, zeros at the start). A call takes `min(input / bits, output / sps)`
+/// A composite block (M44.1 §4, M44.1.1 §3.3): [`SymbolMapBlock`] (the `constellation` `bpsk`,
+/// `qpsk` or `8psk`, with `differential` and the variant `plain` or `pi4`: one of the sixteen
+/// `f32` points at multiples of 22.5 degrees, the differential phase in units of `pi / 8`) then
+/// [`PulseShapeBlock`] (the taps `rrc(rolloff, sps, span) sqrt(sps)` as `f32`, the kernel
+/// `fir_interpolate` through the facade), as a [`Chain`] whose buffer holds [`PSK_MOD_CHUNK`]
+/// symbols; with the variant `offset` the output of the chain then passes [`IqOffsetBlock`] in
+/// place with the same `samples_per_symbol` (the imaginary part delayed by half a symbol
+/// through a ring of `sps / 2` `f32`, zeros at the start). A call takes `min(input / bits, output / sps)`
 /// whole symbols. Timing: constant ratio `sps / bits`, delay `span bits / 2` input samples
 /// (`offset`: `(span bits + 2) / 2`, the half symbol of the quadrature part is one bit).
 /// Storage: the taps, the filter history, the buffer of the chain and for `offset` the ring.
@@ -439,7 +440,6 @@ type PskModStages<S> = Chain<SymbolMapBlock<S>, InterpolateBlock<C32, S>, S>;
 /// # Ok::<(), Box<dyn std::error::Error>>(())
 /// ```
 pub struct PskModBlock<S: Storage> {
-    pulse: RrcPulse,
     bps: usize,
     stages: PskModStages<S>,
     /// The delay of the quadrature part for `offset`; `None` for the other variants.
@@ -455,32 +455,21 @@ impl<S: Storage> core::fmt::Debug for PskModBlock<S> {
 }
 
 impl<S: Storage> PskModBlock<S> {
-    /// Designs the pulse and creates the block; taps, history, the buffer of the chain and the
-    /// ring of `offset` come from `storage`.
+    /// Creates the block of its building blocks; the taps and history of `pulse_shape`, the
+    /// buffer of the chain and the ring of `iq_offset` come from `storage`.
     ///
     /// # Errors
     /// As [`PskModConfig::validate`]; `Storage` when the storage is too small.
     pub fn new(config: &PskModConfig, rate_in: Rate, storage: &mut S) -> Result<Self> {
         config.validate()?;
         let map = SymbolMapBlock::new(&config.map_config(), rate_in, storage)?;
-        let pulse = config.pulse();
-        let interp = pulse.stage(storage)?;
-        let stages = Chain::new(map, interp, PSK_MOD_CHUNK, storage)?;
-        let half = config.half();
-        let offset = if half > 0 {
-            Some(IqOffsetBlock::new(
-                &IqOffsetConfig {
-                    samples: half,
-                    part: IqPart::Imag,
-                },
-                rate_in,
-                storage,
-            )?)
-        } else {
-            None
+        let pulse = PulseShapeBlock::new(&config.pulse(), rate_in, storage)?;
+        let stages = Chain::new(map, pulse, PSK_MOD_CHUNK, storage)?;
+        let offset = match config.offset() {
+            Some(c) => Some(IqOffsetBlock::new(&c, rate_in, storage)?),
+            None => None,
         };
         Ok(Self {
-            pulse,
             bps: config.bits_per_symbol(),
             stages,
             offset,
@@ -494,15 +483,11 @@ impl<S: Storage> PskModBlock<S> {
     /// As [`PskModConfig::validate`].
     pub fn storage_bytes(config: &PskModConfig, _rate_in: Rate) -> Result<usize> {
         config.validate()?;
-        let sps = config.samples_per_symbol;
-        let n = config.span * sps + 1;
         let mut plan = Plan::default();
-        plan.add::<f32>(n)?;
-        plan.add::<C32>(n.div_ceil(sps))?;
+        PulseShapeBlock::<S>::plan(&config.pulse(), &mut plan)?;
         plan.add::<C32>(PSK_MOD_CHUNK)?;
-        let half = config.half();
-        if half > 0 {
-            plan.add::<f32>(half)?;
+        if let Some(c) = config.offset() {
+            plan.add::<f32>(c.delay())?;
         }
         Ok(plan.bytes())
     }
@@ -524,11 +509,12 @@ impl<S: Storage> PskModBlock<S> {
     /// The configuration of the block, from its building blocks.
     pub fn config(&self) -> PskModConfig {
         let map = self.stages.first().config();
+        let pulse = self.stages.second().config();
         PskModConfig {
             constellation: map.constellation,
-            samples_per_symbol: self.pulse.samples_per_symbol,
-            rolloff: self.pulse.rolloff,
-            span: self.pulse.span,
+            samples_per_symbol: pulse.samples_per_symbol,
+            rolloff: pulse.rolloff,
+            span: pulse.span,
             differential: map.differential,
             variant: self.variant(),
         }
@@ -548,13 +534,16 @@ impl<S: Storage> PskModBlock<S> {
 }
 
 /// The flat parameter names of `psk_mod` and the building blocks they reach (M44.1.1 §4): `0`
-/// is `symbol_map`, `1` the root-raised-cosine pulse filter (as in [`QAM_MOD_PARAMS`](crate::QAM_MOD_PARAMS)).
+/// is `symbol_map`, `1` `pulse_shape`, `2` `iq_offset` (there for the variant `offset` only:
+/// otherwise its `samples_per_symbol` has nothing to read and a `set` nothing to reach).
+/// `samples_per_symbol` goes to `pulse_shape` and `iq_offset` unchanged (M44.1.1 §3.3).
 /// `variant` reaches the `variant` of `symbol_map` (`plain`, `pi4`); `offset` is not a value of
 /// any building block but the `iq_offset` stage after the pulse filter, which the block reports
 /// as the variant `offset` (open item I44.1.1-1).
 pub const PSK_MOD_PARAMS: ParamMap = ParamMap::new(&[
     ("constellation", "0.constellation"),
     ("samples_per_symbol", "1.samples_per_symbol"),
+    ("samples_per_symbol", "2.samples_per_symbol"),
     ("rolloff", "1.rolloff"),
     ("span", "1.span"),
     ("differential", "0.differential"),
@@ -568,7 +557,8 @@ impl<S: Storage> Stages for PskModBlock<S> {
         match stage_of(&Self::PARAMS, path)? {
             ("0", "variant") => Ok(ParamValue::Choice(self.variant().index())),
             ("0", n) => self.stages.first().param(n),
-            ("1", n) => self.pulse.param(n),
+            ("1", n) => self.stages.second().param(n),
+            ("2", n) => self.offset.as_ref().map_or_else(unknown, |o| o.param(n)),
             _ => unknown(),
         }
     }
@@ -576,7 +566,17 @@ impl<S: Storage> Stages for PskModBlock<S> {
     fn check_stage_param(&self, path: &str, value: &ParamValue) -> Result<()> {
         match stage_of(&Self::PARAMS, path)? {
             ("0", n) => self.stages.first().check_param(n, value),
-            ("1", n) => RrcPulse::check_param(n, value),
+            ("1", n) => self.stages.second().check_param(n, value),
+            // Left out: what `iq_offset` would answer (its description).
+            ("2", n) => match self.offset.as_ref() {
+                Some(o) => o.check_param(n, value),
+                None => check_build_param(
+                    super::iq_offset::DESCRIPTION
+                        .param(n)
+                        .ok_or(Error::UnknownParameter)?,
+                    value,
+                ),
+            },
             _ => unknown(),
         }
     }
@@ -584,7 +584,11 @@ impl<S: Storage> Stages for PskModBlock<S> {
     fn set_stage_param(&mut self, path: &str, value: ParamValue) -> Result<()> {
         match stage_of(&Self::PARAMS, path)? {
             ("0", n) => self.stages.first_mut().set_param(n, value),
-            ("1", _) => Err(Error::ReadOnlyParameter),
+            ("1", n) => self.stages.second_mut().set_param(n, value),
+            ("2", n) => self
+                .offset
+                .as_mut()
+                .map_or(Ok(()), |o| o.set_param(n, value)),
             _ => unknown(),
         }
     }
@@ -599,10 +603,11 @@ impl<S: Storage> Block for PskModBlock<S> {
     }
 
     fn process(&mut self, input: &[f32], output: &mut [C32]) -> Result<Progress> {
+        let sps = self.stages.second().samples_per_symbol();
         let p = modulate(
             &mut self.stages,
             self.bps,
-            self.pulse.samples_per_symbol,
+            sps,
             input,
             output,
             "psk_mod stages did not take the whole piece",
@@ -619,12 +624,11 @@ impl<S: Storage> Block for PskModBlock<S> {
         // does not report.
         let bits = self.bps;
         let offset = usize::from(self.offset.is_some());
+        let pulse = self.stages.second().config();
         BlockTiming {
-            ratio: Ratio::new(self.pulse.samples_per_symbol as u64, bits as u64)
-                .unwrap_or(Ratio::ONE),
+            ratio: Ratio::new(pulse.samples_per_symbol as u64, bits as u64).unwrap_or(Ratio::ONE),
             kind: RatioKind::Constant,
-            delay: Delay::new((self.pulse.span * bits + 2 * offset) as u64, 2)
-                .unwrap_or(Delay::ZERO),
+            delay: Delay::new((pulse.span * bits + 2 * offset) as u64, 2).unwrap_or(Delay::ZERO),
         }
     }
 

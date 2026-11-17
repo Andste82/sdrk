@@ -2,8 +2,9 @@
 //! constellation against the tables of `psk_mod` (the points at multiples of 22.5 degrees and
 //! `PSK8_GRAY`) and of `Qam`, NaN and the sign rule, the differential phase and `pi4` over all
 //! bit patterns, the invalid combinations, the timing, 20 cut plans of seed 840 and of seed
-//! 851), `iq_offset` (the delay of the imaginary and of the real part, `reset`, the timing, 20
-//! cut plans of seed 840 and of seed 851) and `InterpolateBlock::with_taps` (the taps as given).
+//! 851) and `iq_offset` (the delay by half a symbol of the imaginary and of the real part,
+//! `reset`, the timing, the odd `samples_per_symbol`, 20 cut plans of seed 840 and of seed 851;
+//! `samples_per_symbol` since M44.1.1 §3.3).
 #![allow(
     clippy::unwrap_used,
     clippy::indexing_slicing,
@@ -21,8 +22,8 @@ mod common;
 use common::{check_block, rate, run_block, same_bits};
 use sdrk::{C32, Delay, Ratio, RatioKind};
 use sdrk_blocks::{
-    Block, Error, InterpolateBlock, IqOffsetBlock, IqOffsetConfig, IqPart, PSK8_GRAY,
-    SymbolMapBlock, SymbolMapConfig, SymbolMapConstellation, SymbolMapVariant,
+    Block, Error, IqOffsetBlock, IqOffsetConfig, IqPart, PSK8_GRAY, SymbolMapBlock,
+    SymbolMapConfig, SymbolMapConstellation, SymbolMapVariant,
 };
 use sdrk_core::kernels::constellation::Qam;
 use sdrk_testkit::{Pcg32, VecStorage};
@@ -335,9 +336,12 @@ fn symbol_map_is_chunk_invariant() {
     }
 }
 
-fn offset_block(samples: usize, part: IqPart) -> IqOffsetBlock<VecStorage> {
+fn offset_block(sps: usize, part: IqPart) -> IqOffsetBlock<VecStorage> {
     IqOffsetBlock::new(
-        &IqOffsetConfig { samples, part },
+        &IqOffsetConfig {
+            samples_per_symbol: sps,
+            part,
+        },
         rate(9600),
         &mut VecStorage,
     )
@@ -353,10 +357,11 @@ fn complex(n: usize, seed: u64, stream: u64) -> Vec<C32> {
 
 #[test]
 fn iq_offset_delays_one_part() {
-    for (stream, samples) in [1usize, 2, 4, 5, 32, 512].into_iter().enumerate() {
+    for (stream, sps) in [2usize, 4, 8, 10, 64, 1024].into_iter().enumerate() {
+        let samples = sps / 2;
         let x = complex(3000, SEED, 100 + stream as u64);
         for part in [IqPart::Imag, IqPart::Real] {
-            let mut b = offset_block(samples, part);
+            let mut b = offset_block(sps, part);
             let y = run_block(&mut b, &x, None);
             assert_eq!(y.len(), x.len());
             for (n, (a, o)) in x.iter().zip(&y).enumerate() {
@@ -382,7 +387,13 @@ fn iq_offset_delays_one_part() {
                 b.process_in_place(piece);
             }
             same_bits(&y, &z, "in place");
-            assert_eq!(b.config(), IqOffsetConfig { samples, part });
+            assert_eq!(
+                b.config(),
+                IqOffsetConfig {
+                    samples_per_symbol: sps,
+                    part
+                }
+            );
             let t = b.timing();
             assert_eq!(
                 (t.ratio, t.kind, t.delay),
@@ -392,67 +403,69 @@ fn iq_offset_delays_one_part() {
         }
     }
     // A call takes min(input, output) samples.
-    let mut b = offset_block(3, IqPart::Imag);
+    let mut b = offset_block(6, IqPart::Imag);
     let p = b
         .process(&complex(10, SEED, 1), &mut [C32::default(); 4])
         .unwrap();
     assert_eq!((p.consumed, p.produced), (4, 4));
-    for samples in [0, 513] {
+    for sps in [0, 1026] {
         assert!(matches!(
             IqOffsetConfig {
-                samples,
+                samples_per_symbol: sps,
                 part: IqPart::Imag
             }
             .validate(),
             Err(Error::OutOfRange {
-                name: "samples",
+                name: "samples_per_symbol",
                 ..
             })
         ));
+    }
+    // The delay is half a symbol: an odd `samples_per_symbol` is refused, by the configuration
+    // and by `set`.
+    for sps in [3usize, 7, 1023] {
+        let mut cfg = IqOffsetConfig {
+            samples_per_symbol: sps,
+            part: IqPart::Imag,
+        };
+        assert!(matches!(
+            cfg.validate(),
+            Err(Error::InvalidParameter {
+                name: "samples_per_symbol",
+                ..
+            })
+        ));
+        assert!(IqOffsetBlock::new(&cfg, rate(9600), &mut VecStorage).is_err());
+        cfg.samples_per_symbol = 8;
+        assert!(matches!(
+            cfg.set(
+                "samples_per_symbol",
+                sdrk_blocks::ParamValue::I64(sps as i64)
+            ),
+            Err(Error::InvalidParameter {
+                name: "samples_per_symbol",
+                ..
+            })
+        ));
+        assert_eq!(cfg.samples_per_symbol, 8);
     }
 }
 
 #[test]
 fn iq_offset_is_chunk_invariant() {
-    for (stream, samples) in [1usize, 3, 4, 255, 512].into_iter().enumerate() {
+    for (stream, sps) in [2usize, 6, 8, 510, 1024].into_iter().enumerate() {
         let x = complex(5000, SEED, 200 + stream as u64);
         for part in [IqPart::Imag, IqPart::Real] {
-            let want = run_block(&mut offset_block(samples, part), &x, None);
+            let want = run_block(&mut offset_block(sps, part), &x, None);
             for seed in [SEED, SEED_CHUNKS] {
                 check_block(
                     &want,
                     &x,
                     seed,
-                    || offset_block(samples, part),
-                    &format!("iq_offset {samples} {part:?}"),
+                    || offset_block(sps, part),
+                    &format!("iq_offset {sps} {part:?}"),
                 );
             }
         }
     }
-}
-
-#[test]
-fn interpolate_with_taps_uses_the_taps_as_given() {
-    // One impulse per symbol: every output block is the taps of its phase times the symbol.
-    let taps: Vec<f64> = (0..13).map(|k| f64::from(k) * 0.125 - 0.5).collect();
-    let mut b =
-        InterpolateBlock::<C32, _>::with_taps(taps.iter().copied(), 4, &mut VecStorage).unwrap();
-    assert_eq!(b.num_taps(), 13);
-    let t = b.timing();
-    assert_eq!(t.ratio, Ratio::new(4, 1).unwrap());
-    assert_eq!(t.delay, Delay::new(12, 8).unwrap()); // (taps - 1) / (2 factor) input samples
-    let mut x = vec![C32::default(); 8];
-    x[0] = C32::new(1.0, -2.0);
-    let y = run_block(&mut b, &x, None);
-    assert_eq!(y.len(), 32);
-    for (k, o) in y.iter().enumerate() {
-        let tap = taps.get(k).copied().unwrap_or(0.0) as f32;
-        assert_eq!(*o, C32::new(tap, -2.0 * tap), "sample {k}");
-    }
-    assert!(
-        InterpolateBlock::<C32, _>::with_taps(core::iter::empty(), 4, &mut VecStorage).is_err()
-    );
-    assert!(InterpolateBlock::<C32, _>::with_taps([1.0], 0, &mut VecStorage).is_err());
-    assert!(InterpolateBlock::<C32, _>::with_taps([1.0], 1025, &mut VecStorage).is_err());
-    assert_eq!(b.param("factor").unwrap(), sdrk_blocks::ParamValue::I64(4));
 }

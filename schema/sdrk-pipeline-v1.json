@@ -2898,7 +2898,7 @@
           },
           {
             "additionalProperties": false,
-            "description": "Delays the imaginary or the real part of a complex signal against the other part (the offset of OQPSK).",
+            "description": "Delays the imaginary or the real part of a complex signal against the other part by half a symbol (the offset of OQPSK).",
             "properties": {
               "align": {
                 "$ref": "#/$defs/AlignMode"
@@ -2930,15 +2930,15 @@
                     ],
                     "type": "string"
                   },
-                  "samples": {
-                    "description": "The delay of the part in samples, 1 to 512. Required. Unit: samples. Typical: samples_per_symbol / 2 for OQPSK. Build-time.",
-                    "maximum": 512,
-                    "minimum": 1,
+                  "samples_per_symbol": {
+                    "description": "Samples per symbol of the signal, even, 2 to 1024; the part is delayed by half a symbol, samples_per_symbol / 2 samples. Required. Typical: 8 (the samples per symbol of the modulator). Build-time.",
+                    "maximum": 1024,
+                    "minimum": 2,
                     "type": "integer"
                   }
                 },
                 "required": [
-                  "samples"
+                  "samples_per_symbol"
                 ],
                 "type": "object"
               }
@@ -3694,6 +3694,122 @@
             },
             "required": [
               "kind"
+            ],
+            "type": "object"
+          },
+          {
+            "additionalProperties": false,
+            "description": "Filters a complex signal with the root-raised-cosine pulse matched to pulse_shape (the receive filter).",
+            "properties": {
+              "align": {
+                "$ref": "#/$defs/AlignMode"
+              },
+              "backend": {
+                "$ref": "#/$defs/BackendSpec"
+              },
+              "description": {
+                "maxLength": 2000,
+                "type": "string"
+              },
+              "group": {
+                "description": "The group of the node (a key of `groups`); nodes without one are in `main`.",
+                "pattern": "^[a-z][a-z0-9_]{0,63}$",
+                "type": "string"
+              },
+              "kind": {
+                "const": "pulse_match"
+              },
+              "params": {
+                "additionalProperties": false,
+                "properties": {
+                  "rolloff": {
+                    "default": 0.35,
+                    "description": "Roll-off of the root-raised-cosine pulse. Typical: 0.35 (the roll-off of the transmitter). Build-time.",
+                    "maximum": 1.0,
+                    "minimum": 0.05,
+                    "type": "number"
+                  },
+                  "span": {
+                    "default": 10,
+                    "description": "Length of the filter in symbols (span n + 1 taps). Typical: 10 (the span of the transmitter). Build-time.",
+                    "maximum": 32,
+                    "minimum": 4,
+                    "type": "integer"
+                  },
+                  "symbol_rate_hz": {
+                    "description": "Symbol rate in Hz; the sample rate must be within 1 % of an integer multiple (2 to 1024) of it. Required. Unit: Hz. Typical: 25000. Build-time.",
+                    "maximum": 1000000000000.0,
+                    "minimum": 0.001,
+                    "type": "number"
+                  }
+                },
+                "required": [
+                  "symbol_rate_hz"
+                ],
+                "type": "object"
+              }
+            },
+            "required": [
+              "kind",
+              "params"
+            ],
+            "type": "object"
+          },
+          {
+            "additionalProperties": false,
+            "description": "Shapes complex symbols with a root-raised-cosine pulse (interpolation by samples_per_symbol).",
+            "properties": {
+              "align": {
+                "$ref": "#/$defs/AlignMode"
+              },
+              "backend": {
+                "$ref": "#/$defs/BackendSpec"
+              },
+              "description": {
+                "maxLength": 2000,
+                "type": "string"
+              },
+              "group": {
+                "description": "The group of the node (a key of `groups`); nodes without one are in `main`.",
+                "pattern": "^[a-z][a-z0-9_]{0,63}$",
+                "type": "string"
+              },
+              "kind": {
+                "const": "pulse_shape"
+              },
+              "params": {
+                "additionalProperties": false,
+                "properties": {
+                  "rolloff": {
+                    "default": 0.35,
+                    "description": "Roll-off of the root-raised-cosine pulse. Typical: 0.35; 0.2 for a narrow spectrum. Build-time.",
+                    "maximum": 1.0,
+                    "minimum": 0.05,
+                    "type": "number"
+                  },
+                  "samples_per_symbol": {
+                    "description": "Output samples per symbol, 2 to 64. Required. Typical: 8. Build-time.",
+                    "maximum": 64,
+                    "minimum": 2,
+                    "type": "integer"
+                  },
+                  "span": {
+                    "default": 10,
+                    "description": "Length of the pulse in symbols (span samples_per_symbol + 1 taps). Typical: 10; 16 or more for less intersymbol interference. Build-time.",
+                    "maximum": 32,
+                    "minimum": 4,
+                    "type": "integer"
+                  }
+                },
+                "required": [
+                  "samples_per_symbol"
+                ],
+                "type": "object"
+              }
+            },
+            "required": [
+              "kind",
+              "params"
             ],
             "type": "object"
           },

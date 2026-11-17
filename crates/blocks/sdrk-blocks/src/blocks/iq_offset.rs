@@ -1,5 +1,5 @@
 //! `iq_offset`: delays one part of a complex signal (the imaginary or the real part) against
-//! the other by a number of samples, the offset of OQPSK on both sides of a link.
+//! the other by half a symbol, the offset of OQPSK on both sides of a link.
 
 use sdrk::{Delay, Progress, Rate, Ratio, RatioKind};
 use sdrk_core::C32;
@@ -12,8 +12,8 @@ use crate::describe::{
 use crate::error::{Error, Result};
 use crate::storage::{Plan, Storage};
 
-/// The largest `samples` of `iq_offset`.
-pub const IQ_OFFSET_MAX_SAMPLES: usize = 512;
+/// The largest `samples_per_symbol` of `iq_offset` (a delay of at most 512 samples).
+pub const IQ_OFFSET_MAX_SPS: usize = 1024;
 
 /// The names of the `part` choice, in index order.
 const PART_OPTIONS: &[&str] = &["imag", "real"];
@@ -22,10 +22,11 @@ const PART_OPTIONS: &[&str] = &["imag", "real"];
 pub static DESCRIPTION: BlockDescription = BlockDescription {
     kind: "iq_offset",
     summary: "Delays the imaginary or the real part of a complex signal against the other \
-        part (the offset of OQPSK).",
+        part by half a symbol (the offset of OQPSK).",
     details: "Every output sample keeps the part that is not delayed of the input sample at \
-        the same position and takes the delayed part from the input samples earlier (zeros \
-        at the start and after a reset). It is the same operation on both sides of an offset \
+        the same position and takes the delayed part from the input sample \
+        samples_per_symbol / 2 samples earlier (zeros at the start and after a reset); \
+        samples_per_symbol must be even. It is the same operation on both sides of an offset \
         QPSK link: the transmitter delays the imaginary part by half a symbol after the pulse \
         shaping (part imag, as psk_mod with the variant offset does), a receiver delays the \
         real part by the same amount (part real) to align the two parts again. The rate does \
@@ -39,20 +40,21 @@ pub static DESCRIPTION: BlockDescription = BlockDescription {
     outputs: &[PortDesc {
         name: "out",
         types: &[PortType::C32],
-        description: "The signal with the part delayed by samples samples.",
+        description: "The signal with the part delayed by half a symbol.",
     }],
     params: &[
         ParamDesc {
-            name: "samples",
-            unit: Unit::Samples,
+            name: "samples_per_symbol",
+            unit: Unit::None,
             kind: ParamKind::I64 {
-                min: 1,
-                max: IQ_OFFSET_MAX_SAMPLES as i64,
+                min: 2,
+                max: IQ_OFFSET_MAX_SPS as i64,
                 default: None,
             },
-            typical: "samples_per_symbol / 2 for OQPSK",
+            typical: "8 (the samples per symbol of the modulator)",
             mutability: Mutability::Build,
-            description: "The delay of the part in samples, 1 to 512. Required.",
+            description: "Samples per symbol of the signal, even, 2 to 1024; the part is \
+                delayed by half a symbol, samples_per_symbol / 2 samples. Required.",
         },
         ParamDesc {
             name: "part",
@@ -66,7 +68,7 @@ pub static DESCRIPTION: BlockDescription = BlockDescription {
             description: "The part that is delayed: imag (the imaginary part) or real.",
         },
     ],
-    required: &["samples"],
+    required: &["samples_per_symbol"],
 };
 
 /// The part of the signal that [`IqOffsetBlock`] delays.
@@ -84,47 +86,67 @@ pub enum IqPart {
 ///
 /// ```
 /// use sdrk_blocks::{IqOffsetConfig, IqPart};
-/// let cfg = IqOffsetConfig { samples: 4, part: IqPart::Imag };
+/// let cfg = IqOffsetConfig { samples_per_symbol: 8, part: IqPart::Imag };
 /// assert!(cfg.validate().is_ok());
-/// assert!(IqOffsetConfig { samples: 0, ..cfg }.validate().is_err());
-/// assert!(IqOffsetConfig { samples: 513, ..cfg }.validate().is_err());
+/// assert_eq!(cfg.delay(), 4);
+/// assert!(IqOffsetConfig { samples_per_symbol: 0, ..cfg }.validate().is_err());
+/// assert!(IqOffsetConfig { samples_per_symbol: 7, ..cfg }.validate().is_err()); // odd
+/// assert!(IqOffsetConfig { samples_per_symbol: 1026, ..cfg }.validate().is_err());
 /// ```
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub struct IqOffsetConfig {
-    /// The delay in samples, 1 to 512 (required).
-    pub samples: usize,
+    /// Samples per symbol, even, 2 to 1024 (required); the delay is half of it.
+    pub samples_per_symbol: usize,
     /// The part that is delayed (default `imag`).
     pub part: IqPart,
 }
 
 impl Default for IqOffsetConfig {
-    /// `samples` 4 (a placeholder: the pipeline requires the parameter), `part` `imag`.
+    /// `samples_per_symbol` 8 (a placeholder: the pipeline requires the parameter), `part`
+    /// `imag`.
     fn default() -> Self {
         Self {
-            samples: 4,
+            samples_per_symbol: 8,
             part: IqPart::Imag,
         }
     }
 }
 
 impl IqOffsetConfig {
-    /// Checks the range of `samples`.
+    /// Checks the range of `samples_per_symbol`.
     ///
     /// # Errors
-    /// `OutOfRange` for `samples` outside 1 to 512.
+    /// `OutOfRange` for `samples_per_symbol` outside 2 to 1024; `InvalidParameter` for an odd
+    /// `samples_per_symbol`.
     pub fn validate(&self) -> Result<()> {
-        check_count("samples", self.samples, 1, IQ_OFFSET_MAX_SAMPLES)
+        check_count(
+            "samples_per_symbol",
+            self.samples_per_symbol,
+            2,
+            IQ_OFFSET_MAX_SPS,
+        )?;
+        check_even(self.samples_per_symbol)
+    }
+
+    /// The delay of the part in samples: half a symbol, `samples_per_symbol / 2`.
+    pub fn delay(&self) -> usize {
+        self.samples_per_symbol / 2
     }
 
     /// Sets a parameter by its description name; checks kind and range.
     ///
     /// # Errors
-    /// `UnknownParameter`, `WrongParamType`, `OutOfRange`.
+    /// `UnknownParameter`, `WrongParamType`, `OutOfRange`; `InvalidParameter` for an odd
+    /// `samples_per_symbol`.
     pub fn set(&mut self, name: &str, value: ParamValue) -> Result<()> {
         let p = DESCRIPTION.param(name).ok_or(Error::UnknownParameter)?;
         p.check(&value)?;
         match p.name {
-            "samples" => self.samples = value.as_usize()?,
+            "samples_per_symbol" => {
+                let sps = value.as_usize()?;
+                check_even(sps)?;
+                self.samples_per_symbol = sps;
+            }
             "part" => {
                 self.part = if value.as_choice()? == 1 {
                     IqPart::Real
@@ -143,7 +165,7 @@ impl IqOffsetConfig {
     /// `UnknownParameter`.
     pub fn get(&self, name: &str) -> Result<ParamValue> {
         match name {
-            "samples" => Ok(ParamValue::I64(self.samples as i64)),
+            "samples_per_symbol" => Ok(ParamValue::I64(self.samples_per_symbol as i64)),
             "part" => Ok(ParamValue::Choice(match self.part {
                 IqPart::Imag => 0,
                 IqPart::Real => 1,
@@ -153,9 +175,22 @@ impl IqOffsetConfig {
     }
 }
 
-/// The delay of one part of a complex signal: `C32` in, `C32` out, one sample per sample.
+/// An even `samples_per_symbol`, otherwise `InvalidParameter` (the delay is half a symbol).
+fn check_even(sps: usize) -> Result<()> {
+    if sps.is_multiple_of(2) {
+        Ok(())
+    } else {
+        Err(Error::InvalidParameter {
+            name: "samples_per_symbol",
+            reason: "samples_per_symbol must be even (the delay is half a symbol)",
+        })
+    }
+}
+
+/// The delay of one part of a complex signal by half a symbol: `C32` in, `C32` out, one sample
+/// per sample.
 ///
-/// The delayed part runs through a ring of `samples` `f32` in the storage (zeros at the start
+/// The delayed part runs through a ring of `samples_per_symbol / 2` `f32` in the storage (zeros at the start
 /// and after [`reset`](Block::reset)): each output sample takes the part from the ring and puts
 /// the part of its input sample in its place. A call takes `min(input.len(), output.len())`
 /// samples. Timing: constant ratio 1, delay 0 (the other part is not delayed). Storage: the
@@ -164,7 +199,7 @@ impl IqOffsetConfig {
 /// ```
 /// use sdrk::{Rate, C32};
 /// use sdrk_blocks::{ArenaStorage, Block, IqOffsetBlock, IqOffsetConfig, IqPart};
-/// let cfg = IqOffsetConfig { samples: 2, part: IqPart::Imag };
+/// let cfg = IqOffsetConfig { samples_per_symbol: 4, part: IqPart::Imag };
 /// let rate = Rate::hz(9600)?;
 /// let bytes = IqOffsetBlock::<ArenaStorage<'_>>::storage_bytes(&cfg, rate)?;
 /// let mut mem = vec![0u8; bytes + 16];
@@ -178,9 +213,10 @@ impl IqOffsetConfig {
 /// # Ok::<(), Box<dyn std::error::Error>>(())
 /// ```
 pub struct IqOffsetBlock<S: Storage> {
-    /// The ring of `samples` values of the delayed part.
+    /// The ring of `samples_per_symbol / 2` values of the delayed part.
     ring: S::Buf<f32>,
-    /// The position in the ring of the next sample (below `samples`, at most 511).
+    /// The position in the ring of the next sample (below `samples_per_symbol / 2`, at most
+    /// 511).
     pos: u16,
     part: IqPart,
 }
@@ -188,7 +224,7 @@ pub struct IqOffsetBlock<S: Storage> {
 impl<S: Storage> core::fmt::Debug for IqOffsetBlock<S> {
     fn fmt(&self, f: &mut core::fmt::Formatter<'_>) -> core::fmt::Result {
         f.debug_struct("IqOffsetBlock")
-            .field("samples", &self.ring.as_ref().len())
+            .field("samples_per_symbol", &(2 * self.ring.as_ref().len()))
             .field("part", &self.part)
             .field("pos", &self.pos)
             .finish_non_exhaustive()
@@ -203,7 +239,7 @@ impl<S: Storage> IqOffsetBlock<S> {
     pub fn new(config: &IqOffsetConfig, _rate_in: Rate, storage: &mut S) -> Result<Self> {
         config.validate()?;
         Ok(Self {
-            ring: storage.alloc::<f32>(config.samples)?,
+            ring: storage.alloc::<f32>(config.delay())?,
             pos: 0,
             part: config.part,
         })
@@ -217,7 +253,7 @@ impl<S: Storage> IqOffsetBlock<S> {
     pub fn storage_bytes(config: &IqOffsetConfig, _rate_in: Rate) -> Result<usize> {
         config.validate()?;
         let mut plan = Plan::default();
-        plan.add::<f32>(config.samples)?;
+        plan.add::<f32>(config.delay())?;
         Ok(plan.bytes())
     }
 
@@ -233,7 +269,7 @@ impl<S: Storage> IqOffsetBlock<S> {
     /// The configuration of the block.
     pub fn config(&self) -> IqOffsetConfig {
         IqOffsetConfig {
-            samples: self.ring.as_ref().len(),
+            samples_per_symbol: 2 * self.ring.as_ref().len(),
             part: self.part,
         }
     }
@@ -244,7 +280,7 @@ impl<S: Storage> IqOffsetBlock<S> {
     /// ```
     /// use sdrk::{Rate, C32};
     /// use sdrk_blocks::{ArenaStorage, IqOffsetBlock, IqOffsetConfig, IqPart};
-    /// let cfg = IqOffsetConfig { samples: 1, part: IqPart::Real };
+    /// let cfg = IqOffsetConfig { samples_per_symbol: 2, part: IqPart::Real };
     /// let mut mem = [0u8; 8];
     /// let mut b = IqOffsetBlock::new(&cfg, Rate::hz(9600)?, &mut ArenaStorage::new(&mut mem))?;
     /// let mut x = [C32::new(1.0, 10.0), C32::new(2.0, 20.0)];
@@ -259,7 +295,7 @@ impl<S: Storage> IqOffsetBlock<S> {
             IqPart::Imag => swap_parts::<true>(ring, pos, data),
             IqPart::Real => swap_parts::<false>(ring, pos, data),
         };
-        // Below the ring length, which is at most `IQ_OFFSET_MAX_SAMPLES`.
+        // Below the ring length, which is at most `IQ_OFFSET_MAX_SPS / 2`.
         self.pos = u16::try_from(pos).unwrap_or(0);
     }
 }

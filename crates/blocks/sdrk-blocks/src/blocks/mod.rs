@@ -53,6 +53,8 @@ pub mod preemph_limit;
 pub mod psk_demod;
 pub mod psk_mod;
 pub mod pulse_key;
+pub mod pulse_match;
+pub mod pulse_shape;
 pub mod qam_acquire;
 pub mod qam_demod;
 pub mod qam_frame_decode;

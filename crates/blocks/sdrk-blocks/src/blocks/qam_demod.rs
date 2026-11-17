@@ -1,13 +1,12 @@
 //! `qam_demod`: 16-QAM and 64-QAM demodulator (matched filter, symbol timing, frequency
 //! acquisition, equalizer, decision-directed carrier recovery, soft bits), a composite of the
-//! building blocks `fir`, `symbol_sync`, `qam_acquire`, `equalize`, `costas` and `symbol_demap`
+//! building blocks `pulse_match`, `symbol_sync`, `qam_acquire`, `equalize`, `costas` and `symbol_demap`
 //! with the lock state machine `LockWatch` (M44.1 §5).
 
-use sdrk::{Delay, Progress, Rate, Ratio, RatioKind, Sdrk};
+use sdrk::{Delay, Progress, Rate, Ratio, RatioKind};
 use sdrk_core::C32;
 use sdrk_core::kernels::costas::CostasConstellation;
 use sdrk_core::kernels::equalize::EqualizeState;
-use sdrk_core::kernels::filter::{Fir, FirState};
 
 use super::costas::{
     CostasBlock, CostasConfig, DEFAULT_DAMPING, DEFAULT_MAX_OFFSET, MAX_LOOP_BW, MIN_LOOP_BW,
@@ -17,9 +16,9 @@ use super::equalize::{
     DEFAULT_CMA_SYMBOLS, DEFAULT_MU_CMA, DEFAULT_TAPS, EQ_TAPS, EqualizeBlock, EqualizeConfig,
 };
 use super::psk_demod::{
-    MIN_SYMBOL_RATE_HZ, SPS_TOLERANCE, SYNC_MAX_DEVIATION, check_equalizer_taps, split_work,
-    work_len,
+    MIN_SYMBOL_RATE_HZ, SYNC_MAX_DEVIATION, check_equalizer_taps, split_work, work_len,
 };
+use super::pulse_match::{PulseMatchBlock, PulseMatchConfig};
 use super::qam_acquire::{AcquireWindow, QamAcquireBlock, QamAcquireConfig};
 use super::qam_mod::{QAM_CONSTELLATION_PARAM, qam_constellation_of_value, qam_of};
 use super::symbol_demap::{SymbolDemapBlock, SymbolDemapConfig};
@@ -30,7 +29,7 @@ use crate::block::{Block, BlockTiming, ParamValue};
 use crate::describe::{
     BlockDescription, Mutability, ParamDesc, ParamKind, PortDesc, PortType, Unit,
 };
-use crate::design::{RRC_MAX_SPAN, RRC_MAX_SPS, RRC_MIN_ROLLOFF, RRC_MIN_SPAN, Rrc};
+use crate::design::{RRC_MAX_SPAN, RRC_MIN_ROLLOFF, RRC_MIN_SPAN};
 use crate::error::{Error, Result};
 use crate::lock_watch::{LockAction, LockCheck, LockPolicy, LockState, LockTransition, LockWatch};
 use crate::param_map::{
@@ -173,9 +172,9 @@ pub static DESCRIPTION: BlockDescription = BlockDescription {
         equalizer and carrier recovery.",
     details: "The input is the complex baseband at the nominal level of unit average power \
         (an agc before it) with fs / symbol_rate_hz within 1 % of an integer and at least 2 \
-        (otherwise the rate is unsupported: resample first). A matched root-raised-cosine \
-        filter (rolloff, span symbols, normalized so that the pulse of qam_mod gives the \
-        points at the symbol centres) is followed by symbol_sync (Gardner, loop bandwidth \
+        (otherwise the rate is unsupported: resample first). The matched root-raised-cosine \
+        filter pulse_match (rolloff, span symbols, normalized so that the pulse of qam_mod \
+        gives the points at the symbol centres) is followed by symbol_sync (Gardner, loop bandwidth \
         sync_bw, default 0.005, damping 0.7071, max_deviation 0.005, ted_gain 1), a frequency \
         acquisition (the carrier offset from the spectrum of the fourth powers of 512 symbols \
         from symbol 256 on, range +-0.125 cycles per symbol, repeated on the next 512 symbols \
@@ -320,15 +319,8 @@ impl QamDemodConfig {
         check_count("span", self.span, RRC_MIN_SPAN, RRC_MAX_SPAN)?;
         check_f64("sync_bw", self.sync_bw, 0.0001, 0.1)?;
         check_f64("carrier_bw", self.carrier_bw, MIN_LOOP_BW, MAX_LOOP_BW)?;
-        let sps = rate_in.as_f64() / self.symbol_rate_hz;
-        let n = libm::floor(sps + 0.5);
-        let near = libm::fabs(sps - n) <= SPS_TOLERANCE * n;
-        if !(near && n >= 2.0 && n <= RRC_MAX_SPS as f64) {
-            return Err(Error::InvalidParameter {
-                name: "symbol_rate_hz",
-                reason: RATE_REASON,
-            });
-        }
+        // The rate rule of `pulse_match` (M44.1.1 §3.2).
+        let n = self.pulse().samples_per_symbol(rate_in)?;
         // The exact checks of the timing loop, reported with the hint to resample (as in
         // `psk_demod`).
         match self.sync().validate(rate_in) {
@@ -341,7 +333,16 @@ impl QamDemodConfig {
             }),
             other => other,
         }?;
-        Ok(n as usize)
+        Ok(n)
+    }
+
+    /// The configuration of the building block `pulse_match` (the matched filter).
+    pub fn pulse(&self) -> PulseMatchConfig {
+        PulseMatchConfig {
+            symbol_rate_hz: self.symbol_rate_hz,
+            rolloff: self.rolloff,
+            span: self.span,
+        }
     }
 
     /// The integer samples per symbol of the matched filter: `fs / symbol_rate_hz` rounded.
@@ -558,9 +559,9 @@ impl HandOver {
 /// 16-QAM and 64-QAM demodulator: `C32` in, `f32` soft bits out (`bits_per_symbol` per symbol,
 /// above 0 is a 1), a composite of building blocks with a controller (M44.1 §5).
 ///
-/// The building blocks, per piece of at most [`QAM_DEMOD_CHUNK`] input samples: the kernel `fir`
-/// (the matched filter, taps `rrc(rolloff, n, span) / sqrt(n)` as `f32` with `n` the rounded
-/// samples per symbol), [`SymbolSyncBlock`] (Gardner at the exact `fs / symbol_rate_hz`),
+/// The building blocks, per piece of at most [`QAM_DEMOD_CHUNK`] input samples:
+/// [`PulseMatchBlock`] (the matched filter, taps `rrc(rolloff, n, span) / sqrt(n)` as `f32` with
+/// `n` the rounded samples per symbol, M44.1.1 §3.2), [`SymbolSyncBlock`] (Gardner at the exact `fs / symbol_rate_hz`),
 /// [`QamAcquireBlock`] (`correct` false: it only estimates), [`EqualizeBlock`] (when
 /// `equalizer_taps` is above 0), [`CostasBlock`] with the constellation `qam16` or `qam64`, and
 /// [`SymbolDemapBlock`] `qam16` or `qam64` (scale 1). Every sample the block writes comes from
@@ -621,8 +622,8 @@ impl HandOver {
 /// # Ok::<(), Box<dyn std::error::Error>>(())
 /// ```
 pub struct QamDemodBlock<S: Storage> {
-    /// The matched filter (the kernel `fir` with given taps).
-    fir: FirState<C32, S::Buf<f32>, S::Buf<C32>>,
+    /// The matched filter.
+    pulse: PulseMatchBlock<S>,
     sync: SymbolSyncBlock<C32, S>,
     /// The acquisition, the equalizer and the carrier loop with the controller.
     rx: Loops<S>,
@@ -632,8 +633,6 @@ pub struct QamDemodBlock<S: Storage> {
     /// then those of the carrier loop; `pending` (as `f32`) the soft bits that did not fit into
     /// the output, `pending[at..len]`.
     work: S::Buf<C32>,
-    /// The parameters of the matched filter (the stage `pulse` of [`QAM_DEMOD_PARAMS`]).
-    pulse: MatchedPulse,
     at: u16,
     len: u16,
 }
@@ -649,8 +648,8 @@ impl<S: Storage> core::fmt::Debug for QamDemodBlock<S> {
 }
 
 impl<S: Storage> QamDemodBlock<S> {
-    /// Designs the matched filter and creates the block of its building blocks; taps, history,
-    /// the work buffer, the equalizer and the acquisition come from `storage`, in this order.
+    /// Creates the block of its building blocks; the taps and history of `pulse_match`, the work
+    /// buffer, the equalizer and the acquisition come from `storage`, in this order.
     ///
     /// # Errors
     /// As [`QamDemodConfig::validate`]; `Storage` when the storage is too small.
@@ -659,15 +658,8 @@ impl<S: Storage> QamDemodBlock<S> {
         reason = "clippy counts the temporary of every `?` separately; the real frame is small"
     )]
     pub fn new(config: &QamDemodConfig, rate_in: Rate, storage: &mut S) -> Result<Self> {
-        let n = config.derive(rate_in)?;
-        let rrc = Rrc::new(config.rolloff, n, config.span)?;
-        let taps_len = rrc.len();
-        let gain = 1.0 / libm::sqrt(n as f64);
-        let mut taps = storage.alloc::<f32>(taps_len)?;
-        for (k, t) in taps.as_mut().iter_mut().enumerate() {
-            *t = (rrc.tap(k) * gain) as f32;
-        }
-        let hist = storage.alloc::<C32>(taps_len - 1)?;
+        config.derive(rate_in)?;
+        let pulse = PulseMatchBlock::new(&config.pulse(), rate_in, storage)?;
         let work = storage.alloc::<C32>(work_len(config.bits_per_symbol()))?;
         let eq = match config.equalizer() {
             Some(e) => Some(EqualizeBlock::new(&e, rate_in, storage)?),
@@ -695,7 +687,7 @@ impl<S: Storage> QamDemodBlock<S> {
         )?;
         let hand = HandOver::start(eq.is_some());
         Ok(Self {
-            fir: FirState::new(taps, hist)?,
+            pulse,
             sync,
             rx: Loops {
                 acquire,
@@ -710,11 +702,6 @@ impl<S: Storage> QamDemodBlock<S> {
             },
             demap,
             work,
-            pulse: MatchedPulse {
-                symbol_rate_hz: config.symbol_rate_hz,
-                rolloff: config.rolloff,
-                span: config.span,
-            },
             at: 0,
             len: 0,
         })
@@ -733,10 +720,8 @@ impl<S: Storage> QamDemodBlock<S> {
 
     /// Adds the buffers of the block to `plan`, in the order `new` takes them.
     pub(crate) fn plan(config: &QamDemodConfig, rate_in: Rate, plan: &mut Plan) -> Result<()> {
-        let n = config.derive(rate_in)?;
-        let taps = config.span * n + 1;
-        plan.add::<f32>(taps)?;
-        plan.add::<C32>(taps - 1)?;
+        config.derive(rate_in)?;
+        PulseMatchBlock::<S>::plan(&config.pulse(), rate_in, plan)?;
         plan.add::<C32>(work_len(config.bits_per_symbol()))?;
         if let Some(e) = config.equalizer() {
             e.plan(plan)?;
@@ -754,10 +739,10 @@ impl<S: Storage> QamDemodBlock<S> {
         Ok(sym.scale(Ratio::new(config.bits_per_symbol() as u64, 1)?)?)
     }
 
-    /// The configuration of the block, from its building blocks (the roll-off from the block).
+    /// The configuration of the block, from its building blocks.
     pub fn config(&self) -> QamDemodConfig {
         let sync = self.sync.config();
-        let n = self.samples_per_symbol();
+        let pulse = self.pulse.config();
         QamDemodConfig {
             constellation: if self.bits() == 6 {
                 SymbolMapConstellation::Qam64
@@ -765,8 +750,8 @@ impl<S: Storage> QamDemodBlock<S> {
                 SymbolMapConstellation::Qam16
             },
             symbol_rate_hz: sync.symbol_rate_hz,
-            rolloff: self.pulse.rolloff,
-            span: (self.num_taps() - 1) / n.max(1),
+            rolloff: pulse.rolloff,
+            span: pulse.span,
             equalizer_taps: self.rx.eq.as_ref().map_or(0, |e| e.state().taps()),
             sync_bw: sync.loop_bw,
             carrier_bw: self.rx.costas.state().loop_bw(),
@@ -780,13 +765,12 @@ impl<S: Storage> QamDemodBlock<S> {
 
     /// Number of taps of the matched filter (`span n + 1`).
     pub fn num_taps(&self) -> usize {
-        self.fir.taps().len()
+        self.pulse.num_taps()
     }
 
     /// The integer samples per symbol of the matched filter.
     pub fn samples_per_symbol(&self) -> usize {
-        // `sps` within 1 % of the integer `n` (2 to 1024), as `QamDemodConfig::derive`.
-        libm::floor(self.sync.state().sps() + 0.5) as usize
+        self.pulse.samples_per_symbol()
     }
 
     /// The state of the controller (M44.1 §5).
@@ -931,7 +915,7 @@ impl<S: Storage> QamDemodBlock<S> {
     fn piece_symbols(&mut self, piece: &[C32]) -> Result<usize> {
         let m = piece.len();
         let (a, b, _) = split_work(self.work.as_mut())?;
-        <Sdrk as Fir<C32>>::fir(&Sdrk, &mut self.fir, piece, head_mut(a, m)?)?;
+        self.pulse.process(piece, head_mut(a, m)?)?;
         let p = self.sync.process(head(a, m)?, b)?;
         if p.consumed != m {
             return Err(Error::Core(sdrk_core::Error::Internal(
@@ -1246,7 +1230,7 @@ impl<S: Storage> Block for QamDemodBlock<S> {
     }
 
     fn reset(&mut self) {
-        self.fir.reset();
+        self.pulse.reset();
         self.sync.reset();
         self.rx.costas.reset();
         self.at = 0;
@@ -1283,11 +1267,10 @@ impl<S: Storage> Block for QamDemodBlock<S> {
 }
 
 /// The flat parameter names of `qam_demod` and the building blocks they reach (M44.1.1 §4):
-/// `pulse` the matched filter (the building block `pulse_match` of M44.1.1 §3 takes its
-/// parameters over), `sync` `symbol_sync`, `eq` `equalize` (left out for `equalizer_taps` 0: its
+/// `pulse` `pulse_match` (the matched filter), `sync` `symbol_sync`, `eq` `equalize` (left out for `equalizer_taps` 0: its
 /// `taps` then read 0 and a `set` has nothing to reach there), `costas` and `demap`
 /// `symbol_demap`. `constellation` goes to `costas`, `equalize` and `symbol_demap` (read from
-/// `costas`, which is always there), `symbol_rate_hz` to the matched filter and `symbol_sync`;
+/// `costas`, which is always there), `symbol_rate_hz` to `pulse_match` and `symbol_sync`;
 /// `sync_bw` and `carrier_bw` are the `loop_bw` of `symbol_sync` and of `costas`, and
 /// `equalizer_taps` the `taps` of `equalize`, by their roles (rule 3 of the naming rule).
 pub const QAM_DEMOD_PARAMS: ParamMap = ParamMap::new(&[
@@ -1302,33 +1285,6 @@ pub const QAM_DEMOD_PARAMS: ParamMap = ParamMap::new(&[
     ("sync_bw", "sync.loop_bw"),
     ("carrier_bw", "costas.loop_bw"),
 ]);
-
-/// The parameters of the matched filter of `qam_demod` (its taps and history are the kernel
-/// state of the block): the stage `pulse` of [`QAM_DEMOD_PARAMS`].
-#[derive(Debug, Clone, Copy, PartialEq)]
-pub(crate) struct MatchedPulse {
-    symbol_rate_hz: f64,
-    rolloff: f64,
-    span: usize,
-}
-
-impl MatchedPulse {
-    /// The description of a parameter of the matched filter.
-    pub(crate) fn desc(name: &str) -> Option<&'static ParamDesc> {
-        [&SYMBOL_RATE_PARAM, &DEMOD_ROLLOFF_PARAM, &DEMOD_SPAN_PARAM]
-            .into_iter()
-            .find(|p| p.name == name)
-    }
-
-    fn param(&self, name: &str) -> Result<ParamValue> {
-        match name {
-            "symbol_rate_hz" => Ok(ParamValue::F64(self.symbol_rate_hz)),
-            "rolloff" => Ok(ParamValue::F64(self.rolloff)),
-            "span" => Ok(ParamValue::I64(self.span as i64)),
-            _ => unknown(),
-        }
-    }
-}
 
 impl<S: Storage> Stages for QamDemodBlock<S> {
     const PARAMS: ParamMap = QAM_DEMOD_PARAMS;
@@ -1350,9 +1306,7 @@ impl<S: Storage> Stages for QamDemodBlock<S> {
 
     fn check_stage_param(&self, path: &str, value: &ParamValue) -> Result<()> {
         match stage_of(&Self::PARAMS, path)? {
-            ("pulse", n) => {
-                check_build_param(MatchedPulse::desc(n).ok_or(Error::UnknownParameter)?, value)
-            }
+            ("pulse", n) => self.pulse.check_param(n, value),
             ("sync", n) => self.sync.check_param(n, value),
             // Left out: what `equalize` would answer (its description).
             ("eq", n) => match self.rx.eq.as_ref() {
@@ -1372,7 +1326,7 @@ impl<S: Storage> Stages for QamDemodBlock<S> {
 
     fn set_stage_param(&mut self, path: &str, value: ParamValue) -> Result<()> {
         match stage_of(&Self::PARAMS, path)? {
-            ("pulse", _) => Err(Error::ReadOnlyParameter),
+            ("pulse", n) => self.pulse.set_param(n, value),
             ("sync", n) => self.sync.set_param(n, value),
             ("eq", n) => self
                 .rx

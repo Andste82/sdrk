@@ -9,10 +9,8 @@ use sdrk_proto::frame::{MAX_PAYLOAD, frame_bits};
 use super::frame_encode::{
     ENCODE_WHITENING_PARAM, FrameEncodeBlock, FrameEncodeConfig, IDLE_PARAM, PREAMBLE_BYTES_PARAM,
 };
-use super::qam_mod::{
-    MOD_ROLLOFF_PARAM, MOD_SPAN_PARAM, QAM_CONSTELLATION_PARAM, QAM_MOD_CHUNK, QamModBlock,
-    QamModConfig, SAMPLES_PER_SYMBOL_PARAM,
-};
+use super::pulse_shape::{ROLLOFF_PARAM, SAMPLES_PER_SYMBOL_PARAM, SPAN_PARAM};
+use super::qam_mod::{QAM_CONSTELLATION_PARAM, QAM_MOD_CHUNK, QamModBlock, QamModConfig};
 use super::{head, head_mut, tail, tail_mut, unknown};
 use crate::block::{Block, BlockTiming, ParamValue};
 use crate::describe::{BlockDescription, PortDesc, PortType};
@@ -70,8 +68,8 @@ pub static DESCRIPTION: BlockDescription = BlockDescription {
         ENCODE_WHITENING_PARAM,
         QAM_CONSTELLATION_PARAM,
         SAMPLES_PER_SYMBOL_PARAM,
-        MOD_ROLLOFF_PARAM,
-        MOD_SPAN_PARAM,
+        ROLLOFF_PARAM,
+        SPAN_PARAM,
     ],
     required: &["samples_per_symbol"],
 };

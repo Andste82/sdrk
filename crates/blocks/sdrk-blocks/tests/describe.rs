@@ -60,6 +60,7 @@ use sdrk_blocks::{
     SymbolDemapConfig, SymbolDemapConstellation, SymbolMapBlock, SymbolMapConfig, SymbolSyncBlock,
     SymbolSyncConfig, Ted, ToComplexBlock, all_descriptions,
 };
+use sdrk_blocks::{PulseMatchBlock, PulseMatchConfig, PulseShapeBlock, PulseShapeConfig};
 use sdrk_testkit::VecStorage;
 
 fn is_snake_case(s: &str) -> bool {
@@ -80,8 +81,8 @@ fn text_ok(what: &str, s: &str) {
 #[test]
 fn there_are_sixty_one_unique_kinds() {
     let kinds: BTreeSet<_> = all_descriptions().iter().map(|d| d.kind).collect();
-    assert_eq!(kinds.len(), 77);
-    assert_eq!(all_descriptions().len(), 77);
+    assert_eq!(kinds.len(), 79);
+    assert_eq!(all_descriptions().len(), 79);
     for kind in [
         "convert",
         "convert_out",
@@ -158,6 +159,8 @@ fn there_are_sixty_one_unique_kinds() {
         "qam_acquire",
         "qam_frame_encode",
         "qam_frame_decode",
+        "pulse_shape",
+        "pulse_match",
     ] {
         assert!(kinds.contains(kind), "missing kind {kind}");
     }
@@ -421,6 +424,8 @@ fn config_defaults_match_the_descriptions() {
     defaults_match("symbol_map", |n| SymbolMapConfig::default().get(n), &[]);
     defaults_match("iq_offset", |n| IqOffsetConfig::default().get(n), &[]);
     defaults_match("qam_acquire", |n| QamAcquireConfig::default().get(n), &[]);
+    defaults_match("pulse_shape", |n| PulseShapeConfig::default().get(n), &[]);
+    defaults_match("pulse_match", |n| PulseMatchConfig::default().get(n), &[]);
     defaults_match(
         "qam_frame_encode",
         |n| QamFrameEncodeConfig::default().get(n),
@@ -570,6 +575,8 @@ fn configs_accept_every_described_parameter() {
     round_trip!("symbol_map", SymbolMapConfig);
     round_trip!("iq_offset", IqOffsetConfig);
     round_trip!("qam_acquire", QamAcquireConfig);
+    round_trip!("pulse_shape", PulseShapeConfig);
+    round_trip!("pulse_match", PulseMatchConfig);
 }
 
 /// Every runtime parameter is accepted by `set_param` and readable by `param`; build parameters
@@ -965,6 +972,14 @@ fn blocks_accept_and_report_every_described_parameter() {
     check_block_params(
         "qam_acquire",
         &mut QamAcquireBlock::new(&QamAcquireConfig::default(), rate(9600), &mut s).unwrap(),
+    );
+    check_block_params(
+        "pulse_shape",
+        &mut PulseShapeBlock::new(&PulseShapeConfig::default(), rate(9600), &mut s).unwrap(),
+    );
+    check_block_params(
+        "pulse_match",
+        &mut PulseMatchBlock::new(&PulseMatchConfig::default(), rate(9600), &mut s).unwrap(),
     );
     check_block_params(
         "qam_frame_encode",

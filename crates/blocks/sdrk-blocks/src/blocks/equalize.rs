@@ -188,15 +188,6 @@ fn constellation_index(c: EqConstellation) -> u16 {
     }
 }
 
-/// The constellation of the PSK order (2, 4, 8) that `psk_demod` gives its equalizer.
-pub(crate) fn constellation_of_order(order: u32) -> EqConstellation {
-    match order {
-        2 => EqConstellation::Bpsk,
-        8 => EqConstellation::Psk8,
-        _ => EqConstellation::Qpsk,
-    }
-}
-
 /// An odd number of taps from `min` to 63, otherwise `OutOfRange` (outside) or
 /// `InvalidParameter` (even).
 pub(crate) fn check_taps(name: &'static str, taps: usize, min: usize) -> Result<()> {

@@ -5,9 +5,8 @@
 
 use sdrk::{Delay, Progress, Rate, Ratio, RatioKind, Sdrk};
 use sdrk_core::C32;
-use sdrk_core::kernels::constellation::Qam;
 use sdrk_core::kernels::costas::CostasConstellation;
-use sdrk_core::kernels::equalize::{EqConstellation, EqualizeState};
+use sdrk_core::kernels::equalize::EqualizeState;
 use sdrk_core::kernels::filter::{Fir, FirState};
 
 use super::costas::{
@@ -22,8 +21,9 @@ use super::psk_demod::{
     work_len,
 };
 use super::qam_acquire::{AcquireWindow, QamAcquireBlock, QamAcquireConfig};
-use super::qam_mod::{ORDER_PARAM, order_of_value, qam_of_order};
-use super::symbol_demap::{SymbolDemapBlock, SymbolDemapConfig, SymbolDemapConstellation};
+use super::qam_mod::{QAM_CONSTELLATION_PARAM, qam_constellation_of_value, qam_of};
+use super::symbol_demap::{SymbolDemapBlock, SymbolDemapConfig};
+use super::symbol_map::SymbolMapConstellation;
 use super::symbol_sync::SymbolSyncBlock;
 use super::{HZ_LIMIT, check_count, head, head_mut, tail, tail_mut, unknown};
 use crate::block::{Block, BlockTiming, ParamValue};
@@ -33,6 +33,10 @@ use crate::describe::{
 use crate::design::{RRC_MAX_SPAN, RRC_MAX_SPS, RRC_MIN_ROLLOFF, RRC_MIN_SPAN, Rrc};
 use crate::error::{Error, Result};
 use crate::lock_watch::{LockAction, LockCheck, LockPolicy, LockState, LockTransition, LockWatch};
+use crate::param_map::{
+    ParamMap, Stages, check_build_param, check_composite_param, composite_param,
+    composite_set_param, stage_of,
+};
 use crate::storage::{Plan, Storage};
 use crate::{SymbolSyncConfig, Ted};
 
@@ -185,18 +189,17 @@ pub static DESCRIPTION: BlockDescription = BlockDescription {
         checks in a row, and a clear window after six or more windows \
         without a clear peak, a signal back after a gap, starts the equalizer again with the \
         new estimate), the adaptive equalizer \
-        equalize (constellation qam16 or qam64 of the order, equalizer_taps taps, no feedback \
+        equalize (the constellation, equalizer_taps taps, no feedback \
         taps, mu_cma 0.05, mu_dd 0.005, 1000 CMA symbols, then decision-directed; its phase \
         tracker at 0.005 until the first check after the estimate, then at 0.0015, a narrow \
         frequency tracker; at the switch to the decision mode the tracker turns by the phase \
         of the fourth power of the equalizer's output over its last 256 blind symbols after the \
         estimate; equalizer_taps 0 leaves it out), the decision-directed carrier \
-        loop costas, which tracks the phase (constellation qam16 or qam64, carrier_bw, \
+        loop costas, which tracks the phase (the constellation, carrier_bw, \
         damping 0.7071, max_offset 0.05 cycles per symbol) and the soft bits of symbol_demap \
-        qam16 or \
-        qam64 (scale 1): above 0 is a 1. This is the order of psk_demod (equalizer before the \
+        (the constellation, scale 1): above 0 is a 1. This is the order of psk_demod (equalizer before the \
         carrier loop). The 90 degree ambiguity of the square constellation is not resolved: use \
-        frame_decode with rotations four and bits_per_symbol 4 or 6. The output rate is the \
+        frame_decode with rotations four and bits_per_symbol 4 (qam16) or 6 (qam64). The output rate is the \
         symbol rate times the bits per symbol and follows the clock of the signal (variable \
         ratio); the equalizer adds (equalizer_taps - 1) / 2 symbols of delay.",
     inputs: &[PortDesc {
@@ -211,7 +214,7 @@ pub static DESCRIPTION: BlockDescription = BlockDescription {
         description: "Soft bits, bits per symbol samples per symbol; above 0 is a 1.",
     }],
     params: &[
-        ORDER_PARAM,
+        QAM_CONSTELLATION_PARAM,
         SYMBOL_RATE_PARAM,
         DEMOD_ROLLOFF_PARAM,
         DEMOD_SPAN_PARAM,
@@ -226,7 +229,7 @@ pub static DESCRIPTION: BlockDescription = BlockDescription {
 ///
 /// ```
 /// use sdrk_blocks::QamDemodConfig;
-/// let cfg = QamDemodConfig { order: 16, symbol_rate_hz: 25_000.0, ..QamDemodConfig::default() };
+/// let cfg = QamDemodConfig { symbol_rate_hz: 25_000.0, ..QamDemodConfig::default() };
 /// assert_eq!(cfg.samples_per_symbol(sdrk::Rate::hz(200_000)?)?, 8);
 /// assert_eq!((cfg.equalizer_taps, cfg.carrier_bw), (11, 0.0025));
 /// // 7.5 samples per symbol is not within 1 % of an integer
@@ -235,8 +238,8 @@ pub static DESCRIPTION: BlockDescription = BlockDescription {
 /// ```
 #[derive(Debug, Clone, Copy, PartialEq)]
 pub struct QamDemodConfig {
-    /// Order: 16 (16-QAM) or 64 (64-QAM).
-    pub order: u32,
+    /// The constellation: `Qam16` or `Qam64`.
+    pub constellation: SymbolMapConstellation,
     /// Symbol rate in Hz (required).
     pub symbol_rate_hz: f64,
     /// Roll-off of the matched filter (0.05 to 1).
@@ -252,11 +255,11 @@ pub struct QamDemodConfig {
 }
 
 impl Default for QamDemodConfig {
-    /// Order 16, `symbol_rate_hz` 1200 (a placeholder: the pipeline requires the parameter),
+    /// `qam16`, `symbol_rate_hz` 1200 (a placeholder: the pipeline requires the parameter),
     /// `rolloff` 0.35, `span` 10, `equalizer_taps` 11, `sync_bw` 0.005, `carrier_bw` 0.0025.
     fn default() -> Self {
         Self {
-            order: 16,
+            constellation: SymbolMapConstellation::Qam16,
             symbol_rate_hz: 1200.0,
             rolloff: 0.35,
             span: 10,
@@ -268,14 +271,10 @@ impl Default for QamDemodConfig {
 }
 
 impl QamDemodConfig {
-    /// Bits per symbol: 4 for order 16, 6 for order 64 (4 for an invalid order).
+    /// Bits per symbol: 4 for `qam16`, 6 for `qam64` (that of the constellation for another
+    /// one, which [`QamDemodConfig::validate`] refuses).
     pub fn bits_per_symbol(&self) -> usize {
-        qam_of_order(self.order).map_or(4, Qam::bits_per_symbol)
-    }
-
-    /// The constellation of the order (16-QAM for an invalid order).
-    fn qam(&self) -> Qam {
-        qam_of_order(self.order).unwrap_or(Qam::Qam16)
+        self.constellation.bits_per_symbol()
     }
 
     /// The configuration of the timing loop.
@@ -291,7 +290,7 @@ impl QamDemodConfig {
     }
 
     /// The configuration of the equalizer (`None` for `equalizer_taps` 0): the forward taps,
-    /// no feedback, the QAM constellation of the order, `mu_cma` and the CMA symbols of the
+    /// no feedback, the constellation, `mu_cma` and the CMA symbols of the
     /// `equalize` defaults, `mu_dd` 0.005 (D1618) and the phase tracker at
     /// [`QAM_TRACKER_PULL_BW`] (the block narrows it to [`QAM_TRACKER_HOLD_BW`] at the first check
     /// after an estimate, D1622).
@@ -299,10 +298,7 @@ impl QamDemodConfig {
         (self.equalizer_taps != 0).then(|| EqualizeConfig {
             taps: self.equalizer_taps,
             feedback_taps: 0,
-            constellation: match self.qam() {
-                Qam::Qam64 => EqConstellation::Qam64,
-                _ => EqConstellation::Qam16,
-            },
+            constellation: self.constellation.into(),
             mu_cma: DEFAULT_MU_CMA,
             mu_dd: QAM_MU_DD,
             cma_symbols: DEFAULT_CMA_SYMBOLS,
@@ -312,7 +308,7 @@ impl QamDemodConfig {
 
     /// The ranges, and the integer samples per symbol of the matched filter.
     fn derive(&self, rate_in: Rate) -> Result<usize> {
-        qam_of_order(self.order)?;
+        qam_of(self.constellation)?;
         check_equalizer_taps(self.equalizer_taps)?;
         check_f64(
             "symbol_rate_hz",
@@ -359,8 +355,8 @@ impl QamDemodConfig {
     /// Checks the configuration against the input sample rate.
     ///
     /// # Errors
-    /// `OutOfRange` for a value outside its range; `InvalidParameter` for the orders 17 to 63,
-    /// for an `equalizer_taps` of 1 or an even count and for a symbol rate whose samples per
+    /// `OutOfRange` for a value outside its range; `InvalidParameter` for a constellation other
+    /// than `qam16` and `qam64`, for an `equalizer_taps` of 1 or an even count and for a symbol rate whose samples per
     /// symbol are not within 1 % of an integer from 2 to 1024 or are below 2 (the pipeline
     /// reports it as `rate_unsupported` with the hint to resample).
     pub fn validate(&self, rate_in: Rate) -> Result<()> {
@@ -370,13 +366,14 @@ impl QamDemodConfig {
     /// Sets a parameter by its description name; checks kind and range.
     ///
     /// # Errors
-    /// `UnknownParameter`, `WrongParamType`, `OutOfRange`; `InvalidParameter` for the orders
-    /// 17 to 63 and for an `equalizer_taps` of 1 or an even count.
+    /// `UnknownParameter`, `WrongParamType`, `OutOfRange`; `InvalidParameter` for a
+    /// constellation other than `qam16` and `qam64` and for an `equalizer_taps` of 1 or an
+    /// even count.
     pub fn set(&mut self, name: &str, value: ParamValue) -> Result<()> {
         let p = DESCRIPTION.param(name).ok_or(Error::UnknownParameter)?;
         p.check(&value)?;
         match p.name {
-            "order" => self.order = order_of_value(&value)?,
+            "constellation" => self.constellation = qam_constellation_of_value(&value)?,
             "symbol_rate_hz" => self.symbol_rate_hz = value.as_f64()?,
             "rolloff" => self.rolloff = value.as_f64()?,
             "span" => self.span = value.as_usize()?,
@@ -398,7 +395,7 @@ impl QamDemodConfig {
     /// `UnknownParameter`.
     pub fn get(&self, name: &str) -> Result<ParamValue> {
         match name {
-            "order" => Ok(ParamValue::I64(i64::from(self.order))),
+            "constellation" => Ok(ParamValue::Choice(self.constellation.index())),
             "symbol_rate_hz" => Ok(ParamValue::F64(self.symbol_rate_hz)),
             "rolloff" => Ok(ParamValue::F64(self.rolloff)),
             "span" => Ok(ParamValue::I64(self.span as i64)),
@@ -605,8 +602,8 @@ impl HandOver {
 /// use sdrk_blocks::{ArenaStorage, Block, LockState, QamDemodBlock, QamDemodConfig, QamModBlock,
 ///     QamModConfig};
 /// let rate = Rate::hz(4000)?; // 1000 symbols per second, 4 samples per symbol
-/// let tx = QamModConfig { order: 16, samples_per_symbol: 4, ..QamModConfig::default() };
-/// let rx = QamDemodConfig { order: 16, symbol_rate_hz: 1000.0, ..QamDemodConfig::default() };
+/// let tx = QamModConfig { samples_per_symbol: 4, ..QamModConfig::default() };
+/// let rx = QamDemodConfig { symbol_rate_hz: 1000.0, ..QamDemodConfig::default() };
 /// let mut mem = vec![0u8; 1 << 16];
 /// let mut arena = ArenaStorage::new(&mut mem);
 /// let mut m = QamModBlock::new(&tx, Rate::hz(4000)?, &mut arena)?;
@@ -635,8 +632,8 @@ pub struct QamDemodBlock<S: Storage> {
     /// then those of the carrier loop; `pending` (as `f32`) the soft bits that did not fit into
     /// the output, `pending[at..len]`.
     work: S::Buf<C32>,
-    /// The roll-off of the matched filter (the only parameter no building block holds).
-    rolloff: f64,
+    /// The parameters of the matched filter (the stage `pulse` of [`QAM_DEMOD_PARAMS`]).
+    pulse: MatchedPulse,
     at: u16,
     len: u16,
 }
@@ -663,7 +660,6 @@ impl<S: Storage> QamDemodBlock<S> {
     )]
     pub fn new(config: &QamDemodConfig, rate_in: Rate, storage: &mut S) -> Result<Self> {
         let n = config.derive(rate_in)?;
-        let qam = config.qam();
         let rrc = Rrc::new(config.rolloff, n, config.span)?;
         let taps_len = rrc.len();
         let gain = 1.0 / libm::sqrt(n as f64);
@@ -672,20 +668,16 @@ impl<S: Storage> QamDemodBlock<S> {
             *t = (rrc.tap(k) * gain) as f32;
         }
         let hist = storage.alloc::<C32>(taps_len - 1)?;
-        let work = storage.alloc::<C32>(work_len(qam.bits_per_symbol()))?;
+        let work = storage.alloc::<C32>(work_len(config.bits_per_symbol()))?;
         let eq = match config.equalizer() {
             Some(e) => Some(EqualizeBlock::new(&e, rate_in, storage)?),
             None => None,
         };
         let acquire = QamAcquireBlock::new(&QamAcquireConfig { correct: false }, rate_in, storage)?;
         let sync = SymbolSyncBlock::<C32, S>::new(&config.sync(), rate_in, storage)?;
-        let (costas_c, demap_c) = match qam {
-            Qam::Qam64 => (CostasConstellation::Qam64, SymbolDemapConstellation::Qam64),
-            _ => (CostasConstellation::Qam16, SymbolDemapConstellation::Qam16),
-        };
         let costas = CostasBlock::new(
             &CostasConfig {
-                constellation: costas_c,
+                constellation: config.constellation.into(),
                 loop_bw: config.carrier_bw,
                 damping: DEFAULT_DAMPING,
                 max_offset: DEFAULT_MAX_OFFSET,
@@ -695,7 +687,7 @@ impl<S: Storage> QamDemodBlock<S> {
         )?;
         let demap = SymbolDemapBlock::new(
             &SymbolDemapConfig {
-                constellation: demap_c,
+                constellation: config.constellation.into(),
                 scale: 1.0,
             },
             rate_in,
@@ -718,7 +710,11 @@ impl<S: Storage> QamDemodBlock<S> {
             },
             demap,
             work,
-            rolloff: config.rolloff,
+            pulse: MatchedPulse {
+                symbol_rate_hz: config.symbol_rate_hz,
+                rolloff: config.rolloff,
+                span: config.span,
+            },
             at: 0,
             len: 0,
         })
@@ -763,9 +759,13 @@ impl<S: Storage> QamDemodBlock<S> {
         let sync = self.sync.config();
         let n = self.samples_per_symbol();
         QamDemodConfig {
-            order: if self.bits() == 6 { 64 } else { 16 },
+            constellation: if self.bits() == 6 {
+                SymbolMapConstellation::Qam64
+            } else {
+                SymbolMapConstellation::Qam16
+            },
             symbol_rate_hz: sync.symbol_rate_hz,
-            rolloff: self.rolloff,
+            rolloff: self.pulse.rolloff,
             span: (self.num_taps() - 1) / n.max(1),
             equalizer_taps: self.rx.eq.as_ref().map_or(0, |e| e.state().taps()),
             sync_bw: sync.loop_bw,
@@ -1265,18 +1265,123 @@ impl<S: Storage> Block for QamDemodBlock<S> {
         self.rx.restart_at = NO_RESTART;
     }
 
-    fn set_param(&mut self, name: &str, _value: ParamValue) -> Result<()> {
-        match DESCRIPTION.param(name) {
-            Some(_) => Err(Error::ReadOnlyParameter),
-            None => unknown(),
-        }
+    fn set_param(&mut self, name: &str, value: ParamValue) -> Result<()> {
+        composite_set_param(self, name, value)
     }
 
     fn param(&self, name: &str) -> Result<ParamValue> {
-        self.config().get(name)
+        composite_param(self, name)
+    }
+
+    fn check_param(&self, name: &str, value: &ParamValue) -> Result<()> {
+        check_composite_param(self, name, value)
     }
 
     fn min_input(&self) -> usize {
         self.sync.min_input()
+    }
+}
+
+/// The flat parameter names of `qam_demod` and the building blocks they reach (M44.1.1 §4):
+/// `pulse` the matched filter (the building block `pulse_match` of M44.1.1 §3 takes its
+/// parameters over), `sync` `symbol_sync`, `eq` `equalize` (left out for `equalizer_taps` 0: its
+/// `taps` then read 0 and a `set` has nothing to reach there), `costas` and `demap`
+/// `symbol_demap`. `constellation` goes to `costas`, `equalize` and `symbol_demap` (read from
+/// `costas`, which is always there), `symbol_rate_hz` to the matched filter and `symbol_sync`;
+/// `sync_bw` and `carrier_bw` are the `loop_bw` of `symbol_sync` and of `costas`, and
+/// `equalizer_taps` the `taps` of `equalize`, by their roles (rule 3 of the naming rule).
+pub const QAM_DEMOD_PARAMS: ParamMap = ParamMap::new(&[
+    ("constellation", "costas.constellation"),
+    ("constellation", "eq.constellation"),
+    ("constellation", "demap.constellation"),
+    ("symbol_rate_hz", "pulse.symbol_rate_hz"),
+    ("symbol_rate_hz", "sync.symbol_rate_hz"),
+    ("rolloff", "pulse.rolloff"),
+    ("span", "pulse.span"),
+    ("equalizer_taps", "eq.taps"),
+    ("sync_bw", "sync.loop_bw"),
+    ("carrier_bw", "costas.loop_bw"),
+]);
+
+/// The parameters of the matched filter of `qam_demod` (its taps and history are the kernel
+/// state of the block): the stage `pulse` of [`QAM_DEMOD_PARAMS`].
+#[derive(Debug, Clone, Copy, PartialEq)]
+pub(crate) struct MatchedPulse {
+    symbol_rate_hz: f64,
+    rolloff: f64,
+    span: usize,
+}
+
+impl MatchedPulse {
+    /// The description of a parameter of the matched filter.
+    pub(crate) fn desc(name: &str) -> Option<&'static ParamDesc> {
+        [&SYMBOL_RATE_PARAM, &DEMOD_ROLLOFF_PARAM, &DEMOD_SPAN_PARAM]
+            .into_iter()
+            .find(|p| p.name == name)
+    }
+
+    fn param(&self, name: &str) -> Result<ParamValue> {
+        match name {
+            "symbol_rate_hz" => Ok(ParamValue::F64(self.symbol_rate_hz)),
+            "rolloff" => Ok(ParamValue::F64(self.rolloff)),
+            "span" => Ok(ParamValue::I64(self.span as i64)),
+            _ => unknown(),
+        }
+    }
+}
+
+impl<S: Storage> Stages for QamDemodBlock<S> {
+    const PARAMS: ParamMap = QAM_DEMOD_PARAMS;
+
+    fn stage_param(&self, path: &str) -> Result<ParamValue> {
+        match stage_of(&Self::PARAMS, path)? {
+            ("pulse", n) => self.pulse.param(n),
+            ("sync", n) => self.sync.param(n),
+            ("eq", n) => match (self.rx.eq.as_ref(), n) {
+                (Some(eq), n) => eq.param(n),
+                (None, "taps") => Ok(ParamValue::I64(0)),
+                (None, _) => unknown(),
+            },
+            ("costas", n) => self.rx.costas.param(n),
+            ("demap", n) => self.demap.param(n),
+            _ => unknown(),
+        }
+    }
+
+    fn check_stage_param(&self, path: &str, value: &ParamValue) -> Result<()> {
+        match stage_of(&Self::PARAMS, path)? {
+            ("pulse", n) => {
+                check_build_param(MatchedPulse::desc(n).ok_or(Error::UnknownParameter)?, value)
+            }
+            ("sync", n) => self.sync.check_param(n, value),
+            // Left out: what `equalize` would answer (its description).
+            ("eq", n) => match self.rx.eq.as_ref() {
+                Some(eq) => eq.check_param(n, value),
+                None => check_build_param(
+                    super::equalize::DESCRIPTION
+                        .param(n)
+                        .ok_or(Error::UnknownParameter)?,
+                    value,
+                ),
+            },
+            ("costas", n) => self.rx.costas.check_param(n, value),
+            ("demap", n) => self.demap.check_param(n, value),
+            _ => unknown(),
+        }
+    }
+
+    fn set_stage_param(&mut self, path: &str, value: ParamValue) -> Result<()> {
+        match stage_of(&Self::PARAMS, path)? {
+            ("pulse", _) => Err(Error::ReadOnlyParameter),
+            ("sync", n) => self.sync.set_param(n, value),
+            ("eq", n) => self
+                .rx
+                .eq
+                .as_mut()
+                .map_or(Ok(()), |eq| eq.set_param(n, value)),
+            ("costas", n) => self.rx.costas.set_param(n, value),
+            ("demap", n) => self.demap.set_param(n, value),
+            _ => unknown(),
+        }
     }
 }

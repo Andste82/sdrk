@@ -42,6 +42,7 @@
 )]
 
 use sdrk::{Rate, Sdrk};
+use sdrk_blocks::SymbolMapConstellation;
 use sdrk_blocks::design::{rrc, rrc_len};
 use sdrk_blocks::{
     Block, PskModBlock, PskModConfig, PskVariant, QAM_ACQUISITION_CHECK, QAM_ACQUISITION_SKIP,
@@ -224,7 +225,7 @@ fn qam_mod_keeps_its_baseline() {
         for (rolloff, span) in SHAPES {
             for sps in SPS {
                 let cfg = QamModConfig {
-                    order,
+                    constellation: c_of(order),
                     samples_per_symbol: sps,
                     rolloff,
                     span,
@@ -240,7 +241,7 @@ fn qam_mod_keeps_its_baseline() {
     // the full output of a short case of each order
     for order in [16u32, 64] {
         let cfg = QamModConfig {
-            order,
+            constellation: c_of(order),
             samples_per_symbol: 4,
             ..QamModConfig::default()
         };
@@ -268,7 +269,7 @@ fn psk_mod_keeps_its_baseline() {
                     continue;
                 }
                 let cfg = PskModConfig {
-                    order,
+                    constellation: c_of(order),
                     samples_per_symbol: sps,
                     rolloff,
                     span,
@@ -293,7 +294,7 @@ fn psk_mod_keeps_its_baseline() {
         (4, false, PskVariant::Offset),
     ] {
         let cfg = PskModConfig {
-            order,
+            constellation: c_of(order),
             samples_per_symbol: 4,
             differential,
             variant,
@@ -321,7 +322,7 @@ fn random_bits(n: usize, stream: u64) -> Vec<f32> {
 
 fn modulate(order: u32, sps: usize, bits: &[f32]) -> Vec<C32> {
     let cfg = QamModConfig {
-        order,
+        constellation: c_of(order),
         samples_per_symbol: sps,
         ..QamModConfig::default()
     };
@@ -397,7 +398,7 @@ struct DemodCase {
 
 fn config(order: u32, symbol_rate: f64, taps: usize) -> QamDemodConfig {
     QamDemodConfig {
-        order,
+        constellation: c_of(order),
         symbol_rate_hz: symbol_rate,
         equalizer_taps: taps,
         ..QamDemodConfig::default()
@@ -776,4 +777,16 @@ fn the_matched_filter_of_qam_demod_keeps_its_baseline() {
     let y = matched_filter(&cfg, rate(38_400), &received(16, 4, 1500, 0.02, 20));
     t.check_vector("short_qam16_sps4", &baseline::c32_bytes(&y))
         .unwrap();
+}
+
+/// The constellation of a numeric order of the tables of this file (2, 4, 8, 16 or 64).
+fn c_of(order: u32) -> SymbolMapConstellation {
+    match order {
+        2 => SymbolMapConstellation::Bpsk,
+        4 => SymbolMapConstellation::Qpsk,
+        8 => SymbolMapConstellation::Psk8,
+        16 => SymbolMapConstellation::Qam16,
+        64 => SymbolMapConstellation::Qam64,
+        other => unreachable!("no constellation of the order {other}"),
+    }
 }

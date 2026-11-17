@@ -19,6 +19,7 @@ mod common;
 
 use common::{check_block, check_exact_storage, rate, run_block, same_bits};
 use sdrk::{C32, Delay, Ratio, RatioKind, Sdrk};
+use sdrk_blocks::SymbolMapConstellation;
 use sdrk_blocks::{
     ArenaStorage, Block, EqConstellation, EqMode, EqualizeBlock, EqualizeConfig, Error, ParamValue,
     PskDemodBlock, PskDemodConfig, PskVariant,
@@ -261,7 +262,7 @@ fn equalize_storage_is_exact() {
         (4, false, PskVariant::Offset, 11, 3),
     ] {
         let base = PskDemodConfig {
-            order,
+            constellation: c_of(order),
             symbol_rate_hz: 25_000.0,
             differential,
             variant,
@@ -470,4 +471,16 @@ fn equalize_block_is_send_and_sync() {
     assert_send_sync::<EqualizeConfig>();
     assert_send_sync::<EqConstellation>();
     assert_send_sync::<EqMode>();
+}
+
+/// The constellation of a numeric order of the tables of this file (2, 4, 8, 16 or 64).
+fn c_of(order: u32) -> SymbolMapConstellation {
+    match order {
+        2 => SymbolMapConstellation::Bpsk,
+        4 => SymbolMapConstellation::Qpsk,
+        8 => SymbolMapConstellation::Psk8,
+        16 => SymbolMapConstellation::Qam16,
+        64 => SymbolMapConstellation::Qam64,
+        other => unreachable!("no constellation of the order {other}"),
+    }
 }

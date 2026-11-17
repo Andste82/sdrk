@@ -32,6 +32,7 @@ use sdrk_testkit::Pcg32;
 use serde_json::{Value, json};
 
 use common::build;
+use sdrk_blocks::SymbolMapConstellation;
 
 /// Seed of the random data of the M40 pipeline tests (the chunk-invariance seed of test 6).
 const SEED: u64 = 559;
@@ -108,17 +109,18 @@ fn psk_demod_offset_backend_check_uses_rotate_not_costas() {
     let registry = Registry::standard();
     let factory = registry.factory("psk_demod").unwrap();
     let raw = |v: Value| v.as_object().unwrap().clone();
-    let offset = raw(json!({ "order": 4, "symbol_rate_hz": 25_000, "variant": "offset" }));
+    let offset =
+        raw(json!({ "constellation": "qpsk", "symbol_rate_hz": 25_000, "variant": "offset" }));
     assert_eq!(
         factory.kernels_for(&offset),
         ["fir", "symbol_sync", "rotate"]
     );
     for params in [
-        json!({ "order": 4, "symbol_rate_hz": 25_000 }),
-        json!({ "order": 4, "symbol_rate_hz": 25_000, "variant": "plain" }),
-        json!({ "order": 4, "symbol_rate_hz": 25_000, "variant": "pi4", "differential": true }),
-        json!({ "order": 8, "symbol_rate_hz": 25_000 }),
-        json!({ "order": 4, "symbol_rate_hz": 25_000, "variant": 3 }),
+        json!({ "constellation": "qpsk", "symbol_rate_hz": 25_000 }),
+        json!({ "constellation": "qpsk", "symbol_rate_hz": 25_000, "variant": "plain" }),
+        json!({ "constellation": "qpsk", "symbol_rate_hz": 25_000, "variant": "pi4", "differential": true }),
+        json!({ "constellation": "8psk", "symbol_rate_hz": 25_000 }),
+        json!({ "constellation": "qpsk", "symbol_rate_hz": 25_000, "variant": 3 }),
     ] {
         assert_eq!(
             factory.kernels_for(&raw(params.clone())),
@@ -127,7 +129,7 @@ fn psk_demod_offset_backend_check_uses_rotate_not_costas() {
         );
     }
 
-    let params = json!({ "order": 4, "symbol_rate_hz": 25_000, "variant": "offset" });
+    let params = json!({ "constellation": "qpsk", "symbol_rate_hz": 25_000, "variant": "offset" });
     let rotate = sdrk::backend_for("rotate", sdrk::SampleType::C32);
     for key in ["require", "prefer"] {
         // Requiring the backend of `costas` reports `rotate` whenever `rotate` runs elsewhere.
@@ -157,7 +159,7 @@ fn psk_demod_offset_backend_check_uses_rotate_not_costas() {
         "simd"
     };
     let messages = backend_messages(&psk_demod_with_backend(
-        json!({ "order": 4, "symbol_rate_hz": 25_000 }),
+        json!({ "constellation": "qpsk", "symbol_rate_hz": 25_000 }),
         json!({ "require": other }),
     ));
     assert!(
@@ -232,7 +234,7 @@ fn psk_mod_costs_4_span_and_multiplies_the_rate() {
             "psk_mod",
             "f32",
             50_000,
-            json!({ "order": order, "samples_per_symbol": sps, "span": span }),
+            json!({ "constellation": cname(order), "samples_per_symbol": sps, "span": span }),
         ));
         assert!(report.is_ok(), "{}", report.to_json());
         assert_eq!(report.cost_per_input_sample, 4.0 * span as f64);
@@ -259,11 +261,11 @@ fn psk_mod_costs_4_span_and_multiplies_the_rate() {
         "psk_mod",
         "f32",
         1000,
-        json!({ "samples_per_symbol": 4, "order": 3 }),
+        json!({ "samples_per_symbol": 4, "constellation": "qam16" }),
     ));
     assert_eq!(
         (path.as_str(), code),
-        ("nodes.n.params.order", DiagCode::InvalidValue)
+        ("nodes.n.params.constellation", DiagCode::InvalidValue)
     );
     for bad in [
         json!({ "samples_per_symbol": 65 }),
@@ -289,7 +291,7 @@ fn psk_demod_costs_and_rate_rule() {
             "psk_demod",
             "c32",
             fs,
-            json!({ "order": order, "symbol_rate_hz": sym, "span": span }),
+            json!({ "constellation": cname(order), "symbol_rate_hz": sym, "span": span }),
         ));
         assert!(report.is_ok(), "{}", report.to_json());
         let sps = fs as f64 / sym;
@@ -321,11 +323,11 @@ fn psk_demod_costs_and_rate_rule() {
         "psk_demod",
         "c32",
         200_000,
-        json!({ "symbol_rate_hz": 25_000, "order": 3 }),
+        json!({ "symbol_rate_hz": 25_000, "constellation": "qam64" }),
     ));
     assert_eq!(
         (path.as_str(), code),
-        ("nodes.n.params.order", DiagCode::InvalidValue)
+        ("nodes.n.params.constellation", DiagCode::InvalidValue)
     );
     for ty in ["cq15", "f32", "q15"] {
         let (_, code, _) = first_error(&single(
@@ -421,7 +423,7 @@ fn push_all_seed<I, O: Copy + Default + sdrk::Sample>(
 #[test]
 fn psk_mod_and_psk_demod_kinds_equal_the_blocks() {
     let m = PskModConfig {
-        order: 4,
+        constellation: SymbolMapConstellation::Qpsk,
         samples_per_symbol: 8,
         ..PskModConfig::default()
     };
@@ -436,7 +438,7 @@ fn psk_mod_and_psk_demod_kinds_equal_the_blocks() {
             "psk_mod",
             "f32",
             50_000,
-            json!({ "order": 4, "samples_per_symbol": 8 }),
+            json!({ "constellation": "qpsk", "samples_per_symbol": 8 }),
         )
         .to_string(),
     );
@@ -444,7 +446,7 @@ fn psk_mod_and_psk_demod_kinds_equal_the_blocks() {
     assert_eq!(sig, want, "psk_mod pipeline differs from the block");
 
     let d = PskDemodConfig {
-        order: 4,
+        constellation: SymbolMapConstellation::Qpsk,
         symbol_rate_hz: 25_000.0,
         ..PskDemodConfig::default()
     };
@@ -469,7 +471,7 @@ fn psk_mod_and_psk_demod_kinds_equal_the_blocks() {
             "psk_demod",
             "c32",
             200_000,
-            json!({ "order": 4, "symbol_rate_hz": 25_000 }),
+            json!({ "constellation": "qpsk", "symbol_rate_hz": 25_000 }),
         )
         .to_string(),
     );
@@ -492,7 +494,7 @@ fn inverted_bpsk_frames_are_found_with_rotations_both() {
         "inputs": { "msg": { "type": "packets", "rate_hz": 10_000 } },
         "nodes": {
             "enc": { "kind": "frame_encode", "params": { "preamble_bytes": 32 } },
-            "mod": { "kind": "psk_mod", "params": { "order": 2, "samples_per_symbol": 4 } }
+            "mod": { "kind": "psk_mod", "params": { "constellation": "bpsk", "samples_per_symbol": 4 } }
         },
         "edges": [
             { "from": "msg", "to": "enc" }, { "from": "enc", "to": "mod" },
@@ -531,7 +533,7 @@ fn inverted_bpsk_frames_are_found_with_rotations_both() {
             "sdrk": 1, "name": "rx", "settings": { "precision": "f32", "max_chunk": 4096 },
             "inputs": { "in": { "type": "c32", "rate_hz": 40_000 } },
             "nodes": {
-                "demod": { "kind": "psk_demod", "params": { "order": 2, "symbol_rate_hz": 10_000 } },
+                "demod": { "kind": "psk_demod", "params": { "constellation": "bpsk", "symbol_rate_hz": 10_000 } },
                 "dec": { "kind": "frame_decode", "params": { "rotations": rotations } }
             },
             "edges": [
@@ -609,17 +611,17 @@ fn psk_kinds_take_order_8_and_the_variants() {
     // psk_mod: rate, delay and cost
     for (params, rate_out, delay) in [
         (
-            json!({ "order": 8, "samples_per_symbol": 8 }),
+            json!({ "constellation": "8psk", "samples_per_symbol": 8 }),
             25_600u64,
             Delay::new(30, 2),
         ),
         (
-            json!({ "order": 4, "samples_per_symbol": 8, "variant": "offset" }),
+            json!({ "constellation": "qpsk", "samples_per_symbol": 8, "variant": "offset" }),
             38_400,
             Delay::new(22, 2),
         ),
         (
-            json!({ "order": 4, "samples_per_symbol": 8, "differential": true, "variant": "pi4" }),
+            json!({ "constellation": "qpsk", "samples_per_symbol": 8, "differential": true, "variant": "pi4" }),
             38_400,
             Delay::new(20, 2),
         ),
@@ -640,7 +642,7 @@ fn psk_kinds_take_order_8_and_the_variants() {
         "psk_demod",
         "c32",
         200_000,
-        json!({ "order": 8, "symbol_rate_hz": 25_000 }),
+        json!({ "constellation": "8psk", "symbol_rate_hz": 25_000 }),
     ));
     assert!(report.is_ok(), "{}", report.to_json());
     assert_eq!(report.cost_per_input_sample, 40.0 + 56.0 / 8.0);
@@ -649,7 +651,7 @@ fn psk_kinds_take_order_8_and_the_variants() {
         "psk_demod",
         "c32",
         200_000,
-        json!({ "order": 4, "symbol_rate_hz": 25_000, "variant": "offset" }),
+        json!({ "constellation": "qpsk", "symbol_rate_hz": 25_000, "variant": "offset" }),
     ));
     assert!(report.is_ok(), "{}", report.to_json());
     // the derotation of the OQPSK carrier loop adds 6 per sample (D686)
@@ -660,12 +662,12 @@ fn psk_kinds_take_order_8_and_the_variants() {
     );
     // the combinations that do not fit: invalid_value at params.variant
     for params in [
-        json!({ "order": 4, "samples_per_symbol": 8, "variant": "pi4" }),
-        json!({ "order": 2, "samples_per_symbol": 8, "differential": true, "variant": "pi4" }),
-        json!({ "order": 8, "samples_per_symbol": 8, "differential": true, "variant": "pi4" }),
-        json!({ "order": 4, "samples_per_symbol": 7, "variant": "offset" }),
-        json!({ "order": 4, "samples_per_symbol": 8, "differential": true, "variant": "offset" }),
-        json!({ "order": 8, "samples_per_symbol": 8, "variant": "offset" }),
+        json!({ "constellation": "qpsk", "samples_per_symbol": 8, "variant": "pi4" }),
+        json!({ "constellation": "bpsk", "samples_per_symbol": 8, "differential": true, "variant": "pi4" }),
+        json!({ "constellation": "8psk", "samples_per_symbol": 8, "differential": true, "variant": "pi4" }),
+        json!({ "constellation": "qpsk", "samples_per_symbol": 7, "variant": "offset" }),
+        json!({ "constellation": "qpsk", "samples_per_symbol": 8, "differential": true, "variant": "offset" }),
+        json!({ "constellation": "8psk", "samples_per_symbol": 8, "variant": "offset" }),
     ] {
         let (path, code, _) = first_error(&single("psk_mod", "f32", 9600, params.clone()));
         assert_eq!(
@@ -677,20 +679,20 @@ fn psk_kinds_take_order_8_and_the_variants() {
     for (fs, params) in [
         (
             200_000,
-            json!({ "order": 4, "symbol_rate_hz": 25_000, "variant": "pi4" }),
+            json!({ "constellation": "qpsk", "symbol_rate_hz": 25_000, "variant": "pi4" }),
         ),
         (
             200_000,
-            json!({ "order": 8, "symbol_rate_hz": 25_000, "differential": true, "variant": "pi4" }),
+            json!({ "constellation": "8psk", "symbol_rate_hz": 25_000, "differential": true, "variant": "pi4" }),
         ),
         // 7 samples per symbol: the rate is fine, the odd count is the variant's error
         (
             175_000,
-            json!({ "order": 4, "symbol_rate_hz": 25_000, "variant": "offset" }),
+            json!({ "constellation": "qpsk", "symbol_rate_hz": 25_000, "variant": "offset" }),
         ),
         (
             200_000,
-            json!({ "order": 4, "symbol_rate_hz": 25_000, "differential": true, "variant": "offset" }),
+            json!({ "constellation": "qpsk", "symbol_rate_hz": 25_000, "differential": true, "variant": "offset" }),
         ),
     ] {
         let (path, code, _) = first_error(&single("psk_demod", "c32", fs, params.clone()));
@@ -725,7 +727,7 @@ fn psk_variant_kinds_equal_the_blocks_in_pieces() {
     .enumerate()
     {
         let m = PskModConfig {
-            order,
+            constellation: c_of(order),
             samples_per_symbol: 8,
             differential,
             variant,
@@ -744,7 +746,7 @@ fn psk_variant_kinds_equal_the_blocks_in_pieces() {
         let p = block.process(&bits, &mut want).unwrap();
         assert_eq!(p.consumed, bits.len());
         let params = json!({
-            "order": order, "samples_per_symbol": 8, "differential": differential,
+            "constellation": cname(order), "samples_per_symbol": 8, "differential": differential,
             "variant": name
         });
         let mut tx = build(&single("psk_mod", "f32", bit_rate, params).to_string());
@@ -758,7 +760,7 @@ fn psk_variant_kinds_equal_the_blocks_in_pieces() {
         assert_eq!(sig, want, "psk_mod {order} {name}");
 
         let d = PskDemodConfig {
-            order,
+            constellation: c_of(order),
             symbol_rate_hz: 25_000.0,
             differential,
             variant,
@@ -781,7 +783,7 @@ fn psk_variant_kinds_equal_the_blocks_in_pieces() {
         want.truncate(p.produced);
         assert!(want.len() > 5900 * bps, "{order} {name}");
         let params = json!({
-            "order": order, "symbol_rate_hz": 25_000, "differential": differential,
+            "constellation": cname(order), "symbol_rate_hz": 25_000, "differential": differential,
             "variant": name
         });
         let mut rx = build(&single("psk_demod", "c32", 200_000, params).to_string());
@@ -799,5 +801,29 @@ fn psk_variant_kinds_equal_the_blocks_in_pieces() {
                 .all(|(a, b)| a.to_bits() == b.to_bits()),
             "psk_demod {order} {name}: pipeline differs from the block"
         );
+    }
+}
+
+/// The constellation of a numeric order of the tables of this file (2, 4, 8, 16 or 64).
+fn c_of(order: u32) -> SymbolMapConstellation {
+    match order {
+        2 => SymbolMapConstellation::Bpsk,
+        4 => SymbolMapConstellation::Qpsk,
+        8 => SymbolMapConstellation::Psk8,
+        16 => SymbolMapConstellation::Qam16,
+        64 => SymbolMapConstellation::Qam64,
+        other => unreachable!("no constellation of the order {other}"),
+    }
+}
+
+/// The constellation name of a numeric order of the tables of this file (2, 4, 8, 16 or 64).
+fn cname(order: u32) -> &'static str {
+    match order {
+        2 => "bpsk",
+        4 => "qpsk",
+        8 => "8psk",
+        16 => "qam16",
+        64 => "qam64",
+        other => unreachable!("no constellation of the order {other}"),
     }
 }

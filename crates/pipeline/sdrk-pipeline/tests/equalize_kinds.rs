@@ -31,6 +31,7 @@ use sdrk_testkit::Pcg32;
 use serde_json::{Value, json};
 
 use common::build;
+use sdrk_blocks::SymbolMapConstellation;
 
 /// Seed of the chunk plans and the random signals of M43 (test 6).
 const SEED: u64 = 595;
@@ -237,19 +238,19 @@ fn psk_demod_equalizer_taps_adds_equalize() {
     let raw = |v: Value| v.as_object().unwrap().clone();
     for (params, kernels) in [
         (
-            json!({ "order": 4, "symbol_rate_hz": 25_000, "equalizer_taps": 11 }),
+            json!({ "constellation": "qpsk", "symbol_rate_hz": 25_000, "equalizer_taps": 11 }),
             &["fir", "symbol_sync", "equalize", "costas"][..],
         ),
         (
-            json!({ "order": 4, "symbol_rate_hz": 25_000, "equalizer_taps": 0 }),
+            json!({ "constellation": "qpsk", "symbol_rate_hz": 25_000, "equalizer_taps": 0 }),
             &["fir", "symbol_sync", "costas"][..],
         ),
         (
-            json!({ "order": 4, "symbol_rate_hz": 25_000, "variant": "offset", "equalizer_taps": 7 }),
+            json!({ "constellation": "qpsk", "symbol_rate_hz": 25_000, "variant": "offset", "equalizer_taps": 7 }),
             &["fir", "symbol_sync", "rotate", "equalize"][..],
         ),
         (
-            json!({ "order": 4, "symbol_rate_hz": 25_000, "variant": "offset" }),
+            json!({ "constellation": "qpsk", "symbol_rate_hz": 25_000, "variant": "offset" }),
             &["fir", "symbol_sync", "rotate"][..],
         ),
     ] {
@@ -260,12 +261,12 @@ fn psk_demod_equalizer_taps_adds_equalize() {
         );
     }
     // cost and delay: 8 per weight and symbol, (taps - 1) / 2 symbols of 8 samples
-    for (order, taps, feedback) in [(2u64, 3u64, 0u64), (4, 11, 0), (8, 63, 0), (4, 15, 5)] {
+    for (order, taps, feedback) in [(2u32, 3u64, 0u64), (4, 11, 0), (8, 63, 0), (4, 15, 5)] {
         let report = validate(&single(
             "psk_demod",
             "c32",
             200_000,
-            json!({ "order": order, "symbol_rate_hz": 25_000, "equalizer_taps": taps,
+            json!({ "constellation": cname(order), "symbol_rate_hz": 25_000, "equalizer_taps": taps,
                     "equalizer_feedback_taps": feedback }),
         ));
         assert!(report.is_ok(), "{}", report.to_json());
@@ -319,7 +320,7 @@ fn psk_demod_equalizer_taps_adds_equalize() {
 #[test]
 fn psk_demod_with_equalizer_kind_equals_the_block() {
     let m = PskModConfig {
-        order: 4,
+        constellation: SymbolMapConstellation::Qpsk,
         samples_per_symbol: 8,
         ..PskModConfig::default()
     };
@@ -343,7 +344,7 @@ fn psk_demod_with_equalizer_kind_equals_the_block() {
         })
         .collect();
     let d = PskDemodConfig {
-        order: 4,
+        constellation: SymbolMapConstellation::Qpsk,
         symbol_rate_hz: 25_000.0,
         equalizer_taps: 11,
         equalizer_feedback_taps: 2,
@@ -360,7 +361,7 @@ fn psk_demod_with_equalizer_kind_equals_the_block() {
             "psk_demod",
             "c32",
             200_000,
-            json!({ "order": 4, "symbol_rate_hz": 25_000, "equalizer_taps": 11,
+            json!({ "constellation": "qpsk", "symbol_rate_hz": 25_000, "equalizer_taps": 11,
                     "equalizer_feedback_taps": 2 }),
         )
         .to_string(),
@@ -374,4 +375,16 @@ fn psk_demod_with_equalizer_kind_equals_the_block() {
         "psk_demod with the equalizer: pipeline differs from the block"
     );
     assert!(rx.set_param("n", "equalizer_taps", json!(15)).is_err());
+}
+
+/// The constellation name of a numeric order of the tables of this file (2, 4, 8, 16 or 64).
+fn cname(order: u32) -> &'static str {
+    match order {
+        2 => "bpsk",
+        4 => "qpsk",
+        8 => "8psk",
+        16 => "qam16",
+        64 => "qam64",
+        other => unreachable!("no constellation of the order {other}"),
+    }
 }

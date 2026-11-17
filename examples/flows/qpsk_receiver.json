@@ -31,8 +31,8 @@
       "kind": "psk_demod",
       "params": {
         "carrier_bw": 0.04,
+        "constellation": "qpsk",
         "max_offset": 0.1,
-        "order": 4,
         "symbol_rate_hz": 25000
       }
     },

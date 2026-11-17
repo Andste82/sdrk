@@ -48,6 +48,7 @@
 
 use num_complex::Complex64;
 use sdrk::Rate;
+use sdrk_blocks::SymbolMapConstellation;
 use sdrk_blocks::{
     Block, PSK8_GRAY, PskDemodBlock, PskDemodConfig, PskModBlock, PskModConfig, PskVariant,
 };
@@ -230,7 +231,7 @@ impl Mode {
 
     fn mod_config(self, sps: usize) -> PskModConfig {
         PskModConfig {
-            order: self.order(),
+            constellation: c_of(self.order()),
             samples_per_symbol: sps,
             differential: self.differential(),
             variant: self.variant(),
@@ -257,7 +258,7 @@ impl Receiver {
     fn new(mode: Mode, ebn0_db: f64, power: f64, seed: u64, budget: u64) -> Self {
         let bps = mode.bps();
         let cfg = PskDemodConfig {
-            order: mode.order(),
+            constellation: c_of(mode.order()),
             symbol_rate_hz: SYMBOL_RATE as f64,
             differential: mode.differential(),
             variant: mode.variant(),
@@ -633,7 +634,7 @@ fn oqpsk_corrects_constant_phases_and_acquires() {
         .map(|c| C32::new(c.re as f32, c.im as f32))
         .collect();
     let cfg = PskDemodConfig {
-        order: 4,
+        constellation: SymbolMapConstellation::Qpsk,
         symbol_rate_hz: SYMBOL_RATE as f64,
         variant: PskVariant::Offset,
         ..PskDemodConfig::default()
@@ -711,7 +712,7 @@ fn psk8_demod_locks_on_8psk_and_not_on_noise() {
     let mut locked = Vec::new();
     for order in [4, 8] {
         let cfg = PskDemodConfig {
-            order,
+            constellation: c_of(order),
             symbol_rate_hz: SYMBOL_RATE as f64,
             ..PskDemodConfig::default()
         };
@@ -744,7 +745,7 @@ fn psk8_demod_locks_on_8psk_and_not_on_noise() {
         .map(|x| C32::new(x.re * c - x.im * s, x.re * s + x.im * c))
         .collect();
     let cfg = PskDemodConfig {
-        order: 8,
+        constellation: SymbolMapConstellation::Psk8,
         symbol_rate_hz: SYMBOL_RATE as f64,
         ..PskDemodConfig::default()
     };
@@ -764,4 +765,16 @@ fn psk8_demod_locks_on_8psk_and_not_on_noise() {
     }
     eprintln!("order 8 on 8psk: locked at symbol {first:?}");
     assert!(rx.locked());
+}
+
+/// The constellation of a numeric order of the tables of this file (2, 4, 8, 16 or 64).
+fn c_of(order: u32) -> SymbolMapConstellation {
+    match order {
+        2 => SymbolMapConstellation::Bpsk,
+        4 => SymbolMapConstellation::Qpsk,
+        8 => SymbolMapConstellation::Psk8,
+        16 => SymbolMapConstellation::Qam16,
+        64 => SymbolMapConstellation::Qam64,
+        other => unreachable!("no constellation of the order {other}"),
+    }
 }

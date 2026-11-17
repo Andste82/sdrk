@@ -14,6 +14,7 @@
 )]
 
 use sdrk::{C32, Rate};
+use sdrk_blocks::SymbolMapConstellation;
 use sdrk_blocks::{
     Block, Error, FrameEncodeBlock, FrameEncodeConfig, FrameIdle, FrameWatch, Packet, ParamValue,
     QAM_FRAME_DECODE_PARAMS, QAM_FRAME_ENCODE_PARAMS, QamFrameDecodeBlock, QamFrameDecodeConfig,
@@ -145,7 +146,7 @@ fn qam_frame_encode_equals_the_pair() {
                 whitening,
             },
             qam: QamModConfig {
-                order,
+                constellation: c_of(order),
                 samples_per_symbol: sps,
                 ..QamModConfig::default()
             },
@@ -185,7 +186,7 @@ fn the_flat_parameters_go_through_the_param_maps() {
         ("preamble_bytes", ParamValue::I64(6)),
         ("idle", ParamValue::Choice(2)),
         ("whitening", ParamValue::Choice(1)),
-        ("order", ParamValue::I64(64)),
+        ("constellation", ParamValue::Choice(4)),
         ("samples_per_symbol", ParamValue::I64(5)),
         ("rolloff", ParamValue::F64(0.25)),
         ("span", ParamValue::I64(8)),
@@ -211,7 +212,7 @@ fn the_flat_parameters_go_through_the_param_maps() {
 
     let mut cfg = QamFrameDecodeConfig::default();
     for (name, value) in [
-        ("order", ParamValue::I64(64)),
+        ("constellation", ParamValue::Choice(4)),
         ("symbol_rate_hz", ParamValue::F64(1200.0)),
         ("rolloff", ParamValue::F64(0.25)),
         ("span", ParamValue::I64(8)),
@@ -226,7 +227,11 @@ fn the_flat_parameters_go_through_the_param_maps() {
         cfg.set(name, value).unwrap();
         assert_eq!(cfg.get(name).unwrap(), value, "{name}");
     }
-    assert!(QAM_FRAME_DECODE_PARAMS.path("frame_timeout").is_none());
+    // since M44.1.1 the frame watch is stage 2 of the map (D1805)
+    assert_eq!(
+        QAM_FRAME_DECODE_PARAMS.path("frame_timeout"),
+        Some("2.frame_timeout")
+    );
     assert_eq!(
         cfg.set("rotations", ParamValue::Choice(0)),
         Err(Error::UnknownParameter)
@@ -248,7 +253,7 @@ fn the_flat_parameters_go_through_the_param_maps() {
         (cfg.demod, cfg.decoder(), cfg.frame_timeout)
     );
     for name in [
-        "order",
+        "constellation",
         "equalizer_taps",
         "max_sync_errors",
         "whitening",
@@ -287,4 +292,16 @@ fn the_frame_watch_follows_the_frames() {
     let mut off = FrameWatch::new(0);
     off.frame_ok(10);
     assert_eq!(off.deadline(), None);
+}
+
+/// The constellation of a numeric order of the tables of this file (2, 4, 8, 16 or 64).
+fn c_of(order: u32) -> SymbolMapConstellation {
+    match order {
+        2 => SymbolMapConstellation::Bpsk,
+        4 => SymbolMapConstellation::Qpsk,
+        8 => SymbolMapConstellation::Psk8,
+        16 => SymbolMapConstellation::Qam16,
+        64 => SymbolMapConstellation::Qam64,
+        other => unreachable!("no constellation of the order {other}"),
+    }
 }

@@ -28,6 +28,7 @@
 
 use num_complex::Complex64;
 use sdrk::Rate;
+use sdrk_blocks::SymbolMapConstellation;
 use sdrk_blocks::{
     Block, FrameDecodeBlock, FrameIdle, Packet, QAM_FRAME_TIMEOUT, QAM_FRAME_WATCH_LAG,
     QamDemodBlock, QamFrameDecodeBlock, QamFrameDecodeConfig, QamFrameEncodeBlock,
@@ -82,7 +83,7 @@ fn transmit(order: u32) -> Sent {
             ..sdrk_blocks::FrameEncodeConfig::default()
         },
         qam: sdrk_blocks::QamModConfig {
-            order,
+            constellation: c_of(order),
             samples_per_symbol: SPS,
             ..sdrk_blocks::QamModConfig::default()
         },
@@ -148,7 +149,7 @@ fn config(order: u32, frame_timeout: usize) -> QamFrameDecodeConfig {
         frame_timeout,
         ..QamFrameDecodeConfig::default()
     };
-    cfg.demod.order = order;
+    cfg.demod.constellation = c_of(order);
     cfg.demod.symbol_rate_hz = SYMBOL_RATE as f64;
     cfg
 }
@@ -365,5 +366,17 @@ fn qam_frame_decode_is_chunk_invariant() {
         assert_eq!(got, want, "the packets of a cut plan");
         assert_eq!(rx.frame_watch().restarts(), whole.frame_watch().restarts());
         assert_eq!(rx.demodulator().restarts(), whole.demodulator().restarts());
+    }
+}
+
+/// The constellation of a numeric order of the tables of this file (2, 4, 8, 16 or 64).
+fn c_of(order: u32) -> SymbolMapConstellation {
+    match order {
+        2 => SymbolMapConstellation::Bpsk,
+        4 => SymbolMapConstellation::Qpsk,
+        8 => SymbolMapConstellation::Psk8,
+        16 => SymbolMapConstellation::Qam16,
+        64 => SymbolMapConstellation::Qam64,
+        other => unreachable!("no constellation of the order {other}"),
     }
 }

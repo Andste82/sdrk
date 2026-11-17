@@ -10,14 +10,16 @@ use super::frame_encode::{
     ENCODE_WHITENING_PARAM, FrameEncodeBlock, FrameEncodeConfig, IDLE_PARAM, PREAMBLE_BYTES_PARAM,
 };
 use super::qam_mod::{
-    MOD_ROLLOFF_PARAM, MOD_SPAN_PARAM, ORDER_PARAM, QAM_MOD_CHUNK, QamModBlock, QamModConfig,
-    SAMPLES_PER_SYMBOL_PARAM,
+    MOD_ROLLOFF_PARAM, MOD_SPAN_PARAM, QAM_CONSTELLATION_PARAM, QAM_MOD_CHUNK, QamModBlock,
+    QamModConfig, SAMPLES_PER_SYMBOL_PARAM,
 };
 use super::{head, head_mut, tail, tail_mut, unknown};
 use crate::block::{Block, BlockTiming, ParamValue};
 use crate::describe::{BlockDescription, PortDesc, PortType};
 use crate::error::{Error, Result};
-use crate::param_map::ParamMap;
+use crate::param_map::{
+    ParamMap, Stages, check_composite_param, composite_param, composite_set_param, stage_of,
+};
 use crate::ports::Packets;
 use crate::storage::{Plan, Storage};
 
@@ -27,7 +29,7 @@ pub const QAM_FRAME_ENCODE_PARAMS: ParamMap = ParamMap::new(&[
     ("preamble_bytes", "0.preamble_bytes"),
     ("idle", "0.idle"),
     ("whitening", "0.whitening"),
-    ("order", "1.order"),
+    ("constellation", "1.constellation"),
     ("samples_per_symbol", "1.samples_per_symbol"),
     ("rolloff", "1.rolloff"),
     ("span", "1.span"),
@@ -42,7 +44,7 @@ pub static DESCRIPTION: BlockDescription = BlockDescription {
         every packet is sent as one frame of the test framing (preamble_bytes bytes 0x55, the \
         sync word 0x1ACFFC1D, length, payload, CRC-16/CCITT-FALSE; whitening pn9 XORs length, \
         payload and CRC with the PN9 sequence), its bits are mapped to the 16-QAM or 64-QAM \
-        points of qam_mod (order 16 or 64, the first bit the most significant) and \
+        points of qam_mod (constellation qam16 or qam64, the first bit the most significant) and \
         interpolated by samples_per_symbol with the root-raised-cosine pulse (rolloff, span). \
         Between packets the block sends the idle signal of frame_encode (idle zero, preamble \
         or pn9; pn9 keeps the timing loop and the blind equalizer of the receiver training). \
@@ -66,7 +68,7 @@ pub static DESCRIPTION: BlockDescription = BlockDescription {
         PREAMBLE_BYTES_PARAM,
         IDLE_PARAM,
         ENCODE_WHITENING_PARAM,
-        ORDER_PARAM,
+        QAM_CONSTELLATION_PARAM,
         SAMPLES_PER_SYMBOL_PARAM,
         MOD_ROLLOFF_PARAM,
         MOD_SPAN_PARAM,
@@ -77,12 +79,13 @@ pub static DESCRIPTION: BlockDescription = BlockDescription {
 /// Configuration of [`QamFrameEncodeBlock`]: the configurations of its two stages.
 ///
 /// ```
-/// use sdrk_blocks::{ParamValue, QamFrameEncodeConfig};
+/// use sdrk_blocks::{ParamValue, QamFrameEncodeConfig, SymbolMapConstellation};
 /// let mut cfg = QamFrameEncodeConfig::default();
-/// cfg.set("order", ParamValue::I64(64))?;
+/// cfg.set("constellation", ParamValue::Choice(4))?; // qam64
 /// cfg.set("preamble_bytes", ParamValue::I64(8))?;
-/// assert_eq!((cfg.qam.order, cfg.frame.preamble_bytes), (64, 8));
-/// assert_eq!(cfg.get("order")?, ParamValue::I64(64));
+/// assert_eq!(cfg.qam.constellation, SymbolMapConstellation::Qam64);
+/// assert_eq!(cfg.frame.preamble_bytes, 8);
+/// assert_eq!(cfg.get("constellation")?, ParamValue::Choice(4));
 /// assert!(cfg.validate().is_ok());
 /// # Ok::<(), sdrk_blocks::Error>(())
 /// ```
@@ -90,7 +93,7 @@ pub static DESCRIPTION: BlockDescription = BlockDescription {
 pub struct QamFrameEncodeConfig {
     /// The framing (`preamble_bytes`, `idle`, `whitening`).
     pub frame: FrameEncodeConfig,
-    /// The modulator (`order`, `samples_per_symbol`, `rolloff`, `span`).
+    /// The modulator (`constellation`, `samples_per_symbol`, `rolloff`, `span`).
     pub qam: QamModConfig,
 }
 
@@ -107,17 +110,19 @@ impl QamFrameEncodeConfig {
     /// Sets a parameter by its flat name ([`QAM_FRAME_ENCODE_PARAMS`]); checks kind and range.
     ///
     /// # Errors
-    /// `UnknownParameter`, `WrongParamType`, `OutOfRange`; `InvalidParameter` for the orders
-    /// 17 to 63.
+    /// `UnknownParameter`, `WrongParamType`, `OutOfRange`; `InvalidParameter` for a
+    /// constellation other than `qam16` and `qam64`.
     pub fn set(&mut self, name: &str, value: ParamValue) -> Result<()> {
-        match QAM_FRAME_ENCODE_PARAMS
-            .path(name)
-            .and_then(|p| p.split_once('.'))
-        {
-            Some(("0", n)) => self.frame.set(n, value),
-            Some(("1", n)) => self.qam.set(n, value),
-            _ => unknown(),
+        let mut any = false;
+        for path in QAM_FRAME_ENCODE_PARAMS.paths(name) {
+            match path.split_once('.') {
+                Some(("0", n)) => self.frame.set(n, value)?,
+                Some(("1", n)) => self.qam.set(n, value)?,
+                _ => return unknown(),
+            }
+            any = true;
         }
+        if any { Ok(()) } else { unknown() }
     }
 
     /// Current value of a parameter by its flat name.
@@ -358,26 +363,48 @@ impl<S: Storage> Block for QamFrameEncodeBlock<S> {
         self.len = 0;
     }
 
-    fn set_param(&mut self, name: &str, _value: ParamValue) -> Result<()> {
-        match DESCRIPTION.param(name) {
-            Some(_) => Err(Error::ReadOnlyParameter),
-            None => unknown(),
-        }
+    fn set_param(&mut self, name: &str, value: ParamValue) -> Result<()> {
+        composite_set_param(self, name, value)
     }
 
     fn param(&self, name: &str) -> Result<ParamValue> {
-        match QAM_FRAME_ENCODE_PARAMS
-            .path(name)
-            .and_then(|p| p.split_once('.'))
-        {
-            Some(("0", n)) => self.enc.param(n),
-            Some(("1", n)) => self.qam.param(n),
-            _ => unknown(),
-        }
+        composite_param(self, name)
+    }
+
+    fn check_param(&self, name: &str, value: &ParamValue) -> Result<()> {
+        check_composite_param(self, name, value)
     }
 
     fn min_input(&self) -> usize {
         1
+    }
+}
+
+impl<S: Storage> Stages for QamFrameEncodeBlock<S> {
+    const PARAMS: ParamMap = QAM_FRAME_ENCODE_PARAMS;
+
+    fn stage_param(&self, path: &str) -> Result<ParamValue> {
+        match stage_of(&Self::PARAMS, path)? {
+            ("0", n) => self.enc.param(n),
+            ("1", n) => self.qam.param(n),
+            _ => unknown(),
+        }
+    }
+
+    fn check_stage_param(&self, path: &str, value: &ParamValue) -> Result<()> {
+        match stage_of(&Self::PARAMS, path)? {
+            ("0", n) => self.enc.check_param(n, value),
+            ("1", n) => self.qam.check_param(n, value),
+            _ => unknown(),
+        }
+    }
+
+    fn set_stage_param(&mut self, path: &str, value: ParamValue) -> Result<()> {
+        match stage_of(&Self::PARAMS, path)? {
+            ("0", n) => self.enc.set_param(n, value),
+            ("1", n) => self.qam.set_param(n, value),
+            _ => unknown(),
+        }
     }
 }
 

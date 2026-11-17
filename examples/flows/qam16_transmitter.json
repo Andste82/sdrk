@@ -31,8 +31,8 @@
     "tx": {
       "kind": "qam_frame_encode",
       "params": {
+        "constellation": "qam16",
         "idle": "pn9",
-        "order": 16,
         "preamble_bytes": 4,
         "rolloff": 0.35,
         "samples_per_symbol": 8,

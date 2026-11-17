@@ -17,9 +17,10 @@ use crate::error::{Error, Result};
 use crate::ports::StreamElem;
 use crate::storage::{Plan, Storage};
 
-/// The names of the `constellation` choice, in index order (`8psk` of M40.1 and `qam16`,
-/// `qam64` of M44 appended, so the indices of M38 and M39 stay).
-const CONSTELLATION_OPTIONS: &[&str] = &["real", "bpsk", "qpsk", "fsk4", "8psk", "qam16", "qam64"];
+/// The names of the `constellation` choice, in index order: the constellations of `symbol_map`,
+/// `costas` and `equalize` at their indices (the names and values of the `constellation` of every
+/// block, M44.1.1 §1), then the real alphabets `real` and `fsk4` that only `symbol_demap` has.
+const CONSTELLATION_OPTIONS: &[&str] = &["bpsk", "qpsk", "8psk", "qam16", "qam64", "real", "fsk4"];
 
 /// The Gray mapping of 8PSK (M40.1 §1): entry `g = b0 4 + b1 2 + b2` (bit 0 first, the most
 /// significant) is the symbol index `k` of the point `exp(j (2 pi k / 8 + pi / 8))`: `000 -> 0, 001
@@ -120,7 +121,7 @@ pub static DESCRIPTION: BlockDescription = BlockDescription {
             unit: Unit::None,
             kind: ParamKind::Choice {
                 options: CONSTELLATION_OPTIONS,
-                default: 1,
+                default: 0,
             },
             typical: "bpsk; real after an FSK discriminator, qpsk for QPSK, fsk4 for 4-FSK, \
                 8psk for 8PSK, qam16 and qam64 for QAM",
@@ -208,24 +209,24 @@ impl SymbolDemapConstellation {
 
     const fn index(self) -> u16 {
         match self {
-            Self::Real => 0,
-            Self::Bpsk => 1,
-            Self::Qpsk => 2,
-            Self::Fsk4 => 3,
-            Self::Psk8 => 4,
-            Self::Qam16 => 5,
-            Self::Qam64 => 6,
+            Self::Bpsk => 0,
+            Self::Qpsk => 1,
+            Self::Psk8 => 2,
+            Self::Qam16 => 3,
+            Self::Qam64 => 4,
+            Self::Real => 5,
+            Self::Fsk4 => 6,
         }
     }
 
     const fn from_index(i: u16) -> Self {
         match i {
-            0 => Self::Real,
-            2 => Self::Qpsk,
-            3 => Self::Fsk4,
-            4 => Self::Psk8,
-            5 => Self::Qam16,
-            6 => Self::Qam64,
+            1 => Self::Qpsk,
+            2 => Self::Psk8,
+            3 => Self::Qam16,
+            4 => Self::Qam64,
+            5 => Self::Real,
+            6 => Self::Fsk4,
             _ => Self::Bpsk,
         }
     }

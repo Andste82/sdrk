@@ -30,6 +30,7 @@ use std::path::PathBuf;
 
 use common::rate;
 use sdrk::{C32, CQ15};
+use sdrk_blocks::SymbolMapConstellation;
 use sdrk_blocks::{
     AddBlock, AddRealBlock, AdsbDecodeBlock, AdsbDecodeConfig, AdsbParseBlock, AdsbParseConfig,
     AfcBlock, AfcConfig, AgcBlock, AgcConfig, AmDemodBlock, AmDemodConfig, AmModBlock, AmModConfig,
@@ -433,15 +434,19 @@ fn config_defaults_match_the_descriptions() {
 }
 
 /// Every parameter of the description is known to the config: `get` finds it and `set` accepts
-/// its default or a value inside the range.
+/// its default or a value inside the range. `samples` names the value to take for a parameter
+/// whose range holds values the block refuses (the `constellation` of `psk_mod` and `psk_demod`
+/// is the choice of `symbol_map`, of which they take `bpsk`, `qpsk` and `8psk`; M44.1.1 §2).
 fn config_round_trip(
     kind: &str,
     get: impl Fn(&str) -> Result<ParamValue, Error>,
     set: impl Fn(&str, ParamValue) -> Result<(), Error>,
+    samples: &[(&str, ParamValue)],
 ) {
     let d = find(kind);
     for p in d.params {
-        let sample = match p.kind {
+        let given = samples.iter().find(|(n, _)| *n == p.name).map(|(_, v)| *v);
+        let sample = given.unwrap_or_else(|| match p.kind {
             ParamKind::F64 { min, max, .. } => ParamValue::F64(min + (max - min) / 3.0),
             // In i128: an unbounded parameter spans the whole i64 range.
             ParamKind::I64 { min, max, .. } => ParamValue::I64(
@@ -451,7 +456,7 @@ fn config_round_trip(
             ParamKind::Choice { options, .. } => ParamValue::Choice(options.len() as u16 - 1),
             ParamKind::Format => ParamValue::Format(sdrk_device::formats::CS16),
             _ => unreachable!(),
-        };
+        });
         set(p.name, sample).unwrap_or_else(|e| panic!("{kind}.{}: {e}", p.name));
         assert_eq!(get(p.name), Ok(sample), "{kind}.{}", p.name);
         // The wrong type and a value outside the range are rejected.
@@ -490,12 +495,16 @@ fn config_round_trip(
 }
 
 macro_rules! round_trip {
-    ($kind:literal, $cfg:ty) => {{
+    ($kind:literal, $cfg:ty) => {
+        round_trip!($kind, $cfg, &[])
+    };
+    ($kind:literal, $cfg:ty, $samples:expr) => {{
         let cell = std::cell::RefCell::new(<$cfg>::default());
         config_round_trip(
             $kind,
             |n| cell.borrow().get(n),
             |n, v| cell.borrow_mut().set(n, v),
+            $samples,
         );
     }};
 }
@@ -535,8 +544,10 @@ fn configs_accept_every_described_parameter() {
     round_trip!("fsk_demod", FskDemodConfig);
     round_trip!("afc", AfcConfig);
     round_trip!("costas", CostasConfig);
-    round_trip!("psk_mod", PskModConfig);
-    round_trip!("psk_demod", PskDemodConfig);
+    // 8psk, the last constellation of the PSK blocks
+    let psk8 = &[("constellation", ParamValue::Choice(2))];
+    round_trip!("psk_mod", PskModConfig, psk8);
+    round_trip!("psk_demod", PskDemodConfig, psk8);
     round_trip!("rds_demod", RdsDemodConfig);
     round_trip!("rds_decode", RdsDecodeConfig);
     round_trip!("hdlc_decode", HdlcDecodeConfig);
@@ -852,12 +863,12 @@ fn blocks_accept_and_report_every_described_parameter() {
         &mut CostasBlock::new(&CostasConfig::default(), r, &mut s).unwrap(),
     );
     let pm = PskModConfig {
-        order: 4,
+        constellation: SymbolMapConstellation::Qpsk,
         ..PskModConfig::default()
     };
     check_block_params("psk_mod", &mut PskModBlock::new(&pm, r, &mut s).unwrap());
     let pd = PskDemodConfig {
-        order: 4,
+        constellation: SymbolMapConstellation::Qpsk,
         symbol_rate_hz: 25_000.0,
         ..PskDemodConfig::default()
     };
@@ -966,7 +977,7 @@ fn blocks_accept_and_report_every_described_parameter() {
             .unwrap(),
     );
     let pd = PskDemodConfig {
-        order: 8,
+        constellation: SymbolMapConstellation::Psk8,
         symbol_rate_hz: 25_000.0,
         equalizer_taps: 15,
         equalizer_feedback_taps: 5,
@@ -1163,8 +1174,8 @@ fn the_symbol_kinds_describe_their_ports_and_parameters() {
     assert_eq!(
         slice.param("constellation").unwrap().kind,
         ParamKind::Choice {
-            options: &["real", "bpsk", "qpsk", "fsk4", "8psk", "qam16", "qam64"],
-            default: 1
+            options: &["bpsk", "qpsk", "8psk", "qam16", "qam64", "real", "fsk4"],
+            default: 0
         }
     );
     for word in [
@@ -1443,7 +1454,7 @@ fn the_psk_kinds_describe_their_ports_and_parameters() {
     assert_eq!(
         names,
         [
-            "order",
+            "constellation",
             "samples_per_symbol",
             "rolloff",
             "span",
@@ -1467,7 +1478,7 @@ fn the_psk_kinds_describe_their_ports_and_parameters() {
     assert_eq!(
         names,
         [
-            "order",
+            "constellation",
             "symbol_rate_hz",
             "rolloff",
             "span",
@@ -1483,14 +1494,15 @@ fn the_psk_kinds_describe_their_ports_and_parameters() {
     for p in m.params.iter().chain(d.params).chain(costas.params) {
         assert_eq!(p.mutability, Mutability::Build, "{}", p.name);
     }
-    // M40.1: the orders 2, 4 and 8, and the variant choice (last, build, default plain)
+    // M44.1.1: the constellation (the choice of symbol_map, default bpsk) replaced the orders
+    // 2, 4 and 8 of M40.1; the variant choice (last, build, default plain)
     for desc in [m, d] {
+        assert!(desc.param("order").is_none(), "{}", desc.kind);
         assert_eq!(
-            desc.param("order").unwrap().kind,
-            ParamKind::I64 {
-                min: 2,
-                max: 8,
-                default: Some(2)
+            desc.param("constellation").unwrap().kind,
+            ParamKind::Choice {
+                options: &["bpsk", "qpsk", "8psk", "qam16", "qam64"],
+                default: 0
             },
             "{}",
             desc.kind
@@ -1558,30 +1570,37 @@ fn the_psk_kinds_describe_their_ports_and_parameters() {
         })
     ));
     assert!(cfg.set("bits_per_symbol", ParamValue::I64(7)).is_err());
-    // the orders 3, 5, 6 and 7 lie inside the range of the description but are no orders
+    // qam16 and qam64 lie inside the choice but are no PSK constellations; the old name is
+    // gone
     for (kind, r) in [
         (
             "psk_mod",
-            PskModConfig::default().set("order", ParamValue::I64(6)),
+            PskModConfig::default().set("constellation", ParamValue::Choice(3)),
         ),
         (
             "psk_demod",
-            PskDemodConfig::default().set("order", ParamValue::I64(7)),
-        ),
-        (
-            "psk_mod",
-            PskModConfig::default().set("order", ParamValue::I64(3)),
-        ),
-        (
-            "psk_demod",
-            PskDemodConfig::default().set("order", ParamValue::I64(3)),
+            PskDemodConfig::default().set("constellation", ParamValue::Choice(4)),
         ),
     ] {
         assert!(
-            matches!(r, Err(Error::InvalidParameter { name: "order", .. })),
+            matches!(
+                r,
+                Err(Error::InvalidParameter {
+                    name: "constellation",
+                    ..
+                })
+            ),
             "{kind}: {r:?}"
         );
     }
+    assert_eq!(
+        PskModConfig::default().set("order", ParamValue::I64(4)),
+        Err(Error::UnknownParameter)
+    );
+    assert_eq!(
+        PskDemodConfig::default().set("order", ParamValue::I64(4)),
+        Err(Error::UnknownParameter)
+    );
     // costas takes the constellation as a choice (M44 §3) and has no order any more
     assert_eq!(
         CostasConfig::default().set("order", ParamValue::I64(4)),

@@ -37,6 +37,7 @@
 
 use num_complex::Complex64;
 use sdrk::Rate;
+use sdrk_blocks::SymbolMapConstellation;
 use sdrk_blocks::{Block, PskDemodBlock, PskDemodConfig, PskModBlock, PskModConfig};
 use sdrk_core::C32;
 use sdrk_proto::prbs::{Poly, Prbs};
@@ -178,7 +179,7 @@ impl Receiver {
     fn new(order: u32, differential: bool, ebn0_db: f64, power: f64, seed: u64) -> Self {
         let bps = if order == 4 { 2 } else { 1 };
         let cfg = PskDemodConfig {
-            order,
+            constellation: c_of(order),
             symbol_rate_hz: SYMBOL_RATE as f64,
             differential,
             ..PskDemodConfig::default()
@@ -282,7 +283,7 @@ fn ber_run(order: u32, differential: bool, seed: u64) -> Vec<(f64, f64, u64, u64
     let start = std::time::Instant::now();
     let bps = if order == 4 { 2usize } else { 1 };
     let m = PskModConfig {
-        order,
+        constellation: c_of(order),
         samples_per_symbol: SPS,
         differential,
         ..PskModConfig::default()
@@ -413,4 +414,16 @@ fn dbpsk_ber_within_1_db_of_theory() {
 fn dqpsk_ber_within_1_db_of_theory() {
     let r = ber_run(4, true, 556);
     check("dqpsk", &r, dqpsk_theory, one_db(dqpsk_theory));
+}
+
+/// The constellation of a numeric order of the tables of this file (2, 4, 8, 16 or 64).
+fn c_of(order: u32) -> SymbolMapConstellation {
+    match order {
+        2 => SymbolMapConstellation::Bpsk,
+        4 => SymbolMapConstellation::Qpsk,
+        8 => SymbolMapConstellation::Psk8,
+        16 => SymbolMapConstellation::Qam16,
+        64 => SymbolMapConstellation::Qam64,
+        other => unreachable!("no constellation of the order {other}"),
+    }
 }

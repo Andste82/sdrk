@@ -40,13 +40,13 @@ nodes:
   # while there is nothing to send (idle preamble would be one constant symbol, bits 0101 of
   # 0x55). Modulation: Gray mapping (the first two bits of a symbol select the in-phase level,
   # the last two the quadrature level), root-raised-cosine pulse with roll-off 0.35 over 10
-  # symbols, 8 samples per symbol (200 kHz). order 64 gives 64-QAM (six bits per symbol: set
-  # rate_hz to 150000 for 25 kBd).
+  # symbols, 8 samples per symbol (200 kHz). constellation qam64 gives 64-QAM (six bits per
+  # symbol: set rate_hz to 150000 for 25 kBd).
   tx:
     kind: qam_frame_encode
     params:
+      constellation: qam16
       idle: pn9
-      order: 16
       preamble_bytes: 4
       rolloff: 0.35
       samples_per_symbol: 8

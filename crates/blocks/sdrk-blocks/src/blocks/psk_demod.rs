@@ -13,14 +13,17 @@ use sdrk_core::num::flush_denormal;
 
 use super::costas::{
     DEFAULT_DAMPING, DEFAULT_LOOP_BW, DEFAULT_MAX_OFFSET, MAX_LOOP_BW, MAX_OFFSET_LIMIT,
-    MIN_LOOP_BW, check_f64, check_order, costas_constellation_of_order,
+    MIN_LOOP_BW, check_f64,
 };
 use super::equalize::{
     DEFAULT_CMA_SYMBOLS, DEFAULT_MU_CMA, DEFAULT_MU_DD, EQ_FEEDBACK_MAX, EQ_TAPS, EqualizeConfig,
-    constellation_of_order,
 };
-use super::psk_mod::{PskVariant, VARIANT_PARAM, bits_of_order, check_variant};
+use super::psk_mod::{
+    PSK_CONSTELLATION_PARAM, PskVariant, VARIANT_PARAM, check_psk, check_variant,
+    psk_constellation_of_value,
+};
 use super::symbol_demap::{psk8_bits, soft_bits};
+use super::symbol_map::SymbolMapConstellation;
 use super::symbol_sync::{SymbolSyncBlock, min_input as sync_min_input};
 use super::{HZ_LIMIT, check_count, head, head_mut, tail, tail_mut, unknown};
 use crate::block::{Block, BlockTiming, ParamValue};
@@ -71,8 +74,8 @@ pub static DESCRIPTION: BlockDescription = BlockDescription {
         loop is replaced by z_k = y_k conj(y_k-1) (y_-1 = 1). The symbols become soft bits as \
         symbol_demap does (BPSK re; QPSK re then im; 8PSK the max-log soft bits of symbol_demap \
         8psk): \
-        above 0 is a 1. The variant pi4 (order 4, differential) maps z_k back to the bits of \
-        pi/4-DQPSK: -im for bit 0, then -re for bit 1. The variant offset (order 4, not \
+        above 0 is a 1. The variant pi4 (qpsk, differential) maps z_k back to the bits of \
+        pi/4-DQPSK: -im for bit 0, then -re for bit 1. The variant offset (qpsk, not \
         differential, even samples per symbol) has its own carrier loop at the sample rate: \
         the matched filter output is derotated sample by sample with the phase and frequency \
         of the loop, then the in-phase part is delayed by half a symbol (which undoes the \
@@ -83,7 +86,7 @@ pub static DESCRIPTION: BlockDescription = BlockDescription {
         is not resolved: use frame_decode with rotations both or four or differential coding. The \
         output rate is the symbol rate times the bits per symbol and follows the clock of the \
         signal (variable ratio). With equalizer_taps above 0 an equalize stage (taps \
-        equalizer_taps, feedback_taps equalizer_feedback_taps, the constellation of order, \
+        equalizer_taps, feedback_taps equalizer_feedback_taps, the constellation, \
         mu_cma 0.05, mu_dd 0.02, 1000 CMA symbols, phase_bw carrier_bw) runs between \
         symbol_sync and costas and removes the inter-symbol interference of multipath and \
         filters; with differential it runs before the differential product in CMA only and \
@@ -101,18 +104,7 @@ pub static DESCRIPTION: BlockDescription = BlockDescription {
         description: "Soft bits, bits per symbol samples per symbol; above 0 is a 1.",
     }],
     params: &[
-        ParamDesc {
-            name: "order",
-            unit: Unit::None,
-            kind: ParamKind::I64 {
-                min: 2,
-                max: 8,
-                default: Some(2),
-            },
-            typical: "2 for BPSK, 4 for QPSK, 8 for 8PSK",
-            mutability: Mutability::Build,
-            description: "Order of the phase-shift keying: 2 (BPSK), 4 (QPSK) or 8 (8PSK).",
-        },
+        PSK_CONSTELLATION_PARAM,
         ParamDesc {
             name: "symbol_rate_hz",
             unit: Unit::Hz,
@@ -229,8 +221,12 @@ pub static DESCRIPTION: BlockDescription = BlockDescription {
 /// Configuration of [`PskDemodBlock`].
 ///
 /// ```
-/// use sdrk_blocks::PskDemodConfig;
-/// let cfg = PskDemodConfig { order: 4, symbol_rate_hz: 25_000.0, ..PskDemodConfig::default() };
+/// use sdrk_blocks::{PskDemodConfig, SymbolMapConstellation};
+/// let cfg = PskDemodConfig {
+///     constellation: SymbolMapConstellation::Qpsk,
+///     symbol_rate_hz: 25_000.0,
+///     ..PskDemodConfig::default()
+/// };
 /// assert_eq!(cfg.samples_per_symbol(sdrk::Rate::hz(200_000)?)?, 8);
 /// // 7.5 samples per symbol is not within 1 % of an integer
 /// assert!(cfg.validate(sdrk::Rate::hz(187_500)?).is_err());
@@ -238,8 +234,8 @@ pub static DESCRIPTION: BlockDescription = BlockDescription {
 /// ```
 #[derive(Debug, Clone, Copy, PartialEq)]
 pub struct PskDemodConfig {
-    /// Order: 2 (BPSK), 4 (QPSK) or 8 (8PSK).
-    pub order: u32,
+    /// The constellation: `Bpsk`, `Qpsk` or `Psk8`.
+    pub constellation: SymbolMapConstellation,
     /// Symbol rate in Hz (required).
     pub symbol_rate_hz: f64,
     /// Roll-off of the matched filter (0.05 to 1).
@@ -265,12 +261,12 @@ pub struct PskDemodConfig {
 }
 
 impl Default for PskDemodConfig {
-    /// Order 2, `symbol_rate_hz` 1200 (a placeholder: the pipeline requires the parameter),
+    /// `bpsk`, `symbol_rate_hz` 1200 (a placeholder: the pipeline requires the parameter),
     /// `rolloff` 0.35, `span` 10, coherent, `sync_bw` 0.01, `carrier_bw` 0.02, `max_offset`
     /// 0.05, variant plain, no equalizer.
     fn default() -> Self {
         Self {
-            order: 2,
+            constellation: SymbolMapConstellation::Bpsk,
             symbol_rate_hz: 1200.0,
             rolloff: 0.35,
             span: 10,
@@ -313,9 +309,9 @@ pub(super) fn check_equalizer_taps(taps: usize) -> Result<()> {
 }
 
 impl PskDemodConfig {
-    /// Bits per symbol: 1 for order 2, 2 for order 4, 3 for order 8.
+    /// Bits per symbol: 1 for `bpsk`, 2 for `qpsk`, 3 for `8psk`.
     pub fn bits_per_symbol(&self) -> usize {
-        bits_of_order(self.order)
+        self.constellation.bits_per_symbol()
     }
 
     /// The configuration of the timing loop.
@@ -331,14 +327,14 @@ impl PskDemodConfig {
     }
 
     /// The configuration of the equalizer (`None` for `equalizer_taps` 0): the forward and
-    /// feedback taps, the constellation of the order, the step sizes and CMA symbols of the
+    /// feedback taps, the constellation, the step sizes and CMA symbols of the
     /// `equalize` defaults and the phase tracker at `carrier_bw`; with `differential` CMA only
     /// (`cma_symbols` `u32::MAX`, D815) and without the tracker (`phase_bw` 0, D827).
     pub fn equalizer(&self) -> Option<EqualizeConfig> {
         (self.equalizer_taps != 0).then(|| EqualizeConfig {
             taps: self.equalizer_taps,
             feedback_taps: self.equalizer_feedback_taps,
-            constellation: constellation_of_order(self.order),
+            constellation: self.constellation.into(),
             mu_cma: DEFAULT_MU_CMA,
             mu_dd: DEFAULT_MU_DD,
             cma_symbols: if self.differential {
@@ -356,7 +352,7 @@ impl PskDemodConfig {
 
     /// The ranges, and the integer samples per symbol of the matched filter.
     fn derive(&self, rate_in: Rate) -> Result<usize> {
-        check_order(self.order)?;
+        check_psk(self.constellation)?;
         check_equalizer_taps(self.equalizer_taps)?;
         check_feedback_taps(self.equalizer_feedback_taps, self.equalizer_taps)?;
         check_f64(
@@ -395,7 +391,7 @@ impl PskDemodConfig {
         let n = n as usize;
         check_variant(
             self.variant,
-            self.order,
+            self.constellation,
             self.differential,
             n.is_multiple_of(2),
         )?;
@@ -413,12 +409,12 @@ impl PskDemodConfig {
     /// Checks the configuration against the input sample rate.
     ///
     /// # Errors
-    /// `OutOfRange` for a value outside its range; `InvalidParameter` for the orders 3, 5, 6
-    /// and 7, for a symbol rate whose samples per symbol are not within 1 % of an integer from
+    /// `OutOfRange` for a value outside its range; `InvalidParameter` for `qam16` and `qam64`,
+    /// for a symbol rate whose samples per symbol are not within 1 % of an integer from
     /// 2 to 1024 or are below 2 (the pipeline reports it as `rate_unsupported` with the hint to
     /// resample), for an `equalizer_taps` of 1 or an even count, and for a `variant` that does
-    /// not fit (`pi4` without order 4 and
-    /// `differential`, `offset` without order 4, with `differential` or with an odd rounded
+    /// not fit (`pi4` without `qpsk` and
+    /// `differential`, `offset` without `qpsk`, with `differential` or with an odd rounded
     /// number of samples per symbol; the pipeline reports it as `invalid_value`).
     pub fn validate(&self, rate_in: Rate) -> Result<()> {
         self.derive(rate_in).map(|_| ())
@@ -428,17 +424,13 @@ impl PskDemodConfig {
     /// the parameters is checked by [`PskDemodConfig::validate`]).
     ///
     /// # Errors
-    /// `UnknownParameter`, `WrongParamType`, `OutOfRange`; `InvalidParameter` for the orders
-    /// 3, 5, 6 and 7 and for an `equalizer_taps` of 1 or an even count.
+    /// `UnknownParameter`, `WrongParamType`, `OutOfRange`; `InvalidParameter` for `qam16` and
+    /// `qam64` and for an `equalizer_taps` of 1 or an even count.
     pub fn set(&mut self, name: &str, value: ParamValue) -> Result<()> {
         let p = DESCRIPTION.param(name).ok_or(Error::UnknownParameter)?;
         p.check(&value)?;
         match p.name {
-            "order" => {
-                let o = u32::try_from(value.as_i64()?).unwrap_or(0);
-                check_order(o)?;
-                self.order = o;
-            }
+            "constellation" => self.constellation = psk_constellation_of_value(&value)?,
             "symbol_rate_hz" => self.symbol_rate_hz = value.as_f64()?,
             "rolloff" => self.rolloff = value.as_f64()?,
             "span" => self.span = value.as_usize()?,
@@ -464,7 +456,7 @@ impl PskDemodConfig {
     /// `UnknownParameter`.
     pub fn get(&self, name: &str) -> Result<ParamValue> {
         match name {
-            "order" => Ok(ParamValue::I64(i64::from(self.order))),
+            "constellation" => Ok(ParamValue::Choice(self.constellation.index())),
             "symbol_rate_hz" => Ok(ParamValue::F64(self.symbol_rate_hz)),
             "rolloff" => Ok(ParamValue::F64(self.rolloff)),
             "span" => Ok(ParamValue::I64(self.span as i64)),
@@ -486,7 +478,7 @@ impl PskDemodConfig {
 /// Per piece of at most [`PSK_DEMOD_CHUNK`] input samples: the kernel `fir` (matched filter,
 /// taps `rrc(rolloff, n, span) / sqrt(n)` as `f32` with `n` the rounded samples per symbol),
 /// the kernel `symbol_sync` (Gardner at the exact `fs / symbol_rate_hz`), then the kernel
-/// `costas` of the order (coherent) or the differential product `z_k = y_k conj(y_(k-1))`
+/// `costas` of the constellation (coherent) or the differential product `z_k = y_k conj(y_(k-1))`
 /// with `y_(-1) = 1` (`f32`: `(y.re p.re + y.im p.im, y.im p.re - y.re p.im)`), and the
 /// soft bits of `symbol_demap` (scale 1: BPSK `re`, QPSK `re` then `im`, 8PSK the max-log bits of
 /// `8psk`; the variant `pi4` gives `-im` then `-re`). The variant `offset` replaces `costas` by a carrier loop at the sample
@@ -505,7 +497,7 @@ impl PskDemodConfig {
 /// (`f` = `equalizer_feedback_taps`).
 ///
 /// With `equalizer_taps` above 0 (M43 §3 as amended, D825) the kernel `equalize` (the
-/// constellation of the order, `equalizer_feedback_taps` feedback taps, `mu_cma` 0.05, `mu_dd`
+/// constellation, `equalizer_feedback_taps` feedback taps, `mu_cma` 0.05, `mu_dd`
 /// 0.02, 1000 CMA symbols, its phase tracker at `carrier_bw`) runs on the symbols of
 /// `symbol_sync` before `costas`; for `offset` after its loop; with `differential` before the
 /// differential product with `cma_symbols` `u32::MAX` (CMA only) and `phase_bw` 0. It adds
@@ -517,8 +509,9 @@ impl PskDemodConfig {
 ///     ArenaStorage, Block, PskDemodBlock, PskDemodConfig, PskModBlock, PskModConfig,
 /// };
 /// let rate = Rate::hz(4000)?; // 1000 symbols per second, 4 samples per symbol
-/// let tx = PskModConfig { order: 4, samples_per_symbol: 4, ..PskModConfig::default() };
-/// let rx = PskDemodConfig { order: 4, symbol_rate_hz: 1000.0, differential: false, ..PskDemodConfig::default() };
+/// let qpsk = sdrk_blocks::SymbolMapConstellation::Qpsk;
+/// let tx = PskModConfig { constellation: qpsk, samples_per_symbol: 4, ..PskModConfig::default() };
+/// let rx = PskDemodConfig { constellation: qpsk, symbol_rate_hz: 1000.0, ..PskDemodConfig::default() };
 /// let mut mem = vec![0u8; 1 << 16];
 /// let mut arena = ArenaStorage::new(&mut mem);
 /// let mut m = PskModBlock::new(&tx, Rate::hz(2000)?, &mut arena)?;
@@ -613,7 +606,7 @@ impl<S: Storage> PskDemodBlock<S> {
         };
         let (ratio, sync) = timing_loop(config, rate_in, bps, storage)?;
         let costas = CostasState::new(
-            costas_constellation_of_order(config.order),
+            config.constellation.into(),
             config.carrier_bw,
             DEFAULT_DAMPING,
             config.max_offset,
@@ -712,7 +705,7 @@ impl<S: Storage> PskDemodBlock<S> {
         self.sync.sps_estimate()
     }
 
-    /// The soft-bit map of the order and the variant.
+    /// The soft-bit map of the constellation and the variant.
     fn map(&self) -> SoftMap {
         match (self.bps, self.config.variant) {
             (3, _) => SoftMap::Psk8,

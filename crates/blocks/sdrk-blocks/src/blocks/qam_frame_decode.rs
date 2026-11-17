@@ -14,7 +14,7 @@ use super::qam_demod::{
     CARRIER_BW_PARAM, DEMOD_ROLLOFF_PARAM, DEMOD_SPAN_PARAM, EQUALIZER_TAPS_PARAM, QAM_DEMOD_CHUNK,
     QamDemodBlock, QamDemodConfig, SYMBOL_RATE_PARAM, SYNC_BW_PARAM,
 };
-use super::qam_mod::ORDER_PARAM;
+use super::qam_mod::QAM_CONSTELLATION_PARAM;
 use super::{check_count, head, head_mut, tail, tail_mut, unknown};
 use crate::block::{Block, BlockTiming, ParamValue};
 use crate::describe::{
@@ -22,7 +22,10 @@ use crate::describe::{
 };
 use crate::error::{Error, Result};
 use crate::lock_watch::FrameWatch;
-use crate::param_map::ParamMap;
+use crate::param_map::{
+    ParamMap, Stages, check_build_param, check_composite_param, composite_param,
+    composite_set_param, stage_of,
+};
 use crate::ports::Packets;
 use crate::storage::{Plan, Storage};
 
@@ -41,7 +44,7 @@ const MAX_FRAME_TIMEOUT: usize = 1 << 20;
 pub const QAM_FRAME_WATCH_LAG: u64 = QAM_DEMOD_CHUNK as u64;
 
 /// The `frame_timeout` parameter.
-const FRAME_TIMEOUT_PARAM: ParamDesc = ParamDesc {
+pub(crate) const FRAME_TIMEOUT_PARAM: ParamDesc = ParamDesc {
     name: "frame_timeout",
     unit: Unit::None,
     kind: ParamKind::I64 {
@@ -59,9 +62,10 @@ const FRAME_TIMEOUT_PARAM: ParamDesc = ParamDesc {
 
 /// The flat parameter names of `qam_frame_decode` and the stages they stand for: `0` is
 /// `qam_demod`, `1` is `frame_decode` (`rotations` is `four` and `bits_per_symbol` that of the
-/// order, fixed by the composite); `frame_timeout` belongs to the composite.
+/// constellation, fixed by the composite; `frame_decode` has no `constellation`, open item
+/// I44.1.1-2), `2` the frame watch (`FrameWatch`, a crate-internal building block).
 pub const QAM_FRAME_DECODE_PARAMS: ParamMap = ParamMap::new(&[
-    ("order", "0.order"),
+    ("constellation", "0.constellation"),
     ("symbol_rate_hz", "0.symbol_rate_hz"),
     ("rolloff", "0.rolloff"),
     ("span", "0.span"),
@@ -71,6 +75,7 @@ pub const QAM_FRAME_DECODE_PARAMS: ParamMap = ParamMap::new(&[
     ("max_sync_errors", "1.max_sync_errors"),
     ("emit_bad", "1.emit_bad"),
     ("whitening", "1.whitening"),
+    ("frame_timeout", "2.frame_timeout"),
 ]);
 
 /// Description of the `qam_frame_decode` block.
@@ -80,7 +85,7 @@ pub static DESCRIPTION: BlockDescription = BlockDescription {
         watch at frame level.",
     details: "The receive side of qam_frame_encode, a composite of qam_demod (matched filter, \
         symbol timing, frequency acquisition, equalizer, carrier loop and soft bits, with its \
-        parameters) and frame_decode with rotations four and bits_per_symbol of the order (4 or \
+        parameters) and frame_decode with rotations four and bits_per_symbol of the constellation (4 or \
         6), which resolves the 90 degree ambiguity of the square constellation and reports the \
         quarter turns in bits 16 and 17 of the packet flags (max_sync_errors, emit_bad and \
         whitening as frame_decode). The watch at frame level: after a first frame with CRC_OK \
@@ -106,7 +111,7 @@ pub static DESCRIPTION: BlockDescription = BlockDescription {
             the frames whose CRC does not match.",
     }],
     params: &[
-        ORDER_PARAM,
+        QAM_CONSTELLATION_PARAM,
         SYMBOL_RATE_PARAM,
         DEMOD_ROLLOFF_PARAM,
         DEMOD_SPAN_PARAM,
@@ -140,7 +145,7 @@ pub struct QamFrameDecodeConfig {
     /// The demodulator.
     pub demod: QamDemodConfig,
     /// The decoder: `max_sync_errors`, `emit_bad` and `whitening` (`rotations` and
-    /// `bits_per_symbol` are replaced by `four` and the bits per symbol of the order).
+    /// `bits_per_symbol` are replaced by `four` and the bits per symbol of the constellation).
     pub frame: FrameDecodeConfig,
     /// Symbols without a frame with `CRC_OK` after which the demodulator starts again (0 to
     /// 1048576; 0 = off).
@@ -159,7 +164,7 @@ impl Default for QamFrameDecodeConfig {
 }
 
 impl QamFrameDecodeConfig {
-    /// The configuration of the decoder: `rotations` `four`, `bits_per_symbol` of the order.
+    /// The configuration of the decoder: `rotations` `four`, `bits_per_symbol` of the constellation.
     pub fn decoder(&self) -> FrameDecodeConfig {
         FrameDecodeConfig {
             rotations: FrameRotations::Four,
@@ -179,26 +184,27 @@ impl QamFrameDecodeConfig {
         check_count("frame_timeout", self.frame_timeout, 0, MAX_FRAME_TIMEOUT)
     }
 
-    /// Sets a parameter by its flat name ([`QAM_FRAME_DECODE_PARAMS`] and `frame_timeout`);
+    /// Sets a parameter by its flat name ([`QAM_FRAME_DECODE_PARAMS`]);
     /// checks kind and range.
     ///
     /// # Errors
     /// `UnknownParameter`, `WrongParamType`, `OutOfRange`; `InvalidParameter` as
     /// [`QamDemodConfig::set`].
     pub fn set(&mut self, name: &str, value: ParamValue) -> Result<()> {
-        if name == FRAME_TIMEOUT_PARAM.name {
-            FRAME_TIMEOUT_PARAM.check(&value)?;
-            self.frame_timeout = value.as_usize()?;
-            return Ok(());
+        let mut any = false;
+        for path in QAM_FRAME_DECODE_PARAMS.paths(name) {
+            match path.split_once('.') {
+                Some(("0", n)) => self.demod.set(n, value)?,
+                Some(("1", n)) => self.frame.set(n, value)?,
+                Some(("2", _)) => {
+                    FRAME_TIMEOUT_PARAM.check(&value)?;
+                    self.frame_timeout = value.as_usize()?;
+                }
+                _ => return unknown(),
+            }
+            any = true;
         }
-        match QAM_FRAME_DECODE_PARAMS
-            .path(name)
-            .and_then(|p| p.split_once('.'))
-        {
-            Some(("0", n)) => self.demod.set(n, value),
-            Some(("1", n)) => self.frame.set(n, value),
-            _ => unknown(),
-        }
+        if any { Ok(()) } else { unknown() }
     }
 
     /// Current value of a parameter by its flat name.
@@ -206,15 +212,13 @@ impl QamFrameDecodeConfig {
     /// # Errors
     /// `UnknownParameter`.
     pub fn get(&self, name: &str) -> Result<ParamValue> {
-        if name == FRAME_TIMEOUT_PARAM.name {
-            return Ok(ParamValue::I64(self.frame_timeout as i64));
-        }
         match QAM_FRAME_DECODE_PARAMS
             .path(name)
             .and_then(|p| p.split_once('.'))
         {
             Some(("0", n)) => self.demod.get(n),
             Some(("1", n)) => self.frame.get(n),
+            Some(("2", _)) => Ok(ParamValue::I64(self.frame_timeout as i64)),
             _ => unknown(),
         }
     }
@@ -462,25 +466,16 @@ impl<S: Storage> Block for QamFrameDecodeBlock<S> {
         self.watch.reset();
     }
 
-    fn set_param(&mut self, name: &str, _value: ParamValue) -> Result<()> {
-        match DESCRIPTION.param(name) {
-            Some(_) => Err(Error::ReadOnlyParameter),
-            None => unknown(),
-        }
+    fn set_param(&mut self, name: &str, value: ParamValue) -> Result<()> {
+        composite_set_param(self, name, value)
     }
 
     fn param(&self, name: &str) -> Result<ParamValue> {
-        if name == FRAME_TIMEOUT_PARAM.name {
-            return Ok(ParamValue::I64(i64::from(self.watch.timeout())));
-        }
-        match QAM_FRAME_DECODE_PARAMS
-            .path(name)
-            .and_then(|p| p.split_once('.'))
-        {
-            Some(("0", n)) => self.demod.param(n),
-            Some(("1", n)) => self.decode.param(n),
-            _ => unknown(),
-        }
+        composite_param(self, name)
+    }
+
+    fn check_param(&self, name: &str, value: &ParamValue) -> Result<()> {
+        check_composite_param(self, name, value)
     }
 
     fn min_input(&self) -> usize {
@@ -489,3 +484,34 @@ impl<S: Storage> Block for QamFrameDecodeBlock<S> {
 }
 
 const _: () = assert!(QAM_DEMOD_CHUNK * 6 <= u16::MAX as usize);
+
+impl<S: Storage> Stages for QamFrameDecodeBlock<S> {
+    const PARAMS: ParamMap = QAM_FRAME_DECODE_PARAMS;
+
+    fn stage_param(&self, path: &str) -> Result<ParamValue> {
+        match stage_of(&Self::PARAMS, path)? {
+            ("0", n) => self.demod.param(n),
+            ("1", n) => self.decode.param(n),
+            ("2", _) => Ok(ParamValue::I64(i64::from(self.watch.timeout()))),
+            _ => unknown(),
+        }
+    }
+
+    fn check_stage_param(&self, path: &str, value: &ParamValue) -> Result<()> {
+        match stage_of(&Self::PARAMS, path)? {
+            ("0", n) => self.demod.check_param(n, value),
+            ("1", n) => self.decode.check_param(n, value),
+            ("2", _) => check_build_param(&FRAME_TIMEOUT_PARAM, value),
+            _ => unknown(),
+        }
+    }
+
+    fn set_stage_param(&mut self, path: &str, value: ParamValue) -> Result<()> {
+        match stage_of(&Self::PARAMS, path)? {
+            ("0", n) => self.demod.set_param(n, value),
+            ("1", n) => self.decode.set_param(n, value),
+            ("2", _) => Err(Error::ReadOnlyParameter),
+            _ => unknown(),
+        }
+    }
+}

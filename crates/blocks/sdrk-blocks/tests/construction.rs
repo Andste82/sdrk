@@ -334,7 +334,7 @@ fn psk_blocks_storage_is_exact() {
         (4, 64, 32, false, PskVariant::Offset),
     ] {
         let cfg = PskModConfig {
-            order,
+            constellation: c_of(order),
             samples_per_symbol: sps,
             span,
             differential,
@@ -356,7 +356,7 @@ fn psk_blocks_storage_is_exact() {
         (4, 50.0, 51_200, 4, false, PskVariant::Offset),
     ] {
         let cfg = PskDemodConfig {
-            order,
+            constellation: c_of(order),
             symbol_rate_hz,
             span,
             differential,
@@ -410,7 +410,7 @@ fn psk_blocks_storage_is_exact() {
     // M44: qam_mod and qam_demod (with and without the equalizer)
     for (order, sps, span) in [(16, 8, 10), (64, 2, 4), (16, 64, 32)] {
         let cfg = QamModConfig {
-            order,
+            constellation: c_of(order),
             samples_per_symbol: sps,
             span,
             ..QamModConfig::default()
@@ -427,7 +427,7 @@ fn psk_blocks_storage_is_exact() {
         (64, 50.0, 51_200, 4, 63),
     ] {
         let cfg = QamDemodConfig {
-            order,
+            constellation: c_of(order),
             symbol_rate_hz,
             span,
             equalizer_taps,
@@ -442,7 +442,7 @@ fn psk_blocks_storage_is_exact() {
     // M44.1 §7: the composites qam_frame_encode and qam_frame_decode
     for (order, sps) in [(16usize, 8usize), (64, 4)] {
         let mut cfg = QamFrameEncodeConfig::default();
-        cfg.qam.order = order as u32;
+        cfg.qam.constellation = c_of(order as u32);
         cfg.qam.samples_per_symbol = sps;
         let r = rate(100_000);
         check_exact_storage(
@@ -452,7 +452,7 @@ fn psk_blocks_storage_is_exact() {
     }
     for (order, equalizer_taps) in [(16u32, 15usize), (64, 0)] {
         let mut cfg = QamFrameDecodeConfig::default();
-        cfg.demod.order = order;
+        cfg.demod.constellation = c_of(order);
         cfg.demod.symbol_rate_hz = 25_000.0;
         cfg.demod.equalizer_taps = equalizer_taps;
         let r = rate(200_000);
@@ -924,4 +924,16 @@ fn public_types_are_send() {
     }
     is_frame::<SpectrumBlock<CQ15, A<'static>>>();
     let _ = Rate::hz(1);
+}
+
+/// The constellation of a numeric order of the tables of this file (2, 4, 8, 16 or 64).
+fn c_of(order: u32) -> SymbolMapConstellation {
+    match order {
+        2 => SymbolMapConstellation::Bpsk,
+        4 => SymbolMapConstellation::Qpsk,
+        8 => SymbolMapConstellation::Psk8,
+        16 => SymbolMapConstellation::Qam16,
+        64 => SymbolMapConstellation::Qam64,
+        other => unreachable!("no constellation of the order {other}"),
+    }
 }

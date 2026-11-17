@@ -25,10 +25,10 @@
     "rx": {
       "kind": "qam_frame_decode",
       "params": {
+        "constellation": "qam16",
         "equalizer_taps": 15,
         "frame_timeout": 16384,
         "max_sync_errors": 2,
-        "order": 16,
         "symbol_rate_hz": 25000,
         "sync_bw": 0.002
       }

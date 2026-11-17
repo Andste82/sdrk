@@ -8,7 +8,10 @@ use sdrk::{Delay, Progress, Rate, Ratio, RatioKind};
 use sdrk_core::C32;
 use sdrk_core::kernels::constellation::Qam;
 
-use super::symbol_demap::{C8, PSK8_GRAY, S8};
+use sdrk_core::kernels::costas::CostasConstellation;
+use sdrk_core::kernels::equalize::EqConstellation;
+
+use super::symbol_demap::{C8, PSK8_GRAY, S8, SymbolDemapConstellation};
 use super::unknown;
 use crate::block::{Block, BlockTiming, ParamValue};
 use crate::describe::{
@@ -20,8 +23,10 @@ use crate::storage::{Plan, Storage};
 /// `1 / sqrt(2)` rounded once to `f32`.
 const H: f32 = core::f32::consts::FRAC_1_SQRT_2;
 
-/// The names of the `constellation` choice, in index order (the names of `symbol_demap`).
-const CONSTELLATION_OPTIONS: &[&str] = &["bpsk", "qpsk", "8psk", "qam16", "qam64"];
+/// The names of the `constellation` choice, in index order: the same names at the same indices
+/// in `costas`, `equalize`, `symbol_demap` and the `constellation` of the QAM and PSK composites
+/// (M44.1.1 §1).
+pub(crate) const CONSTELLATION_OPTIONS: &[&str] = &["bpsk", "qpsk", "8psk", "qam16", "qam64"];
 
 /// The names of the `variant` choice, in index order.
 const VARIANT_OPTIONS: &[&str] = &["plain", "pi4"];
@@ -137,7 +142,7 @@ impl SymbolMapConstellation {
         matches!(self, Self::Bpsk | Self::Qpsk | Self::Psk8)
     }
 
-    const fn index(self) -> u16 {
+    pub(crate) const fn index(self) -> u16 {
         match self {
             Self::Bpsk => 0,
             Self::Qpsk => 1,
@@ -147,13 +152,52 @@ impl SymbolMapConstellation {
         }
     }
 
-    const fn from_index(i: u16) -> Self {
+    pub(crate) const fn from_index(i: u16) -> Self {
         match i {
             1 => Self::Qpsk,
             2 => Self::Psk8,
             3 => Self::Qam16,
             4 => Self::Qam64,
             _ => Self::Bpsk,
+        }
+    }
+}
+
+/// The same constellation in the carrier loop (`costas`).
+impl From<SymbolMapConstellation> for CostasConstellation {
+    fn from(c: SymbolMapConstellation) -> Self {
+        match c {
+            SymbolMapConstellation::Bpsk => Self::Bpsk,
+            SymbolMapConstellation::Qpsk => Self::Qpsk,
+            SymbolMapConstellation::Psk8 => Self::Psk8,
+            SymbolMapConstellation::Qam16 => Self::Qam16,
+            SymbolMapConstellation::Qam64 => Self::Qam64,
+        }
+    }
+}
+
+/// The same constellation in the equalizer (`equalize`).
+impl From<SymbolMapConstellation> for EqConstellation {
+    fn from(c: SymbolMapConstellation) -> Self {
+        match c {
+            SymbolMapConstellation::Bpsk => Self::Bpsk,
+            SymbolMapConstellation::Qpsk => Self::Qpsk,
+            SymbolMapConstellation::Psk8 => Self::Psk8,
+            SymbolMapConstellation::Qam16 => Self::Qam16,
+            SymbolMapConstellation::Qam64 => Self::Qam64,
+        }
+    }
+}
+
+/// The same constellation in the soft bits (`symbol_demap`).
+impl From<SymbolMapConstellation> for SymbolDemapConstellation {
+    fn from(c: SymbolMapConstellation) -> Self {
+        match c {
+            SymbolMapConstellation::Bpsk => Self::Bpsk,
+            SymbolMapConstellation::Qpsk => Self::Qpsk,
+            SymbolMapConstellation::Psk8 => Self::Psk8,
+            SymbolMapConstellation::Qam16 => Self::Qam16,
+            SymbolMapConstellation::Qam64 => Self::Qam64,
         }
     }
 }

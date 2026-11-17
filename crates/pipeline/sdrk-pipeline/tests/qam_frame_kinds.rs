@@ -68,24 +68,28 @@ fn the_kinds_are_registered_with_the_kernels_of_their_parts() {
 #[test]
 fn qam_frame_encode_plans_as_the_pair() {
     let report = validate(&encoder(
-        json!({ "order": 16, "samples_per_symbol": 8, "idle": "pn9", "preamble_bytes": 4 }),
+        json!({ "constellation": "qam16", "samples_per_symbol": 8, "idle": "pn9", "preamble_bytes": 4 }),
     ));
     assert!(report.is_ok(), "{}", report.to_json());
     let node = &report.nodes[0];
     assert_eq!(node.rate_out, Rate::hz(200_000).unwrap());
     // `frame_encode` 1 and `qam_mod` 4 span per bit
     assert_eq!(report.cost_per_input_sample, 41.0);
-    let report = validate(&encoder(json!({ "order": 64, "samples_per_symbol": 4 })));
+    let report = validate(&encoder(
+        json!({ "constellation": "qam64", "samples_per_symbol": 4 }),
+    ));
     assert!(report.is_ok(), "{}", report.to_json());
     assert!((report.nodes[0].rate_out.as_f64() - 400_000.0 / 6.0).abs() < 1e-6);
     // required, invalid values and the input type
     let (p, code) = first_error(&encoder(json!({})));
     assert_eq!(p, "nodes.n.params.samples_per_symbol");
     assert_eq!(code, DiagCode::MissingParam);
-    let (p, code) = first_error(&encoder(json!({ "order": 32, "samples_per_symbol": 8 })));
+    let (p, code) = first_error(&encoder(
+        json!({ "constellation": "8psk", "samples_per_symbol": 8 }),
+    ));
     assert_eq!(
         (p.as_str(), code),
-        ("nodes.n.params.order", DiagCode::InvalidValue)
+        ("nodes.n.params.constellation", DiagCode::InvalidValue)
     );
     let (p, _) = first_error(&encoder(
         json!({ "preamble_bytes": 33, "samples_per_symbol": 8 }),
@@ -99,7 +103,8 @@ fn qam_frame_encode_plans_as_the_pair() {
 
 #[test]
 fn qam_frame_decode_plans_as_the_pair() {
-    let params = json!({ "order": 16, "symbol_rate_hz": 25_000, "equalizer_taps": 15 });
+    let params =
+        json!({ "constellation": "qam16", "symbol_rate_hz": 25_000, "equalizer_taps": 15 });
     let report = validate(&decoder("c32", params.clone()));
     assert!(report.is_ok(), "{}", report.to_json());
     let mut pair = decoder("c32", json!({}));
@@ -149,7 +154,7 @@ fn qam_frame_decode_plans_as_the_pair() {
 
 #[test]
 fn a_push_flow_of_the_two_composites_delivers_its_packets() {
-    let params = json!({ "order": 16, "samples_per_symbol": 8, "idle": "pn9" });
+    let params = json!({ "constellation": "qam16", "samples_per_symbol": 8, "idle": "pn9" });
     let mut tx = build(&encoder(params).to_string());
     let mut cfg = QamFrameEncodeConfig::default();
     cfg.frame.idle = FrameIdle::Pn9;
@@ -191,7 +196,10 @@ fn a_push_flow_of_the_two_composites_delivers_its_packets() {
     // idle symbols that carry the last frame out of the pulse filter
     let q = block.process(&[], &mut buf[..8 * 400]).unwrap();
     signal.extend_from_slice(&buf[..q.produced]);
-    let rx = decoder("c32", json!({ "order": 16, "symbol_rate_hz": 25_000 }));
+    let rx = decoder(
+        "c32",
+        json!({ "constellation": "qam16", "symbol_rate_hz": 25_000 }),
+    );
     let mut rx = build(&rx.to_string());
     for piece in signal.chunks(4096) {
         rx.push("in", InputData::C32(piece)).unwrap();

@@ -60,6 +60,7 @@
 
 use num_complex::Complex64;
 use sdrk::Rate;
+use sdrk_blocks::SymbolMapConstellation;
 use sdrk_blocks::{Block, QamDemodBlock, QamDemodConfig, QamModBlock, QamModConfig};
 use sdrk_core::C32;
 use sdrk_core::kernels::constellation::rotate_symbol;
@@ -188,7 +189,7 @@ fn apply(stages: &mut [Box<dyn Impairment>], x: &[Complex64]) -> Vec<Complex64> 
 
 fn mod_config(order: u32) -> QamModConfig {
     QamModConfig {
-        order,
+        constellation: c_of(order),
         samples_per_symbol: SPS,
         ..QamModConfig::default()
     }
@@ -196,7 +197,7 @@ fn mod_config(order: u32) -> QamModConfig {
 
 fn demod(order: u32, taps: usize) -> QamDemodBlock<VecStorage> {
     let cfg = QamDemodConfig {
-        order,
+        constellation: c_of(order),
         symbol_rate_hz: SYMBOL_RATE as f64,
         equalizer_taps: taps,
         ..QamDemodConfig::default()
@@ -615,5 +616,17 @@ fn large_offsets_acquire_within_5000_symbols() {
         assert!(r[0].locked_at_start, "{name}: {:?}", r[0]);
         assert_within(&name, order, &r[0], ebn0, window);
         assert_acquired(&r[0], offset);
+    }
+}
+
+/// The constellation of a numeric order of the tables of this file (2, 4, 8, 16 or 64).
+fn c_of(order: u32) -> SymbolMapConstellation {
+    match order {
+        2 => SymbolMapConstellation::Bpsk,
+        4 => SymbolMapConstellation::Qpsk,
+        8 => SymbolMapConstellation::Psk8,
+        16 => SymbolMapConstellation::Qam16,
+        64 => SymbolMapConstellation::Qam64,
+        other => unreachable!("no constellation of the order {other}"),
     }
 }

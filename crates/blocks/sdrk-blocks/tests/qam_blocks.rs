@@ -26,6 +26,7 @@ mod common;
 
 use common::{check_block, rate, run_block, same_bits, twenty_plans};
 use sdrk::{C32, Delay, Ratio, RatioKind, Sdrk};
+use sdrk_blocks::SymbolMapConstellation;
 use sdrk_blocks::design::{rrc, rrc_len};
 use sdrk_blocks::{
     Block, CostasBlock, CostasConfig, CostasConstellation, EqConstellation, EqMode, EqualizeBlock,
@@ -130,10 +131,10 @@ fn the_qam_constellations_take_c32_and_give_their_bits() {
         assert_eq!((t.kind, t.delay), (RatioKind::Constant, Delay::ZERO));
     }
     let mut cfg = SymbolDemapConfig::default();
-    // The options are appended: qam16 is choice 5, qam64 choice 6.
+    // qam16 is choice 3, qam64 choice 4: the indices of symbol_map (M44.1.1, D1803).
     for (i, c) in [
-        (5u16, SymbolDemapConstellation::Qam16),
-        (6, SymbolDemapConstellation::Qam64),
+        (3u16, SymbolDemapConstellation::Qam16),
+        (4, SymbolDemapConstellation::Qam64),
     ] {
         cfg.set("constellation", ParamValue::Choice(i)).unwrap();
         assert_eq!(cfg.constellation, c);
@@ -456,7 +457,7 @@ fn qam_mod_equals_the_kernels_whole_and_in_cut_plans() {
         .enumerate()
     {
         let cfg = QamModConfig {
-            order,
+            constellation: c_of(order),
             samples_per_symbol: sps,
             span,
             ..QamModConfig::default()
@@ -483,7 +484,7 @@ fn qam_mod_equals_the_kernels_whole_and_in_cut_plans() {
 #[test]
 fn qam_mod_timing_rates_and_parameters() {
     let cfg = QamModConfig {
-        order: 64,
+        constellation: SymbolMapConstellation::Qam64,
         samples_per_symbol: 8,
         ..QamModConfig::default()
     };
@@ -511,18 +512,32 @@ fn qam_mod_timing_rates_and_parameters() {
     // room for one symbol only
     let p = m.process(&random_bits(8, 4), &mut out[..7]).unwrap();
     assert_eq!((p.consumed, p.produced), (4, 4));
-    // the orders 17 to 63 are no orders; outside 16 to 64 out of range
+    // bpsk, qpsk and 8psk are in the choice but no QAM; past the choice out of range; the old
+    // name is gone
     let mut c = QamModConfig::default();
+    for psk in 0..3 {
+        assert!(matches!(
+            c.set("constellation", ParamValue::Choice(psk)),
+            Err(Error::InvalidParameter {
+                name: "constellation",
+                ..
+            })
+        ));
+    }
     assert!(matches!(
-        c.set("order", ParamValue::I64(32)),
-        Err(Error::InvalidParameter { name: "order", .. })
+        c.set("constellation", ParamValue::Choice(5)),
+        Err(Error::OutOfRange {
+            name: "constellation",
+            ..
+        })
     ));
-    assert!(matches!(
-        c.set("order", ParamValue::I64(4)),
-        Err(Error::OutOfRange { name: "order", .. })
-    ));
-    c.set("order", ParamValue::I64(64)).unwrap();
-    assert_eq!(c.get("order"), Ok(ParamValue::I64(64)));
+    assert_eq!(
+        c.set("order", ParamValue::I64(64)),
+        Err(Error::UnknownParameter)
+    );
+    c.set("constellation", ParamValue::Choice(4)).unwrap();
+    assert_eq!(c.get("constellation"), Ok(ParamValue::Choice(4)));
+    assert_eq!(c.constellation, SymbolMapConstellation::Qam64);
     assert!(QamModConfig { span: 3, ..c }.validate().is_err());
     assert!(
         QamModConfig {
@@ -540,8 +555,12 @@ fn qam_mod_timing_rates_and_parameters() {
     assert_eq!(d.outputs[0].types, [PortType::C32]);
     assert_eq!(d.required, ["samples_per_symbol"]);
     assert_eq!(
-        m.set_param("order", ParamValue::I64(64)),
+        m.set_param("constellation", ParamValue::Choice(4)),
         Err(Error::ReadOnlyParameter)
+    );
+    assert_eq!(
+        m.set_param("order", ParamValue::I64(64)),
+        Err(Error::UnknownParameter)
     );
 }
 
@@ -550,7 +569,7 @@ fn qam_mod_timing_rates_and_parameters() {
 /// per component (streams of seed 607).
 fn received(order: u32, sps: usize, n_sym: usize, noise: f64, stream: u64) -> Vec<C32> {
     let cfg = QamModConfig {
-        order,
+        constellation: c_of(order),
         samples_per_symbol: sps,
         ..QamModConfig::default()
     };
@@ -659,7 +678,7 @@ fn acquire_kernels(x: &[C32]) -> Option<(usize, f64)> {
 /// their order, and before the decision mode the tracker's phase turned by
 /// `round(atan2(-sum.im, -sum.re) / (8 pi) 2^32)` units of `2^-32` turn.
 fn demod_kernels(cfg: &QamDemodConfig, fs: sdrk::Rate, input: &[C32]) -> Vec<f32> {
-    let q = if cfg.order == 16 {
+    let q = if order_of(cfg.constellation) == 16 {
         Qam::Qam16
     } else {
         Qam::Qam64
@@ -769,7 +788,7 @@ fn qam_demod_equals_the_kernels_whole_and_in_cut_plans() {
     {
         let fs = rate(9600 * sps as u64);
         let cfg = QamDemodConfig {
-            order,
+            constellation: c_of(order),
             symbol_rate_hz: 9600.0,
             equalizer_taps: taps,
             ..QamDemodConfig::default()
@@ -796,7 +815,7 @@ fn qam_demod_equals_the_kernels_whole_and_in_cut_plans() {
 fn qam_demod_keeps_soft_bits_that_do_not_fit() {
     let fs = rate(38_400);
     let cfg = QamDemodConfig {
-        order: 64,
+        constellation: SymbolMapConstellation::Qam64,
         symbol_rate_hz: 9600.0,
         ..QamDemodConfig::default()
     };
@@ -829,7 +848,7 @@ fn qam_demod_keeps_soft_bits_that_do_not_fit() {
 #[test]
 fn qam_demod_timing_rates_and_parameters() {
     let cfg = QamDemodConfig {
-        order: 16,
+        constellation: SymbolMapConstellation::Qam16,
         symbol_rate_hz: 25_000.0,
         ..QamDemodConfig::default()
     };
@@ -853,7 +872,10 @@ fn qam_demod_timing_rates_and_parameters() {
     let b0 = QamDemodBlock::<VecStorage>::new(&no_eq, fs, &mut VecStorage).unwrap();
     assert_eq!(b0.timing().delay, Delay::new(82, 2).unwrap());
     assert!(b0.equalizer().is_none());
-    let c64 = QamDemodConfig { order: 64, ..cfg };
+    let c64 = QamDemodConfig {
+        constellation: SymbolMapConstellation::Qam64,
+        ..cfg
+    };
     assert_eq!(
         QamDemodBlock::<VecStorage>::rate_out(&c64, fs).unwrap(),
         rate(150_000)
@@ -868,7 +890,7 @@ fn qam_demod_timing_rates_and_parameters() {
             })
         ));
     }
-    // equalizer taps 0 or odd from 3; orders 16 and 64
+    // equalizer taps 0 or odd from 3; constellations qam16 and qam64
     let mut c = QamDemodConfig::default();
     for (taps, ok) in [(0, true), (1, false), (3, true), (12, false), (63, true)] {
         assert_eq!(
@@ -879,11 +901,18 @@ fn qam_demod_timing_rates_and_parameters() {
     }
     assert!(c.set("equalizer_taps", ParamValue::I64(65)).is_err());
     assert!(matches!(
-        c.set("order", ParamValue::I64(20)),
-        Err(Error::InvalidParameter { name: "order", .. })
+        c.set("constellation", ParamValue::Choice(1)),
+        Err(Error::InvalidParameter {
+            name: "constellation",
+            ..
+        })
     ));
+    assert_eq!(
+        c.set("order", ParamValue::I64(16)),
+        Err(Error::UnknownParameter)
+    );
     for (name, value) in [
-        ("order", ParamValue::I64(64)),
+        ("constellation", ParamValue::Choice(4)),
         ("symbol_rate_hz", ParamValue::F64(1000.0)),
         ("rolloff", ParamValue::F64(0.25)),
         ("span", ParamValue::I64(12)),
@@ -904,7 +933,7 @@ fn qam_demod_timing_rates_and_parameters() {
     assert_eq!(
         names,
         [
-            "order",
+            "constellation",
             "symbol_rate_hz",
             "rolloff",
             "span",
@@ -959,7 +988,7 @@ fn qam_mod_to_qam_demod_with_little_noise_is_error_free() {
     .enumerate()
     {
         let mcfg = QamModConfig {
-            order,
+            constellation: c_of(order),
             samples_per_symbol: sps,
             ..QamModConfig::default()
         };
@@ -982,7 +1011,7 @@ fn qam_mod_to_qam_demod_with_little_noise_is_error_free() {
             })
             .collect();
         let dcfg = QamDemodConfig {
-            order,
+            constellation: c_of(order),
             symbol_rate_hz: 1000.0,
             ..QamDemodConfig::default()
         };
@@ -1013,7 +1042,7 @@ fn qam_demod_acquires_once_after_its_window_and_again_after_reset() {
     let fs = rate(38_400);
     for taps in [11usize, 0] {
         let cfg = QamDemodConfig {
-            order: 16,
+            constellation: SymbolMapConstellation::Qam16,
             symbol_rate_hz: 9600.0,
             equalizer_taps: taps,
             ..QamDemodConfig::default()
@@ -1114,7 +1143,7 @@ fn qam_demod_acquisition_phases_are_independent_of_the_cut_plan() {
     for (name, input, restarted) in [("weak", &sig, false), ("carrier, weak", &lead, true)] {
         for taps in [11usize, 0] {
             let cfg = QamDemodConfig {
-                order: 16,
+                constellation: SymbolMapConstellation::Qam16,
                 symbol_rate_hz: 9600.0,
                 equalizer_taps: taps,
                 ..QamDemodConfig::default()
@@ -1200,7 +1229,7 @@ fn qam_demod_lock_and_verify_are_independent_of_the_cut_plan() {
     ] {
         for taps in [11usize, 0] {
             let cfg = QamDemodConfig {
-                order: 16,
+                constellation: SymbolMapConstellation::Qam16,
                 symbol_rate_hz: 9600.0,
                 equalizer_taps: taps,
                 ..QamDemodConfig::default()
@@ -1273,7 +1302,7 @@ fn qam_demod_searches_again_when_the_loop_does_not_lock() {
     for (lead_name, lead) in [("carrier", &tone), ("noise", &noise)] {
         for taps in [11usize, 0] {
             let cfg = QamDemodConfig {
-                order: 16,
+                constellation: SymbolMapConstellation::Qam16,
                 symbol_rate_hz: 9600.0,
                 equalizer_taps: taps,
                 ..QamDemodConfig::default()
@@ -1543,7 +1572,7 @@ fn qam_link_with_frame_decode_four_resolves_every_rotation() {
         bits.extend(random(&mut rng, 200 * k));
         bits.truncate(bits.len() / k * k);
         let mcfg = QamModConfig {
-            order,
+            constellation: c_of(order),
             samples_per_symbol: 4,
             ..QamModConfig::default()
         };
@@ -1561,7 +1590,7 @@ fn qam_link_with_frame_decode_four_resolves_every_rotation() {
                 })
                 .collect();
             let dcfg = QamDemodConfig {
-                order,
+                constellation: c_of(order),
                 symbol_rate_hz: 1000.0,
                 ..QamDemodConfig::default()
             };
@@ -1586,5 +1615,28 @@ fn qam_link_with_frame_decode_four_resolves_every_rotation() {
                 "{order}-QAM {rots:?}"
             );
         }
+    }
+}
+
+/// The constellation of a numeric order of the tables of this file (2, 4, 8, 16 or 64).
+fn c_of(order: u32) -> SymbolMapConstellation {
+    match order {
+        2 => SymbolMapConstellation::Bpsk,
+        4 => SymbolMapConstellation::Qpsk,
+        8 => SymbolMapConstellation::Psk8,
+        16 => SymbolMapConstellation::Qam16,
+        64 => SymbolMapConstellation::Qam64,
+        other => unreachable!("no constellation of the order {other}"),
+    }
+}
+
+/// The numeric order of a constellation (the inverse of `c_of`).
+fn order_of(c: SymbolMapConstellation) -> u32 {
+    match c {
+        SymbolMapConstellation::Bpsk => 2,
+        SymbolMapConstellation::Qpsk => 4,
+        SymbolMapConstellation::Psk8 => 8,
+        SymbolMapConstellation::Qam16 => 16,
+        _ => 64,
     }
 }

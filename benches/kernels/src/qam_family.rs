@@ -754,7 +754,7 @@ fn leaked_arena(bytes: usize) -> ArenaStorage<'static> {
 
 fn qam_mod_config() -> QamModConfig {
     QamModConfig {
-        order: 16,
+        constellation: SymbolMapConstellation::Qam16,
         samples_per_symbol: BLOCK_SPS,
         ..QamModConfig::default()
     }
@@ -875,7 +875,7 @@ impl Kernel for QamModBlockK {
 
 fn psk_mod_config() -> PskModConfig {
     PskModConfig {
-        order: 4,
+        constellation: SymbolMapConstellation::Qpsk,
         samples_per_symbol: BLOCK_SPS,
         ..PskModConfig::default()
     }
@@ -994,7 +994,7 @@ impl Kernel for PskModBlockK {
 
 fn qam_demod_block() -> QamDemodBlock<ArenaStorage<'static>> {
     let cfg = QamDemodConfig {
-        order: 16,
+        constellation: SymbolMapConstellation::Qam16,
         symbol_rate_hz: 25_000.0,
         ..QamDemodConfig::default()
     };
@@ -1730,7 +1730,7 @@ impl QamFrameDecodeBlockK {
             .collect();
         let cfg = QamFrameDecodeConfig {
             demod: QamDemodConfig {
-                order: 16,
+                constellation: SymbolMapConstellation::Qam16,
                 symbol_rate_hz: 25_000.0,
                 ..QamDemodConfig::default()
             },

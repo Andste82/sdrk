@@ -170,6 +170,31 @@ pub trait Block: Send {
     /// `UnknownParameter`.
     fn param(&self, name: &str) -> Result<ParamValue>;
 
+    /// Checks whether [`Block::set_param`] would take `value` for `name`, without changing
+    /// anything. [`ParamMap::set`](crate::ParamMap::set) checks every building block a flat
+    /// name reaches before it writes any of them.
+    ///
+    /// The default checks the description: the name, that a block may change it at run time,
+    /// the type and the range. A block whose `set_param` checks more (a combination with other
+    /// parameters) may override it; a composite that reaches its stages by paths
+    /// ([`Chain`](crate::Chain), [`Fork`](crate::Fork)) routes it like `set_param`.
+    ///
+    /// # Errors
+    /// `UnknownParameter`, `ReadOnlyParameter`, `WrongParamType`, `OutOfRange`.
+    ///
+    /// ```
+    /// use sdrk::{Rate, C32};
+    /// use sdrk_blocks::{ArenaStorage, Block, Error, ParamValue, ScaleBlock, ScaleConfig};
+    /// let mut arena = ArenaStorage::new(&mut []);
+    /// let b = ScaleBlock::<C32, _>::new(&ScaleConfig::default(), Rate::hz(1000)?, &mut arena)?;
+    /// assert_eq!(b.check_param("gain_db", &ParamValue::F64(-6.0)), Ok(()));
+    /// assert_eq!(b.check_param("gain", &ParamValue::F64(-6.0)), Err(Error::UnknownParameter));
+    /// # Ok::<(), Box<dyn std::error::Error>>(())
+    /// ```
+    fn check_param(&self, name: &str, value: &ParamValue) -> Result<()> {
+        runtime_param(self.description(), name, value).map(|_| ())
+    }
+
     /// Smallest input count that is guaranteed to produce at least one output (used for
     /// buffer sizing).
     fn min_input(&self) -> usize;

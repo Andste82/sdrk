@@ -9,7 +9,12 @@ use crate::error::{Error, Result};
 /// A composite block that offers flat parameter names keeps a `const` map and forwards its own
 /// `set_param` and `param` through [`ParamMap::set`] and [`ParamMap::get`]; its
 /// `description()` stays its own. A flat name that is not in the map is `UnknownParameter`; the
-/// error of the inner block is returned unchanged. The first entry of a name wins.
+/// error of the inner block is returned unchanged.
+///
+/// One flat name may stand for several paths (M44.1.1 §4, the naming rule of `docs/blocks.md`:
+/// a parameter appears once in the composite and goes, with the same value, to every building
+/// block that has it): its entries are its paths in the order of the table. [`ParamMap::set`]
+/// checks every path first and then writes every path; [`ParamMap::get`] reads the first.
 ///
 /// ```
 /// use sdrk::Rate;
@@ -56,7 +61,7 @@ impl ParamMap {
         self.entries
     }
 
-    /// The path of the flat name `flat`, or `None` if the map does not have it.
+    /// The first path of the flat name `flat`, or `None` if the map does not have it.
     ///
     /// ```
     /// use sdrk_blocks::ParamMap;
@@ -65,24 +70,54 @@ impl ParamMap {
     /// assert_eq!(MAP.path("1.0.cutoff_hz"), None);
     /// ```
     pub fn path(&self, flat: &str) -> Option<&'static str> {
+        self.paths(flat).next()
+    }
+
+    /// Every path of the flat name `flat`, in the order of the table (none if the map does not
+    /// have it).
+    ///
+    /// ```
+    /// use sdrk_blocks::ParamMap;
+    /// const MAP: ParamMap = ParamMap::new(&[("gain_db", "0.gain_db"), ("gain_db", "1.gain_db")]);
+    /// assert!(MAP.paths("gain_db").eq(["0.gain_db", "1.gain_db"]));
+    /// assert_eq!(MAP.paths("gain").count(), 0);
+    /// ```
+    pub fn paths<'a>(&self, flat: &'a str) -> impl Iterator<Item = &'static str> + 'a {
         self.entries
             .iter()
-            .find(|(name, _)| *name == flat)
+            .filter(move |(name, _)| *name == flat)
             .map(|(_, path)| *path)
     }
 
-    /// Sets the parameter `flat` of `block` through its path.
+    /// Whether `path` is a path of the map (of any flat name).
+    ///
+    /// ```
+    /// use sdrk_blocks::ParamMap;
+    /// const MAP: ParamMap = ParamMap::new(&[("cutoff_hz", "1.0.cutoff_hz")]);
+    /// assert!(MAP.has_path("1.0.cutoff_hz"));
+    /// assert!(!MAP.has_path("cutoff_hz"));
+    /// ```
+    pub fn has_path(&self, path: &str) -> bool {
+        self.entries.iter().any(|(_, p)| *p == path)
+    }
+
+    /// Sets the parameter `flat` of `target` through all its paths: every path is checked
+    /// first ([`ParamPaths::check_path_param`]), then written in the order of the table. If a
+    /// check fails, nothing is written; if a write still fails (a building block whose
+    /// `set_param` checks more than its `check_param`), the paths written before it get the
+    /// value of the first path back, which they held before (the paths of one flat name hold
+    /// the same value), so a `set` reaches all of them or none.
     ///
     /// # Errors
-    /// `UnknownParameter` if `flat` is not in the map; otherwise the error of
-    /// `block.set_param`, unchanged.
+    /// `UnknownParameter` if `flat` is not in the map; otherwise the first error of a building
+    /// block, unchanged.
     ///
     /// ```
     /// use sdrk::{Rate, C32};
     /// use sdrk_blocks::{
     ///     AlignedBytes, ArenaStorage, Chain, Error, ParamMap, ParamValue, ScaleBlock, ScaleConfig,
     /// };
-    /// const MAP: ParamMap = ParamMap::new(&[("gain_db", "1.gain_db")]);
+    /// const MAP: ParamMap = ParamMap::new(&[("gain_db", "0.gain_db"), ("gain_db", "1.gain_db")]);
     /// let rate = Rate::hz(48_000)?;
     /// let mut mem = AlignedBytes([0u8; 4096]);
     /// let mut arena = ArenaStorage::new(&mut mem.0);
@@ -91,24 +126,39 @@ impl ParamMap {
     /// let mut chain = Chain::new(a, b, 16, &mut arena)?;
     /// MAP.set(&mut chain, "gain_db", ParamValue::F64(-6.0))?;
     /// assert_eq!(MAP.get(&chain, "gain_db")?, ParamValue::F64(-6.0));
+    /// assert_eq!(chain.param("1.gain_db")?, ParamValue::F64(-6.0));
     /// assert_eq!(MAP.set(&mut chain, "gain", ParamValue::F64(0.0)), Err(Error::UnknownParameter));
+    /// # use sdrk_blocks::Block;
     /// # Ok::<(), Box<dyn std::error::Error>>(())
     /// ```
-    pub fn set<B: Block + ?Sized>(
+    pub fn set<T: ParamPathsMut + ?Sized>(
         &self,
-        block: &mut B,
+        target: &mut T,
         flat: &str,
         value: ParamValue,
     ) -> Result<()> {
-        let path = self.path(flat).ok_or(Error::UnknownParameter)?;
-        block.set_param(path, value)
+        let first = self.path(flat).ok_or(Error::UnknownParameter)?;
+        for path in self.paths(flat) {
+            target.check_path_param(path, &value)?;
+        }
+        let before = target.path_param(first)?;
+        for (written, path) in self.paths(flat).enumerate() {
+            if let Err(e) = target.set_path_param(path, value) {
+                for back in self.paths(flat).take(written) {
+                    // The value the path held before: it takes it again.
+                    let _ = target.set_path_param(back, before);
+                }
+                return Err(e);
+            }
+        }
+        Ok(())
     }
 
-    /// Reads the parameter `flat` of `block` through its path.
+    /// Reads the parameter `flat` of `target` through its first path.
     ///
     /// # Errors
-    /// `UnknownParameter` if `flat` is not in the map; otherwise the error of `block.param`,
-    /// unchanged.
+    /// `UnknownParameter` if `flat` is not in the map; otherwise the error of the building
+    /// block, unchanged.
     ///
     /// ```
     /// use sdrk::{Rate, C32};
@@ -124,8 +174,55 @@ impl ParamMap {
     /// assert_eq!(MAP.get(&chain, "first_gain_db")?, ParamValue::F64(-3.0));
     /// # Ok::<(), Box<dyn std::error::Error>>(())
     /// ```
-    pub fn get<B: Block + ?Sized>(&self, block: &B, flat: &str) -> Result<ParamValue> {
+    pub fn get<T: ParamPaths + ?Sized>(&self, target: &T, flat: &str) -> Result<ParamValue> {
         let path = self.path(flat).ok_or(Error::UnknownParameter)?;
-        block.param(path)
+        target.path_param(path)
+    }
+}
+
+/// The building blocks of a composite, reached by paths (`"1.cutoff_hz"`: the parameter
+/// `cutoff_hz` of the stage `1`): what a [`ParamMap`] reads and checks.
+///
+/// Every [`Block`] is one: a path is a parameter name, which [`Chain`](crate::Chain) and
+/// [`Fork`](crate::Fork) route to their stages. A composite block that holds its building
+/// blocks in fields of its own routes the paths of its map through a private view of them, so
+/// that its building blocks are reached through its public parameters alone.
+pub trait ParamPaths {
+    /// The current value of the parameter at `path`.
+    ///
+    /// # Errors
+    /// `UnknownParameter` for a path that reaches no parameter; otherwise the error of the
+    /// building block.
+    fn path_param(&self, path: &str) -> Result<ParamValue>;
+
+    /// Checks whether the building block at `path` would take `value`
+    /// ([`Block::check_param`]), without changing anything.
+    ///
+    /// # Errors
+    /// As [`Block::check_param`].
+    fn check_path_param(&self, path: &str, value: &ParamValue) -> Result<()>;
+}
+
+/// [`ParamPaths`] that can also be written: what [`ParamMap::set`] writes.
+pub trait ParamPathsMut: ParamPaths {
+    /// Sets the parameter at `path` ([`Block::set_param`]).
+    ///
+    /// # Errors
+    /// As [`Block::set_param`].
+    fn set_path_param(&mut self, path: &str, value: ParamValue) -> Result<()>;
+}
+
+impl<B: Block + ?Sized> ParamPaths for B {
+    fn path_param(&self, path: &str) -> Result<ParamValue> {
+        self.param(path)
+    }
+    fn check_path_param(&self, path: &str, value: &ParamValue) -> Result<()> {
+        self.check_param(path, value)
+    }
+}
+
+impl<B: Block + ?Sized> ParamPathsMut for B {
+    fn set_path_param(&mut self, path: &str, value: ParamValue) -> Result<()> {
+        self.set_param(path, value)
     }
 }

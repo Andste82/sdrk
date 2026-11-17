@@ -400,6 +400,14 @@ where
         }
     }
 
+    fn check_param(&self, name: &str, value: &ParamValue) -> Result<()> {
+        match name.split_once('.') {
+            Some(("0", rest)) => self.a.check_param(rest, value),
+            Some(("1", rest)) => self.b.check_param(rest, value),
+            _ => Err(Error::UnknownParameter),
+        }
+    }
+
     fn min_input(&self) -> usize {
         let ratio: Ratio = self.a.timing().ratio;
         let need = ceil_div(

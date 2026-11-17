@@ -668,7 +668,7 @@ The kinds that later milestones add have their names reserved here, so that ever
 | `morse_encode`, `morse_decode` | Morse code (CW): text to the key envelope, the envelope to words | M47 (delivered) |
 | `qam_demod`/`qam_mod` | 16-QAM and 64-QAM | M44 (delivered) |
 | `symbol_map`/`symbol_demap` | bits to the symbol of a constellation (BPSK to 64-QAM, M44.2 to 1024-QAM) and back to soft bits; the pair of `subcarrier_map`/`subcarrier_demap` | M44.1 (delivered; `symbol_demap` is the renamed `slice`) |
-| `iq_offset` | delay of the imaginary or the real part (OQPSK, both sides) | M44.1 (delivered); from M44.1.1 an internal building block of `psk_mod`, no longer a kind |
+| `iq_offset` | delay of the imaginary or the real part (OQPSK, both sides) | M44.1 (delivered) |
 | `qam_acquire` | QAM frequency acquisition by the fourth power | M44.1 (delivered) |
 | `qam_frame_encode`/`qam_frame_decode` | packets to QAM samples and back, with a frame-level lock watch (composite blocks) | M44.1 (delivered) |
 | `pulse_shape`/`pulse_match` | the root-raised-cosine pulse filter of a linear modulation: interpolation by the samples per symbol (transmit) and the matched filter (receive) | M44.1.1 |

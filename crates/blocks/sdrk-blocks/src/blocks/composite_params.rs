@@ -173,7 +173,7 @@ fn check<T: Block>(
             );
             if (label, p.name) == ("psk_mod", "variant") {
                 // `offset` is the `iq_offset` stage after the pulse filter, not a value of the
-                // `variant` of `symbol_map` (open item I44.1.1-1): the other names at their
+                // `variant` of `symbol_map` (structure, D1823): the other names at their
                 // indices, and `offset` the one more.
                 let (ParamKind::Choice { options: a, .. }, ParamKind::Choice { options: x, .. }) =
                     (p.kind, s.kind)
@@ -344,7 +344,7 @@ fn the_parameters_of_every_composite_follow_the_naming_rule() {
             ("differential", ParamValue::Bool(cfg.differential)),
         ];
         values.push(("variant", ParamValue::Choice(cfg.variant.index())));
-        // `variant` `offset` is the `iq_offset` stage, not a value of `symbol_map` (I44.1.1-1):
+        // `variant` `offset` is the `iq_offset` stage, not a value of `symbol_map` (D1823):
         // checked here, outside the generic resolution.
         if cfg.variant == PskVariant::Offset {
             assert_eq!(b.param("variant"), Ok(ParamValue::Choice(2)));

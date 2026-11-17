@@ -110,7 +110,7 @@ fn qam_frame_decode_plans_as_the_pair() {
     let mut pair = decoder("c32", json!({}));
     pair["nodes"] = json!({
         "d": { "kind": "qam_demod", "params": params },
-        "f": { "kind": "frame_decode", "params": { "rotations": "four", "bits_per_symbol": 4 } }
+        "f": { "kind": "frame_decode", "params": { "rotations": "four", "constellation": "qam16" } }
     });
     pair["edges"] = json!([
         { "from": "in", "to": "d" }, { "from": "d", "to": "f" }, { "from": "f", "to": "out" }

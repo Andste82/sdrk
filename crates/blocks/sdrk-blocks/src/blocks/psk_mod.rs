@@ -378,7 +378,7 @@ type PskModStages<S> = Chain<SymbolMapBlock<S>, PulseShapeBlock<S>, S>;
 /// (`offset`: `(span bits + 2) / 2`, the half symbol of the quadrature part is one bit).
 /// Storage: the taps, the filter history, the buffer of the chain and for `offset` the ring.
 /// Its parameters are answered by its building blocks through [`PSK_MOD_PARAMS`] (M44.1.1 §4;
-/// `variant` `offset` is the presence of the `iq_offset` stage, open item I44.1.1-1).
+/// `variant` `offset` is the presence of the `iq_offset` stage, D1823).
 ///
 /// ```
 /// use sdrk::{Rate, C32};
@@ -501,7 +501,8 @@ impl<S: Storage> PskModBlock<S> {
 /// `samples_per_symbol` goes to `pulse_shape` and `iq_offset` unchanged (M44.1.1 §3.3).
 /// `variant` reaches the `variant` of `symbol_map` (`plain`, `pi4`); `offset` is not a value of
 /// any building block but the `iq_offset` stage after the pulse filter, which the block reports
-/// as the variant `offset` (open item I44.1.1-1).
+/// as the variant `offset`: a parameter that decides which building blocks the composite holds,
+/// not a conversion (D1823).
 pub const PSK_MOD_PARAMS: ParamMap = ParamMap::new(&[
     ("constellation", "0.constellation"),
     ("samples_per_symbol", "1.samples_per_symbol"),

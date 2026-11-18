@@ -626,11 +626,16 @@ pub enum Reference {
     Cmsis,
     /// liquid-dsp: the DC blocker (`iirfilt_*_create_dc_blocker`, portable C) and the halfband
     /// decimators and Hilbert transform decimator (`resamp2`, `firhilbf`) with the SIMD dot
-    /// product of the level (the portable one for a fallback entry).
+    /// product of the level (the portable one for a fallback entry), the amplitude modulator
+    /// `ampmodem`, the channelizer `firpfbch2_crcf` and the Gaussian generators `randnf` and
+    /// `crandnf` (`benches/refs/liquid-randn.c`, information only).
     Liquid,
     /// libairspy 1.0.10's real-to-complex converters (`iqconverter_float`, `iqconverter_int16`,
     /// conversion only).
     Libairspy,
+    /// `rand_distr`'s `StandardNormal` (Ziggurat) over rand's `SmallRng`, the informational
+    /// Ziggurat row of `gauss_noise` (M48 §5, `gauss_noise_f32_ziggurat`).
+    RandDistr,
     /// Our own fallback, where no established library exists.
     Fallback,
     /// Our own numbers of another level (run-time detection against that fixed level).
@@ -659,6 +664,7 @@ impl Reference {
             Reference::Cmsis => "cmsis",
             Reference::Liquid => "liquid",
             Reference::Libairspy => "airspy",
+            Reference::RandDistr => "rand-distr",
             Reference::Fallback => "fallback",
             Reference::OwnLevel(_) | Reference::OwnKernel(_) => "ours",
         }
@@ -733,8 +739,16 @@ pub enum Family {
     /// A fallback entry as [`Family::FallbackVsCmsis`] whose gate is liquid-dsp's DC blocker
     /// (`dc_block_fallback`, `dc_block_real_fallback`), its halfband decimator with the
     /// portable dot product (`halfband_decimate_fallback`, `halfband_decimate_real_fallback`) or
-    /// its amplitude modulator `ampmodem` (`am_mod_fallback`).
+    /// its amplitude modulator `ampmodem` (`am_mod_fallback`), or its Gaussian generators
+    /// `crandnf` and `randnf` (`gauss_noise_c32_fallback`, `gauss_noise_f32_fallback`, information
+    /// only: liquid does different work).
     FallbackVsLiquid,
+    /// A fallback entry whose kernel has no library that does the same work
+    /// (`gauss_noise_q15_fallback`, M48: no library makes `Q15` Gaussian noise): the measured
+    /// side is our fallback, compiled for the level, and the comparison is the same fallback
+    /// (ratio 1, information only). The entry exists so that the D321 cycle gate pairs the SIMD
+    /// entry of [`Family::Own`] with it. Not measured at a level with run-time detection.
+    FallbackOwn,
     /// The halfband decimators of the float types (`halfband_decimate`,
     /// `halfband_decimate_real`): liquid-dsp's `resamp2` with its SIMD dot product of the level
     /// (the portable loop at `simd128`, where liquid has no SIMD loop).
@@ -743,6 +757,21 @@ pub enum Family {
     /// dot product of the level and FFTW (liquid's own FFT on wasm32, which has no FFTW build),
     /// our fallback as information.
     ChannelizeLiquid,
+    /// `gauss_noise` (M48): liquid-dsp's `crandnf` and `randnf` over libc `rand()`
+    /// (`benches/refs/liquid-randn.c`), which do other work than the contract (`f32` Box–Muller,
+    /// no PCG32, no random access, no bit-exact sequence): the comparison as information (`info`
+    /// with the waiver "reference does different work" at every level), our fallback beside it.
+    LiquidDifferentWork,
+    /// `gauss_noise_c32_fastnoise`, `gauss_noise_f32_fastnoise` (M48): our `gauss_noise` against
+    /// the work loop of GNU Radio's `fastnoise_source_c` / `_f` (`benches/refs/gr-fastnoise.c`),
+    /// which copies one value of a precomputed pool per sample (`info` with the waiver "reference
+    /// does less work" at every level). Not measured at a level with run-time detection, whose
+    /// kernel entry is judged against the fixed level.
+    GaussNoiseFastnoise,
+    /// `gauss_noise_f32_ziggurat` (M48): our `gauss_noise` against `rand_distr`'s `StandardNormal`
+    /// (Ziggurat, rejection sampling) as `f32` (`info` with the waiver "reference does different
+    /// work" at every level); not measured at a level with run-time detection.
+    GaussNoiseZiggurat,
     /// `real_to_complex` of `C32`: liquid-dsp's `firhilbf` with its SIMD dot product; at `sse2`
     /// libairspy's `iqconverter_float` (SSE2) is the second gate, the entry
     /// [`Family::HilbertAirspy`].
@@ -794,6 +823,7 @@ impl Family {
                 | Family::FallbackVsVolkGeneric
                 | Family::FallbackVsGnuRadio
                 | Family::FallbackVsLiquid
+                | Family::FallbackOwn
                 | Family::FallbackHilbert
                 | Family::FallbackVsAirspy
                 | Family::FftFallbackVsCmsis
@@ -818,7 +848,12 @@ impl Family {
         if self == Family::HilbertAirspy {
             return plan.level == "sse2" && plan.baseline.is_none();
         }
-        !((self.is_fallback_entry() || self == Family::Workload) && plan.baseline.is_some())
+        !((self.is_fallback_entry()
+            || matches!(
+                self,
+                Family::Workload | Family::GaussNoiseFastnoise | Family::GaussNoiseZiggurat
+            ))
+            && plan.baseline.is_some())
     }
 }
 
@@ -886,8 +921,10 @@ const fn spec_own(name: &'static str, family: Family, own: &'static str) -> Kern
 /// composites of M44.1 `symbol_map_block` (one output symbol), `iq_offset_block` (one sample),
 /// `qam_acquire_block` (one input symbol), `qam_frame_encode_block` (one output sample) and
 /// `qam_frame_decode_block` (one input sample), the building blocks of M44.1.1
-/// `pulse_shape_block` (one output sample) and `pulse_match_block` (one input sample), and
-/// `frame_decode_four_block` (one soft bit, `frame_decode` with `rotations` `four`).
+/// `pulse_shape_block` (one output sample) and `pulse_match_block` (one input sample),
+/// `frame_decode_four_block` (one soft bit, `frame_decode` with `rotations` `four`), and the
+/// noise source of M48 `noise_block` (one output sample, the block around the kernel entries
+/// `gauss_noise_c32` and `gauss_noise_f32`).
 const fn proto(name: &'static str, family: Family) -> KernelSpec {
     KernelSpec {
         name,
@@ -911,7 +948,7 @@ const fn fft(name: &'static str, family: Family, samples: u64) -> KernelSpec {
 }
 
 /// The kernels of the benchmark table, in report order.
-pub static KERNELS: [KernelSpec; 239] = [
+pub static KERNELS: [KernelSpec; 249] = [
     spec("convert_cs8", Family::Volk, true),
     spec("convert_cs16", Family::Volk, true),
     spec("convert_cu8", Family::VolkAndOwn, true),
@@ -1178,6 +1215,28 @@ pub static KERNELS: [KernelSpec; 239] = [
     proto("pulse_shape_block", Family::Own),
     proto("pulse_match_block", Family::Own),
     proto("frame_decode_four_block", Family::Own),
+    spec("gauss_noise_c32", Family::LiquidDifferentWork, false),
+    spec("gauss_noise_f32", Family::LiquidDifferentWork, false),
+    spec("gauss_noise_q15", Family::Own, false),
+    proto("noise_block", Family::Own),
+    spec("gauss_noise_c32_fallback", Family::FallbackVsLiquid, false),
+    spec("gauss_noise_f32_fallback", Family::FallbackVsLiquid, false),
+    spec("gauss_noise_q15_fallback", Family::FallbackOwn, false),
+    spec(
+        "gauss_noise_c32_fastnoise",
+        Family::GaussNoiseFastnoise,
+        false,
+    ),
+    spec(
+        "gauss_noise_f32_fastnoise",
+        Family::GaussNoiseFastnoise,
+        false,
+    ),
+    spec(
+        "gauss_noise_f32_ziggurat",
+        Family::GaussNoiseZiggurat,
+        false,
+    ),
     spec("add", Family::Volk, false),
     spec("add_cq15", Family::Volk, false),
     spec("add_real", Family::Volk, false),
@@ -1589,7 +1648,7 @@ fn family_comparisons(plan: &LevelPlan, spec: &KernelSpec) -> (Reference, Vec<Re
         Family::FftC32 => (plan.fft_c32.0, plan.fft_c32.1.to_vec()),
         Family::FftCq15 => (Reference::KissFft, plan.fft_cq15_extra.to_vec()),
         Family::RealFft => (plan.rfft.0, plan.rfft.1.to_vec()),
-        Family::Own | Family::Workload => (Reference::Fallback, Vec::new()),
+        Family::Own | Family::Workload | Family::FallbackOwn => (Reference::Fallback, Vec::new()),
         Family::Kfr if plan.kfr => (Reference::Kfr, vec![Reference::Cmsis]),
         // Without KFR at the level, CMSIS-DSP gates, as it does for a fallback entry.
         Family::Kfr | Family::FallbackVsCmsis | Family::FftFallbackVsCmsis => {
@@ -1604,7 +1663,11 @@ fn family_comparisons(plan: &LevelPlan, spec: &KernelSpec) -> (Reference, Vec<Re
         Family::FallbackVsLiquid | Family::HalfbandLiquid | Family::HilbertLiquid => {
             (Reference::Liquid, Vec::new())
         }
-        Family::ChannelizeLiquid => (Reference::Liquid, vec![Reference::Fallback]),
+        Family::ChannelizeLiquid | Family::LiquidDifferentWork => {
+            (Reference::Liquid, vec![Reference::Fallback])
+        }
+        Family::GaussNoiseFastnoise => (Reference::GnuRadio, Vec::new()),
+        Family::GaussNoiseZiggurat => (Reference::RandDistr, Vec::new()),
         Family::HilbertAirspyQ15 => (Reference::Libairspy, vec![Reference::Fallback]),
         Family::FallbackHilbert => (Reference::Liquid, vec![Reference::Libairspy]),
         Family::HilbertAirspy | Family::FallbackVsAirspy => (Reference::Libairspy, Vec::new()),
@@ -4825,6 +4888,7 @@ mod tests {
             "qam_frame_decode_block",
             "pulse_shape_block",
             "pulse_match_block",
+            "noise_block",
         ];
         let names = crcs.iter().chain(&framing).copied().collect::<Vec<_>>();
         for level in ["sse2", "sse4.2", "avx2", "avx512", "neon", "simd128"] {
@@ -5132,6 +5196,106 @@ mod tests {
                 if let Some(limit) = limit.filter(|l| l.status == Status::Info) {
                     assert!(limit.waiver.is_some(), "{name} at {}", p.level);
                 }
+            }
+        }
+    }
+
+    #[test]
+    fn gauss_noise_is_information_against_liquid_on_every_level() {
+        let plan = |l: &str| PLANS.iter().find(|p| p.level == l).unwrap();
+        let kernel = |k: &str| KERNELS.iter().find(|s| s.name == k).unwrap();
+        let limits = Limits::parse(include_str!("../../benches/limits.json")).unwrap();
+        for name in ["gauss_noise_c32", "gauss_noise_f32"] {
+            let spec = kernel(name);
+            assert_eq!(spec.family.measured(), "ours");
+            for level in ["sse2", "sse4.2", "avx2", "avx512", "neon", "simd128"] {
+                assert_eq!(
+                    comparisons(plan(level), spec),
+                    (Reference::Liquid, vec![Reference::Fallback]),
+                    "{name} at {level}"
+                );
+            }
+            assert_eq!(
+                comparisons(plan("avx2-runtime"), spec).0,
+                Reference::OwnLevel("avx2")
+            );
+        }
+        // `Q15` noise has no library row: the SIMD paths against our own fallback.
+        for level in ["sse2", "sse4.2", "avx2", "avx512", "neon", "simd128"] {
+            assert_eq!(
+                comparisons(plan(level), kernel("gauss_noise_q15")),
+                (Reference::Fallback, Vec::new()),
+                "gauss_noise_q15 at {level}"
+            );
+        }
+        // Its fallback entry, the pair of the D321 cycle gate, compares the fallback with
+        // itself.
+        let spec = kernel("gauss_noise_q15_fallback");
+        assert_eq!(spec.family.measured(), "fallback");
+        assert!(!spec.family.measured_at(plan("avx2-runtime")));
+        for level in ["sse2", "sse4.2", "avx2", "avx512", "neon", "simd128"] {
+            assert_eq!(
+                comparisons(plan(level), spec),
+                (Reference::Fallback, Vec::new()),
+                "gauss_noise_q15_fallback at {level}"
+            );
+        }
+        for name in ["gauss_noise_c32_fallback", "gauss_noise_f32_fallback"] {
+            let spec = kernel(name);
+            assert_eq!(spec.family.measured(), "fallback");
+            assert!(!spec.family.measured_at(plan("avx2-runtime")));
+            for level in ["sse2", "sse4.2", "avx2", "avx512", "neon", "simd128"] {
+                assert_eq!(
+                    comparisons(plan(level), spec),
+                    (Reference::Liquid, Vec::new()),
+                    "{name} at {level}"
+                );
+            }
+        }
+        // The rows of GNU Radio's `fastnoise_source` (less work) and of rand_distr's Ziggurat
+        // (different work): entries of their own, so that the cycles are simulated against them.
+        for (name, reference) in [
+            ("gauss_noise_c32_fastnoise", Reference::GnuRadio),
+            ("gauss_noise_f32_fastnoise", Reference::GnuRadio),
+            ("gauss_noise_f32_ziggurat", Reference::RandDistr),
+        ] {
+            let spec = kernel(name);
+            assert_eq!(spec.family.measured(), "ours");
+            assert!(!spec.family.measured_at(plan("avx2-runtime")));
+            for level in ["sse2", "sse4.2", "avx2", "avx512", "neon", "simd128"] {
+                assert_eq!(
+                    comparisons(plan(level), spec),
+                    (reference, Vec::new()),
+                    "{name} at {level}"
+                );
+            }
+        }
+        assert_eq!(Reference::RandDistr.implementation(), "rand-distr");
+        for name in [
+            "gauss_noise_c32",
+            "gauss_noise_f32",
+            "gauss_noise_q15",
+            "noise_block",
+            "gauss_noise_c32_fallback",
+            "gauss_noise_f32_fallback",
+            "gauss_noise_q15_fallback",
+            "gauss_noise_c32_fastnoise",
+            "gauss_noise_f32_fastnoise",
+            "gauss_noise_f32_ziggurat",
+        ] {
+            for p in PLANS.iter().filter(|p| kernel(name).family.measured_at(p)) {
+                let limit = limits.get(name, p.level);
+                let limit = limit.unwrap_or_else(|| panic!("{name} at {}: no entry", p.level));
+                // Information at every level against liquid and rand_distr, which do different
+                // work, and GNU Radio's `fastnoise_source`, which does less (M48 §5), and for the
+                // block, which no library has; the run-time-detection build of the kernel
+                // entries is judged against the `avx2` build of the SIMD path.
+                if p.level == "avx2-runtime" && name.starts_with("gauss_noise") {
+                    assert_eq!(limit.status, Status::Release, "{name} at {}", p.level);
+                    continue;
+                }
+                assert_eq!(limit.status, Status::Info, "{name} at {}", p.level);
+                assert!(limit.waiver.is_some(), "{name} at {}", p.level);
             }
         }
     }

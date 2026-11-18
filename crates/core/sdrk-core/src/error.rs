@@ -25,6 +25,9 @@ pub enum Error {
     InvalidParameter(&'static str),
     /// The requested operation is not supported (kind: `Unsupported`).
     Unsupported(&'static str),
+    /// The call does not fit the state it was given, for example another sample type than
+    /// the previous call of a state that fixes its type (kind: `InvalidState`).
+    InvalidState(&'static str),
     /// An error of the device layer (kind forwarded).
     Device(sdrk_device::Error),
     /// An internal invariant was violated (kind: `Internal`).
@@ -45,6 +48,7 @@ impl fmt::Display for Error {
             }
             Self::InvalidParameter(msg) => write!(f, "invalid parameter: {msg}"),
             Self::Unsupported(msg) => write!(f, "unsupported: {msg}"),
+            Self::InvalidState(msg) => write!(f, "invalid state: {msg}"),
             Self::Device(e) => write!(f, "device error: {e}"),
             Self::Internal(msg) => write!(f, "internal error: {msg}"),
         }
@@ -67,6 +71,7 @@ impl SdrkError for Error {
             Self::BufferTooSmall { .. } => ErrorKind::BufferTooSmall,
             Self::InvalidParameter(_) => ErrorKind::InvalidArgument,
             Self::Unsupported(_) => ErrorKind::Unsupported,
+            Self::InvalidState(_) => ErrorKind::InvalidState,
             Self::Device(e) => e.kind(),
             Self::Internal(_) => ErrorKind::Internal,
         }

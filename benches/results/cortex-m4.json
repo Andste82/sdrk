@@ -101,6 +101,18 @@
       "implementation": "fallback",
       "instructions_per_sample": 423.06
     },
+    "gauss_noise_c32": {
+      "implementation": "fallback",
+      "instructions_per_sample": 80.59
+    },
+    "gauss_noise_f32": {
+      "implementation": "fallback",
+      "instructions_per_sample": 40.34
+    },
+    "gauss_noise_q15": {
+      "implementation": "fallback",
+      "instructions_per_sample": 72.08
+    },
     "mag_sq": {
       "implementation": "fallback",
       "instructions_per_sample": 6.4

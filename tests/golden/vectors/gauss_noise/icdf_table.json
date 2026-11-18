@@ -1,0 +1,77 @@
+{
+  "arrays": {
+    "entries": {
+      "dtype": "i32",
+      "file": "icdf_table.entries.bin",
+      "len": 1024
+    }
+  },
+  "case": "icdf_table",
+  "format_version": 1,
+  "kernel": "gauss_noise",
+  "notes": "GAUSS_ICDF of section 2.2 from scipy.special.ndtri (Q17 knots, round half up, own tie guard); entries are u32 stored with the bits of i32; the distribution numbers are exact over all 2^31 magnitude cells (tails: P(Z > t) of the generator and Phi(-t))",
+  "params": {
+    "ks_vs_phi": 1.7044762717965956e-05,
+    "kurtosis": 2.999937965194862,
+    "len": 1024,
+    "max_abs_err_at_z": 1.141057085221187,
+    "max_abs_err_vs_ndtri": 5.6196028813015886e-05,
+    "slope_max": 3197,
+    "slope_min": 323,
+    "tails": [
+      {
+        "p_gen": 0.15866100788116455,
+        "p_phi": 0.15865525393145707,
+        "t": 1.0
+      },
+      {
+        "p_gen": 0.022750914096832275,
+        "p_phi": 0.022750131948179195,
+        "t": 2.0
+      },
+      {
+        "p_gen": 0.001349935308098793,
+        "p_phi": 0.0013498980316300933,
+        "t": 3.0
+      },
+      {
+        "p_gen": 3.167265094816685e-05,
+        "p_phi": 3.167124183311986e-05,
+        "t": 4.0
+      },
+      {
+        "p_gen": 2.866145223379135e-07,
+        "p_phi": 2.866515718791933e-07,
+        "t": 5.0
+      },
+      {
+        "p_gen": 1.909211277961731e-08,
+        "p_phi": 1.898956246588768e-08,
+        "t": 5.5
+      },
+      {
+        "p_gen": 9.313225746154785e-10,
+        "p_phi": 9.865876450376946e-10,
+        "t": 6.0
+      },
+      {
+        "p_gen": 2.3283064365386963e-10,
+        "p_phi": 1.4882282217623072e-10,
+        "t": 6.3
+      }
+    ],
+    "tie_distance_min_lsb": 0.0004939677892252803,
+    "variance": 1.0000278503453182,
+    "zmax": 6.337959289550781
+  },
+  "provenance": {
+    "generator": "tests/golden/generate.py",
+    "numpy": "2.5.4",
+    "python": "3.12",
+    "scipy": "1.18.1"
+  },
+  "seed": 0,
+  "tolerance": {
+    "class": "bit_exact"
+  }
+}

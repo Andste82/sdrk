@@ -689,6 +689,7 @@ impl Engine {
             ("fir_interpolate_real", F32),
             ("fm_demod", C32),
             ("fm_mod", C32),
+            ("gauss_noise", C32),
             ("halfband_decimate", C32),
             ("halfband_decimate_real", F32),
             ("interleave", C32),

@@ -25,6 +25,7 @@ from . import (  # noqa: F401
     fm_mod,
     flows,
     fsk,
+    gauss_noise,
     halfband,
     io,
     mag,

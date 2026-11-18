@@ -66,6 +66,7 @@ mod interp;
 mod math;
 mod mix;
 mod modulate;
+mod noise;
 mod noise_blank;
 mod preemph_limit;
 mod rds;

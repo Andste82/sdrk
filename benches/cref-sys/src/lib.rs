@@ -28,6 +28,12 @@
 //!   pilot loop of `stereo_pll` around it (MIT).
 //! - [`LiquidAmpmodem`]: liquid-dsp's amplitude modulator (`ampmodem`, `LIQUID_AMPMODEM_DSB` with
 //!   the carrier, MIT), the scalar reference of the `C32` `am_mod` fallback.
+//! - [`LiquidRandn`]: liquid-dsp's Gaussian generators `randnf` and `crandnf` over libc `rand()`
+//!   (MIT), the information reference of `gauss_noise` (reference does different work).
+//! - [`GrFastnoiseSourceF`], [`GrFastnoiseSourceC`]: the work loop of GNU Radio's
+//!   `fastnoise_source_f` and `fastnoise_source_c` (GPL-3.0-or-later), a copy from a pool of
+//!   precomputed Gaussian values per sample, the information reference of `gauss_noise`
+//!   (reference does less work).
 //! - [`LiquidResamp2Crcf`], [`LiquidResamp2Rrrf`], [`LiquidFirhilbf`]: liquid-dsp's halfband
 //!   decimators and Hilbert transform decimator with its SIMD dot products (MIT);
 //!   [`AirspyFloat`], [`AirspyInt16`]: libairspy 1.0.10's real-to-complex converters (MIT).
@@ -48,10 +54,12 @@ mod biquad;
 mod channelizer;
 pub mod cmsis_dsp;
 pub mod gnuradio;
+mod gr_fastnoise;
 mod halfband;
 pub mod liquid;
 mod liquid_am;
 mod liquid_nco;
+mod liquid_randn;
 pub mod volk_generic;
 pub mod volk_nofma;
 
@@ -62,12 +70,14 @@ pub use gnuradio::{
     GrFrequencyModulatorFc, GrLinearEqualizer, GrLinearEqualizerRect, GrQuadratureDemodCf, GrRect,
     GrRotator,
 };
+pub use gr_fastnoise::{GR_FASTNOISE_POOL, GrFastnoiseSourceC, GrFastnoiseSourceF};
 pub use halfband::{
     AirspyFloat, AirspyInt16, LiquidFirhilbf, LiquidResamp2Crcf, LiquidResamp2Rrrf,
 };
 pub use liquid::{LiquidDcBlocker, LiquidDcBlockerCrcf};
 pub use liquid_am::LiquidAmpmodem;
 pub use liquid_nco::LiquidNcoPll;
+pub use liquid_randn::LiquidRandn;
 
 /// FFTW's single-precision forward transform, planned for one pair of buffers: in place
 /// (input and output are the same buffer) or out of place.

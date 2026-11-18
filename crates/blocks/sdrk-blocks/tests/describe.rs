@@ -47,18 +47,18 @@ use sdrk_blocks::{
     HdlcEncodeBlock, HdlcEncodeConfig, ImagPartBlock, InterpolateConfig, IqOffsetBlock,
     IqOffsetConfig, MakeComplexBlock, MorseDecodeBlock, MorseDecodeConfig, MorseEncodeBlock,
     MorseEncodeConfig, MulBlock, MulRealBlock, Mutability, NcoBlock, NcoConfig, NcoRealBlock,
-    NoiseBlankBlock, NoiseBlankConfig, OokDemodBlock, OokDemodConfig, OokModBlock, OokModConfig,
-    ParamKind, ParamValue, PortType, PreemphLimitBlock, PreemphLimitConfig, PskDemodBlock,
-    PskDemodConfig, PskModBlock, PskModConfig, PulseKeyBlock, PulseKeyConfig, QamAcquireBlock,
-    QamAcquireConfig, QamDemodConfig, QamFrameDecodeBlock, QamFrameDecodeConfig,
-    QamFrameEncodeBlock, QamFrameEncodeConfig, QamModConfig, QuadDemodConfig, RdsDecodeBlock,
-    RdsDecodeConfig, RdsDemodBlock, RdsDemodConfig, RdsEncodeBlock, RdsEncodeConfig, RealPartBlock,
-    ResampleBlock, ResampleConfig, ResampleRealBlock, RotateConfig, ScaleBlock, ScaleConfig,
-    SensorDecodeBlock, SensorDecodeConfig, SensorEncodeBlock, SensorEncodeConfig, SpectrumBlock,
-    SpectrumConfig, SquelchBlock, SquelchConfig, SsbDemodBlock, SsbDemodConfig, SsbModBlock,
-    SsbModConfig, StereoMatrixBlock, StereoPllBlock, StereoPllConfig, SymbolDemapBlock,
-    SymbolDemapConfig, SymbolDemapConstellation, SymbolMapBlock, SymbolMapConfig, SymbolSyncBlock,
-    SymbolSyncConfig, Ted, ToComplexBlock, all_descriptions,
+    NoiseBlankBlock, NoiseBlankConfig, NoiseBlock, NoiseConfig, NoiseRealBlock, OokDemodBlock,
+    OokDemodConfig, OokModBlock, OokModConfig, ParamKind, ParamValue, PortType, PreemphLimitBlock,
+    PreemphLimitConfig, PskDemodBlock, PskDemodConfig, PskModBlock, PskModConfig, PulseKeyBlock,
+    PulseKeyConfig, QamAcquireBlock, QamAcquireConfig, QamDemodConfig, QamFrameDecodeBlock,
+    QamFrameDecodeConfig, QamFrameEncodeBlock, QamFrameEncodeConfig, QamModConfig, QuadDemodConfig,
+    RdsDecodeBlock, RdsDecodeConfig, RdsDemodBlock, RdsDemodConfig, RdsEncodeBlock,
+    RdsEncodeConfig, RealPartBlock, ResampleBlock, ResampleConfig, ResampleRealBlock, RotateConfig,
+    ScaleBlock, ScaleConfig, SensorDecodeBlock, SensorDecodeConfig, SensorEncodeBlock,
+    SensorEncodeConfig, SpectrumBlock, SpectrumConfig, SquelchBlock, SquelchConfig, SsbDemodBlock,
+    SsbDemodConfig, SsbModBlock, SsbModConfig, StereoMatrixBlock, StereoPllBlock, StereoPllConfig,
+    SymbolDemapBlock, SymbolDemapConfig, SymbolDemapConstellation, SymbolMapBlock, SymbolMapConfig,
+    SymbolSyncBlock, SymbolSyncConfig, Ted, ToComplexBlock, all_descriptions,
 };
 use sdrk_blocks::{PulseMatchBlock, PulseMatchConfig, PulseShapeBlock, PulseShapeConfig};
 use sdrk_testkit::VecStorage;
@@ -81,8 +81,8 @@ fn text_ok(what: &str, s: &str) {
 #[test]
 fn there_are_sixty_one_unique_kinds() {
     let kinds: BTreeSet<_> = all_descriptions().iter().map(|d| d.kind).collect();
-    assert_eq!(kinds.len(), 79);
-    assert_eq!(all_descriptions().len(), 79);
+    assert_eq!(kinds.len(), 80);
+    assert_eq!(all_descriptions().len(), 80);
     for kind in [
         "convert",
         "convert_out",
@@ -161,6 +161,7 @@ fn there_are_sixty_one_unique_kinds() {
         "qam_frame_decode",
         "pulse_shape",
         "pulse_match",
+        "noise",
     ] {
         assert!(kinds.contains(kind), "missing kind {kind}");
     }
@@ -360,6 +361,7 @@ fn config_defaults_match_the_descriptions() {
     defaults_match("interpolate", |n| InterpolateConfig::default().get(n), &[]);
     defaults_match("delay", |n| DelayConfig::default().get(n), &[]);
     defaults_match("nco", |n| NcoConfig::default().get(n), &[]);
+    defaults_match("noise", |n| NoiseConfig::default().get(n), &[]);
     defaults_match("stereo_pll", |n| StereoPllConfig::default().get(n), &[]);
     defaults_match("noise_blank", |n| NoiseBlankConfig::default().get(n), &[]);
     defaults_match("auto_notch", |n| AutoNotchConfig::default().get(n), &[]);
@@ -535,6 +537,7 @@ fn configs_accept_every_described_parameter() {
     round_trip!("ssb_demod", SsbDemodConfig);
     round_trip!("biquad", BiquadConfig);
     round_trip!("nco", NcoConfig);
+    round_trip!("noise", NoiseConfig);
     round_trip!("stereo_pll", StereoPllConfig);
     round_trip!("noise_blank", NoiseBlankConfig);
     round_trip!("auto_notch", AutoNotchConfig);
@@ -689,6 +692,14 @@ fn blocks_accept_and_report_every_described_parameter() {
     check_block_params(
         "nco",
         &mut NcoRealBlock::<CQ15, _>::new(&nco, r, &mut s).unwrap(),
+    );
+    check_block_params(
+        "noise",
+        &mut NoiseBlock::<C32, _>::new(&NoiseConfig::default(), r, &mut s).unwrap(),
+    );
+    check_block_params(
+        "noise",
+        &mut NoiseRealBlock::<sdrk::Q15, _>::new(&NoiseConfig::default(), r, &mut s).unwrap(),
     );
     check_block_params(
         "stereo_pll",

@@ -20,6 +20,7 @@ pub mod interp;
 pub mod math;
 pub mod mix;
 pub mod modulate;
+pub mod noise;
 pub mod noise_blank;
 pub mod preemph_limit;
 pub mod rds;

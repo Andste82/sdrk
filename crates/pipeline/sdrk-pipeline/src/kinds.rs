@@ -29,20 +29,20 @@ use sdrk_blocks::{
     InterpolateConfig, InterpolateRealBlock, IqOffsetBlock, IqOffsetConfig, MagBlock, MagConfig,
     MakeComplexBlock, MorseDecodeBlock, MorseDecodeConfig, MorseEncodeBlock, MorseEncodeConfig,
     MulBlock, MulRealBlock, NcoBlock, NcoConfig, NcoRealBlock, NoiseBlankBlock, NoiseBlankConfig,
-    OokDemodBlock, OokDemodConfig, OokModBlock, OokModConfig, ParamValue, PortType,
-    PreemphLimitBlock, PreemphLimitConfig, PskDemodBlock, PskDemodConfig, PskModBlock,
-    PskModConfig, PskVariant, PulseKeyBlock, PulseKeyConfig, PulseMatchBlock, PulseMatchConfig,
-    PulseShapeBlock, PulseShapeConfig, QamAcquireBlock, QamAcquireConfig, QamDemodBlock,
-    QamDemodConfig, QamFrameDecodeBlock, QamFrameDecodeConfig, QamFrameEncodeBlock,
-    QamFrameEncodeConfig, QamModBlock, QamModConfig, QuadDemodBlock, QuadDemodConfig,
-    RESAMPLE_TUNED_PHASES, RdsDecodeBlock, RdsDecodeConfig, RdsDemodBlock, RdsDemodConfig,
-    RdsEncodeBlock, RdsEncodeConfig, RealPartBlock, RealToIqBlock, ResampleBlock, ResampleConfig,
-    ResampleRealBlock, RotateBlock, RotateConfig, ScaleBlock, ScaleConfig, SensorDecodeBlock,
-    SensorDecodeConfig, SensorEncodeBlock, SensorEncodeConfig, SpectrumBlock, SpectrumConfig,
-    SquelchBlock, SquelchConfig, SsbDemodBlock, SsbDemodConfig, SsbModBlock, SsbModConfig,
-    StereoMatrixBlock, StereoPllBlock, StereoPllConfig, SymbolDemapBlock, SymbolDemapConfig,
-    SymbolDemapConstellation, SymbolMapBlock, SymbolMapConfig, SymbolMapConstellation,
-    SymbolSyncBlock, SymbolSyncConfig, ToComplexBlock,
+    NoiseBlock, NoiseConfig, NoiseRealBlock, OokDemodBlock, OokDemodConfig, OokModBlock,
+    OokModConfig, ParamValue, PortType, PreemphLimitBlock, PreemphLimitConfig, PskDemodBlock,
+    PskDemodConfig, PskModBlock, PskModConfig, PskVariant, PulseKeyBlock, PulseKeyConfig,
+    PulseMatchBlock, PulseMatchConfig, PulseShapeBlock, PulseShapeConfig, QamAcquireBlock,
+    QamAcquireConfig, QamDemodBlock, QamDemodConfig, QamFrameDecodeBlock, QamFrameDecodeConfig,
+    QamFrameEncodeBlock, QamFrameEncodeConfig, QamModBlock, QamModConfig, QuadDemodBlock,
+    QuadDemodConfig, RESAMPLE_TUNED_PHASES, RdsDecodeBlock, RdsDecodeConfig, RdsDemodBlock,
+    RdsDemodConfig, RdsEncodeBlock, RdsEncodeConfig, RealPartBlock, RealToIqBlock, ResampleBlock,
+    ResampleConfig, ResampleRealBlock, RotateBlock, RotateConfig, ScaleBlock, ScaleConfig,
+    SensorDecodeBlock, SensorDecodeConfig, SensorEncodeBlock, SensorEncodeConfig, SpectrumBlock,
+    SpectrumConfig, SquelchBlock, SquelchConfig, SsbDemodBlock, SsbDemodConfig, SsbModBlock,
+    SsbModConfig, StereoMatrixBlock, StereoPllBlock, StereoPllConfig, SymbolDemapBlock,
+    SymbolDemapConfig, SymbolDemapConstellation, SymbolMapBlock, SymbolMapConfig,
+    SymbolMapConstellation, SymbolSyncBlock, SymbolSyncConfig, ToComplexBlock,
 };
 use sdrk_device::Layout;
 use serde_json::{Map, Value};
@@ -2678,6 +2678,86 @@ impl Kind for NcoKind {
                 )?)))
             }
         )
+    }
+}
+
+// ---------------------------------------------------------------------- noise
+
+pub(crate) struct NoiseKind;
+
+impl Kind for NoiseKind {
+    type Cfg = NoiseConfig;
+
+    const KIND: &'static str = "noise";
+    fn kernels() -> &'static [&'static str] {
+        &["gauss_noise"]
+    }
+    fn default_cfg() -> NoiseConfig {
+        NoiseConfig::default()
+    }
+    fn set(cfg: &mut NoiseConfig, name: &str, value: ParamValue) -> BlockResult<()> {
+        cfg.set(name, value)
+    }
+    fn plan(cfg: &NoiseConfig, input: PortType, rate: Rate, p: Precision) -> BlockResult<Figures> {
+        // Measured against `nco` (cost 6, the kernel `oscillate`): the `C32` noise of the block
+        // takes 1.5 to 6.8 times the simulated cycles of `oscillate` `C32` per sample on the
+        // SIMD levels and both core models (median 4.1; the fallbacks 2.1 to 13, median 4.5,
+        // M48 §6). So 4 times `nco`: 24 for a complex sample, 12 per real one (one draw each).
+        let (rate_out, memory_bytes, cost) = if is_complex(input) {
+            with_complex!(
+                p,
+                T,
+                (
+                    NoiseBlock::<T, VecStorage>::rate_out(cfg, rate)?,
+                    NoiseBlock::<T, VecStorage>::storage_bytes(cfg, rate)?,
+                    24.0
+                )
+            )
+        } else {
+            with_real!(
+                p,
+                R,
+                (
+                    NoiseRealBlock::<R, VecStorage>::rate_out(cfg, rate)?,
+                    NoiseRealBlock::<R, VecStorage>::storage_bytes(cfg, rate)?,
+                    12.0
+                )
+            )
+        };
+        Ok(Figures {
+            rate_out,
+            memory_bytes,
+            cost,
+            taps: 0,
+            delay: Delay::ZERO,
+            min_input: 1,
+            output: stream(input),
+        })
+    }
+    fn build(
+        cfg: &NoiseConfig,
+        input: PortType,
+        rate: Rate,
+        p: Precision,
+        st: &mut VecStorage,
+    ) -> BlockResult<Box<dyn Node>> {
+        if is_complex(input) {
+            with_complex!(
+                p,
+                T,
+                Ok(Box::new(StreamNode::new(NoiseBlock::<T, _>::new(
+                    cfg, rate, st
+                )?)))
+            )
+        } else {
+            with_real!(
+                p,
+                R,
+                Ok(Box::new(StreamNode::new(NoiseRealBlock::<R, _>::new(
+                    cfg, rate, st
+                )?)))
+            )
+        }
     }
 }
 

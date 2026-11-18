@@ -175,6 +175,9 @@
 //! | `rds_shape_f32` | quick | about 21 KiB |
 //! | `stereo_encode_rds_c32` | quick | about 48 KiB |
 //! | `extremes_m42` | full | about 11 KiB |
+//! | `gauss_noise_c32` | quick | 32 KiB |
+//! | `gauss_noise_q15` | quick | 16 KiB |
+//! | `extremes_m48` | full | 12 KiB |
 //! | `backend_vs_fallback_stereo_matrix` | quick | up to 62 KiB |
 //! | `backend_vs_fallback_convert` | quick | up to 60 KiB |
 //! | `backend_vs_fallback_convert_out` | quick | up to 60 KiB |
@@ -241,13 +244,14 @@ mod m40;
 mod m42;
 mod m43;
 mod m45;
+mod m48;
 
 pub use m27::{
     CHAIN_FM_RECEIVER_AUDIO, CHAIN_FM_RECEIVER_DIGEST, CHAIN_FM_RECEIVER_SAMPLES, DIGEST_START,
     chain_fm_receiver_digest, digest_q15,
 };
 
-pub(crate) static CASES: [TestCase; 192] = [
+pub(crate) static CASES: [TestCase; 195] = [
     TestCase {
         name: "rng_known_answer",
         tier: Tier::Quick,
@@ -1207,6 +1211,21 @@ pub(crate) static CASES: [TestCase; 192] = [
         name: "extremes_m42",
         tier: Tier::Full,
         run: m42::extremes_m42,
+    },
+    TestCase {
+        name: "gauss_noise_c32",
+        tier: Tier::Quick,
+        run: m48::gauss_noise_c32,
+    },
+    TestCase {
+        name: "gauss_noise_q15",
+        tier: Tier::Quick,
+        run: m48::gauss_noise_q15,
+    },
+    TestCase {
+        name: "extremes_m48",
+        tier: Tier::Full,
+        run: m48::extremes_m48,
     },
 ];
 

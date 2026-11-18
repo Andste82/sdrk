@@ -104,6 +104,7 @@ pub use blocks::morse_decode::{MorseDecodeBlock, MorseDecodeConfig};
 pub use blocks::morse_encode::{MorseEncodeBlock, MorseEncodeConfig};
 pub use blocks::mul::{MulBlock, MulRealBlock};
 pub use blocks::nco::{NcoBlock, NcoConfig, NcoRealBlock};
+pub use blocks::noise::{NoiseBlock, NoiseConfig, NoiseRealBlock};
 pub use blocks::noise_blank::{NoiseBlankBlock, NoiseBlankConfig};
 pub use blocks::ook_demod::{
     OOK_DEMOD_CHUNK, OOK_LOW_RATIO, OOK_MIN_SWING, OOK_THRESHOLD, OokDemodBlock, OokDemodConfig,

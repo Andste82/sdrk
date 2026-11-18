@@ -5727,5 +5727,278 @@
       "status": "info",
       "waiver": "`pulse_match_block` is not accelerated: the run-time-detection build runs the block code compiled for the baseline x86-64 target, the `avx2` build the same code compiled for AVX2, so their counts differ by code generation only; reported as information"
     }
+  },
+  "gauss_noise_c32": {
+    "sse2": {
+      "status": "info",
+      "waiver": "liquid-dsp's `crandnf` (benches/refs/liquid-randn.c) does different work than the `gauss_noise` contract (reference does different work, M48 §5): libc `rand()` for the uniform values and Box–Muller in single precision (`sqrtf`, `logf`, `cexpf`) with a rejection loop, no random access, a sequence that depends on the platform's libc; ours runs PCG32 with one draw per real value and the inverse CDF of a 1024-entry table in integers, with the same bits on every target and random access. The row is information, not a gap to close (cycles and instructions per output sample; ours is the SIMD path of the level through the facade)"
+    },
+    "sse4.2": {
+      "status": "info",
+      "waiver": "liquid-dsp's `crandnf` (benches/refs/liquid-randn.c) does different work than the `gauss_noise` contract (reference does different work, M48 §5): libc `rand()` for the uniform values and Box–Muller in single precision (`sqrtf`, `logf`, `cexpf`) with a rejection loop, no random access, a sequence that depends on the platform's libc; ours runs PCG32 with one draw per real value and the inverse CDF of a 1024-entry table in integers, with the same bits on every target and random access. The row is information, not a gap to close (cycles and instructions per output sample; ours is the SIMD path of the level through the facade)"
+    },
+    "avx2": {
+      "status": "info",
+      "waiver": "liquid-dsp's `crandnf` (benches/refs/liquid-randn.c) does different work than the `gauss_noise` contract (reference does different work, M48 §5): libc `rand()` for the uniform values and Box–Muller in single precision (`sqrtf`, `logf`, `cexpf`) with a rejection loop, no random access, a sequence that depends on the platform's libc; ours runs PCG32 with one draw per real value and the inverse CDF of a 1024-entry table in integers, with the same bits on every target and random access. The row is information, not a gap to close (cycles and instructions per output sample; ours is the SIMD path of the level through the facade)"
+    },
+    "avx512": {
+      "status": "info",
+      "waiver": "liquid-dsp's `crandnf` (benches/refs/liquid-randn.c) does different work than the `gauss_noise` contract (reference does different work, M48 §5): libc `rand()` for the uniform values and Box–Muller in single precision (`sqrtf`, `logf`, `cexpf`) with a rejection loop, no random access, a sequence that depends on the platform's libc; ours runs PCG32 with one draw per real value and the inverse CDF of a 1024-entry table in integers, with the same bits on every target and random access. The row is information, not a gap to close (cycles and instructions per output sample; ours is the SIMD path of the level through the facade)"
+    },
+    "neon": {
+      "status": "info",
+      "waiver": "liquid-dsp's `crandnf` (benches/refs/liquid-randn.c) does different work than the `gauss_noise` contract (reference does different work, M48 §5): libc `rand()` for the uniform values and Box–Muller in single precision (`sqrtf`, `logf`, `cexpf`) with a rejection loop, no random access, a sequence that depends on the platform's libc; ours runs PCG32 with one draw per real value and the inverse CDF of a 1024-entry table in integers, with the same bits on every target and random access. The row is information, not a gap to close (cycles and instructions per output sample; ours is the SIMD path of the level through the facade)"
+    },
+    "simd128": {
+      "status": "info",
+      "waiver": "liquid-dsp's `crandnf` (benches/refs/liquid-randn.c) does different work than the `gauss_noise` contract (reference does different work, M48 §5): libc `rand()` for the uniform values and Box–Muller in single precision (`sqrtf`, `logf`, `cexpf`) with a rejection loop, no random access, a sequence that depends on the platform's libc; ours runs PCG32 with one draw per real value and the inverse CDF of a 1024-entry table in integers, with the same bits on every target and random access. The row is information, not a gap to close (cycles and instructions per output sample; ours is the SIMD path of the level through the facade)"
+    },
+    "avx2-runtime": {
+      "status": "release"
+    }
+  },
+  "gauss_noise_f32": {
+    "sse2": {
+      "status": "info",
+      "waiver": "liquid-dsp's `randnf` (benches/refs/liquid-randn.c) does different work than the `gauss_noise` contract (reference does different work, M48 §5): libc `rand()` for the uniform values and Box–Muller in single precision (`sqrtf`, `logf`, the sine branch with `sinf`) with a rejection loop, no random access, a sequence that depends on the platform's libc; ours runs PCG32 with one draw per real value and the inverse CDF of a 1024-entry table in integers, with the same bits on every target and random access. The row is information, not a gap to close (cycles and instructions per output sample; ours is the SIMD path of the level through the facade)"
+    },
+    "sse4.2": {
+      "status": "info",
+      "waiver": "liquid-dsp's `randnf` (benches/refs/liquid-randn.c) does different work than the `gauss_noise` contract (reference does different work, M48 §5): libc `rand()` for the uniform values and Box–Muller in single precision (`sqrtf`, `logf`, the sine branch with `sinf`) with a rejection loop, no random access, a sequence that depends on the platform's libc; ours runs PCG32 with one draw per real value and the inverse CDF of a 1024-entry table in integers, with the same bits on every target and random access. The row is information, not a gap to close (cycles and instructions per output sample; ours is the SIMD path of the level through the facade)"
+    },
+    "avx2": {
+      "status": "info",
+      "waiver": "liquid-dsp's `randnf` (benches/refs/liquid-randn.c) does different work than the `gauss_noise` contract (reference does different work, M48 §5): libc `rand()` for the uniform values and Box–Muller in single precision (`sqrtf`, `logf`, the sine branch with `sinf`) with a rejection loop, no random access, a sequence that depends on the platform's libc; ours runs PCG32 with one draw per real value and the inverse CDF of a 1024-entry table in integers, with the same bits on every target and random access. The row is information, not a gap to close (cycles and instructions per output sample; ours is the SIMD path of the level through the facade)"
+    },
+    "avx512": {
+      "status": "info",
+      "waiver": "liquid-dsp's `randnf` (benches/refs/liquid-randn.c) does different work than the `gauss_noise` contract (reference does different work, M48 §5): libc `rand()` for the uniform values and Box–Muller in single precision (`sqrtf`, `logf`, the sine branch with `sinf`) with a rejection loop, no random access, a sequence that depends on the platform's libc; ours runs PCG32 with one draw per real value and the inverse CDF of a 1024-entry table in integers, with the same bits on every target and random access. The row is information, not a gap to close (cycles and instructions per output sample; ours is the SIMD path of the level through the facade)"
+    },
+    "neon": {
+      "status": "info",
+      "waiver": "liquid-dsp's `randnf` (benches/refs/liquid-randn.c) does different work than the `gauss_noise` contract (reference does different work, M48 §5): libc `rand()` for the uniform values and Box–Muller in single precision (`sqrtf`, `logf`, the sine branch with `sinf`) with a rejection loop, no random access, a sequence that depends on the platform's libc; ours runs PCG32 with one draw per real value and the inverse CDF of a 1024-entry table in integers, with the same bits on every target and random access. The row is information, not a gap to close (cycles and instructions per output sample; ours is the SIMD path of the level through the facade)"
+    },
+    "simd128": {
+      "status": "info",
+      "waiver": "liquid-dsp's `randnf` (benches/refs/liquid-randn.c) does different work than the `gauss_noise` contract (reference does different work, M48 §5): libc `rand()` for the uniform values and Box–Muller in single precision (`sqrtf`, `logf`, the sine branch with `sinf`) with a rejection loop, no random access, a sequence that depends on the platform's libc; ours runs PCG32 with one draw per real value and the inverse CDF of a 1024-entry table in integers, with the same bits on every target and random access. The row is information, not a gap to close (cycles and instructions per output sample; ours is the SIMD path of the level through the facade)"
+    },
+    "avx2-runtime": {
+      "status": "release"
+    }
+  },
+  "gauss_noise_q15": {
+    "sse2": {
+      "status": "info",
+      "waiver": "`gauss_noise_q15` is the kernel `gauss_noise` (M48) with `Q15` output, 4096 samples per call: per sample one PCG32 draw, the inverse CDF of the 1024-entry Q17 table and the R7 rounding of `zq · 2^-17 · sigma`, with a lane-parallel SIMD path per level, bit-exact with the fallback. No library makes `Q15` Gaussian noise (liquid-dsp and GNU Radio have float generators only), so the comparison is our own fallback, reported as information (cycles and instructions per output sample); the paths must not be slower than the fallback (D321)"
+    },
+    "sse4.2": {
+      "status": "info",
+      "waiver": "`gauss_noise_q15` is the kernel `gauss_noise` (M48) with `Q15` output, 4096 samples per call: per sample one PCG32 draw, the inverse CDF of the 1024-entry Q17 table and the R7 rounding of `zq · 2^-17 · sigma`, with a lane-parallel SIMD path per level, bit-exact with the fallback. No library makes `Q15` Gaussian noise (liquid-dsp and GNU Radio have float generators only), so the comparison is our own fallback, reported as information (cycles and instructions per output sample); the paths must not be slower than the fallback (D321)"
+    },
+    "avx2": {
+      "status": "info",
+      "waiver": "`gauss_noise_q15` is the kernel `gauss_noise` (M48) with `Q15` output, 4096 samples per call: per sample one PCG32 draw, the inverse CDF of the 1024-entry Q17 table and the R7 rounding of `zq · 2^-17 · sigma`, with a lane-parallel SIMD path per level, bit-exact with the fallback. No library makes `Q15` Gaussian noise (liquid-dsp and GNU Radio have float generators only), so the comparison is our own fallback, reported as information (cycles and instructions per output sample); the paths must not be slower than the fallback (D321)"
+    },
+    "avx512": {
+      "status": "info",
+      "waiver": "`gauss_noise_q15` is the kernel `gauss_noise` (M48) with `Q15` output, 4096 samples per call: per sample one PCG32 draw, the inverse CDF of the 1024-entry Q17 table and the R7 rounding of `zq · 2^-17 · sigma`, with a lane-parallel SIMD path per level, bit-exact with the fallback. No library makes `Q15` Gaussian noise (liquid-dsp and GNU Radio have float generators only), so the comparison is our own fallback, reported as information (cycles and instructions per output sample); the paths must not be slower than the fallback (D321)"
+    },
+    "neon": {
+      "status": "info",
+      "waiver": "`gauss_noise_q15` is the kernel `gauss_noise` (M48) with `Q15` output, 4096 samples per call: per sample one PCG32 draw, the inverse CDF of the 1024-entry Q17 table and the R7 rounding of `zq · 2^-17 · sigma`, with a lane-parallel SIMD path per level, bit-exact with the fallback. No library makes `Q15` Gaussian noise (liquid-dsp and GNU Radio have float generators only), so the comparison is our own fallback, reported as information (cycles and instructions per output sample); the paths must not be slower than the fallback (D321)"
+    },
+    "simd128": {
+      "status": "info",
+      "waiver": "`gauss_noise_q15` is the kernel `gauss_noise` (M48) with `Q15` output, 4096 samples per call: per sample one PCG32 draw, the inverse CDF of the 1024-entry Q17 table and the R7 rounding of `zq · 2^-17 · sigma`, with a lane-parallel SIMD path per level, bit-exact with the fallback. No library makes `Q15` Gaussian noise (liquid-dsp and GNU Radio have float generators only), so the comparison is our own fallback, reported as information (cycles and instructions per output sample); the paths must not be slower than the fallback (D321)"
+    },
+    "avx2-runtime": {
+      "status": "release"
+    }
+  },
+  "noise_block": {
+    "sse2": {
+      "status": "info",
+      "waiver": "`noise_block` is the block `noise` (M48 §6) with the default configuration (`sigma` 0.1, seed 0, stream 1) on a `C32` clock, 4096 output samples per call: one call of the kernel `gauss_noise`, whose entry `gauss_noise_c32` carries the library comparison. No library has the same block (GNU Radio's `noise_source_c` is a source without a clock and with xoroshiro128+), so the entry is our own code, reported as information (cycles and instructions per output sample; ours and fallback run the same block code)"
+    },
+    "sse4.2": {
+      "status": "info",
+      "waiver": "`noise_block` is the block `noise` (M48 §6) with the default configuration (`sigma` 0.1, seed 0, stream 1) on a `C32` clock, 4096 output samples per call: one call of the kernel `gauss_noise`, whose entry `gauss_noise_c32` carries the library comparison. No library has the same block (GNU Radio's `noise_source_c` is a source without a clock and with xoroshiro128+), so the entry is our own code, reported as information (cycles and instructions per output sample; ours and fallback run the same block code)"
+    },
+    "avx2": {
+      "status": "info",
+      "waiver": "`noise_block` is the block `noise` (M48 §6) with the default configuration (`sigma` 0.1, seed 0, stream 1) on a `C32` clock, 4096 output samples per call: one call of the kernel `gauss_noise`, whose entry `gauss_noise_c32` carries the library comparison. No library has the same block (GNU Radio's `noise_source_c` is a source without a clock and with xoroshiro128+), so the entry is our own code, reported as information (cycles and instructions per output sample; ours and fallback run the same block code)"
+    },
+    "avx512": {
+      "status": "info",
+      "waiver": "`noise_block` is the block `noise` (M48 §6) with the default configuration (`sigma` 0.1, seed 0, stream 1) on a `C32` clock, 4096 output samples per call: one call of the kernel `gauss_noise`, whose entry `gauss_noise_c32` carries the library comparison. No library has the same block (GNU Radio's `noise_source_c` is a source without a clock and with xoroshiro128+), so the entry is our own code, reported as information (cycles and instructions per output sample; ours and fallback run the same block code)"
+    },
+    "neon": {
+      "status": "info",
+      "waiver": "`noise_block` is the block `noise` (M48 §6) with the default configuration (`sigma` 0.1, seed 0, stream 1) on a `C32` clock, 4096 output samples per call: one call of the kernel `gauss_noise`, whose entry `gauss_noise_c32` carries the library comparison. No library has the same block (GNU Radio's `noise_source_c` is a source without a clock and with xoroshiro128+), so the entry is our own code, reported as information (cycles and instructions per output sample; ours and fallback run the same block code)"
+    },
+    "simd128": {
+      "status": "info",
+      "waiver": "`noise_block` is the block `noise` (M48 §6) with the default configuration (`sigma` 0.1, seed 0, stream 1) on a `C32` clock, 4096 output samples per call: one call of the kernel `gauss_noise`, whose entry `gauss_noise_c32` carries the library comparison. No library has the same block (GNU Radio's `noise_source_c` is a source without a clock and with xoroshiro128+), so the entry is our own code, reported as information (cycles and instructions per output sample; ours and fallback run the same block code)"
+    },
+    "avx2-runtime": {
+      "status": "info",
+      "waiver": "`noise_block` is the block code around `gauss_noise`, whose SIMD path the run-time-detection build reaches through the dispatch at AVX2; the block code itself is compiled for the baseline x86-64 target there, so the counts differ by the dispatch and code generation only; reported as information"
+    }
+  },
+  "gauss_noise_c32_fallback": {
+    "sse2": {
+      "status": "info",
+      "waiver": "The fallback of `gauss_noise` against liquid-dsp's `crandnf` (benches/refs/liquid-randn.c), which does different work than the contract (reference does different work, M48 §5): libc `rand()` and Box–Muller in single precision (`sqrtf`, `logf`, `cexpf`), no random access, a sequence that depends on the platform's libc; ours runs PCG32 with one draw per real value and the inverse CDF of a 1024-entry table in integers, with the same bits on every target and random access. Information, not a gap to close; the entry is the pair of `gauss_noise_c32` for the D321 cycle gate (the SIMD path against the fallback)"
+    },
+    "sse4.2": {
+      "status": "info",
+      "waiver": "The fallback of `gauss_noise` against liquid-dsp's `crandnf` (benches/refs/liquid-randn.c), which does different work than the contract (reference does different work, M48 §5): libc `rand()` and Box–Muller in single precision (`sqrtf`, `logf`, `cexpf`), no random access, a sequence that depends on the platform's libc; ours runs PCG32 with one draw per real value and the inverse CDF of a 1024-entry table in integers, with the same bits on every target and random access. Information, not a gap to close; the entry is the pair of `gauss_noise_c32` for the D321 cycle gate (the SIMD path against the fallback)"
+    },
+    "avx2": {
+      "status": "info",
+      "waiver": "The fallback of `gauss_noise` against liquid-dsp's `crandnf` (benches/refs/liquid-randn.c), which does different work than the contract (reference does different work, M48 §5): libc `rand()` and Box–Muller in single precision (`sqrtf`, `logf`, `cexpf`), no random access, a sequence that depends on the platform's libc; ours runs PCG32 with one draw per real value and the inverse CDF of a 1024-entry table in integers, with the same bits on every target and random access. Information, not a gap to close; the entry is the pair of `gauss_noise_c32` for the D321 cycle gate (the SIMD path against the fallback)"
+    },
+    "avx512": {
+      "status": "info",
+      "waiver": "The fallback of `gauss_noise` against liquid-dsp's `crandnf` (benches/refs/liquid-randn.c), which does different work than the contract (reference does different work, M48 §5): libc `rand()` and Box–Muller in single precision (`sqrtf`, `logf`, `cexpf`), no random access, a sequence that depends on the platform's libc; ours runs PCG32 with one draw per real value and the inverse CDF of a 1024-entry table in integers, with the same bits on every target and random access. Information, not a gap to close; the entry is the pair of `gauss_noise_c32` for the D321 cycle gate (the SIMD path against the fallback)"
+    },
+    "neon": {
+      "status": "info",
+      "waiver": "The fallback of `gauss_noise` against liquid-dsp's `crandnf` (benches/refs/liquid-randn.c), which does different work than the contract (reference does different work, M48 §5): libc `rand()` and Box–Muller in single precision (`sqrtf`, `logf`, `cexpf`), no random access, a sequence that depends on the platform's libc; ours runs PCG32 with one draw per real value and the inverse CDF of a 1024-entry table in integers, with the same bits on every target and random access. Information, not a gap to close; the entry is the pair of `gauss_noise_c32` for the D321 cycle gate (the SIMD path against the fallback)"
+    },
+    "simd128": {
+      "status": "info",
+      "waiver": "The fallback of `gauss_noise` against liquid-dsp's `crandnf` (benches/refs/liquid-randn.c), which does different work than the contract (reference does different work, M48 §5): libc `rand()` and Box–Muller in single precision (`sqrtf`, `logf`, `cexpf`), no random access, a sequence that depends on the platform's libc; ours runs PCG32 with one draw per real value and the inverse CDF of a 1024-entry table in integers, with the same bits on every target and random access. Information, not a gap to close; the entry is the pair of `gauss_noise_c32` for the D321 cycle gate (the SIMD path against the fallback)"
+    }
+  },
+  "gauss_noise_f32_fallback": {
+    "sse2": {
+      "status": "info",
+      "waiver": "The fallback of `gauss_noise` against liquid-dsp's `randnf` (benches/refs/liquid-randn.c), which does different work than the contract (reference does different work, M48 §5): libc `rand()` and Box–Muller in single precision (`sqrtf`, `logf`, the sine branch with `sinf`), no random access, a sequence that depends on the platform's libc; ours runs PCG32 with one draw per real value and the inverse CDF of a 1024-entry table in integers, with the same bits on every target and random access. Information, not a gap to close; the entry is the pair of `gauss_noise_f32` for the D321 cycle gate (the SIMD path against the fallback)"
+    },
+    "sse4.2": {
+      "status": "info",
+      "waiver": "The fallback of `gauss_noise` against liquid-dsp's `randnf` (benches/refs/liquid-randn.c), which does different work than the contract (reference does different work, M48 §5): libc `rand()` and Box–Muller in single precision (`sqrtf`, `logf`, the sine branch with `sinf`), no random access, a sequence that depends on the platform's libc; ours runs PCG32 with one draw per real value and the inverse CDF of a 1024-entry table in integers, with the same bits on every target and random access. Information, not a gap to close; the entry is the pair of `gauss_noise_f32` for the D321 cycle gate (the SIMD path against the fallback)"
+    },
+    "avx2": {
+      "status": "info",
+      "waiver": "The fallback of `gauss_noise` against liquid-dsp's `randnf` (benches/refs/liquid-randn.c), which does different work than the contract (reference does different work, M48 §5): libc `rand()` and Box–Muller in single precision (`sqrtf`, `logf`, the sine branch with `sinf`), no random access, a sequence that depends on the platform's libc; ours runs PCG32 with one draw per real value and the inverse CDF of a 1024-entry table in integers, with the same bits on every target and random access. Information, not a gap to close; the entry is the pair of `gauss_noise_f32` for the D321 cycle gate (the SIMD path against the fallback)"
+    },
+    "avx512": {
+      "status": "info",
+      "waiver": "The fallback of `gauss_noise` against liquid-dsp's `randnf` (benches/refs/liquid-randn.c), which does different work than the contract (reference does different work, M48 §5): libc `rand()` and Box–Muller in single precision (`sqrtf`, `logf`, the sine branch with `sinf`), no random access, a sequence that depends on the platform's libc; ours runs PCG32 with one draw per real value and the inverse CDF of a 1024-entry table in integers, with the same bits on every target and random access. Information, not a gap to close; the entry is the pair of `gauss_noise_f32` for the D321 cycle gate (the SIMD path against the fallback)"
+    },
+    "neon": {
+      "status": "info",
+      "waiver": "The fallback of `gauss_noise` against liquid-dsp's `randnf` (benches/refs/liquid-randn.c), which does different work than the contract (reference does different work, M48 §5): libc `rand()` and Box–Muller in single precision (`sqrtf`, `logf`, the sine branch with `sinf`), no random access, a sequence that depends on the platform's libc; ours runs PCG32 with one draw per real value and the inverse CDF of a 1024-entry table in integers, with the same bits on every target and random access. Information, not a gap to close; the entry is the pair of `gauss_noise_f32` for the D321 cycle gate (the SIMD path against the fallback)"
+    },
+    "simd128": {
+      "status": "info",
+      "waiver": "The fallback of `gauss_noise` against liquid-dsp's `randnf` (benches/refs/liquid-randn.c), which does different work than the contract (reference does different work, M48 §5): libc `rand()` and Box–Muller in single precision (`sqrtf`, `logf`, the sine branch with `sinf`), no random access, a sequence that depends on the platform's libc; ours runs PCG32 with one draw per real value and the inverse CDF of a 1024-entry table in integers, with the same bits on every target and random access. Information, not a gap to close; the entry is the pair of `gauss_noise_f32` for the D321 cycle gate (the SIMD path against the fallback)"
+    }
+  },
+  "gauss_noise_q15_fallback": {
+    "sse2": {
+      "status": "info",
+      "waiver": "The fallback of `gauss_noise` with `Q15` output (M48), measured against itself: no library makes `Q15` Gaussian noise (liquid-dsp and GNU Radio have float generators only), so the comparison is the same fallback (ratio 1). Information, not a gap to close; the entry is the pair of `gauss_noise_q15` for the D321 cycle gate (`cargo xtask check cycles`: the SIMD path of every level must not be slower than this fallback on either core model)"
+    },
+    "sse4.2": {
+      "status": "info",
+      "waiver": "The fallback of `gauss_noise` with `Q15` output (M48), measured against itself: no library makes `Q15` Gaussian noise (liquid-dsp and GNU Radio have float generators only), so the comparison is the same fallback (ratio 1). Information, not a gap to close; the entry is the pair of `gauss_noise_q15` for the D321 cycle gate (`cargo xtask check cycles`: the SIMD path of every level must not be slower than this fallback on either core model)"
+    },
+    "avx2": {
+      "status": "info",
+      "waiver": "The fallback of `gauss_noise` with `Q15` output (M48), measured against itself: no library makes `Q15` Gaussian noise (liquid-dsp and GNU Radio have float generators only), so the comparison is the same fallback (ratio 1). Information, not a gap to close; the entry is the pair of `gauss_noise_q15` for the D321 cycle gate (`cargo xtask check cycles`: the SIMD path of every level must not be slower than this fallback on either core model)"
+    },
+    "avx512": {
+      "status": "info",
+      "waiver": "The fallback of `gauss_noise` with `Q15` output (M48), measured against itself: no library makes `Q15` Gaussian noise (liquid-dsp and GNU Radio have float generators only), so the comparison is the same fallback (ratio 1). Information, not a gap to close; the entry is the pair of `gauss_noise_q15` for the D321 cycle gate (`cargo xtask check cycles`: the SIMD path of every level must not be slower than this fallback on either core model)"
+    },
+    "neon": {
+      "status": "info",
+      "waiver": "The fallback of `gauss_noise` with `Q15` output (M48), measured against itself: no library makes `Q15` Gaussian noise (liquid-dsp and GNU Radio have float generators only), so the comparison is the same fallback (ratio 1). Information, not a gap to close; the entry is the pair of `gauss_noise_q15` for the D321 cycle gate (`cargo xtask check cycles`: the SIMD path of every level must not be slower than this fallback on either core model)"
+    },
+    "simd128": {
+      "status": "info",
+      "waiver": "The fallback of `gauss_noise` with `Q15` output (M48), measured against itself: no library makes `Q15` Gaussian noise (liquid-dsp and GNU Radio have float generators only), so the comparison is the same fallback (ratio 1). Information, not a gap to close; the entry is the pair of `gauss_noise_q15` for the D321 cycle gate (`cargo xtask check cycles`: the SIMD path of every level must not be slower than this fallback on either core model)"
+    }
+  },
+  "gauss_noise_c32_fastnoise": {
+    "sse2": {
+      "status": "info",
+      "waiver": "GNU Radio's `fastnoise_source_c` (benches/refs/gr-fastnoise.c, the work loop of GNU Radio main at ec1bf15) does less work than the `gauss_noise` contract (reference does less work, M48 §5): per sample one xoroshiro128+ draw and a copy of the value of a precomputed pool of 8192 Gaussian values that it selects (the pool is filled once, outside the counted calls), with no normal mapping per sample, values that repeat, a tail that ends at the largest pool value and no random access; ours runs PCG32 with one draw per real value and the inverse CDF of a 1024-entry table in integers, with the same bits on every target and random access. The row shows the floor of what a noise sample can cost; it is information, not a gap to close (cycles and instructions per output sample; ours is the SIMD path of the level through the facade)"
+    },
+    "sse4.2": {
+      "status": "info",
+      "waiver": "GNU Radio's `fastnoise_source_c` (benches/refs/gr-fastnoise.c, the work loop of GNU Radio main at ec1bf15) does less work than the `gauss_noise` contract (reference does less work, M48 §5): per sample one xoroshiro128+ draw and a copy of the value of a precomputed pool of 8192 Gaussian values that it selects (the pool is filled once, outside the counted calls), with no normal mapping per sample, values that repeat, a tail that ends at the largest pool value and no random access; ours runs PCG32 with one draw per real value and the inverse CDF of a 1024-entry table in integers, with the same bits on every target and random access. The row shows the floor of what a noise sample can cost; it is information, not a gap to close (cycles and instructions per output sample; ours is the SIMD path of the level through the facade)"
+    },
+    "avx2": {
+      "status": "info",
+      "waiver": "GNU Radio's `fastnoise_source_c` (benches/refs/gr-fastnoise.c, the work loop of GNU Radio main at ec1bf15) does less work than the `gauss_noise` contract (reference does less work, M48 §5): per sample one xoroshiro128+ draw and a copy of the value of a precomputed pool of 8192 Gaussian values that it selects (the pool is filled once, outside the counted calls), with no normal mapping per sample, values that repeat, a tail that ends at the largest pool value and no random access; ours runs PCG32 with one draw per real value and the inverse CDF of a 1024-entry table in integers, with the same bits on every target and random access. The row shows the floor of what a noise sample can cost; it is information, not a gap to close (cycles and instructions per output sample; ours is the SIMD path of the level through the facade)"
+    },
+    "avx512": {
+      "status": "info",
+      "waiver": "GNU Radio's `fastnoise_source_c` (benches/refs/gr-fastnoise.c, the work loop of GNU Radio main at ec1bf15) does less work than the `gauss_noise` contract (reference does less work, M48 §5): per sample one xoroshiro128+ draw and a copy of the value of a precomputed pool of 8192 Gaussian values that it selects (the pool is filled once, outside the counted calls), with no normal mapping per sample, values that repeat, a tail that ends at the largest pool value and no random access; ours runs PCG32 with one draw per real value and the inverse CDF of a 1024-entry table in integers, with the same bits on every target and random access. The row shows the floor of what a noise sample can cost; it is information, not a gap to close (cycles and instructions per output sample; ours is the SIMD path of the level through the facade)"
+    },
+    "neon": {
+      "status": "info",
+      "waiver": "GNU Radio's `fastnoise_source_c` (benches/refs/gr-fastnoise.c, the work loop of GNU Radio main at ec1bf15) does less work than the `gauss_noise` contract (reference does less work, M48 §5): per sample one xoroshiro128+ draw and a copy of the value of a precomputed pool of 8192 Gaussian values that it selects (the pool is filled once, outside the counted calls), with no normal mapping per sample, values that repeat, a tail that ends at the largest pool value and no random access; ours runs PCG32 with one draw per real value and the inverse CDF of a 1024-entry table in integers, with the same bits on every target and random access. The row shows the floor of what a noise sample can cost; it is information, not a gap to close (cycles and instructions per output sample; ours is the SIMD path of the level through the facade)"
+    },
+    "simd128": {
+      "status": "info",
+      "waiver": "GNU Radio's `fastnoise_source_c` (benches/refs/gr-fastnoise.c, the work loop of GNU Radio main at ec1bf15) does less work than the `gauss_noise` contract (reference does less work, M48 §5): per sample one xoroshiro128+ draw and a copy of the value of a precomputed pool of 8192 Gaussian values that it selects (the pool is filled once, outside the counted calls), with no normal mapping per sample, values that repeat, a tail that ends at the largest pool value and no random access; ours runs PCG32 with one draw per real value and the inverse CDF of a 1024-entry table in integers, with the same bits on every target and random access. The row shows the floor of what a noise sample can cost; it is information, not a gap to close (cycles and instructions per output sample; ours is the SIMD path of the level through the facade)"
+    }
+  },
+  "gauss_noise_f32_fastnoise": {
+    "sse2": {
+      "status": "info",
+      "waiver": "GNU Radio's `fastnoise_source_f` (benches/refs/gr-fastnoise.c, the work loop of GNU Radio main at ec1bf15) does less work than the `gauss_noise` contract (reference does less work, M48 §5): per sample one xoroshiro128+ draw and a copy of the value of a precomputed pool of 8192 Gaussian values that it selects (the pool is filled once, outside the counted calls), with no normal mapping per sample, values that repeat, a tail that ends at the largest pool value and no random access; ours runs PCG32 with one draw per real value and the inverse CDF of a 1024-entry table in integers, with the same bits on every target and random access. The row shows the floor of what a noise sample can cost; it is information, not a gap to close (cycles and instructions per output sample; ours is the SIMD path of the level through the facade)"
+    },
+    "sse4.2": {
+      "status": "info",
+      "waiver": "GNU Radio's `fastnoise_source_f` (benches/refs/gr-fastnoise.c, the work loop of GNU Radio main at ec1bf15) does less work than the `gauss_noise` contract (reference does less work, M48 §5): per sample one xoroshiro128+ draw and a copy of the value of a precomputed pool of 8192 Gaussian values that it selects (the pool is filled once, outside the counted calls), with no normal mapping per sample, values that repeat, a tail that ends at the largest pool value and no random access; ours runs PCG32 with one draw per real value and the inverse CDF of a 1024-entry table in integers, with the same bits on every target and random access. The row shows the floor of what a noise sample can cost; it is information, not a gap to close (cycles and instructions per output sample; ours is the SIMD path of the level through the facade)"
+    },
+    "avx2": {
+      "status": "info",
+      "waiver": "GNU Radio's `fastnoise_source_f` (benches/refs/gr-fastnoise.c, the work loop of GNU Radio main at ec1bf15) does less work than the `gauss_noise` contract (reference does less work, M48 §5): per sample one xoroshiro128+ draw and a copy of the value of a precomputed pool of 8192 Gaussian values that it selects (the pool is filled once, outside the counted calls), with no normal mapping per sample, values that repeat, a tail that ends at the largest pool value and no random access; ours runs PCG32 with one draw per real value and the inverse CDF of a 1024-entry table in integers, with the same bits on every target and random access. The row shows the floor of what a noise sample can cost; it is information, not a gap to close (cycles and instructions per output sample; ours is the SIMD path of the level through the facade)"
+    },
+    "avx512": {
+      "status": "info",
+      "waiver": "GNU Radio's `fastnoise_source_f` (benches/refs/gr-fastnoise.c, the work loop of GNU Radio main at ec1bf15) does less work than the `gauss_noise` contract (reference does less work, M48 §5): per sample one xoroshiro128+ draw and a copy of the value of a precomputed pool of 8192 Gaussian values that it selects (the pool is filled once, outside the counted calls), with no normal mapping per sample, values that repeat, a tail that ends at the largest pool value and no random access; ours runs PCG32 with one draw per real value and the inverse CDF of a 1024-entry table in integers, with the same bits on every target and random access. The row shows the floor of what a noise sample can cost; it is information, not a gap to close (cycles and instructions per output sample; ours is the SIMD path of the level through the facade)"
+    },
+    "neon": {
+      "status": "info",
+      "waiver": "GNU Radio's `fastnoise_source_f` (benches/refs/gr-fastnoise.c, the work loop of GNU Radio main at ec1bf15) does less work than the `gauss_noise` contract (reference does less work, M48 §5): per sample one xoroshiro128+ draw and a copy of the value of a precomputed pool of 8192 Gaussian values that it selects (the pool is filled once, outside the counted calls), with no normal mapping per sample, values that repeat, a tail that ends at the largest pool value and no random access; ours runs PCG32 with one draw per real value and the inverse CDF of a 1024-entry table in integers, with the same bits on every target and random access. The row shows the floor of what a noise sample can cost; it is information, not a gap to close (cycles and instructions per output sample; ours is the SIMD path of the level through the facade)"
+    },
+    "simd128": {
+      "status": "info",
+      "waiver": "GNU Radio's `fastnoise_source_f` (benches/refs/gr-fastnoise.c, the work loop of GNU Radio main at ec1bf15) does less work than the `gauss_noise` contract (reference does less work, M48 §5): per sample one xoroshiro128+ draw and a copy of the value of a precomputed pool of 8192 Gaussian values that it selects (the pool is filled once, outside the counted calls), with no normal mapping per sample, values that repeat, a tail that ends at the largest pool value and no random access; ours runs PCG32 with one draw per real value and the inverse CDF of a 1024-entry table in integers, with the same bits on every target and random access. The row shows the floor of what a noise sample can cost; it is information, not a gap to close (cycles and instructions per output sample; ours is the SIMD path of the level through the facade)"
+    }
+  },
+  "gauss_noise_f32_ziggurat": {
+    "sse2": {
+      "status": "info",
+      "waiver": "rand_distr's `StandardNormal` (benches/kernels, the Ziggurat method over rand's `SmallRng`, sampled as `f32`) does different work than the `gauss_noise` contract (reference does different work, M48 §5, maintainer decision 2026-11-17): rejection sampling with a variable number of draws per value, no random access, no bit-exact sequence across platforms and versions; ours runs PCG32 with one draw per real value and the inverse CDF of a 1024-entry table in integers, with the same bits on every target and random access. The row is information, not a gap to close (cycles and instructions per output sample; ours is the SIMD path of the level through the facade)"
+    },
+    "sse4.2": {
+      "status": "info",
+      "waiver": "rand_distr's `StandardNormal` (benches/kernels, the Ziggurat method over rand's `SmallRng`, sampled as `f32`) does different work than the `gauss_noise` contract (reference does different work, M48 §5, maintainer decision 2026-11-17): rejection sampling with a variable number of draws per value, no random access, no bit-exact sequence across platforms and versions; ours runs PCG32 with one draw per real value and the inverse CDF of a 1024-entry table in integers, with the same bits on every target and random access. The row is information, not a gap to close (cycles and instructions per output sample; ours is the SIMD path of the level through the facade)"
+    },
+    "avx2": {
+      "status": "info",
+      "waiver": "rand_distr's `StandardNormal` (benches/kernels, the Ziggurat method over rand's `SmallRng`, sampled as `f32`) does different work than the `gauss_noise` contract (reference does different work, M48 §5, maintainer decision 2026-11-17): rejection sampling with a variable number of draws per value, no random access, no bit-exact sequence across platforms and versions; ours runs PCG32 with one draw per real value and the inverse CDF of a 1024-entry table in integers, with the same bits on every target and random access. The row is information, not a gap to close (cycles and instructions per output sample; ours is the SIMD path of the level through the facade)"
+    },
+    "avx512": {
+      "status": "info",
+      "waiver": "rand_distr's `StandardNormal` (benches/kernels, the Ziggurat method over rand's `SmallRng`, sampled as `f32`) does different work than the `gauss_noise` contract (reference does different work, M48 §5, maintainer decision 2026-11-17): rejection sampling with a variable number of draws per value, no random access, no bit-exact sequence across platforms and versions; ours runs PCG32 with one draw per real value and the inverse CDF of a 1024-entry table in integers, with the same bits on every target and random access. The row is information, not a gap to close (cycles and instructions per output sample; ours is the SIMD path of the level through the facade)"
+    },
+    "neon": {
+      "status": "info",
+      "waiver": "rand_distr's `StandardNormal` (benches/kernels, the Ziggurat method over rand's `SmallRng`, sampled as `f32`) does different work than the `gauss_noise` contract (reference does different work, M48 §5, maintainer decision 2026-11-17): rejection sampling with a variable number of draws per value, no random access, no bit-exact sequence across platforms and versions; ours runs PCG32 with one draw per real value and the inverse CDF of a 1024-entry table in integers, with the same bits on every target and random access. The row is information, not a gap to close (cycles and instructions per output sample; ours is the SIMD path of the level through the facade)"
+    },
+    "simd128": {
+      "status": "info",
+      "waiver": "rand_distr's `StandardNormal` (benches/kernels, the Ziggurat method over rand's `SmallRng`, sampled as `f32`) does different work than the `gauss_noise` contract (reference does different work, M48 §5, maintainer decision 2026-11-17): rejection sampling with a variable number of draws per value, no random access, no bit-exact sequence across platforms and versions; ours runs PCG32 with one draw per real value and the inverse CDF of a 1024-entry table in integers, with the same bits on every target and random access. The row is information, not a gap to close (cycles and instructions per output sample; ours is the SIMD path of the level through the facade)"
+    }
   }
 }

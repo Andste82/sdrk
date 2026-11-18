@@ -39,7 +39,7 @@ pub const TARGET_CPU: &str = "cortex-m4";
 pub const BIQUAD_SAMPLES_PER_CALL: u64 = 4096;
 
 /// The kernels the workload binary knows, in report order.
-pub const KERNELS: [&str; 19] = [
+pub const KERNELS: [&str; 22] = [
     "convert_cs8",
     "convert_cs16",
     "convert_out_cs16",
@@ -59,6 +59,9 @@ pub const KERNELS: [&str; 19] = [
     "biquad_cq15",
     "biquad_real",
     "biquad_real_q15",
+    "gauss_noise_c32",
+    "gauss_noise_f32",
+    "gauss_noise_q15",
 ];
 
 /// What the CMSIS-DSP side of a biquad kernel calls (the text of `compared_with`), or `None`

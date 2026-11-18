@@ -66,6 +66,10 @@ pub enum CostasConstellation {
     Qam16,
     /// 64-QAM, the detector `arg(y conj d)` against the grid decision (M44).
     Qam64,
+    /// 256-QAM, the detector `arg(y conj d)` against the grid decision (M44.2).
+    Qam256,
+    /// 1024-QAM, the detector `arg(y conj d)` against the grid decision (M44.2).
+    Qam1024,
 }
 
 impl CostasConstellation {
@@ -76,7 +80,7 @@ impl CostasConstellation {
             Self::Bpsk => Some(2),
             Self::Qpsk => Some(4),
             Self::Psk8 => Some(8),
-            Self::Qam16 | Self::Qam64 => None,
+            Self::Qam16 | Self::Qam64 | Self::Qam256 | Self::Qam1024 => None,
         }
     }
 
@@ -86,6 +90,8 @@ impl CostasConstellation {
         match self {
             Self::Qam16 => Some(Qam::Qam16),
             Self::Qam64 => Some(Qam::Qam64),
+            Self::Qam256 => Some(Qam::Qam256),
+            Self::Qam1024 => Some(Qam::Qam1024),
             Self::Bpsk | Self::Qpsk | Self::Psk8 => None,
         }
     }
@@ -397,6 +403,10 @@ pub(crate) const PSK8: u8 = 2;
 pub(crate) const QAM16: u8 = 3;
 /// See [`BPSK`].
 pub(crate) const QAM64: u8 = 4;
+/// See [`BPSK`].
+pub(crate) const QAM256: u8 = 5;
+/// See [`BPSK`].
+pub(crate) const QAM1024: u8 = 6;
 
 impl CostasConstellation {
     /// The code of the detector and the lock metric.
@@ -408,17 +418,20 @@ impl CostasConstellation {
             Self::Psk8 => PSK8,
             Self::Qam16 => QAM16,
             Self::Qam64 => QAM64,
+            Self::Qam256 => QAM256,
+            Self::Qam1024 => QAM1024,
         }
     }
 }
 
-/// The QAM of a code ([`QAM16`] or [`QAM64`]).
+/// The QAM of a code ([`QAM16`], [`QAM64`], [`QAM256`] or [`QAM1024`]).
 #[inline]
 pub(crate) const fn qam_of(code: u8) -> Qam {
-    if code == QAM64 {
-        Qam::Qam64
-    } else {
-        Qam::Qam16
+    match code {
+        QAM64 => Qam::Qam64,
+        QAM256 => Qam::Qam256,
+        QAM1024 => Qam::Qam1024,
+        _ => Qam::Qam16,
     }
 }
 
@@ -480,14 +493,12 @@ pub(crate) fn lock_metric(code: u8, y: C32) -> Option<f32> {
     c.is_finite().then_some(c)
 }
 
-/// `6 / delta^2 = 1.5 E` of the QAM decision-error metric, `delta = 2 / sqrt E` the level
-/// spacing of the unit-power grid: 15 for 16-QAM and 63 for 64-QAM, exact in `f32` (D1400).
+/// `6 / delta^2 = 1.5 E = M - 1` of the QAM decision-error metric, `delta = 2 / sqrt E` the
+/// level spacing of the unit-power grid: 15 for 16-QAM and 63 for 64-QAM, the same formula for
+/// every order, exact in `f32` (D1400).
 #[inline]
 pub(crate) const fn qam_lock_gain(q: Qam) -> f32 {
-    match q {
-        Qam::Qam16 => 15.0,
-        Qam::Qam64 => 63.0,
-    }
+    (q.points() - 1) as f32
 }
 
 /// The QAM lock metric of the contract (the decision error, D1400): `ex = y.re - dr`,

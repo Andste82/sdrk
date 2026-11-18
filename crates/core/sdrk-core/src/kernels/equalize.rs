@@ -62,6 +62,12 @@ pub(crate) const QPSK_A: f32 = core::f32::consts::FRAC_1_SQRT_2;
 const QAM16_R2: f32 = Qam::Qam16.cma_r2() as f32;
 /// The CMA radius of 64-QAM, [`Qam::cma_r2`] rounded once to `f32`.
 const QAM64_R2: f32 = Qam::Qam64.cma_r2() as f32;
+/// The CMA radius of 4-QAM (QPSK), [`Qam::cma_r2`] (1) as `f32`.
+const QAM4_R2: f32 = Qam::Qpsk.cma_r2() as f32;
+/// The CMA radius of 256-QAM, [`Qam::cma_r2`] rounded once to `f32`.
+const QAM256_R2: f32 = Qam::Qam256.cma_r2() as f32;
+/// The CMA radius of 1024-QAM, [`Qam::cma_r2`] rounded once to `f32`.
+const QAM1024_R2: f32 = Qam::Qam1024.cma_r2() as f32;
 
 /// The adaptation mode of the equalizer.
 ///
@@ -101,6 +107,10 @@ pub enum EqConstellation {
     Qam16,
     /// 64-QAM, the unit-power Gray points of [`Qam::Qam64`] (M44).
     Qam64,
+    /// 256-QAM, the unit-power Gray points of [`Qam::Qam256`] (M44.2).
+    Qam256,
+    /// 1024-QAM, the unit-power Gray points of [`Qam::Qam1024`] (M44.2).
+    Qam1024,
 }
 
 impl EqConstellation {
@@ -131,6 +141,8 @@ impl EqConstellation {
             }
             Self::Qam16 => Qam::Qam16.decide(y),
             Self::Qam64 => Qam::Qam64.decide(y),
+            Self::Qam256 => Qam::Qam256.decide(y),
+            Self::Qam1024 => Qam::Qam1024.decide(y),
         }
     }
 
@@ -150,6 +162,8 @@ impl EqConstellation {
             Self::Bpsk | Self::Qpsk | Self::Psk8 => 1.0,
             Self::Qam16 => QAM16_R2,
             Self::Qam64 => QAM64_R2,
+            Self::Qam256 => QAM256_R2,
+            Self::Qam1024 => QAM1024_R2,
         }
     }
 }
@@ -747,6 +761,10 @@ where
             equalize_qam(dot, &mut p, Qam64Table, input, output)
         }
         EqConstellation::Qam64 => equalize_qam(dot, &mut p, QamDecide(Qam::Qam64), input, output),
+        EqConstellation::Qam256 => equalize_qam(dot, &mut p, QamDecide(Qam::Qam256), input, output),
+        EqConstellation::Qam1024 => {
+            equalize_qam(dot, &mut p, QamDecide(Qam::Qam1024), input, output)
+        }
         EqConstellation::Bpsk => equalize_paths(dot, &mut p, PskDecide::Bpsk, input, output),
         EqConstellation::Psk8 => equalize_paths(dot, &mut p, PskDecide::Psk8, input, output),
         _ => equalize_paths(dot, &mut p, PskDecide::Qpsk, input, output),
@@ -806,8 +824,11 @@ impl Decide for QamDecide {
     #[inline]
     fn cma_r2(self) -> f32 {
         match self.0 {
+            Qam::Qpsk => QAM4_R2,
             Qam::Qam16 => QAM16_R2,
-            _ => QAM64_R2,
+            Qam::Qam64 => QAM64_R2,
+            Qam::Qam256 => QAM256_R2,
+            Qam::Qam1024 => QAM1024_R2,
         }
     }
 }

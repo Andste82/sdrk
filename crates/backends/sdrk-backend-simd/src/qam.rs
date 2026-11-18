@@ -1,6 +1,25 @@
-//! `qam_soft_bits` `C32` (M44 §2, I44-1): the piecewise-linear max-log soft bits of 16- and
-//! 64-QAM, bit-exact with the fallback on every level (a NaN soft bit may have another sign,
-//! D296).
+//! `qam_soft_bits` `C32` (M44 §2, I44-1, M44.2 §2): the piecewise-linear max-log soft bits of
+//! every square QAM (4 to 1024 points), bit-exact with the fallback on every level (a NaN soft bit
+//! may have another sign, D296).
+//!
+//! **The instances of M44.2** (D1504): every order has a path per level, written once over the
+//! bits per axis `B` (a literal of the macros below, or a `const` parameter of
+//! [`recursion`]) and chosen per order and level by simulated cycles, against the fallback of
+//! the same order and, for 16-QAM and 64-QAM, against the hand-written paths of M44 below:
+//!
+//! - 4-QAM (QPSK, `B` = 1) on every level and 256-QAM at SSE2: the output layout of
+//!   [`spread`] and [`ladder`] (the recursion `y = (y | m) + k` per output lane on `v` copied
+//!   into the output order by a constant shuffle);
+//! - 256-QAM at SSE4.2: the component layout with a transpose of the first four streams
+//!   (`component!`); on NEON: the component layout and `st4`;
+//! - 256-QAM at AVX2 and AVX-512, 1024-QAM on every level: [`recursion`], the plain loop of the
+//!   recursion that the compiler vectorizes with the features of the level (its interleaved
+//!   stores of four or five streams were faster than every hand-written layout there);
+//! - 64-QAM on NEON: the component layout and `st3` of the generic macro, the code of M44;
+//! - 16-QAM on every level and 64-QAM on x86 and wasm32: the hand-written paths of M44, which
+//!   simulated faster than the instances of `B` = 2 and 3 on at least one model (D1503).
+//!
+//! **The hand-written paths of M44** (D1414):
 //!
 //! The fallback forms, per component `x` (in memory order) with `v = x √E` and `a = |v|`, the soft
 //! bits `s v`, `s (2 - a)` (16-QAM) or `s v`, `s (4 - a)`, `s (2 - |a - 4|)` (64-QAM), each
@@ -45,7 +64,7 @@ use crate::level::dispatch_fn;
 /// the `#[target_feature]` function of the path.
 #[cfg(target_arch = "x86_64")]
 macro_rules! steps {
-    ($x:expr, $out:expr, $vin:literal, $vout:literal, $u:literal, |$i:ident, $o:ident| $body:block) => {{
+    ($x:expr, $out:expr, $vin:literal, $vout:expr, $u:literal, |$i:ident, $o:ident| $body:block) => {{
         let (x, out): (&[f32], &mut [f32]) = ($x, $out);
         let (xb, _) = x.as_chunks::<{ $u * $vin }>();
         let (ob, _) = out.as_chunks_mut::<{ $u * $vout }>();
@@ -74,7 +93,7 @@ macro_rules! steps {
     all(target_arch = "wasm32", target_feature = "simd128")
 ))]
 macro_rules! blocks {
-    ($x:expr, $out:expr, $vin:literal, $vout:literal, $u:literal, |$i:ident, $o:ident| $body:block) => {{
+    ($x:expr, $out:expr, $vin:literal, $vout:expr, $u:literal, |$i:ident, $o:ident| $body:block) => {{
         let (x, out): (&[f32], &mut [f32]) = ($x, $out);
         let (xb, _) = x.as_chunks::<{ $u * $vin }>();
         let (ob, _) = out.as_chunks_mut::<{ $u * $vout }>();
@@ -116,12 +135,103 @@ const fn lanes64<const W: usize>() -> [[[f32; W]; 4]; 3] {
     c
 }
 
-/// The level path of 16-QAM (`qam16`) or 64-QAM for the current level, if there is one:
-/// returns the number of leading components done.
+/// The output layout of `B` soft bits per component for vectors of `W` lanes: lane `l` of the
+/// output vector `q` (`B` output vectors per `W` components) holds soft bit `j % B` of the
+/// component `j / B`, `j = W q + l`; the entry is that component.
+#[allow(
+    dead_code,
+    clippy::indexing_slicing,
+    reason = "const evaluation only: an index out of range fails the build, never at run time; \
+              not every target has a generic path in the output layout"
+)]
+const fn spread<const W: usize, const B: usize>() -> [[usize; W]; B] {
+    let mut idx = [[0usize; W]; B];
+    let mut j = 0;
+    while j < W * B {
+        idx[j / W][j % W] = j / B;
+        j += 1;
+    }
+    idx
+}
+
+/// The per-lane constants of the output layout ([`spread`]): entry `[q][i - 1]` holds `[m, k]`
+/// of the step `i` (1 to `B - 1`) of the recursion on the output vector `q`. A lane of the soft
+/// bit `i` or a later one takes the step, `y = (y | m) + k` with `m` the sign bit and
+/// `k = 2^(B - i)`: `y | m = -|y|`, so `y` becomes `2^(B - i) - |y|`. The other lanes keep their
+/// value: `m = 0` and `k = -0.0`, and `y + (-0.0)` is `y` exactly (also `-0.0` and NaN).
+#[allow(
+    dead_code,
+    clippy::indexing_slicing,
+    reason = "const evaluation only: an index out of range fails the build, never at run time; \
+              not every target has a generic path in the output layout"
+)]
+const fn ladder<const W: usize, const B: usize>() -> [[[[f32; W]; 2]; 4]; B] {
+    let mut c = [[[[0.0f32; W]; 2]; 4]; B];
+    let mut j = 0;
+    while j < W * B {
+        let bit = j % B;
+        let mut i = 1;
+        while i < B {
+            let on = bit >= i;
+            c[j / W][i - 1][0][j % W] = if on { -0.0 } else { 0.0 };
+            c[j / W][i - 1][1][j % W] = if on { (1u32 << (B - i)) as f32 } else { -0.0 };
+            i += 1;
+        }
+        j += 1;
+    }
+    c
+}
+
+/// The recursion of M44.2 §2 over the components `x` (`t_0 = x c`, `t_i = 2^(B - i) -
+/// |t_(i - 1)|`, each times `s`), `B` soft bits per component in output order, as a plain loop
+/// that the compiler vectorizes with the target features of the level path it is inlined into
+/// (the interleaved stores of `B` streams by the shuffles of that level): the form of the
+/// instances where no hand-written layout is faster (M44.2 §2, D1504). Returns the number of
+/// components done (all of them).
+#[inline(always)]
+#[allow(dead_code, reason = "not every target has a path in this form")]
+fn recursion<const B: usize>(x: &[f32], out: &mut [f32], s: f32, c: f32) -> usize {
+    #[inline(always)]
+    fn run<const B: usize>(x: &[f32], out: &mut [f32], s: f32, c: f32) {
+        let (out, _) = out.as_chunks_mut::<B>();
+        for (o, &x) in out.iter_mut().zip(x) {
+            if let [first, rest @ ..] = o.as_mut_slice() {
+                let mut t = x * c;
+                *first = s * t;
+                for (i, o) in rest.iter_mut().enumerate() {
+                    t = (1u32 << (B - 1 - i)) as f32 - t.abs();
+                    *o = s * t;
+                }
+            }
+        }
+    }
+    if s == 1.0 {
+        run::<B>(x, out, 1.0, c);
+    } else {
+        run::<B>(x, out, s, c);
+    }
+    x.len().min(out.len() / B)
+}
+
+/// Defines the level path `$name` of `$b` bits per axis in the form of [`recursion`].
+#[allow(unused_macros, reason = "not every target has a path in this form")]
+macro_rules! autovec {
+    ($name:ident, $token:ident, $b:literal) => {
+        fearless_simd::kernel!(
+            pub(crate) fn $name(t: $token, x: &[f32], out: &mut [f32], s: f32, c: f32) -> usize {
+                let _ = t;
+                super::recursion::<$b>(x, out, s, c)
+            }
+        );
+    };
+}
+
+/// The level path of the square QAM with `b` bits per axis for the current level, if there is
+/// one: returns the number of leading components done.
 #[inline(always)]
 fn level_path<S: SimdToken>(
     simd: S,
-    qam16: bool,
+    b: usize,
     x: &[f32],
     out: &mut [f32],
     s: f32,
@@ -131,67 +241,81 @@ fn level_path<S: SimdToken>(
     #[cfg(target_arch = "x86_64")]
     {
         if let Some(t) = level.as_avx512() {
-            return if qam16 {
-                x86::qam16_avx512(t, x, out, s, c)
-            } else {
-                x86::qam64_avx512(t, x, out, s, c)
+            return match b {
+                1 => x86::g1_avx512(t, x, out, s, c),
+                2 => x86::qam16_avx512(t, x, out, s, c),
+                3 => x86::qam64_avx512(t, x, out, s, c),
+                4 => x86::a4_avx512(t, x, out, s, c),
+                _ => x86::a5_avx512(t, x, out, s, c),
             };
         }
         if let Some(t) = level.as_avx2() {
-            return if qam16 {
-                x86::qam16_avx2(t, x, out, s, c)
-            } else {
-                x86::qam64_avx2(t, x, out, s, c)
+            return match b {
+                1 => x86::g1_avx2(t, x, out, s, c),
+                2 => x86::qam16_avx2(t, x, out, s, c),
+                3 => x86::qam64_avx2(t, x, out, s, c),
+                4 => x86::a4_avx2(t, x, out, s, c),
+                _ => x86::a5_avx2(t, x, out, s, c),
             };
         }
         if let Some(t) = level.as_sse4_2() {
-            return if qam16 {
-                x86::qam16_sse4_2(t, x, out, s, c)
-            } else {
-                x86::qam64_sse4_2(t, x, out, s, c)
+            return match b {
+                1 => x86::g1_sse4_2(t, x, out, s, c),
+                2 => x86::qam16_sse4_2(t, x, out, s, c),
+                3 => x86::qam64_sse4_2(t, x, out, s, c),
+                4 => x86::c4_sse4_2(t, x, out, s, c),
+                _ => x86::a5_sse4_2(t, x, out, s, c),
             };
         }
         if let Some(t) = crate::level::sse2_only(level) {
-            return if qam16 {
-                x86::qam16_sse2(t, x, out, s, c)
-            } else {
-                x86::qam64_sse2(t, x, out, s, c)
+            return match b {
+                1 => x86::g1_sse2(t, x, out, s, c),
+                2 => x86::qam16_sse2(t, x, out, s, c),
+                3 => x86::qam64_sse2(t, x, out, s, c),
+                4 => x86::g4_sse2(t, x, out, s, c),
+                _ => x86::a5_sse2(t, x, out, s, c),
             };
         }
     }
     #[cfg(target_arch = "aarch64")]
     if let Some(t) = level.as_neon() {
-        return if qam16 {
-            neon::qam16(t, x, out, s, c)
-        } else {
-            neon::qam64(t, x, out, s, c)
+        return match b {
+            1 => neon::g1(t, x, out, s, c),
+            2 => neon::qam16(t, x, out, s, c),
+            3 => neon::g3(t, x, out, s, c),
+            4 => neon::g4(t, x, out, s, c),
+            _ => neon::a5(t, x, out, s, c),
         };
     }
     #[cfg(all(target_arch = "wasm32", target_feature = "simd128"))]
     if let Some(t) = level.as_wasm_simd128() {
-        return if qam16 {
-            wasm::qam16(t, x, out, s, c)
-        } else {
-            wasm::qam64(t, x, out, s, c)
+        return match b {
+            1 => wasm::g1(t, x, out, s, c),
+            2 => wasm::qam16(t, x, out, s, c),
+            3 => wasm::qam64(t, x, out, s, c),
+            4 => wasm::a4(t, x, out, s, c),
+            _ => wasm::a5(t, x, out, s, c),
         };
     }
-    let _ = (level, qam16, x, out, s, c);
+    let _ = (level, b, x, out, s, c);
     0
 }
 
 #[inline(always)]
-fn qam16<S: SimdToken>(simd: S, x: &[f32], out: &mut [f32], s: f32, c: f32, done: &mut usize) {
-    *done = level_path(simd, true, x, out, s, c);
+fn soft_bits<S: SimdToken>(
+    simd: S,
+    b: usize,
+    x: &[f32],
+    out: &mut [f32],
+    s: f32,
+    c: f32,
+    done: &mut usize,
+) {
+    *done = level_path(simd, b, x, out, s, c);
 }
 
-#[inline(always)]
-fn qam64<S: SimdToken>(simd: S, x: &[f32], out: &mut [f32], s: f32, c: f32, done: &mut usize) {
-    *done = level_path(simd, false, x, out, s, c);
-}
-
-// The entries, one function per level (see `dispatch_fn!`).
-dispatch_fn!(fn run16(x: &[f32], out: &mut [f32], s: f32, c: f32, done: &mut usize) => qam16);
-dispatch_fn!(fn run64(x: &[f32], out: &mut [f32], s: f32, c: f32, done: &mut usize) => qam64);
+// The entry, one function per level (see `dispatch_fn!`).
+dispatch_fn!(fn run(b: usize, x: &[f32], out: &mut [f32], s: f32, c: f32, done: &mut usize) => soft_bits);
 
 impl QamSoftBits<C32> for Simd {
     fn qam_soft_bits(&self, qam: Qam, input: &[C32], output: &mut [f32], scale: f32) -> Result<()> {
@@ -199,10 +323,7 @@ impl QamSoftBits<C32> for Simd {
         let x: &[f32] = bytemuck::cast_slice(input);
         let c = qam.sqrt_energy();
         let mut done = 0;
-        match qam {
-            Qam::Qam16 => run16(x, output, scale, c, &mut done),
-            _ => run64(x, output, scale, c, &mut done),
-        }
+        run(qam.bits_per_axis(), x, output, scale, c, &mut done);
         // The rest (and everything on a level without a path): whole symbols.
         let n = done / 2;
         let bits = qam.bits_per_symbol();
@@ -230,8 +351,8 @@ mod x86 {
         _mm256_castps256_ps128, _mm256_castsi256_ps, _mm256_insertf128_ps, _mm256_mul_ps,
         _mm256_or_ps, _mm256_permute2f128_ps, _mm256_permutevar8x32_ps, _mm256_set1_epi32,
         _mm256_set1_ps, _mm256_setr_epi32, _mm256_setr_ps, _mm256_sub_ps, _mm256_unpackhi_ps,
-        _mm256_unpacklo_ps, _mm512_and_ps, _mm512_castsi512_ps, _mm512_mul_ps,
-        _mm512_permutex2var_ps, _mm512_set1_epi32, _mm512_set1_ps, _mm512_setr_epi32,
+        _mm256_unpacklo_ps, _mm512_add_ps, _mm512_and_ps, _mm512_castsi512_ps, _mm512_mul_ps,
+        _mm512_or_ps, _mm512_permutex2var_ps, _mm512_set1_epi32, _mm512_set1_ps, _mm512_setr_epi32,
         _mm512_sub_ps,
     };
     use fearless_simd::prelude::*;
@@ -355,7 +476,7 @@ mod x86 {
         /// the second soft bit turned into `2 - |v|` by `w = v | m`, `w + k` (`m` the sign bit,
         /// `k` 2 there; 0 and -0.0 in the lanes of the first soft bit), so that the products
         /// with the scale run on whole output vectors.
-        pub(super) fn qam16_avx2(t: Avx2, x: &[f32], out: &mut [f32], s: f32, c: f32) -> usize {
+        pub(crate) fn qam16_avx2(t: Avx2, x: &[f32], out: &mut [f32], s: f32, c: f32) -> usize {
             let (sv, cv, two) = (_mm256_set1_ps(s), _mm256_set1_ps(c), _mm256_set1_ps(2.0));
             if s == 1.0 {
                 let abs = _mm256_castsi256_ps(_mm256_set1_epi32(0x7fff_ffff));
@@ -392,7 +513,7 @@ mod x86 {
     fearless_simd::kernel!(
         /// The 64-QAM path of AVX2: eight components per step in the output layout (three
         /// `vpermps` of `v` and the per-lane sequence of the module documentation).
-        pub(super) fn qam64_avx2(t: Avx2, x: &[f32], out: &mut [f32], s: f32, c: f32) -> usize {
+        pub(crate) fn qam64_avx2(t: Avx2, x: &[f32], out: &mut [f32], s: f32, c: f32) -> usize {
             let (sv, cv) = (_mm256_set1_ps(s), _mm256_set1_ps(c));
             let ld = |r: &[f32; 8]| -> __m256 { f32x8::from_slice(t, r).into() };
             let lanes = |[m1, k1, m2, k2]: &[[f32; 8]; 4]| (ld(m1), ld(k1), ld(m2), ld(k2));
@@ -429,7 +550,7 @@ mod x86 {
     fearless_simd::kernel!(
         /// The 16-QAM path of AVX-512: sixteen components per step, the two soft bits per
         /// component lane, interleaved by two `vpermt2ps`.
-        pub(super) fn qam16_avx512(t: Avx512, x: &[f32], out: &mut [f32], s: f32, c: f32) -> usize {
+        pub(crate) fn qam16_avx512(t: Avx512, x: &[f32], out: &mut [f32], s: f32, c: f32) -> usize {
             let (sv, cv, two) = (_mm512_set1_ps(s), _mm512_set1_ps(c), _mm512_set1_ps(2.0));
             let abs = _mm512_castsi512_ps(_mm512_set1_epi32(0x7fff_ffff));
             let lo = _mm512_setr_epi32(0, 16, 1, 17, 2, 18, 3, 19, 4, 20, 5, 21, 6, 22, 7, 23);
@@ -492,7 +613,7 @@ mod x86 {
     fearless_simd::kernel!(
         /// The 64-QAM path of AVX-512: sixteen components per step, the three soft bits per
         /// component lane, interleaved by two `vpermt2ps` per output vector.
-        pub(super) fn qam64_avx512(t: Avx512, x: &[f32], out: &mut [f32], s: f32, c: f32) -> usize {
+        pub(crate) fn qam64_avx512(t: Avx512, x: &[f32], out: &mut [f32], s: f32, c: f32) -> usize {
             let (sv, cv, two, four) = (
                 _mm512_set1_ps(s),
                 _mm512_set1_ps(c),
@@ -530,6 +651,183 @@ mod x86 {
             if s == 1.0 { run!(true) } else { run!(false) }
         }
     );
+
+    /// The generic instance of `$b` bits per axis on a level of `$w` lanes (M44.2 §2): `v`
+    /// copied into the output layout of [`super::spread`] (a constant shuffle of one vector,
+    /// which the compiler turns into `pshufd`, `shufps`, `vpermps` or the cheapest shuffle of
+    /// the level), then the `$b - 1` steps of the recursion on every output vector with the
+    /// per-lane constants of [`super::ladder`], then the products with the scale.
+    macro_rules! generic {
+        ($name:ident, $token:ident, $b:literal, $w:literal, $fv:ident, $raw:ty, $set1:ident, $mul:ident, $or:ident, $add:ident) => {
+            fearless_simd::kernel!(
+                pub(crate) fn $name(
+                    t: $token,
+                    x: &[f32],
+                    out: &mut [f32],
+                    s: f32,
+                    c: f32,
+                ) -> usize {
+                    const B: usize = $b;
+                    const IDX: [[usize; $w]; B] = super::spread::<$w, B>();
+                    const LADDER: [[[[f32; $w]; 2]; 4]; B] = super::ladder::<$w, B>();
+                    let (sv, cv) = ($set1(s), $set1(c));
+                    let ld = |r: &[f32; $w]| -> $raw { $fv::from_slice(t, r).into() };
+                    let consts: [[($raw, $raw); 4]; B] =
+                        LADDER.map(|q| q.map(|[m, k]| (ld(&m), ld(&k))));
+                    macro_rules! run {
+                        ($unit:tt) => {
+                            steps!(x, out, $w, { $w * B }, 4, |i, o| {
+                                let xv: $raw = $fv::from_slice(t, i).into();
+                                let v: [f32; $w] = $fv::simd_from(t, $mul(xv, cv)).into();
+                                let (os, _) = o.as_chunks_mut::<$w>();
+                                for ((o, idx), cq) in os.iter_mut().zip(&IDX).zip(&consts) {
+                                    let d = idx.map(|j| v.get(j).copied().unwrap_or(0.0));
+                                    let mut y: $raw = $fv::simd_from(t, d).into();
+                                    for &(m, k) in cq.iter().take(B - 1) {
+                                        y = $add($or(y, m), k);
+                                    }
+                                    $fv::simd_from(t, scaled!($unit, $mul, sv, y)).store_slice(o);
+                                }
+                            })
+                        };
+                    }
+                    if s == 1.0 { run!(true) } else { run!(false) }
+                }
+            );
+        };
+    }
+    /// The generic instance of `$b` bits per axis (4 or 5) in the component layout (M44.2 §2):
+    /// the recursion per component lane (`t_0 = x c`, `t_i = 2^(B - i) - |t_(i - 1)|`, the
+    /// absolute value as a mask of the sign bit), the products with the scale, then per component
+    /// its first four soft bits as one 4-lane store (a transpose of the first four streams, which
+    /// the compiler builds from the constant lane picks) and the fifth, if any, alone.
+    macro_rules! component {
+        ($name:ident, $token:ident, $b:literal, $w:literal, $fv:ident, $raw:ty, $set1:ident, $mul:ident, $and:ident, $sub:ident, $abs:expr) => {
+            fearless_simd::kernel!(
+                pub(crate) fn $name(
+                    t: $token,
+                    x: &[f32],
+                    out: &mut [f32],
+                    s: f32,
+                    c: f32,
+                ) -> usize {
+                    const B: usize = $b;
+                    let (sv, cv) = ($set1(s), $set1(c));
+                    let abs: $raw = $abs;
+                    let knees: [$raw; 4] =
+                        core::array::from_fn(|i| $set1((1u32 << B.saturating_sub(i + 1)) as f32));
+                    macro_rules! run {
+                        ($unit:tt) => {
+                            steps!(x, out, $w, { $w * B }, 4, |i, o| {
+                                let xv: $raw = $fv::from_slice(t, i).into();
+                                let mut v = $mul(xv, cv);
+                                let mut r = [v; B];
+                                for (r, &k) in r.iter_mut().skip(1).zip(&knees) {
+                                    v = $sub(k, $and(v, abs));
+                                    *r = v;
+                                }
+                                let r: [[f32; $w]; B] = r
+                                    .map(|v| $fv::simd_from(t, scaled!($unit, $mul, sv, v)).into());
+                                let pick = |i: usize, j: usize| {
+                                    r.get(i).and_then(|v| v.get(j)).copied().unwrap_or(0.0)
+                                };
+                                let (os, _) = o.as_chunks_mut::<B>();
+                                for (j, o) in os.iter_mut().enumerate() {
+                                    let (head, tail) = o.split_at_mut(4);
+                                    let d: [f32; 4] = core::array::from_fn(|i| pick(i, j));
+                                    f32x4::simd_from(t, d).store_slice(head);
+                                    for (k, o) in tail.iter_mut().enumerate() {
+                                        *o = pick(4 + k, j);
+                                    }
+                                }
+                            })
+                        };
+                    }
+                    if s == 1.0 { run!(true) } else { run!(false) }
+                }
+            );
+        };
+    }
+    component!(
+        c4_sse4_2,
+        Sse4_2,
+        4,
+        4,
+        f32x4,
+        __m128,
+        _mm_set1_ps,
+        _mm_mul_ps,
+        _mm_and_ps,
+        _mm_sub_ps,
+        _mm_castsi128_ps(_mm_set1_epi32(0x7fff_ffff))
+    );
+
+    autovec!(a5_sse2, Sse2, 5);
+    autovec!(a5_sse4_2, Sse4_2, 5);
+    autovec!(a4_avx2, Avx2, 4);
+    autovec!(a5_avx2, Avx2, 5);
+    autovec!(a4_avx512, Avx512, 4);
+    autovec!(a5_avx512, Avx512, 5);
+    generic!(
+        g1_sse2,
+        Sse2,
+        1,
+        4,
+        f32x4,
+        __m128,
+        _mm_set1_ps,
+        _mm_mul_ps,
+        _mm_or_ps,
+        _mm_add_ps
+    );
+    generic!(
+        g4_sse2,
+        Sse2,
+        4,
+        4,
+        f32x4,
+        __m128,
+        _mm_set1_ps,
+        _mm_mul_ps,
+        _mm_or_ps,
+        _mm_add_ps
+    );
+    generic!(
+        g1_sse4_2,
+        Sse4_2,
+        1,
+        4,
+        f32x4,
+        __m128,
+        _mm_set1_ps,
+        _mm_mul_ps,
+        _mm_or_ps,
+        _mm_add_ps
+    );
+    generic!(
+        g1_avx2,
+        Avx2,
+        1,
+        8,
+        f32x8,
+        __m256,
+        _mm256_set1_ps,
+        _mm256_mul_ps,
+        _mm256_or_ps,
+        _mm256_add_ps
+    );
+    generic!(
+        g1_avx512,
+        Avx512,
+        1,
+        16,
+        f32x16,
+        __m512,
+        _mm512_set1_ps,
+        _mm512_mul_ps,
+        _mm512_or_ps,
+        _mm512_add_ps
+    );
 }
 
 #[cfg(target_arch = "aarch64")]
@@ -544,8 +842,8 @@ mod neon {
     #![allow(unsafe_code)]
 
     use core::arch::aarch64::{
-        float32x4_t, float32x4x2_t, float32x4x3_t, vabsq_f32, vdupq_n_f32, vmulq_f32, vst2q_f32,
-        vst3q_f32, vsubq_f32,
+        float32x4_t, float32x4x2_t, float32x4x3_t, float32x4x4_t, vabsq_f32, vdupq_n_f32,
+        vmulq_f32, vst2q_f32, vst3q_f32, vst4q_f32, vsubq_f32,
     };
     use fearless_simd::f32x4;
     use fearless_simd::prelude::*;
@@ -577,7 +875,7 @@ mod neon {
     }
 
     fearless_simd::kernel!(
-        pub(super) fn qam16(t: Neon, x: &[f32], out: &mut [f32], s: f32, c: f32) -> usize {
+        pub(crate) fn qam16(t: Neon, x: &[f32], out: &mut [f32], s: f32, c: f32) -> usize {
             let (sv, cv, two) = (vdupq_n_f32(s), vdupq_n_f32(c), vdupq_n_f32(2.0));
             macro_rules! run {
                 ($unit:tt) => {
@@ -594,26 +892,72 @@ mod neon {
         }
     );
 
-    fearless_simd::kernel!(
-        pub(super) fn qam64(t: Neon, x: &[f32], out: &mut [f32], s: f32, c: f32) -> usize {
-            let (sv, cv) = (vdupq_n_f32(s), vdupq_n_f32(c));
-            let (two, four) = (vdupq_n_f32(2.0), vdupq_n_f32(4.0));
-            macro_rules! run {
-                ($unit:tt) => {
-                    blocks!(x, out, 4, 12, 2, |i, o| {
-                        let xv: float32x4_t = f32x4::from_slice(t, i).into();
-                        let v = vmulq_f32(xv, cv);
-                        let u = vsubq_f32(four, vabsq_f32(v));
-                        let b0 = scaled!($unit, sv, v);
-                        let b1 = scaled!($unit, sv, u);
-                        let b2 = scaled!($unit, sv, vsubq_f32(two, vabsq_f32(u)));
-                        store3(o, b0, b1, b2);
-                    })
-                };
-            }
-            if s == 1.0 { run!(true) } else { run!(false) }
-        }
-    );
+    /// Stores the four soft bits of four components interleaved into `o`.
+    #[inline(always)]
+    fn store4(o: &mut [f32; 16], a: float32x4_t, b: float32x4_t, c: float32x4_t, d: float32x4_t) {
+        // SAFETY: `vst4q_f32` writes 16 consecutive `f32` with no alignment requirement beyond
+        // that of `f32`, and `o` holds exactly 16 and is borrowed exclusively.
+        unsafe { vst4q_f32(o.as_mut_ptr(), float32x4x4_t(a, b, c, d)) }
+    }
+
+    /// Stores the `B` soft-bit vectors `r` of four components interleaved into `o` (`4 B`
+    /// values): one store, `st2`, `st3` or `st4` for `B` up to 4 (NEON has no `st5`; 1024-QAM
+    /// takes the form of [`super::recursion`]).
+    macro_rules! store {
+        (1, $t:expr, $o:expr, $r:expr) => {{
+            let [a] = $r;
+            f32x4::simd_from($t, a).store_slice($o);
+        }};
+        (2, $t:expr, $o:expr, $r:expr) => {{
+            let [a, b] = $r;
+            store2($o, a, b);
+        }};
+        (3, $t:expr, $o:expr, $r:expr) => {{
+            let [a, b, c] = $r;
+            store3($o, a, b, c);
+        }};
+        (4, $t:expr, $o:expr, $r:expr) => {{
+            let [a, b, c, d] = $r;
+            store4($o, a, b, c, d);
+        }};
+    }
+
+    /// The generic instance of `$b` bits per axis (M44.2 §2): the recursion per component lane
+    /// (`t_0 = x c`, `t_i = 2^(B - i) - |t_(i - 1)|`), the products with the scale, and the
+    /// interleaved store of [`store!`].
+    macro_rules! generic {
+        ($name:ident, $b:tt) => {
+            fearless_simd::kernel!(
+                pub(super) fn $name(t: Neon, x: &[f32], out: &mut [f32], s: f32, c: f32) -> usize {
+                    const B: usize = $b;
+                    let (sv, cv) = (vdupq_n_f32(s), vdupq_n_f32(c));
+                    let knees: [float32x4_t; 4] = core::array::from_fn(|i| {
+                        vdupq_n_f32((1u32 << B.saturating_sub(i + 1)) as f32)
+                    });
+                    macro_rules! run {
+                        ($unit:tt) => {
+                            blocks!(x, out, 4, { 4 * B }, 2, |i, o| {
+                                let xv: float32x4_t = f32x4::from_slice(t, i).into();
+                                let mut v = vmulq_f32(xv, cv);
+                                let mut r = [v; B];
+                                for (r, &k) in r.iter_mut().skip(1).zip(&knees) {
+                                    v = vsubq_f32(k, vabsq_f32(v));
+                                    *r = v;
+                                }
+                                let r = r.map(|v| scaled!($unit, sv, v));
+                                store!($b, t, o, r);
+                            })
+                        };
+                    }
+                    if s == 1.0 { run!(true) } else { run!(false) }
+                }
+            );
+        };
+    }
+    generic!(g1, 1);
+    generic!(g3, 3);
+    generic!(g4, 4);
+    autovec!(a5, Neon, 5);
 }
 
 #[cfg(all(target_arch = "wasm32", target_feature = "simd128"))]
@@ -625,7 +969,9 @@ mod wasm {
         reason = "the lint counts the slices of the unrolled bodies before optimization; the loops \
                   keep them in registers"
     )]
-    use core::arch::wasm32::{f32x4_abs, f32x4_mul, f32x4_splat, f32x4_sub, i32x4_shuffle, v128};
+    use core::arch::wasm32::{
+        f32x4_abs, f32x4_add, f32x4_mul, f32x4_splat, f32x4_sub, i32x4_shuffle, v128, v128_or,
+    };
     use fearless_simd::f32x4;
     use fearless_simd::prelude::*;
 
@@ -640,7 +986,7 @@ mod wasm {
     }
 
     fearless_simd::kernel!(
-        pub(super) fn qam16(t: WasmSimd128, x: &[f32], out: &mut [f32], s: f32, c: f32) -> usize {
+        pub(crate) fn qam16(t: WasmSimd128, x: &[f32], out: &mut [f32], s: f32, c: f32) -> usize {
             let (sv, cv, two) = (f32x4_splat(s), f32x4_splat(c), f32x4_splat(2.0));
             macro_rules! run {
                 ($unit:tt) => {
@@ -660,7 +1006,7 @@ mod wasm {
     );
 
     fearless_simd::kernel!(
-        pub(super) fn qam64(t: WasmSimd128, x: &[f32], out: &mut [f32], s: f32, c: f32) -> usize {
+        pub(crate) fn qam64(t: WasmSimd128, x: &[f32], out: &mut [f32], s: f32, c: f32) -> usize {
             let (sv, cv) = (f32x4_splat(s), f32x4_splat(c));
             let (two, four) = (f32x4_splat(2.0), f32x4_splat(4.0));
             macro_rules! run {
@@ -687,4 +1033,50 @@ mod wasm {
             if s == 1.0 { run!(true) } else { run!(false) }
         }
     );
+
+    /// The generic instance of `$b` bits per axis (M44.2 §2): `v` in the output layout of
+    /// [`super::spread`] (one `i8x16.shuffle` per output vector), the steps of the recursion with
+    /// the constants of [`super::ladder`], then the products with the scale.
+    macro_rules! generic {
+        ($name:ident, $b:literal) => {
+            fearless_simd::kernel!(
+                pub(super) fn $name(
+                    t: WasmSimd128,
+                    x: &[f32],
+                    out: &mut [f32],
+                    s: f32,
+                    c: f32,
+                ) -> usize {
+                    const B: usize = $b;
+                    const IDX: [[usize; 4]; B] = super::spread::<4, B>();
+                    const LADDER: [[[[f32; 4]; 2]; 4]; B] = super::ladder::<4, B>();
+                    let (sv, cv) = (f32x4_splat(s), f32x4_splat(c));
+                    let ld = |r: &[f32; 4]| -> v128 { f32x4::from_slice(t, r).into() };
+                    let consts: [[(v128, v128); 4]; B] =
+                        LADDER.map(|q| q.map(|[m, k]| (ld(&m), ld(&k))));
+                    macro_rules! run {
+                        ($unit:tt) => {
+                            blocks!(x, out, 4, { 4 * B }, 2, |i, o| {
+                                let xv: v128 = f32x4::from_slice(t, i).into();
+                                let v: [f32; 4] = f32x4::simd_from(t, f32x4_mul(xv, cv)).into();
+                                let (os, _) = o.as_chunks_mut::<4>();
+                                for ((o, idx), cq) in os.iter_mut().zip(&IDX).zip(&consts) {
+                                    let d = idx.map(|j| v.get(j).copied().unwrap_or(0.0));
+                                    let mut y: v128 = f32x4::simd_from(t, d).into();
+                                    for &(m, k) in cq.iter().take(B - 1) {
+                                        y = f32x4_add(v128_or(y, m), k);
+                                    }
+                                    f32x4::simd_from(t, scaled!($unit, sv, y)).store_slice(o);
+                                }
+                            })
+                        };
+                    }
+                    if s == 1.0 { run!(true) } else { run!(false) }
+                }
+            );
+        };
+    }
+    generic!(g1, 1);
+    autovec!(a4, WasmSimd128, 4);
+    autovec!(a5, WasmSimd128, 5);
 }

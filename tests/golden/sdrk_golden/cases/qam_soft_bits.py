@@ -1,11 +1,12 @@
-"""Cases for the qam_soft_bits kernel (the piecewise-linear max-log soft bits of 16- and 64-QAM,
-M44 section 2, open item I44-1, decisions D1412 and D1413).
+"""Cases for the qam_soft_bits kernel (the piecewise-linear max-log soft bits of every square QAM,
+M44 section 2, M44.2 section 2, open item I44-1, decisions D1412 and D1413).
 
 The kernel is bit-exact against its float32 form: per component ``x`` (in memory order, ``re``
-then ``im`` of every symbol) ``v = x * sqrt_e`` with ``sqrt_e`` the float32 of ``sqrt(E)``
-(E = 10 or 42) and ``a = |v|``, the soft bits ``scale * v``, ``scale * (2 - a)`` (16-QAM) or
-``scale * v``, ``scale * (4 - a)``, ``scale * (2 - |a - 4|)`` (64-QAM), every operation one
-rounded float32 operation. The model evaluates them with NumPy ``float32`` element by element on
+then ``im`` of every symbol) with ``b`` bits per axis, ``t_0 = x * sqrt_e`` with ``sqrt_e`` the
+float32 of ``sqrt(E)`` (E = 2, 10, 42, 170 or 682) and ``t_i = 2^(b - i) - |t_(i - 1)|`` for
+``i = 1 .. b - 1``, the soft bits ``scale * t_i``: ``scale * v``, ``scale * (2 - |v|)`` for
+16-QAM, ``scale * v``, ``scale * (4 - |v|)``, ``scale * (2 - |4 - |v||)`` for 64-QAM (``|4 - a|``
+is ``|a - 4|`` exactly, the form of M44), every operation one rounded float32 operation. The model evaluates them with NumPy ``float32`` element by element on
 arrays (one rounded operation per element, nothing fused), so it equals Rust ``f32`` code without
 FMA on every CPU.
 
@@ -24,7 +25,14 @@ import numpy as np
 from ..registry import Array, case
 
 F32 = np.float32
-QAM = {"qam16": (10, 4), "qam64": (42, 8)}
+# (E, levels per axis, bits per axis) of every square order; 4-QAM is qpsk (M44.2).
+QAM = {
+    "qpsk": (2, 2, 1),
+    "qam16": (10, 4, 2),
+    "qam64": (42, 8, 3),
+    "qam256": (170, 16, 4),
+    "qam1024": (682, 32, 5),
+}
 
 
 def f32_bits(v):
@@ -33,34 +41,32 @@ def f32_bits(v):
 
 def model_f32(order, x, scale):
     """The float32 form for the components ``x`` (float32 array); returns the soft bits in output
-    order (two or three per component)."""
-    e, _ = QAM[order]
+    order (``b`` per component)."""
+    e, _, b = QAM[order]
     c = F32(math.sqrt(e))
     s = F32(scale)
     with np.errstate(all="ignore"):
-        v = x * c
-        a = np.abs(v)
-        if order == "qam16":
-            cols = [s * v, s * (F32(2.0) - a)]
-        else:
-            cols = [s * v, s * (F32(4.0) - a), s * (F32(2.0) - np.abs(a - F32(4.0)))]
+        t = x * c
+        cols = [s * t]
+        for i in range(1, b):
+            t = F32(2 ** (b - i)) - np.abs(t)
+            cols.append(s * t)
     return np.stack(cols, axis=1).reshape(-1).astype(F32)
 
 
 def definition_f64(order, x, scale):
     """The definition in float64 with the exact ``sqrt(E)``, one value per soft bit."""
-    e, _ = QAM[order]
+    e, _, b = QAM[order]
     c = math.sqrt(e)
     s = float(F32(scale))
     out = []
     for xv in x.tolist():
-        v = float(xv) * c
-        a = abs(v)
-        if order == "qam16":
-            bits = [v, 2.0 - a]
-        else:
-            bits = [v, 4.0 - a, 2.0 - abs(a - 4.0)]
-        out.extend(s * b for b in bits)
+        t = float(xv) * c
+        bits = [t]
+        for i in range(1, b):
+            t = float(2 ** (b - i)) - abs(t)
+            bits.append(t)
+        out.extend(s * v for v in bits)
     return out
 
 
@@ -71,8 +77,8 @@ def snr_db(ref, got):
     return 10.0 * math.log10(num / den)
 
 
-def run_case(rng, order, n, scale):
-    e, m = QAM[order]
+def run_case(rng, order, n, scale, noise=0.2):
+    e, m, _ = QAM[order]
     levels = [(2 * i - (m - 1)) / math.sqrt(e) for i in range(m)]
     # Listed components first: zeros, the levels, the boundaries of the soft bits (|v| = 2, 4, 6,
     # where a soft bit is 0) and values outside the grid.
@@ -85,7 +91,7 @@ def run_case(rng, order, n, scale):
     comps = np.empty(2 * n, dtype=F32)
     comps[: len(listed)] = np.array(listed, dtype=F32)
     rest = 2 * n - len(listed)
-    pts = rng.choice(np.array(levels), rest) + rng.uniform(-0.2, 0.2, rest)
+    pts = rng.choice(np.array(levels), rest) + rng.uniform(-noise, noise, rest)
     comps[len(listed) :] = pts.astype(F32)
     x = np.empty(n, dtype=np.complex64)
     x.real = comps[0::2]
@@ -111,7 +117,7 @@ def run_case(rng, order, n, scale):
         "(the components in memory order, re then im); the scale is the float32 of "
         f"{scale} (scale_bits); the first {len(listed)} components are 0, -0, the levels, the soft-bit "
         "boundaries +-k / sqrt(E) for even k, +-3 and +-1e-30, the rest random levels plus uniform "
-        "noise in [-0.2, 0.2); snr_db_guard compares with the float64 definition with the exact "
+        f"noise in [-{noise}, {noise}); snr_db_guard compares with the float64 definition with the exact "
         "sqrt(E) (D111), snr_db_optimum is that definition rounded once to float32",
     )
 
@@ -124,3 +130,20 @@ def qam16_c32_4096(rng):
 @case(kernel="qam_soft_bits", name="qam64_c32_4096", seed=776)
 def qam64_c32_4096(rng):
     return run_case(rng, "qam64", 4096, 0.7)
+
+
+# M44.2: the generic instances of 1, 4 and 5 bits per axis. The noise is about the 16-QAM noise of 0.2
+# in units of the level spacing 2 / sqrt(10), so every order sees the same noise per cell.
+@case(kernel="qam_soft_bits", name="qpsk_c32_4096", seed=820)
+def qpsk_c32_4096(rng):
+    return run_case(rng, "qpsk", 4096, 2.5, noise=0.45)
+
+
+@case(kernel="qam_soft_bits", name="qam256_c32_4096", seed=821)
+def qam256_c32_4096(rng):
+    return run_case(rng, "qam256", 4096, 0.4, noise=0.05)
+
+
+@case(kernel="qam_soft_bits", name="qam1024_c32_4096", seed=822)
+def qam1024_c32_4096(rng):
+    return run_case(rng, "qam1024", 4096, 1.9, noise=0.025)

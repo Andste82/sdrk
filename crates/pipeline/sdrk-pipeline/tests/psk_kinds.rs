@@ -185,12 +185,14 @@ fn costas_costs_30_and_keeps_the_rate() {
         let (_, code, _) = first_error(&single("costas", ty, 1000, json!({})));
         assert_eq!(code, DiagCode::TypeMismatch, "{ty}");
     }
-    // M44 §3: the QAM constellations cost 45 per symbol (D1206), the PSK ones 30
+    // M44 §3, M44.2 §3: the QAM constellations cost 45 per symbol (D1206), the PSK ones 30
     for (c, cost) in [
         ("bpsk", 30.0),
         ("8psk", 30.0),
         ("qam16", 45.0),
         ("qam64", 45.0),
+        ("qam256", 45.0),
+        ("qam1024", 45.0),
     ] {
         let report = validate(&single(
             "costas",
@@ -207,7 +209,7 @@ fn costas_costs_30_and_keeps_the_rate() {
         "costas",
         "c32",
         1000,
-        json!({ "constellation": "qam256" }),
+        json!({ "constellation": "qam32" }),
     ));
     assert_eq!(path.as_str(), "nodes.n.params.constellation");
     for bad in [

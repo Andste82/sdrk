@@ -522,10 +522,10 @@ fn symbol_demap_fsk4_follows_the_table_at_corner_values() {
     assert!(SymbolDemapBlock::<C32, _>::new(&cfg, rate(1200), &mut VecStorage).is_err());
     assert_eq!(SymbolDemapConstellation::Fsk4.bits_per_symbol(), 2);
     let mut cfg = SymbolDemapConfig::default();
-    // fsk4 after the constellations of symbol_map (M44.1.1, D1803)
-    cfg.set("constellation", ParamValue::Choice(6)).unwrap();
+    // fsk4 after the constellations of symbol_map (M44.1.1, D1803; M44.2)
+    cfg.set("constellation", ParamValue::Choice(8)).unwrap();
     assert_eq!(cfg.constellation, SymbolDemapConstellation::Fsk4);
-    assert_eq!(cfg.get("constellation"), Ok(ParamValue::Choice(6)));
+    assert_eq!(cfg.get("constellation"), Ok(ParamValue::Choice(8)));
 }
 
 /// A complex tone at `f(n)` Hz (continuous phase) at `fs`.

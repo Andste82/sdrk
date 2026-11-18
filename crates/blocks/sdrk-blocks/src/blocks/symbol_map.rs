@@ -1,12 +1,12 @@
-//! `symbol_map`: soft bits to the points of a constellation (BPSK, QPSK, 8PSK, 16-QAM and
-//! 64-QAM), coherent or differential, without pulse shaping; the transmit side of
-//! `symbol_demap`.
+//! `symbol_map`: soft bits to the points of a constellation (BPSK, QPSK, 8PSK and the square
+//! QAM of 16 to 1024 points), coherent or differential, without pulse shaping; the transmit side
+//! of `symbol_demap`.
 
 use core::marker::PhantomData;
 
 use sdrk::{Delay, Progress, Rate, Ratio, RatioKind};
 use sdrk_core::C32;
-use sdrk_core::kernels::constellation::Qam;
+use sdrk_core::kernels::constellation::{Qam, level_of_code};
 
 use sdrk_core::kernels::costas::CostasConstellation;
 use sdrk_core::kernels::equalize::EqConstellation;
@@ -26,7 +26,9 @@ const H: f32 = core::f32::consts::FRAC_1_SQRT_2;
 /// The names of the `constellation` choice, in index order: the same names at the same indices
 /// in `costas`, `equalize`, `symbol_demap` and the `constellation` of the QAM and PSK composites
 /// (M44.1.1 §1).
-pub(crate) const CONSTELLATION_OPTIONS: &[&str] = &["bpsk", "qpsk", "8psk", "qam16", "qam64"];
+pub(crate) const CONSTELLATION_OPTIONS: &[&str] = &[
+    "bpsk", "qpsk", "8psk", "qam16", "qam64", "qam256", "qam1024",
+];
 
 /// The names of the `variant` choice, in index order.
 const VARIANT_OPTIONS: &[&str] = &["plain", "pi4"];
@@ -34,7 +36,7 @@ const VARIANT_OPTIONS: &[&str] = &["plain", "pi4"];
 /// Description of the `symbol_map` block.
 pub static DESCRIPTION: BlockDescription = BlockDescription {
     kind: "symbol_map",
-    summary: "Turns soft bits into the points of a constellation (BPSK to 64-QAM), one \
+    summary: "Turns soft bits into the points of a constellation (BPSK to 1024-QAM), one \
         sample per symbol.",
     details: "Reads one soft bit per input sample (above 0 is a 1, anything else, NaN \
         included, a 0; frame_encode produces them) and maps bits-per-symbol of them, the first \
@@ -44,7 +46,8 @@ pub static DESCRIPTION: BlockDescription = BlockDescription {
         bits): exp(j (2 pi k / 8 + pi / 8)) with k from the Gray code b0 b1 b2 (000 -> 0, 001 \
         -> 1, 011 -> 2, 010 -> 3, 110 -> 4, 111 -> 5, 101 -> 6, 100 -> 7). The PSK points are \
         the sixteen f32 points at multiples of 22.5 degrees, each part rounded once to f32. \
-        qam16 and qam64 (4 and 6 bits): the unit-power Gray square constellations of qam_mod, \
+        qam16, qam64, qam256 and qam1024 (4, 6, 8 and 10 bits): the unit-power Gray square \
+        constellations of qam_mod, \
         equalize, costas and symbol_demap (the first half of the bits selects the in-phase \
         level, the second half the quadrature level). With differential set (bpsk, qpsk and \
         8psk only) the phase of a symbol is the phase of the previous symbol plus the phase of \
@@ -71,10 +74,10 @@ pub static DESCRIPTION: BlockDescription = BlockDescription {
                 options: CONSTELLATION_OPTIONS,
                 default: 0,
             },
-            typical: "bpsk; qpsk, 8psk, qam16 or qam64 for more bits per symbol",
+            typical: "bpsk; qpsk, 8psk or qam16 to qam1024 for more bits per symbol",
             mutability: Mutability::Build,
             description: "The constellation: bpsk (1 bit per symbol), qpsk (2), 8psk (3), qam16 \
-                (4) or qam64 (6), the names of symbol_demap.",
+                (4), qam64 (6), qam256 (8) or qam1024 (10), the names of symbol_demap.",
         },
         ParamDesc {
             name: "differential",
@@ -123,10 +126,14 @@ pub enum SymbolMapConstellation {
     Qam16,
     /// 64-QAM, six bits: the points of [`Qam::Qam64`].
     Qam64,
+    /// 256-QAM, eight bits: the points of [`Qam::Qam256`] (M44.2).
+    Qam256,
+    /// 1024-QAM, ten bits: the points of [`Qam::Qam1024`] (M44.2).
+    Qam1024,
 }
 
 impl SymbolMapConstellation {
-    /// Bits per symbol: 1, 2, 3, 4 or 6.
+    /// Bits per symbol: 1, 2, 3, 4, 6, 8 or 10.
     pub const fn bits_per_symbol(self) -> usize {
         match self {
             Self::Bpsk => 1,
@@ -134,6 +141,8 @@ impl SymbolMapConstellation {
             Self::Psk8 => 3,
             Self::Qam16 => 4,
             Self::Qam64 => 6,
+            Self::Qam256 => 8,
+            Self::Qam1024 => 10,
         }
     }
 
@@ -149,6 +158,8 @@ impl SymbolMapConstellation {
             Self::Psk8 => 2,
             Self::Qam16 => 3,
             Self::Qam64 => 4,
+            Self::Qam256 => 5,
+            Self::Qam1024 => 6,
         }
     }
 
@@ -158,6 +169,8 @@ impl SymbolMapConstellation {
             2 => Self::Psk8,
             3 => Self::Qam16,
             4 => Self::Qam64,
+            5 => Self::Qam256,
+            6 => Self::Qam1024,
             _ => Self::Bpsk,
         }
     }
@@ -172,6 +185,8 @@ impl From<SymbolMapConstellation> for CostasConstellation {
             SymbolMapConstellation::Psk8 => Self::Psk8,
             SymbolMapConstellation::Qam16 => Self::Qam16,
             SymbolMapConstellation::Qam64 => Self::Qam64,
+            SymbolMapConstellation::Qam256 => Self::Qam256,
+            SymbolMapConstellation::Qam1024 => Self::Qam1024,
         }
     }
 }
@@ -185,6 +200,8 @@ impl From<SymbolMapConstellation> for EqConstellation {
             SymbolMapConstellation::Psk8 => Self::Psk8,
             SymbolMapConstellation::Qam16 => Self::Qam16,
             SymbolMapConstellation::Qam64 => Self::Qam64,
+            SymbolMapConstellation::Qam256 => Self::Qam256,
+            SymbolMapConstellation::Qam1024 => Self::Qam1024,
         }
     }
 }
@@ -198,6 +215,8 @@ impl From<SymbolMapConstellation> for SymbolDemapConstellation {
             SymbolMapConstellation::Psk8 => Self::Psk8,
             SymbolMapConstellation::Qam16 => Self::Qam16,
             SymbolMapConstellation::Qam64 => Self::Qam64,
+            SymbolMapConstellation::Qam256 => Self::Qam256,
+            SymbolMapConstellation::Qam1024 => Self::Qam1024,
         }
     }
 }
@@ -396,12 +415,54 @@ fn map_points<const K: usize>(points: &[C32], bits: &[f32], out: &mut [C32]) {
     }
 }
 
+/// The level values of one axis of `q` by the Gray code of the axis: entry `g` is the level of
+/// the level index whose Gray code is `g` (the per-axis form of the point table).
+#[allow(
+    clippy::indexing_slicing,
+    reason = "const evaluation only: an index out of range fails the build, never at run time"
+)]
+const fn code_levels<const M: usize>(q: Qam) -> [f32; M] {
+    let levels = q.levels();
+    let mut out = [0.0; M];
+    let mut g = 0;
+    while g < M {
+        out[g] = levels[level_of_code(g as u32) as usize];
+        g += 1;
+    }
+    out
+}
+
+/// The 256-QAM levels by Gray code (16 values).
+const QAM256_CODE_LEVELS: [f32; 16] = code_levels::<16>(Qam::Qam256);
+/// The 1024-QAM levels by Gray code (32 values).
+const QAM1024_CODE_LEVELS: [f32; 32] = code_levels::<32>(Qam::Qam1024);
+
+/// The points of the symbols of `2 B` bits each in `bits` (whole symbols) to `out`, per axis:
+/// the first `B` bits are the Gray code of the in-phase level, the last `B` that of the
+/// quadrature level, each looked up in `levels` (the levels by Gray code). The same bits as the
+/// point table of [`Qam`].
+#[inline]
+fn map_axes<const B: usize>(levels: &[f32], bits: &[f32], out: &mut [C32]) {
+    for (s, b) in out.iter_mut().zip(bits.chunks_exact(2 * B)) {
+        let (bi, bq) = b.split_at(B);
+        let level = |half: &[f32]| {
+            <&[f32; B]>::try_from(half)
+                .ok()
+                .and_then(|h| levels.get(symbol_of(h) as usize))
+                .copied()
+                .unwrap_or_default()
+        };
+        *s = C32::new(level(bi), level(bq));
+    }
+}
+
 /// Soft bits to constellation points: `f32` soft bits in (one per sample), `C32` points out,
 /// one per symbol of `bits_per_symbol` bits.
 ///
 /// `bpsk`, `qpsk` and `8psk` take the sixteen constant `f32` points at multiples of 22.5
 /// degrees of `psk_mod` (D649) and the Gray code [`PSK8_GRAY`](crate::PSK8_GRAY); `qam16` and
-/// `qam64` the table of [`Qam`] (shared with `symbol_demap`, `equalize` and `costas`). With
+/// `qam64` the table of [`Qam`] (shared with `symbol_demap`, `equalize` and `costas`), `qam256`
+/// and `qam1024` the same points from the levels per axis (D1509). With
 /// `differential` the phase is a counter in units of 22.5 degrees (modulo 16), start 0
 /// (D613); `pi4` takes the steps of D648. A call takes `min(input.len() / bits,
 /// output.len())` whole symbols. Timing: constant ratio `1 / bits`, delay 0. The block needs no
@@ -501,6 +562,14 @@ impl<S: Storage> Block for SymbolMapBlock<S> {
             }
             SymbolMapConstellation::Qam64 => {
                 map_points::<6>(Qam::Qam64.point_table(), input, output);
+            }
+            // 256-QAM and 1024-QAM per axis: as fast as the point table or faster, without its
+            // 2 KiB and 8 KiB (D1509).
+            SymbolMapConstellation::Qam256 => {
+                map_axes::<4>(&QAM256_CODE_LEVELS, input, output);
+            }
+            SymbolMapConstellation::Qam1024 => {
+                map_axes::<5>(&QAM1024_CODE_LEVELS, input, output);
             }
             _ => {
                 let pi4 = self.config.variant == SymbolMapVariant::Pi4;

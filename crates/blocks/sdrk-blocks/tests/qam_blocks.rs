@@ -1,4 +1,5 @@
-//! The blocks of M44: the `symbol_demap` constellations `qam16` and `qam64` (test 1: the soft-bit
+//! The blocks of M44: the `symbol_demap` constellations `qam16` and `qam64`, since M44.2 also
+//! `qam256` and `qam1024` (test 1: the soft-bit
 //! signs of every point derived from the mapping of `sdrk_core::kernels::constellation`, the
 //! piecewise-linear max-log values bit for bit, the agreement of every sign with the grid
 //! decision, the rates, the parameter checks, the extremes and 20 cut plans of seed 607), and the
@@ -8,6 +9,7 @@
 //! kernels whole and in 20 cut plans of seed 607 (test 8), their timing, rates and parameters,
 //! a noiseless link without bit errors, and `frame_decode` with `rotations` `four` (test 1: the
 //! sync word and the payload under each of the four rotations for 2, 4 and 6 bits per symbol,
+//! since M44.2 also 8 and 10,
 //! the rotation in the packet flags, cut plans, the parameter checks, and a QAM link turned by
 //! 0 to 270 degrees).
 #![allow(
@@ -48,9 +50,12 @@ use sdrk_testkit::{Pcg32, VecStorage};
 /// The seed of the cut plans and signals of M44 (test 8).
 const SEED: u64 = 607;
 
-const QAMS: [(SymbolDemapConstellation, Qam); 2] = [
+/// The QAM constellations of `symbol_demap` (`qam256` and `qam1024` since M44.2).
+const QAMS: [(SymbolDemapConstellation, Qam); 4] = [
     (SymbolDemapConstellation::Qam16, Qam::Qam16),
     (SymbolDemapConstellation::Qam64, Qam::Qam64),
+    (SymbolDemapConstellation::Qam256, Qam::Qam256),
+    (SymbolDemapConstellation::Qam1024, Qam::Qam1024),
 ];
 
 fn slicer(
@@ -78,15 +83,18 @@ fn symbol_demap_all(
     out
 }
 
-/// The `f32` definition of M44 §2 per axis: `v = x √E`, then `s v`, `s (2 - |v|)` (16-QAM) or
-/// `s v`, `s (4 - |v|)`, `s (2 - ||v| - 4|)` (64-QAM).
+/// The `f32` definition of M44.2 §2 per axis of `b` bits: `t_0 = v = x √E`, `t_i = 2^(b - i) -
+/// |t_(i - 1)|`, each times `s`; for 16-QAM `s v`, `s (2 - |v|)`, for 64-QAM `s v`,
+/// `s (4 - |v|)`, `s (2 - ||v| - 4|)` of M44 §2 (`|4 - a|` is `|a - 4|` exactly).
 fn axis_bits(q: Qam, s: f32, x: f32) -> Vec<f32> {
-    let v = x * q.sqrt_energy();
-    let a = v.abs();
-    match q {
-        Qam::Qam16 => vec![s * v, s * (2.0 - a)],
-        _ => vec![s * v, s * (4.0 - a), s * (2.0 - (a - 4.0).abs())],
+    let b = q.bits_per_axis();
+    let mut t = x * q.sqrt_energy();
+    let mut out = vec![s * t];
+    for i in 1..b {
+        t = (1u32 << (b - i)) as f32 - t.abs();
+        out.push(s * t);
     }
+    out
 }
 
 /// `a` and `b` bit for bit, every NaN folded to one value: NaN must be NaN where the
@@ -131,10 +139,13 @@ fn the_qam_constellations_take_c32_and_give_their_bits() {
         assert_eq!((t.kind, t.delay), (RatioKind::Constant, Delay::ZERO));
     }
     let mut cfg = SymbolDemapConfig::default();
-    // qam16 is choice 3, qam64 choice 4: the indices of symbol_map (M44.1.1, D1803).
+    // qam16 is choice 3, qam64 choice 4, qam256 choice 5, qam1024 choice 6: the indices of
+    // symbol_map (M44.1.1, D1803; M44.2).
     for (i, c) in [
         (3u16, SymbolDemapConstellation::Qam16),
         (4, SymbolDemapConstellation::Qam64),
+        (5, SymbolDemapConstellation::Qam256),
+        (6, SymbolDemapConstellation::Qam1024),
     ] {
         cfg.set("constellation", ParamValue::Choice(i)).unwrap();
         assert_eq!(cfg.constellation, c);
@@ -525,7 +536,7 @@ fn qam_mod_timing_rates_and_parameters() {
         ));
     }
     assert!(matches!(
-        c.set("constellation", ParamValue::Choice(5)),
+        c.set("constellation", ParamValue::Choice(7)),
         Err(Error::OutOfRange {
             name: "constellation",
             ..
@@ -1383,6 +1394,8 @@ fn constellation_of(k: usize) -> SymbolMapConstellation {
         3 => SymbolMapConstellation::Psk8,
         4 => SymbolMapConstellation::Qam16,
         6 => SymbolMapConstellation::Qam64,
+        8 => SymbolMapConstellation::Qam256,
+        10 => SymbolMapConstellation::Qam1024,
         _ => panic!("no constellation of {k} bits per symbol"),
     }
 }
@@ -1425,7 +1438,7 @@ fn decode_all(
 
 #[test]
 fn proto_rotation_map_equals_the_constellation_map() {
-    for bpa in 1..=3u32 {
+    for bpa in 1..=5u32 {
         for s in 0..(1u32 << (2 * bpa)) {
             for r in 0..6 {
                 assert_eq!(
@@ -1439,9 +1452,9 @@ fn proto_rotation_map_equals_the_constellation_map() {
 }
 
 #[test]
-fn frame_decode_four_finds_every_rotation_for_2_4_and_6_bits_per_symbol() {
+fn frame_decode_four_finds_every_rotation_for_2_to_10_bits_per_symbol() {
     let data = b"rotations of the sync word";
-    for k in [2usize, 4, 6] {
+    for k in [2usize, 4, 6, 8, 10] {
         for lead in [0usize, 1, k - 1, 7] {
             let bits = frame_stream(data, lead, k, (k * 10 + lead) as u64);
             for r in 0..4u32 {
@@ -1478,7 +1491,7 @@ fn frame_decode_four_finds_every_rotation_for_2_4_and_6_bits_per_symbol() {
 
 #[test]
 fn frame_decode_four_finds_frames_of_different_rotations_in_cut_plans() {
-    for k in [2usize, 4, 6] {
+    for k in [2usize, 4, 6, 8, 10] {
         let mut soft = Vec::new();
         let mut want = Vec::new();
         for (j, r) in [1u32, 0, 3, 2, 2].into_iter().enumerate() {
@@ -1528,7 +1541,7 @@ fn frame_decode_rotations_and_constellation_are_checked() {
         };
         FrameDecodeBlock::<VecStorage>::new(&cfg, rate(9600), &mut VecStorage).map(|_| ())
     };
-    for k in [2, 4, 6] {
+    for k in [2, 4, 6, 8, 10] {
         assert!(make(FrameRotations::Four, k).is_ok(), "{k}");
     }
     // bpsk and 8psk are not square: refused by the rotations four, used by normal and both
@@ -1543,9 +1556,9 @@ fn frame_decode_rotations_and_constellation_are_checked() {
         assert!(make(FrameRotations::Normal, k).is_ok());
         assert!(make(FrameRotations::Both, k).is_ok());
     }
-    // the choice has the five names of symbol_map, nothing beyond
+    // the choice has the seven names of symbol_map (M44.2), nothing beyond
     let mut cfg = FrameDecodeConfig::default();
-    for i in [5, 6] {
+    for i in [7, 8] {
         assert!(matches!(
             cfg.set("constellation", ParamValue::Choice(i)),
             Err(Error::OutOfRange {

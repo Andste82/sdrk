@@ -1,5 +1,5 @@
-//! `qam_soft_bits` (M44 §2, I44-1) against the fallback, bit for bit at the level of the running
-//! build: both constellations, every symbol count up to 100 (every tail of the vector steps of
+//! `qam_soft_bits` (M44 §2, I44-1, M44.2 §2) against the fallback, bit for bit at the level of the
+//! running build: every square order (4 to 1024), every symbol count up to 100 (every tail of the vector steps of
 //! every level), every start offset of the input and of the output within a vector, several
 //! scales, values around the soft-bit boundaries and special values (signed zeros, infinities,
 //! NaN, denormals, huge values), and the length check.
@@ -12,7 +12,7 @@ use sdrk_backend_simd::Simd;
 use sdrk_core::kernels::constellation::{Qam, QamSoftBits};
 use sdrk_core::{C32, Error, Fallback};
 
-const BOTH: [Qam; 2] = [Qam::Qam16, Qam::Qam64];
+const ALL: [Qam; 5] = Qam::ALL;
 /// Start offsets in values: the kernel must not depend on the alignment of the buffers.
 const OFFSETS: [usize; 4] = [0, 1, 2, 3];
 const SCALES: [f32; 5] = [1.0, 0.25, 5.3, 1e-9, 1e9];
@@ -23,8 +23,8 @@ fn bits(x: f32) -> u32 {
     if x.is_nan() { u32::MAX } else { x.to_bits() }
 }
 
-/// A component: a special value, one near a soft-bit boundary (`|v|` near 0, 2, 4 or 6), or
-/// a level with noise.
+/// A component: a special value, one near a soft-bit boundary (`|v|` near an even integer
+/// below `2 m`), or a level with noise.
 fn component(rng: &mut Rng, qam: Qam) -> f32 {
     let special = [
         0.0,
@@ -42,7 +42,7 @@ fn component(rng: &mut Rng, qam: Qam) -> f32 {
     match rng.below(8) {
         0 => special[rng.below(special.len())],
         1 => {
-            let k = [0.0f32, 2.0, 4.0, 6.0][rng.below(4)];
+            let k = 2.0 * rng.below(qam.levels_per_axis()) as f32;
             let v = (k + 1e-6 * rng.unit()) / c;
             if rng.below(2) == 0 { v } else { -v }
         }
@@ -60,7 +60,7 @@ fn soft<K: QamSoftBits<C32>>(k: &K, qam: Qam, x: &[C32], out: &mut [f32], s: f32
 #[test]
 fn qam_soft_bits_is_bit_exact_at_every_length_and_offset() {
     let mut rng = Rng::new(778);
-    for qam in BOTH {
+    for qam in ALL {
         let b = qam.bits_per_symbol();
         for n in 0..=100 {
             let x: Vec<C32> = (0..n + 3)
@@ -87,7 +87,7 @@ fn qam_soft_bits_is_bit_exact_at_every_length_and_offset() {
 #[test]
 fn qam_soft_bits_checks_the_output_length() {
     let x = [C32::new(0.1, -0.2); 5];
-    for qam in BOTH {
+    for qam in ALL {
         let b = qam.bits_per_symbol();
         for got in [0, 5 * b - 1, 5 * b + 1] {
             let mut out = vec![0.0f32; got];

@@ -43,6 +43,7 @@ use sdrk_device::{Align, Container, Endian, Layout as DataLayout, SampleFormat, 
 use volk_sys::{lv_16sc_t, lv_32fc_t};
 
 mod am_family;
+mod bit_scramble_family;
 mod channelize_family;
 mod costas_family;
 mod equalize_family;
@@ -634,6 +635,8 @@ pub const KERNELS: [&str; 268] = [
     "costas_qam1024",
     "equalize_qam256",
     "equalize_qam1024",
+    "bit_scramble_block",
+    "bit_descramble_block",
 ];
 
 /// Prepares the measurement `name` with `layout` (the FFT sizes are fixed by the name).
@@ -939,7 +942,9 @@ pub fn prepare(name: &str, layout: Layout) -> Option<Box<dyn Kernel>> {
         "scramble_cq15_b8" | "scramble_cq15_b8_fallback" => {
             Box::new(scramble_family::ScrambleCq15K::new(rng, layout, 8, entry))
         }
-        "scramble_block" => Box::new(scramble_family::ScrambleBlockK::new(rng, layout)),
+        "scramble_block" => Box::new(bit_scramble_family::ScrambleBlockK::new(rng, layout)),
+        "bit_scramble_block" => Box::new(bit_scramble_family::ScrambleBlockK::new(rng, layout, false)),
+        "bit_descramble_block" => Box::new(bit_scramble_family::ScrambleBlockK::new(rng, layout, true)),
         "qam_demod_block" => Box::new(qam_family::QamDemodBlockK::new(rng, layout)),
         "qam_demod_search_block" => Box::new(qam_family::QamDemodSearchK::new(rng, layout)),
         "frame_decode_four_block" => Box::new(qam_family::FrameDecodeFourBlockK::new(rng, layout)),

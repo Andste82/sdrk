@@ -121,7 +121,7 @@ use sdrk_blocks::{
     ArenaStorage, Block, FrameDecodeBlock, FrameDecodeConfig, FrameEncodeConfig, FrameRotations,
     IqOffsetBlock, IqOffsetConfig, IqPart, Packet, PacketFlags, PskModBlock, PskModConfig,
     PulseMatchBlock, PulseMatchConfig, PulseShapeBlock, QamAcquireBlock, QamAcquireConfig, QamDemodBlock, QamDemodConfig, QamFrameDecodeBlock,
-    QamFrameDecodeConfig, QamFrameEncodeBlock, QamFrameEncodeConfig, QamModBlock, QamModConfig,
+    QamFrameDecodeConfig, QamFrameEncodeBlock, QamFrameEncodeConfig, QamModBlock, QamModConfig, Scrambler,
     SymbolDemapBlock, SymbolDemapConfig, SymbolDemapConstellation, SymbolMapBlock, SymbolMapConfig,
     SymbolMapConstellation,
 };
@@ -1632,6 +1632,10 @@ impl QamFrameEncodeBlockK {
                 ..FrameEncodeConfig::default()
             },
             qam: qam_mod_config(),
+            // The workload of M44.1 (the flow `qam16_transmitter`); the scrambler of M44.2 has
+            // its own entry, `bit_scramble_block`.
+            scrambler: Scrambler::Off,
+            ..QamFrameEncodeConfig::default()
         };
         let rate = block_rate(100_000);
         let bytes = QamFrameEncodeBlock::<ArenaStorage<'static>>::storage_bytes(&cfg, rate)
@@ -1767,6 +1771,9 @@ impl QamFrameDecodeBlockK {
                 symbol_rate_hz: 25_000.0,
                 ..QamDemodConfig::default()
             },
+            // The workload of M44.1 (the flow `qam16_receiver`); the descrambler of M44.2 has
+            // its own entry, `bit_descramble_block`.
+            scrambler: Scrambler::Off,
             ..QamFrameDecodeConfig::default()
         };
         let rate = block_rate(200_000);

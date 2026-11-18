@@ -961,7 +961,7 @@ const fn fft(name: &'static str, family: Family, samples: u64) -> KernelSpec {
 }
 
 /// The kernels of the benchmark table, in report order.
-pub static KERNELS: [KernelSpec; 261] = [
+pub static KERNELS: [KernelSpec; 268] = [
     spec("convert_cs8", Family::Volk, true),
     spec("convert_cs16", Family::Volk, true),
     spec("convert_cu8", Family::VolkAndOwn, true),
@@ -1238,6 +1238,13 @@ pub static KERNELS: [KernelSpec; 261] = [
     proto("band_pulse_detect_block", Family::Own),
     spec("qam_soft_bits_qam16", Family::Own, false),
     spec("qam_soft_bits_qam64", Family::Own, false),
+    spec("qam_soft_bits_qpsk", Family::Own, false),
+    spec("qam_soft_bits_qam256", Family::Own, false),
+    spec("qam_soft_bits_qam1024", Family::Own, false),
+    spec("costas_qam256", Family::Own, false),
+    spec("costas_qam1024", Family::Own, false),
+    spec("equalize_qam256", Family::Own, false),
+    spec("equalize_qam1024", Family::Own, false),
     proto("symbol_demap_qam16_block", Family::Own),
     proto("symbol_demap_qam64_block", Family::Own),
     proto("qam_mod_block", Family::Own),
@@ -4992,7 +4999,13 @@ mod tests {
         }
         // `qam_soft_bits` (I44-1, D1412): the SIMD paths against our own fallback (no library
         // computes the same soft bits, D1201), misaligned as the other kernels.
-        for k in ["qam_soft_bits_qam16", "qam_soft_bits_qam64"] {
+        for k in [
+            "qam_soft_bits_qpsk",
+            "qam_soft_bits_qam16",
+            "qam_soft_bits_qam64",
+            "qam_soft_bits_qam256",
+            "qam_soft_bits_qam1024",
+        ] {
             for level in ["sse2", "sse4.2", "avx2", "avx512", "neon", "simd128"] {
                 assert_eq!(
                     comparisons(plan(level), kernel(k)),

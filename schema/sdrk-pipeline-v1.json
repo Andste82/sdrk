@@ -1493,7 +1493,7 @@
           },
           {
             "additionalProperties": false,
-            "description": "Recovers the carrier of BPSK, QPSK, 8PSK, 16-QAM or 64-QAM symbols: removes phase and frequency offset.",
+            "description": "Recovers the carrier of BPSK, QPSK, 8PSK or square QAM symbols (16 to 1024 points): removes phase and frequency offset.",
             "properties": {
               "align": {
                 "$ref": "#/$defs/AlignMode"
@@ -1518,13 +1518,15 @@
                 "properties": {
                   "constellation": {
                     "default": "bpsk",
-                    "description": "The constellation of the phase detector: bpsk, qpsk or 8psk (the points of psk_mod), qam16 or qam64 (decision-directed against the grid of qam_mod). Typical: bpsk; the constellation of the transmitter. Build-time.",
+                    "description": "The constellation of the phase detector: bpsk, qpsk or 8psk (the points of psk_mod; qpsk is also the 4-QAM grid), qam16, qam64, qam256 or qam1024 (decision-directed against the grid of symbol_map). Typical: bpsk; the constellation of the transmitter. Build-time.",
                     "enum": [
                       "bpsk",
                       "qpsk",
                       "8psk",
                       "qam16",
-                      "qam64"
+                      "qam64",
+                      "qam256",
+                      "qam1024"
                     ],
                     "type": "string"
                   },
@@ -1956,13 +1958,15 @@
                   },
                   "constellation": {
                     "default": "qpsk",
-                    "description": "The constellation of the decisions: bpsk, qpsk or 8psk (the points of psk_mod), qam16 or qam64 (the unit-power Gray points of qam_mod; the CMA radius R2 = E|s|^4 / E|s|^2 is 1.32 and 1.381). Typical: qpsk; the constellation of the transmitter. Build-time.",
+                    "description": "The constellation of the decisions: bpsk, qpsk or 8psk (the points of psk_mod; qpsk is also the 4-QAM grid), qam16, qam64, qam256 or qam1024 (the unit-power Gray points of symbol_map; the CMA radius R2 = E|s|^4 / E|s|^2 is 1.32, 1.381, 1.3953 and 1.3988). Typical: qpsk; the constellation of the transmitter. Build-time.",
                     "enum": [
                       "bpsk",
                       "qpsk",
                       "8psk",
                       "qam16",
-                      "qam64"
+                      "qam64",
+                      "qam256",
+                      "qam1024"
                     ],
                     "type": "string"
                   },
@@ -2400,13 +2404,15 @@
                 "properties": {
                   "constellation": {
                     "default": "qpsk",
-                    "description": "The constellation of the soft bits, the names of symbol_demap: the rotations four take the soft bits in symbols of its bits per symbol (qpsk 2, qam16 4, qam64 6; bpsk and 8psk are not square and are refused there); not used by normal and both. Typical: qpsk; qam16 or qam64 behind qam_demod. Build-time.",
+                    "description": "The constellation of the soft bits, the names of symbol_demap: the rotations four take the soft bits in symbols of its bits per symbol (qpsk 2, qam16 4, qam64 6, qam256 8, qam1024 10; bpsk and 8psk are not square and are refused there); not used by normal and both. Typical: qpsk; qam16 to qam1024 behind qam_demod. Build-time.",
                     "enum": [
                       "bpsk",
                       "qpsk",
                       "8psk",
                       "qam16",
-                      "qam64"
+                      "qam64",
+                      "qam256",
+                      "qam1024"
                     ],
                     "type": "string"
                   },
@@ -3542,7 +3548,9 @@
                       "qpsk",
                       "8psk",
                       "qam16",
-                      "qam64"
+                      "qam64",
+                      "qam256",
+                      "qam1024"
                     ],
                     "type": "string"
                   },
@@ -3655,7 +3663,9 @@
                       "qpsk",
                       "8psk",
                       "qam16",
-                      "qam64"
+                      "qam64",
+                      "qam256",
+                      "qam1024"
                     ],
                     "type": "string"
                   },
@@ -3952,7 +3962,9 @@
                       "qpsk",
                       "8psk",
                       "qam16",
-                      "qam64"
+                      "qam64",
+                      "qam256",
+                      "qam1024"
                     ],
                     "type": "string"
                   },
@@ -4043,7 +4055,9 @@
                       "qpsk",
                       "8psk",
                       "qam16",
-                      "qam64"
+                      "qam64",
+                      "qam256",
+                      "qam1024"
                     ],
                     "type": "string"
                   },
@@ -4155,7 +4169,9 @@
                       "qpsk",
                       "8psk",
                       "qam16",
-                      "qam64"
+                      "qam64",
+                      "qam256",
+                      "qam1024"
                     ],
                     "type": "string"
                   },
@@ -4251,7 +4267,9 @@
                       "qpsk",
                       "8psk",
                       "qam16",
-                      "qam64"
+                      "qam64",
+                      "qam256",
+                      "qam1024"
                     ],
                     "type": "string"
                   },
@@ -5313,13 +5331,15 @@
                 "properties": {
                   "constellation": {
                     "default": "bpsk",
-                    "description": "The symbol alphabet: real (f32, 1 bit), bpsk (C32, 1 bit), qpsk (C32, 2 bits, re then im), fsk4 (f32, 2 bits, -v then |v| - 2/3), 8psk (C32, 3 bits, max-log, Gray), qam16 (C32, 4 bits) or qam64 (C32, 6 bits; both Gray, in-phase bits first, piecewise-linear max-log). Typical: bpsk; real after an FSK discriminator, qpsk for QPSK, fsk4 for 4-FSK, 8psk for 8PSK, qam16 and qam64 for QAM. Build-time.",
+                    "description": "The symbol alphabet: real (f32, 1 bit), bpsk (C32, 1 bit), qpsk (C32, 2 bits, re then im), fsk4 (f32, 2 bits, -v then |v| - 2/3), 8psk (C32, 3 bits, max-log, Gray), qam16 (C32, 4 bits), qam64 (C32, 6 bits), qam256 (C32, 8 bits) or qam1024 (C32, 10 bits; the QAM Gray, in-phase bits first, piecewise-linear max-log). Typical: bpsk; real after an FSK discriminator, qpsk for QPSK, fsk4 for 4-FSK, 8psk for 8PSK, qam16 to qam1024 for QAM. Build-time.",
                     "enum": [
                       "bpsk",
                       "qpsk",
                       "8psk",
                       "qam16",
                       "qam64",
+                      "qam256",
+                      "qam1024",
                       "real",
                       "fsk4"
                     ],
@@ -5343,7 +5363,7 @@
           },
           {
             "additionalProperties": false,
-            "description": "Turns soft bits into the points of a constellation (BPSK to 64-QAM), one sample per symbol.",
+            "description": "Turns soft bits into the points of a constellation (BPSK to 1024-QAM), one sample per symbol.",
             "properties": {
               "align": {
                 "$ref": "#/$defs/AlignMode"
@@ -5368,13 +5388,15 @@
                 "properties": {
                   "constellation": {
                     "default": "bpsk",
-                    "description": "The constellation: bpsk (1 bit per symbol), qpsk (2), 8psk (3), qam16 (4) or qam64 (6), the names of symbol_demap. Typical: bpsk; qpsk, 8psk, qam16 or qam64 for more bits per symbol. Build-time.",
+                    "description": "The constellation: bpsk (1 bit per symbol), qpsk (2), 8psk (3), qam16 (4), qam64 (6), qam256 (8) or qam1024 (10), the names of symbol_demap. Typical: bpsk; qpsk, 8psk or qam16 to qam1024 for more bits per symbol. Build-time.",
                     "enum": [
                       "bpsk",
                       "qpsk",
                       "8psk",
                       "qam16",
-                      "qam64"
+                      "qam64",
+                      "qam256",
+                      "qam1024"
                     ],
                     "type": "string"
                   },

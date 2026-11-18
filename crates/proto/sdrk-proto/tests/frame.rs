@@ -455,7 +455,7 @@ fn encode_bytes_packs_the_bits_of_encode() {
     ));
 }
 
-/// M44: `RotatingDecoder::new` checks `bits_per_symbol` (2, 4 or 6); a frame turned by a
+/// M44, M44.2: `RotatingDecoder::new` checks `bits_per_symbol` (2, 4, 6, 8 or 10); a frame turned by a
 /// quarter turn (16-QAM symbols of 4 bits) is found and reports the turn, the plain decoder does
 /// not find it, and `reset` drops a partial symbol.
 #[test]
@@ -466,9 +466,12 @@ fn rotating_decoder_checks_bits_per_symbol_and_reset_drops_a_partial_symbol() {
         (2, true),
         (4, true),
         (6, true),
+        (8, true),
+        (10, true),
         (0, false),
         (3, false),
-        (8, false),
+        (9, false),
+        (12, false),
     ] {
         assert_eq!(RotatingDecoder::new(dec(), k).is_ok(), ok, "{k}");
     }
@@ -510,4 +513,46 @@ fn rotating_decoder_checks_bits_per_symbol_and_reset_drops_a_partial_symbol() {
     assert!(got[0].flags.contains(PacketFlags::CRC_OK));
     assert_eq!(got[0].index, 32);
     assert!(d.is_hunting());
+}
+
+/// M44.2 §4: the rotation map of M44 §1 for symbol groups of up to 10 bits. For every even
+/// `bits_per_symbol` from 2 to 10 (QPSK to 1024-QAM) and every quarter turn, a frame whose
+/// symbols are turned by `rotate_group` is found by the rotating decoder, which reports the turn
+/// and reads the payload under the inverse rotation; the frame is padded with zero bits to
+/// whole symbols.
+#[test]
+fn rotating_decoder_reads_every_turn_of_symbols_of_up_to_10_bits() {
+    use sdrk_proto::frame::{MAX_BITS_PER_SYMBOL, RotatingDecoder, rotate_group, rotation_of};
+    assert_eq!(MAX_BITS_PER_SYMBOL, 10);
+    let payload: Vec<u8> = (0..23u8).map(|i| i.wrapping_mul(37) ^ 0x5a).collect();
+    let p = Packet::new(0, PacketFlags::NONE, &payload).unwrap();
+    for k in [2u32, 4, 6, 8, 10] {
+        let half = k / 2;
+        let mut bits = vec![0u8; frame::frame_bits(payload.len(), 2)];
+        frame::encode(&p, 2, Whitening::Pn9, &mut bits).unwrap();
+        let pad = (k as usize - bits.len() % k as usize) % k as usize;
+        bits.extend(core::iter::repeat_n(0u8, pad + 2 * k as usize));
+        for r in 0..4u32 {
+            let turned: Vec<bool> = bits
+                .chunks_exact(k as usize)
+                .flat_map(|c| {
+                    let g = c.iter().fold(0u32, |g, &b| (g << 1) | u32::from(b));
+                    let t = rotate_group(g, half, r);
+                    (0..k).rev().map(move |j| (t >> j) & 1 == 1)
+                })
+                .collect();
+            let mut d =
+                RotatingDecoder::new(Decoder::new(0, false, Whitening::Pn9).unwrap(), k).unwrap();
+            let got: Vec<Packet> = turned
+                .iter()
+                .enumerate()
+                .filter_map(|(i, &b)| d.push_bit(b, i as u64))
+                .collect();
+            assert_eq!(got.len(), 1, "k {k} r {r}");
+            assert_eq!(got[0].data(), &payload[..], "k {k} r {r}");
+            assert_eq!(rotation_of(got[0].flags), r, "k {k} r {r}");
+            assert!(got[0].flags.contains(PacketFlags::CRC_OK), "k {k} r {r}");
+            assert_eq!(got[0].index, 16, "k {k} r {r}");
+        }
+    }
 }

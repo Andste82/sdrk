@@ -14,7 +14,9 @@ use sdrk_pipeline::{BuildOptions, DiagCode, Registry};
 use serde_json::{Value, json};
 
 /// The names of the choice, in index order.
-const ALL: [&str; 5] = ["bpsk", "qpsk", "8psk", "qam16", "qam64"];
+const ALL: [&str; 7] = [
+    "bpsk", "qpsk", "8psk", "qam16", "qam64", "qam256", "qam1024",
+];
 
 /// A flow with one node of `kind` and the input it takes.
 fn flow(kind: &str, params: Value) -> Value {
@@ -86,7 +88,13 @@ fn every_value_of_the_constellation_of_the_six_kinds() {
             }
         }
         // A name outside the choice, the wrong type and the default.
-        for bad in [json!("qam256"), json!("QAM16"), json!(16), json!(true)] {
+        for bad in [
+            json!("qam32"),
+            json!("qam4"),
+            json!("QAM16"),
+            json!(16),
+            json!(true),
+        ] {
             let got = errors(&flow(kind, params(kind, json!({ "constellation": bad }))));
             assert_eq!(
                 got.first().map(|(p, _)| p.as_str()),

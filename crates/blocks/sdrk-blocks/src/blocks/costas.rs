@@ -1,5 +1,5 @@
-//! `costas`: carrier recovery for BPSK, QPSK, 8PSK, 16-QAM and 64-QAM at one sample per symbol (a
-//! Costas loop, decision-directed for QAM).
+//! `costas`: carrier recovery for BPSK, QPSK, 8PSK and the square QAM of 16 to 1024 points at one
+//! sample per symbol (a Costas loop, decision-directed for QAM).
 
 use core::marker::PhantomData;
 
@@ -30,24 +30,24 @@ pub(crate) const MAX_LOOP_BW: f64 = 0.2;
 /// Largest `max_offset` in cycles per symbol.
 pub(crate) const MAX_OFFSET_LIMIT: f64 = 0.25;
 
-/// The names of the constellations, in the order of the choice.
-const CONSTELLATIONS: &[&str] = &["bpsk", "qpsk", "8psk", "qam16", "qam64"];
+/// The names of the constellations, in the order of the choice: those of `symbol_map` (M44.1.1).
+const CONSTELLATIONS: &[&str] = super::symbol_map::CONSTELLATION_OPTIONS;
 
 /// Description of the `costas` block.
 pub static DESCRIPTION: BlockDescription = BlockDescription {
     kind: "costas",
-    summary: "Recovers the carrier of BPSK, QPSK, 8PSK, 16-QAM or 64-QAM symbols: removes phase \
-        and frequency offset.",
+    summary: "Recovers the carrier of BPSK, QPSK, 8PSK or square QAM symbols (16 to 1024 points): \
+        removes phase and frequency offset.",
     details: "A carrier loop at one sample per symbol: every symbol is turned by the phase of \
         an oscillator, a decision-directed detector (bpsk: re im; qpsk: sign(re) im - \
-        sign(im) re; 8psk: im(y conj(d)) with d the 8PSK point of the octant of y; qam16 and \
-        qam64: arg(y conj(d)) with d the nearest point of the square grid, the phase detector \
+        sign(im) re; 8psk: im(y conj(d)) with d the 8PSK point of the octant of y; qam16, \
+        qam64, qam256 and qam1024: arg(y conj(d)) with d the nearest point of the square grid, the phase detector \
         of GNU Radio's constellation_receiver_cb) measures the remaining phase error and a \
         proportional-integral loop with the bandwidth loop_bw (relative to the symbol rate) \
         and the damping corrects phase and frequency; the frequency integrator is limited to \
         max_offset cycles per symbol. A lock detector reports lock above 0.5 of its smoothed \
         metric and loses it below 0.3 (the metric is about 1 on the points and about 0 on \
-        noise; for qam16 and qam64 it is the decision error 1 - 6 |y - d|^2 / delta^2 with \
+        noise; for the QAM it is the decision error 1 - 6 |y - d|^2 / delta^2 with \
         delta the level spacing, so it also falls when the amplitude is off the grid). \
         Place it after \
         symbol_sync (one sample per symbol, amplitude about 1, after an agc; for QAM after \
@@ -80,8 +80,8 @@ pub static DESCRIPTION: BlockDescription = BlockDescription {
             typical: "bpsk; the constellation of the transmitter",
             mutability: Mutability::Build,
             description: "The constellation of the phase detector: bpsk, qpsk or 8psk (the \
-                points of psk_mod), qam16 or qam64 (decision-directed against the grid of \
-                qam_mod).",
+                points of psk_mod; qpsk is also the 4-QAM grid), qam16, qam64, qam256 or \
+                qam1024 (decision-directed against the grid of symbol_map).",
         },
         ParamDesc {
             name: "loop_bw",
@@ -157,13 +157,16 @@ impl Default for CostasConfig {
     }
 }
 
-/// The constellation of a choice index (0 `bpsk`, 1 `qpsk`, 2 `8psk`, 3 `qam16`, 4 `qam64`).
+/// The constellation of a choice index (0 `bpsk`, 1 `qpsk`, 2 `8psk`, 3 `qam16`, 4 `qam64`, 5
+/// `qam256`, 6 `qam1024`).
 const fn constellation_of(i: u16) -> CostasConstellation {
     match i {
         1 => CostasConstellation::Qpsk,
         2 => CostasConstellation::Psk8,
         3 => CostasConstellation::Qam16,
         4 => CostasConstellation::Qam64,
+        5 => CostasConstellation::Qam256,
+        6 => CostasConstellation::Qam1024,
         _ => CostasConstellation::Bpsk,
     }
 }
@@ -175,6 +178,8 @@ fn constellation_index(c: CostasConstellation) -> u16 {
         CostasConstellation::Psk8 => 2,
         CostasConstellation::Qam16 => 3,
         CostasConstellation::Qam64 => 4,
+        CostasConstellation::Qam256 => 5,
+        CostasConstellation::Qam1024 => 6,
         _ => 0,
     }
 }

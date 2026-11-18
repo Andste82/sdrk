@@ -39,7 +39,7 @@ pub enum FrameRotations {
     /// (`sdrk_proto::frame::Decoder::with_both_polarities`).
     Both,
     /// The four rotations by 90 degrees of the symbols of a square constellation (`qpsk`,
-    /// `qam16`, `qam64`), of its bits per symbol each; the rotation is reported in bits 16 and 17 of the packet flags (`sdrk_proto::frame::RotatingDecoder`).
+    /// `qam16`, `qam64`, `qam256`, `qam1024`), of its bits per symbol each; the rotation is reported in bits 16 and 17 of the packet flags (`sdrk_proto::frame::RotatingDecoder`).
     Four,
 }
 
@@ -120,7 +120,7 @@ pub static DESCRIPTION: BlockDescription = BlockDescription {
         word in the four rotations by 90 degrees of a square constellation with Gray coded \
         axes (one quarter turn maps the bit halves (I, Q) to (Q with its first bit inverted, \
         I)), which resolves the ambiguity of QPSK (constellation qpsk, 2 bits per symbol) and of \
-        qam_demod (qam16, 4 bits; qam64, 6 bits); the frame is read under the inverse rotation, and the packet \
+        the square QAM (qam16, 4 bits; qam64, 6 bits; qam256, 8 bits; qam1024, 10 bits); the frame is read under the inverse rotation, and the packet \
         flags carry the quarter turns 0 to 3 in bits 16 and 17. Pitfall: max_sync_errors above 0 \
         finds frames with damaged sync words but also false syncs in noise; those mostly fail \
         the CRC.",
@@ -160,12 +160,12 @@ pub static DESCRIPTION: BlockDescription = BlockDescription {
                 options: CONSTELLATION_OPTIONS,
                 default: 1,
             },
-            typical: "qpsk; qam16 or qam64 behind qam_demod",
+            typical: "qpsk; qam16 to qam1024 behind qam_demod",
             mutability: Mutability::Build,
             description: "The constellation of the soft bits, the names of symbol_demap: the \
                 rotations four take the soft bits in symbols of its bits per symbol (qpsk 2, \
-                qam16 4, qam64 6; bpsk and 8psk are not square and are refused there); not \
-                used by normal and both.",
+                qam16 4, qam64 6, qam256 8, qam1024 10; bpsk and 8psk are not square and are \
+                refused there); not used by normal and both.",
         },
     ],
     required: &[],
@@ -203,7 +203,8 @@ pub struct FrameDecodeConfig {
     /// The accepted sync-word rotations (M44; `Both` is the former polarity `both` of M40).
     pub rotations: FrameRotations,
     /// The constellation of the soft bits, whose bits per symbol the rotations
-    /// [`FrameRotations::Four`] use (`qpsk`, `qam16` or `qam64` for `Four`; M44.1.1, before
+    /// [`FrameRotations::Four`] use (`qpsk`, `qam16`, `qam64`, `qam256` or `qam1024` for
+    /// `Four`; M44.1.1, before
     /// `bits_per_symbol`).
     pub constellation: SymbolMapConstellation,
 }
@@ -222,8 +223,8 @@ impl Default for FrameDecodeConfig {
 }
 
 impl FrameDecodeConfig {
-    /// The bits per symbol of the constellation (1, 2, 3, 4 or 6), the symbol of the rotations
-    /// `four`.
+    /// The bits per symbol of the constellation (1, 2, 3, 4, 6, 8 or 10), the symbol of the
+    /// rotations `four`.
     pub const fn bits_per_symbol(&self) -> usize {
         self.constellation.bits_per_symbol()
     }
@@ -243,7 +244,7 @@ impl FrameDecodeConfig {
         if self.rotations == FrameRotations::Four && !self.bits_per_symbol().is_multiple_of(2) {
             return Err(Error::InvalidParameter {
                 name: "constellation",
-                reason: "the rotations four need a square constellation: qpsk, qam16 or qam64",
+                reason: "the rotations four need a square constellation: qpsk or qam16 to qam1024",
             });
         }
         Ok(())

@@ -3231,11 +3231,11 @@ impl Kind for SymbolDemapKind {
     fn kernels() -> &'static [&'static str] {
         &[]
     }
-    /// `qam16` and `qam64` call the kernel `qam_soft_bits` (I44-1, D1412); the other
+    /// `qam16` to `qam1024` call the kernel `qam_soft_bits` (I44-1, D1412, M44.2); the other
     /// constellations call no kernel.
     fn kernels_for(params: &Map<String, Value>) -> &'static [&'static str] {
         match params.get("constellation").and_then(Value::as_str) {
-            Some("qam16" | "qam64") => &["qam_soft_bits"],
+            Some("qam16" | "qam64" | "qam256" | "qam1024") => &["qam_soft_bits"],
             _ => Self::kernels(),
         }
     }
@@ -3270,11 +3270,15 @@ impl Kind for SymbolDemapKind {
             // One multiplication per soft bit; 8psk: eight squared distances, six minimum
             // searches over four points and three products per symbol (D644); qam16: two
             // products by sqrt(E), two magnitudes, two differences and four products; qam64:
-            // two products, four magnitudes, four differences and six products (D1200).
+            // two products, four magnitudes, four differences and six products (D1200); qam256
+            // and qam1024 (b bits per axis): two products by sqrt(E), 2 (b - 1) magnitudes,
+            // 2 (b - 1) differences and 2 b products, 22 and 28 (M44.2).
             cost: match cfg.constellation {
                 SymbolDemapConstellation::Psk8 => 16.0,
                 SymbolDemapConstellation::Qam16 => 10.0,
                 SymbolDemapConstellation::Qam64 => 18.0,
+                SymbolDemapConstellation::Qam256 => 22.0,
+                SymbolDemapConstellation::Qam1024 => 28.0,
                 _ => 1.0,
             },
             taps: 0,

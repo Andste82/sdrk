@@ -1212,7 +1212,9 @@ fn the_symbol_kinds_describe_their_ports_and_parameters() {
     assert_eq!(
         slice.param("constellation").unwrap().kind,
         ParamKind::Choice {
-            options: &["bpsk", "qpsk", "8psk", "qam16", "qam64", "real", "fsk4"],
+            options: &[
+                "bpsk", "qpsk", "8psk", "qam16", "qam64", "qam256", "qam1024", "real", "fsk4"
+            ],
             default: 0
         }
     );
@@ -1478,11 +1480,19 @@ fn the_psk_kinds_describe_their_ports_and_parameters() {
     assert_eq!(
         costas.param("constellation").unwrap().kind,
         ParamKind::Choice {
-            options: &["bpsk", "qpsk", "8psk", "qam16", "qam64"],
+            options: &[
+                "bpsk", "qpsk", "8psk", "qam16", "qam64", "qam256", "qam1024"
+            ],
             default: 0
         }
     );
-    for word in ["arg(y conj(d))", "constellation_receiver_cb", "qam64"] {
+    for word in [
+        "arg(y conj(d))",
+        "constellation_receiver_cb",
+        "qam64",
+        "qam256",
+        "qam1024",
+    ] {
         assert!(costas.details.contains(word), "costas details: {word}");
     }
     let m = find("psk_mod");
@@ -1540,7 +1550,9 @@ fn the_psk_kinds_describe_their_ports_and_parameters() {
         assert_eq!(
             desc.param("constellation").unwrap().kind,
             ParamKind::Choice {
-                options: &["bpsk", "qpsk", "8psk", "qam16", "qam64"],
+                options: &[
+                    "bpsk", "qpsk", "8psk", "qam16", "qam64", "qam256", "qam1024"
+                ],
                 default: 0
             },
             "{}",
@@ -1587,7 +1599,9 @@ fn the_psk_kinds_describe_their_ports_and_parameters() {
     assert_eq!(
         last.kind,
         ParamKind::Choice {
-            options: &["bpsk", "qpsk", "8psk", "qam16", "qam64"],
+            options: &[
+                "bpsk", "qpsk", "8psk", "qam16", "qam64", "qam256", "qam1024"
+            ],
             default: 1
         }
     );
@@ -1611,7 +1625,14 @@ fn the_psk_kinds_describe_their_ports_and_parameters() {
             })
         ));
     }
-    assert!(cfg.set("constellation", ParamValue::Choice(5)).is_err());
+    // M44.2: qam256 and qam1024, symbols of 8 and 10 bits
+    for (i, bits) in [(5u16, 8usize), (6, 10)] {
+        cfg.set("constellation", ParamValue::Choice(i)).unwrap();
+        assert_eq!(cfg.get("constellation"), Ok(ParamValue::Choice(i)));
+        assert_eq!(cfg.bits_per_symbol(), bits);
+        assert!(cfg.validate().is_ok());
+    }
+    assert!(cfg.set("constellation", ParamValue::Choice(7)).is_err());
     assert_eq!(
         cfg.set("bits_per_symbol", ParamValue::I64(4)),
         Err(Error::UnknownParameter)
@@ -1801,7 +1822,9 @@ fn the_equalizer_kind_describes_its_ports_and_parameters() {
     assert_eq!(
         eq.param("constellation").unwrap().kind,
         ParamKind::Choice {
-            options: &["bpsk", "qpsk", "8psk", "qam16", "qam64"],
+            options: &[
+                "bpsk", "qpsk", "8psk", "qam16", "qam64", "qam256", "qam1024"
+            ],
             default: 1
         }
     );

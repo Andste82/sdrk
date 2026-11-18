@@ -1,4 +1,4 @@
-//! `qam_frame_encode`: packets to 16-QAM or 64-QAM baseband, the composite `frame_encode` ->
+//! `qam_frame_encode`: packets to square QAM baseband (4-QAM to 1024-QAM), the composite `frame_encode` ->
 //! `qam_mod` (M44.1 §7).
 
 use sdrk::{Progress, Rate, Ratio, RatioKind};
@@ -36,13 +36,14 @@ pub const QAM_FRAME_ENCODE_PARAMS: ParamMap = ParamMap::new(&[
 /// Description of the `qam_frame_encode` block.
 pub static DESCRIPTION: BlockDescription = BlockDescription {
     kind: "qam_frame_encode",
-    summary: "Frames packets and modulates them as 16-QAM or 64-QAM: frame_encode then qam_mod \
-        in one block.",
+    summary: "Frames packets and modulates them as square QAM (4-QAM to 1024-QAM): frame_encode \
+        then qam_mod in one block.",
     details: "The transmit side of qam_frame_decode, a composite of frame_encode and qam_mod: \
         every packet is sent as one frame of the test framing (preamble_bytes bytes 0x55, the \
         sync word 0x1ACFFC1D, length, payload, CRC-16/CCITT-FALSE; whitening pn9 XORs length, \
-        payload and CRC with the PN9 sequence), its bits are mapped to the 16-QAM or 64-QAM \
-        points of qam_mod (constellation qam16 or qam64, the first bit the most significant) and \
+        payload and CRC with the PN9 sequence), its bits are mapped to the square QAM \
+        points of qam_mod (constellation qpsk, qam16, qam64, qam256 or qam1024, the first bit the \
+        most significant) and \
         interpolated by samples_per_symbol with the root-raised-cosine pulse (rolloff, span). \
         Between packets the block sends the idle signal of frame_encode (idle zero, preamble \
         or pn9; pn9 keeps the timing loop and the blind equalizer of the receiver training). \
@@ -109,7 +110,7 @@ impl QamFrameEncodeConfig {
     ///
     /// # Errors
     /// `UnknownParameter`, `WrongParamType`, `OutOfRange`; `InvalidParameter` for a
-    /// constellation other than `qam16` and `qam64`.
+    /// constellation that is not a square QAM (`bpsk`, `8psk`).
     pub fn set(&mut self, name: &str, value: ParamValue) -> Result<()> {
         // Every path on a copy, kept only if all of them took the value (all or none, §4).
         let mut next = *self;
@@ -150,7 +151,7 @@ fn buffer_len(bps: usize) -> usize {
     QAM_MOD_CHUNK * bps
 }
 
-/// Packets to 16-QAM or 64-QAM baseband: [`Packets`] in, `C32` out at `samples_per_symbol`
+/// Packets to square QAM baseband (`qpsk` to `qam1024`): [`Packets`] in, `C32` out at `samples_per_symbol`
 /// samples per symbol (M44.1 §7).
 ///
 /// A composite block: [`FrameEncodeBlock`] writes the bits of the frames (and the idle signal)

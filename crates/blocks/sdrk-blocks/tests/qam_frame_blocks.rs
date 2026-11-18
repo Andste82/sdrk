@@ -254,7 +254,7 @@ fn the_flat_parameters_go_through_the_param_maps() {
     assert_eq!(cfg.frame.get("constellation"), Ok(ParamValue::Choice(4)));
     assert_eq!(cfg.decoder().bits_per_symbol(), 6);
     // a value the demodulator refuses reaches neither (all or none)
-    assert!(cfg.set("constellation", ParamValue::Choice(1)).is_err());
+    assert!(cfg.set("constellation", ParamValue::Choice(2)).is_err());
     assert_eq!(cfg.frame.get("constellation"), Ok(ParamValue::Choice(4)));
     let rx = QamFrameDecodeBlock::new(&cfg, rate, &mut VecStorage).unwrap();
     // `rotations` of the decoder is set by the composite, its constellation is the demodulator's

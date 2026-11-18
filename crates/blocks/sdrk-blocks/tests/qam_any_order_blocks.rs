@@ -3,7 +3,8 @@
 //! of `symbol_map` (M44.1.1); `symbol_map` -> a quarter turn -> `symbol_demap` -> `frame_decode`
 //! `four` delivers the packets with the turn for `qpsk` and every QAM order (the symbol groups of
 //! up to 10 bits, §4); `symbol_map` and `symbol_demap` agree on every point of `qam256` and
-//! `qam1024`. Seed 839 (M44.2).
+//! `qam1024`. Seed 839 (M44.2). Test 8 of M44.2 (seed 837): `qam_mod` and `qam_demod` with
+//! `qpsk`, `qam256` and `qam1024` do not depend on the cut plan.
 #![allow(
     clippy::unwrap_used,
     clippy::indexing_slicing,
@@ -22,8 +23,9 @@ use sdrk::{C32, Sdrk};
 use sdrk_blocks::{
     Block, CostasBlock, CostasConfig, CostasConstellation, EqConstellation, EqualizeBlock,
     EqualizeConfig, FrameDecodeBlock, FrameDecodeConfig, FrameRotations, Packet, PacketFlags,
-    ParamValue, SymbolDemapBlock, SymbolDemapConfig, SymbolDemapConstellation, SymbolMapBlock,
-    SymbolMapConfig, SymbolMapConstellation,
+    ParamValue, QamDemodBlock, QamDemodConfig, QamModBlock, QamModConfig, SymbolDemapBlock,
+    SymbolDemapConfig, SymbolDemapConstellation, SymbolMapBlock, SymbolMapConfig,
+    SymbolMapConstellation, qam_acquisition_check,
 };
 use sdrk_core::kernels::constellation::Qam;
 use sdrk_core::kernels::costas::{Costas, CostasState};
@@ -357,5 +359,105 @@ fn frame_decode_four_resolves_every_turn_of_every_square_order() {
                 assert_eq!(rotation_of(g.flags), turn, "{what}");
             }
         }
+    }
+}
+
+/// The seed of test 8 of M44.2 (the chunk invariance of the QAM composites).
+const SEED_CHUNKS: u64 = 837;
+
+/// A `qam_mod` signal of `n` random symbols of `c` (4 samples per symbol), turned by
+/// `0.6 + 2 pi 0.001 k / 4` at sample `k` (0.001 cycles per symbol) with Gaussian noise of
+/// `sigma` per component (seed 837, stream `stream`); the soft bits sent and the samples.
+fn composite_signal(
+    c: SymbolMapConstellation,
+    n: usize,
+    sigma: f64,
+    stream: u64,
+) -> (Vec<f32>, Vec<C32>) {
+    let cfg = QamModConfig {
+        constellation: c,
+        samples_per_symbol: 4,
+        ..QamModConfig::default()
+    };
+    let k = cfg.bits_per_symbol();
+    let mut rng = Pcg32::new(SEED_CHUNKS, stream);
+    let bits: Vec<f32> = (0..n * k)
+        .map(|_| if rng.next_u32() & 1 == 1 { 1.0 } else { -1.0 })
+        .collect();
+    let mut tx = QamModBlock::<VecStorage>::new(&cfg, rate(40_000), &mut VecStorage).unwrap();
+    let sig = run_block(&mut tx, &bits, None);
+    let mut noise = Pcg32::new(SEED_CHUNKS, 100 + stream);
+    let input = sig
+        .iter()
+        .enumerate()
+        .map(|(i, x)| {
+            let ph = 0.6 + core::f64::consts::TAU * 0.001 * i as f64 / 4.0;
+            let (s, co) = ph.sin_cos();
+            let (re, im) = (f64::from(x.re), f64::from(x.im));
+            C32::new(
+                (re * co - im * s + sigma * noise.normal()) as f32,
+                (re * s + im * co + sigma * noise.normal()) as f32,
+            )
+        })
+        .collect();
+    (bits, input)
+}
+
+/// M44.2 test 8 (seed 837): `qam_mod` and `qam_demod` with `qpsk`, `qam256` and `qam1024` give
+/// the same output whole and in 20 cut plans. The receivers run past the first check of the
+/// controller (`qam_acquisition_check` of the order after the estimate: the acquisition, the
+/// switch of the equalizer to the decision mode with its hand-over, the first check), with and
+/// without the equalizer.
+#[test]
+fn qam_mod_and_qam_demod_of_every_new_order_do_not_depend_on_the_cut_plan() {
+    for (i, (c, sigma, taps)) in [
+        (SymbolMapConstellation::Qpsk, 0.1, 11usize),
+        (SymbolMapConstellation::Qam256, 0.01, 11),
+        (SymbolMapConstellation::Qam1024, 0.005, 11),
+        (SymbolMapConstellation::Qam256, 0.01, 0),
+    ]
+    .into_iter()
+    .enumerate()
+    {
+        let n = qam_acquisition_check(c) + 2000;
+        let (bits, input) = composite_signal(c, n, sigma, i as u64);
+        let mod_cfg = QamModConfig {
+            constellation: c,
+            samples_per_symbol: 4,
+            ..QamModConfig::default()
+        };
+        let make_tx =
+            || QamModBlock::<VecStorage>::new(&mod_cfg, rate(40_000), &mut VecStorage).unwrap();
+        let sent = run_block(&mut make_tx(), &bits, None);
+        assert_eq!(sent.len(), 4 * bits.len() / mod_cfg.bits_per_symbol());
+        check_block(
+            &sent,
+            &bits,
+            SEED_CHUNKS,
+            make_tx,
+            &format!("qam_mod {c:?}"),
+        );
+        let cfg = QamDemodConfig {
+            constellation: c,
+            symbol_rate_hz: 10_000.0,
+            equalizer_taps: taps,
+            ..QamDemodConfig::default()
+        };
+        let make =
+            || QamDemodBlock::<VecStorage>::new(&cfg, rate(40_000), &mut VecStorage).unwrap();
+        let mut whole = make();
+        let want = run_block(&mut whole, &input, None);
+        assert!(
+            want.len() > (n - 100) * cfg.bits_per_symbol(),
+            "{c:?} taps {taps}"
+        );
+        assert!(whole.acquired_frequency().is_some(), "{c:?} taps {taps}");
+        check_block(
+            &want,
+            &input,
+            SEED_CHUNKS,
+            make,
+            &format!("qam_demod {c:?} taps {taps}"),
+        );
     }
 }

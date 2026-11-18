@@ -523,10 +523,11 @@ fn qam_mod_timing_rates_and_parameters() {
     // room for one symbol only
     let p = m.process(&random_bits(8, 4), &mut out[..7]).unwrap();
     assert_eq!((p.consumed, p.produced), (4, 4));
-    // bpsk, qpsk and 8psk are in the choice but no QAM; past the choice out of range; the old
-    // name is gone
+    // bpsk and 8psk are in the choice but no square QAM (qpsk is 4-QAM since M44.2); past the
+    // choice out of range; the old name is gone
     let mut c = QamModConfig::default();
-    for psk in 0..3 {
+    assert!(c.set("constellation", ParamValue::Choice(1)).is_ok());
+    for psk in [0, 2] {
         assert!(matches!(
             c.set("constellation", ParamValue::Choice(psk)),
             Err(Error::InvalidParameter {
@@ -911,8 +912,10 @@ fn qam_demod_timing_rates_and_parameters() {
         );
     }
     assert!(c.set("equalizer_taps", ParamValue::I64(65)).is_err());
+    // qpsk is 4-QAM since M44.2; bpsk is no square QAM
+    assert!(c.set("constellation", ParamValue::Choice(1)).is_ok());
     assert!(matches!(
-        c.set("constellation", ParamValue::Choice(1)),
+        c.set("constellation", ParamValue::Choice(0)),
         Err(Error::InvalidParameter {
             name: "constellation",
             ..

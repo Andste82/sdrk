@@ -108,13 +108,17 @@ fn the_qam_kinds_are_registered_with_their_kernels() {
             "{params}"
         );
     }
-    // `symbol_demap` names `qam_soft_bits` for the QAM constellations only (I44-1, D1412).
+    // `symbol_demap` names `qam_soft_bits` for the square QAM constellations only, `qpsk` (4-QAM)
+    // included since M44.2 (I44-1, D1412, D1515).
     let f = registry.factory("symbol_demap").unwrap();
     assert_eq!(f.kernels(), [""; 0]);
     for (constellation, kernels) in [
         ("qam16", &["qam_soft_bits"][..]),
         ("qam64", &["qam_soft_bits"][..]),
-        ("qpsk", &[][..]),
+        ("qam256", &["qam_soft_bits"][..]),
+        ("qam1024", &["qam_soft_bits"][..]),
+        ("qpsk", &["qam_soft_bits"][..]),
+        ("bpsk", &[][..]),
         ("8psk", &[][..]),
     ] {
         assert_eq!(
@@ -174,7 +178,7 @@ fn qam_mod_costs_4_span_and_multiplies_the_rate() {
     );
     for bad in [
         json!({ "samples_per_symbol": 65 }),
-        json!({ "samples_per_symbol": 4, "constellation": "qpsk" }),
+        json!({ "samples_per_symbol": 4, "constellation": "bpsk" }),
         json!({ "samples_per_symbol": 4, "span": 3 }),
         json!({ "samples_per_symbol": 4, "rolloff": 1.5 }),
     ] {
@@ -191,6 +195,10 @@ fn qam_demod_costs_and_rate_rule() {
         (16, 200_000u64, 25_000.0, 10u64, 11u64),
         (64, 48_000, 1200.0, 16, 15),
         (16, 9600, 4800.0, 4, 0),
+        // M44.2: every square order (D1521)
+        (4, 200_000, 25_000.0, 10, 11),
+        (256, 200_000, 25_000.0, 10, 15),
+        (1024, 48_000, 1200.0, 16, 11),
     ] {
         let report = validate(&single(
             "qam_demod",
@@ -200,13 +208,21 @@ fn qam_demod_costs_and_rate_rule() {
         ));
         assert!(report.is_ok(), "{}", report.to_json());
         let sps = fs as f64 / sym;
-        let slice = if order == 64 { 18.0 } else { 10.0 };
+        // The timing loop 10, `costas` (45 with QAM, 30 for the PSK loop of `qpsk`) and the soft
+        // bits of `symbol_demap` per symbol (D1212, D1521).
+        let (costas, slice) = match order {
+            4 => (30.0, 4.0),
+            64 => (45.0, 18.0),
+            256 => (45.0, 22.0),
+            1024 => (45.0, 28.0),
+            _ => (45.0, 10.0),
+        };
         assert_eq!(
             report.cost_per_input_sample,
-            4.0 * span as f64 + (55.0 + slice) / sps + 8.0 * taps as f64 / sps
+            4.0 * span as f64 + (10.0 + costas + slice) / sps + 8.0 * taps as f64 / sps
         );
         let node = &report.nodes[0];
-        let bps = if order == 64 { 6 } else { 4 };
+        let bps = u64::from(order.trailing_zeros());
         assert_eq!(node.rate_out, Rate::hz(sym as u64 * bps).unwrap());
         let n = sps as u64;
         assert_eq!(
@@ -424,6 +440,8 @@ fn cname(order: u32) -> &'static str {
         8 => "8psk",
         16 => "qam16",
         64 => "qam64",
+        256 => "qam256",
+        1024 => "qam1024",
         other => unreachable!("no constellation of the order {other}"),
     }
 }

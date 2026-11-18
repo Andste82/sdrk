@@ -68,7 +68,7 @@ fn every_value_of_the_constellation_of_the_six_kinds() {
     ];
     for kind in qam.iter().chain(&["psk_mod", "psk_demod"]) {
         let valid: &[&str] = if kind.starts_with("qam") {
-            &["qam16", "qam64"]
+            &["qpsk", "qam16", "qam64", "qam256", "qam1024"]
         } else {
             &["bpsk", "qpsk", "8psk"]
         };

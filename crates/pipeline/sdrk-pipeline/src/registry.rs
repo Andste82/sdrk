@@ -17,12 +17,13 @@ use crate::kinds::{
     FmStereoModKind, FmStereoRdsModKind, FrameDecodeKind, FrameEncodeKind, FskDemodKind,
     FskModKind, HalfbandDecimateKind, HdlcDecodeKind, HdlcEncodeKind, ImagPartKind,
     InterpolateKind, IqOffsetKind, Kind, MagKind, MakeComplexKind, MorseDecodeKind,
-    MorseEncodeKind, MulKind, NcoKind, NoiseBlankKind, OokDemodKind, OokModKind, PreemphLimitKind,
-    PskDemodKind, PskModKind, PulseKeyKind, PulseMatchKind, PulseShapeKind, QamAcquireKind,
-    QamDemodKind, QamFrameDecodeKind, QamFrameEncodeKind, QamModKind, QuadDemodKind, RdsDecodeKind,
-    RdsDemodKind, RdsEncodeKind, RealPartKind, RealToIqKind, ResampleKind, RotateKind, ScaleKind,
-    SensorDecodeKind, SensorEncodeKind, SpectrumKind, SquelchKind, SsbDemodKind, SsbModKind,
-    StereoMatrixKind, StereoPllKind, SymbolDemapKind, SymbolMapKind, SymbolSyncKind, ToComplexKind,
+    MorseEncodeKind, MulKind, NcoKind, NoiseBlankKind, NoiseKind, OokDemodKind, OokModKind,
+    PreemphLimitKind, PskDemodKind, PskModKind, PulseKeyKind, PulseMatchKind, PulseShapeKind,
+    QamAcquireKind, QamDemodKind, QamFrameDecodeKind, QamFrameEncodeKind, QamModKind,
+    QuadDemodKind, RdsDecodeKind, RdsDemodKind, RdsEncodeKind, RealPartKind, RealToIqKind,
+    ResampleKind, RotateKind, ScaleKind, SensorDecodeKind, SensorEncodeKind, SpectrumKind,
+    SquelchKind, SsbDemodKind, SsbModKind, StereoMatrixKind, StereoPllKind, SymbolDemapKind,
+    SymbolMapKind, SymbolSyncKind, ToComplexKind,
 };
 use crate::model::{PipelineSpec, PortName, Precision};
 use crate::node::Node;
@@ -255,7 +256,7 @@ pub struct BuildOptions {
 /// ```
 /// use sdrk_pipeline::Registry;
 /// let registry = Registry::standard();
-/// assert_eq!(registry.descriptions().count(), 79);
+/// assert_eq!(registry.descriptions().count(), 80);
 /// assert!(registry.factory("fm_demod").is_some());
 /// ```
 pub struct Registry {
@@ -362,6 +363,7 @@ impl Registry {
         register::<QamFrameDecodeKind>(&mut factories);
         register::<PulseShapeKind>(&mut factories);
         register::<PulseMatchKind>(&mut factories);
+        register::<NoiseKind>(&mut factories);
         Self { factories }
     }
 

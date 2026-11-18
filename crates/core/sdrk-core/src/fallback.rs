@@ -119,6 +119,7 @@ mod interp;
 mod math;
 pub(crate) mod mix;
 pub(crate) mod modulate;
+mod noise;
 mod noise_blank;
 mod preemph_limit;
 mod rds;

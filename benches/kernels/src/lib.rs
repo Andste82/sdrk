@@ -47,6 +47,7 @@ mod channelize_family;
 mod costas_family;
 mod equalize_family;
 mod fir_family;
+mod gauss_noise_family;
 mod halfband_family;
 mod ism_family;
 mod math_family;
@@ -112,6 +113,9 @@ pub enum Impl {
     Liquid,
     /// libairspy 1.0.10's real-to-complex converters (`iqconverter_float`, `iqconverter_int16`).
     Airspy,
+    /// rand_distr's `StandardNormal` (the Ziggurat method) over rand's `SmallRng`: the
+    /// informational Ziggurat row of `gauss_noise` (M48).
+    RandDistr,
     /// Only the copy that restores the input of an in-place transform before every call. Its
     /// count is the baseline that xtask subtracts from every FFT comparison.
     Restore,
@@ -119,7 +123,7 @@ pub enum Impl {
 
 impl Impl {
     /// All implementations, in the order of `count info`.
-    pub const ALL: [Impl; 16] = [
+    pub const ALL: [Impl; 17] = [
         Impl::Ours,
         Impl::Fallback,
         Impl::Volk,
@@ -135,6 +139,7 @@ impl Impl {
         Impl::Cmsis,
         Impl::Liquid,
         Impl::Airspy,
+        Impl::RandDistr,
         Impl::Restore,
     ];
 
@@ -156,6 +161,7 @@ impl Impl {
             Impl::Cmsis => "cmsis",
             Impl::Liquid => "liquid",
             Impl::Airspy => "airspy",
+            Impl::RandDistr => "rand-distr",
             Impl::Restore => "restore",
         }
     }
@@ -355,9 +361,10 @@ pub trait Kernel {
 }
 
 /// All kernel names. The position gives the seed of the input (`1000 + index`), so new kernels
-/// are appended; a `<kernel>_fallback` or `<kernel>_airspy` entry takes the seed of `<kernel>`, so that
-/// both entries filter the same input.
-pub const KERNELS: [&str; 239] = [
+/// are appended; a `<kernel>_fallback`, `<kernel>_airspy`, `<kernel>_fastnoise` or
+/// `<kernel>_ziggurat` entry takes the seed of `<kernel>`, so that both entries filter the same
+/// input.
+pub const KERNELS: [&str; 249] = [
     "convert_cs8",
     "convert_cs16",
     "convert_out_cs16",
@@ -597,6 +604,16 @@ pub const KERNELS: [&str; 239] = [
     "qam_frame_decode_block",
     "pulse_shape_block",
     "pulse_match_block",
+    "gauss_noise_c32",
+    "gauss_noise_f32",
+    "gauss_noise_q15",
+    "noise_block",
+    "gauss_noise_c32_fallback",
+    "gauss_noise_f32_fallback",
+    "gauss_noise_c32_fastnoise",
+    "gauss_noise_f32_fastnoise",
+    "gauss_noise_f32_ziggurat",
+    "gauss_noise_q15_fallback",
 ];
 
 /// Prepares the measurement `name` with `layout` (the FFT sizes are fixed by the name).
@@ -605,6 +622,8 @@ pub fn prepare(name: &str, layout: Layout) -> Option<Box<dyn Kernel>> {
     let seed_of = name
         .strip_suffix("_fallback")
         .or_else(|| name.strip_suffix("_airspy"))
+        .or_else(|| name.strip_suffix("_fastnoise"))
+        .or_else(|| name.strip_suffix("_ziggurat"))
         .unwrap_or(name);
     // An entry without an entry of its base name (`stereo_pll_fallback`: `stereo_pll` has no SIMD
     // entry) takes the seed of its own position.
@@ -851,6 +870,19 @@ pub fn prepare(name: &str, layout: Layout) -> Option<Box<dyn Kernel>> {
         "qam_frame_decode_block" => Box::new(qam_family::QamFrameDecodeBlockK::new(rng, layout)),
         "pulse_shape_block" => Box::new(qam_family::PulseShapeBlockK::new(rng, layout)),
         "pulse_match_block" => Box::new(qam_family::PulseMatchBlockK::new(rng, layout)),
+        "gauss_noise_c32" | "gauss_noise_c32_fallback" | "gauss_noise_c32_fastnoise" => {
+            Box::new(gauss_noise_family::GaussNoiseC32K::new(rng, layout))
+        }
+        "gauss_noise_f32"
+        | "gauss_noise_f32_fallback"
+        | "gauss_noise_f32_fastnoise"
+        | "gauss_noise_f32_ziggurat" => {
+            Box::new(gauss_noise_family::GaussNoiseF32K::new(rng, layout))
+        }
+        "gauss_noise_q15" | "gauss_noise_q15_fallback" => {
+            Box::new(gauss_noise_family::GaussNoiseQ15K::new(rng, layout))
+        }
+        "noise_block" => Box::new(gauss_noise_family::NoiseBlockK::new(rng, layout)),
         "qam_demod_block" => Box::new(qam_family::QamDemodBlockK::new(rng, layout)),
         "qam_demod_search_block" => Box::new(qam_family::QamDemodSearchK::new(rng, layout)),
         "frame_decode_four_block" => Box::new(qam_family::FrameDecodeFourBlockK::new(rng, layout)),

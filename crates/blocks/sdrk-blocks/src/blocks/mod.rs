@@ -46,6 +46,7 @@ pub mod morse_decode;
 pub mod morse_encode;
 pub mod mul;
 pub mod nco;
+pub mod noise;
 pub mod noise_blank;
 pub mod ook_demod;
 pub mod ook_mod;

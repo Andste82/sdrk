@@ -3223,6 +3223,61 @@
           },
           {
             "additionalProperties": false,
+            "description": "Generates white Gaussian noise of standard deviation sigma, one sample per input sample.",
+            "properties": {
+              "align": {
+                "$ref": "#/$defs/AlignMode"
+              },
+              "backend": {
+                "$ref": "#/$defs/BackendSpec"
+              },
+              "description": {
+                "maxLength": 2000,
+                "type": "string"
+              },
+              "group": {
+                "description": "The group of the node (a key of `groups`); nodes without one are in `main`.",
+                "pattern": "^[a-z][a-z0-9_]{0,63}$",
+                "type": "string"
+              },
+              "kind": {
+                "const": "noise"
+              },
+              "params": {
+                "additionalProperties": false,
+                "properties": {
+                  "seed": {
+                    "default": 0,
+                    "description": "Seed of the generator, 0 to 2^53 - 1. Typical: 0; any other value gives another sequence. Build-time.",
+                    "maximum": 9007199254740991,
+                    "minimum": 0,
+                    "type": "integer"
+                  },
+                  "sigma": {
+                    "default": 0.1,
+                    "description": "Standard deviation of each real component as a linear amplitude, 0 to 16; 0 gives zeros and keeps the sequence running. Typical: 0.1; 0.01 for a noise floor 40 dB below full scale. Runtime.",
+                    "maximum": 16.0,
+                    "minimum": 0.0,
+                    "type": "number"
+                  },
+                  "stream": {
+                    "default": 1,
+                    "description": "Stream of the generator, one of many independent sequences of the same seed, 0 to 2^53 - 1. Typical: 1; two nodes with the same seed and different streams are independent. Build-time.",
+                    "maximum": 9007199254740991,
+                    "minimum": 0,
+                    "type": "integer"
+                  }
+                },
+                "type": "object"
+              }
+            },
+            "required": [
+              "kind"
+            ],
+            "type": "object"
+          },
+          {
+            "additionalProperties": false,
             "description": "Noise blanker: sets short strong impulses of a complex signal to zero.",
             "properties": {
               "align": {

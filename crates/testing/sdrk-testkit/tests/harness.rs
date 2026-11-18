@@ -669,7 +669,7 @@ fn failure_detail_is_truncated_not_panicking() {
 #[allow(clippy::too_many_lines)]
 fn registered_cases_have_unique_names_without_spaces() {
     let cases = sdrk_testkit::all_cases();
-    assert_eq!(cases.len(), 192);
+    assert_eq!(cases.len(), 195);
     for (i, c) in cases.iter().enumerate() {
         assert!(!c.name.contains(' '));
         assert!(cases[i + 1..].iter().all(|o| o.name != c.name));
@@ -822,6 +822,9 @@ fn registered_cases_have_unique_names_without_spaces() {
         "rds_shape_f32",
         "stereo_encode_rds_c32",
         "extremes_m42",
+        "gauss_noise_c32",
+        "gauss_noise_q15",
+        "extremes_m48",
     ] {
         assert!(cases.iter().any(|c| c.name == name), "{name}");
     }

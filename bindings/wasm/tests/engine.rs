@@ -242,6 +242,11 @@ fn validate_schema_and_backends() {
     assert_eq!(backend("ddc"), "chained");
     assert_eq!(backend("squelch"), "fallback");
     assert_eq!(backend("noise_blank"), "fallback");
+    // M48: the kernel of the kind `noise`, and the kind itself in the schema.
+    // The level is pinned by the facade test; here the kernel only has to be listed with a
+    // real implementation.
+    assert!(matches!(backend("gauss_noise"), "simd" | "fallback"));
+    assert!(Engine::schema().contains("\"const\": \"noise\""));
     assert_eq!(backend("auto_notch"), "fallback");
     assert_eq!(backend("stereo_pll"), "fallback");
     assert_eq!(backend("preemph_limit"), "fallback");

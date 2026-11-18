@@ -3538,6 +3538,229 @@
           "status": "info",
           "verdict": "info"
         },
+        "gauss_noise_c32": {
+          "compared_with": "liquid-dsp 1.8.3 crandnf times sigma (libc rand(), f32 Box-Muller with sqrtf, logf and cexpf; no random access, no bit-exact sequence; reference does different work; -O3)",
+          "goal": true,
+          "informational": [
+            {
+              "compared_with": "sdrk fallback",
+              "label": "information: fallback",
+              "other_instr_per_sample": 44.02,
+              "other_snr_db": 999.0,
+              "ours_instr_per_sample": 28.57,
+              "ratio": 0.65
+            },
+            {
+              "compared_with": "liquid-dsp 1.8.3 crandnf times sigma (libc rand(), f32 Box-Muller with sqrtf, logf and cexpf; no random access, no bit-exact sequence; reference does different work; -O3)",
+              "label": "misaligned by one sample",
+              "other_instr_per_sample": 364.94,
+              "other_snr_db": null,
+              "ours_instr_per_sample": 28.57,
+              "ratio": 0.08
+            }
+          ],
+          "other_instr_per_sample": 364.94,
+          "ours_instr_per_sample": 28.57,
+          "ratio": 0.08,
+          "snr_db": {
+            "other": 999.0,
+            "ours": 999.0
+          },
+          "status": "info",
+          "verdict": "info"
+        },
+        "gauss_noise_c32_fallback": {
+          "compared_with": "liquid-dsp 1.8.3 crandnf times sigma (libc rand(), f32 Box-Muller with sqrtf, logf and cexpf; no random access, no bit-exact sequence; reference does different work; -O3)",
+          "goal": true,
+          "informational": [
+            {
+              "compared_with": "liquid-dsp 1.8.3 crandnf times sigma (libc rand(), f32 Box-Muller with sqrtf, logf and cexpf; no random access, no bit-exact sequence; reference does different work; -O3)",
+              "label": "misaligned by one sample",
+              "other_instr_per_sample": 364.94,
+              "other_snr_db": null,
+              "ours_instr_per_sample": 44.02,
+              "ratio": 0.12
+            }
+          ],
+          "other_instr_per_sample": 364.94,
+          "ours_instr_per_sample": 44.02,
+          "ratio": 0.12,
+          "snr_db": {
+            "other": 999.0,
+            "ours": 999.0
+          },
+          "status": "info",
+          "verdict": "info"
+        },
+        "gauss_noise_c32_fastnoise": {
+          "compared_with": "GNU Radio fastnoise_source_c, amplitude sigma * sqrt(2) (benches/refs/gr-fastnoise.c, main at ec1bf15: one xoroshiro128+ draw and a copy from a pool of 8192 precomputed values per sample, no normal mapping, no random access; reference does less work; -O3)",
+          "goal": false,
+          "informational": [
+            {
+              "compared_with": "GNU Radio fastnoise_source_c, amplitude sigma * sqrt(2) (benches/refs/gr-fastnoise.c, main at ec1bf15: one xoroshiro128+ draw and a copy from a pool of 8192 precomputed values per sample, no normal mapping, no random access; reference does less work; -O3)",
+              "label": "misaligned by one sample",
+              "other_instr_per_sample": 10.01,
+              "other_snr_db": null,
+              "ours_instr_per_sample": 28.57,
+              "ratio": 2.85
+            }
+          ],
+          "other_instr_per_sample": 10.01,
+          "ours_instr_per_sample": 28.57,
+          "ratio": 2.85,
+          "snr_db": {
+            "other": 999.0,
+            "ours": 999.0
+          },
+          "status": "info",
+          "verdict": "info"
+        },
+        "gauss_noise_f32": {
+          "compared_with": "liquid-dsp 1.8.3 randnf times sigma (libc rand(), f32 Box-Muller with sqrtf, logf and sinf; no random access, no bit-exact sequence; reference does different work; -O3)",
+          "goal": true,
+          "informational": [
+            {
+              "compared_with": "sdrk fallback",
+              "label": "information: fallback",
+              "other_instr_per_sample": 22.02,
+              "other_snr_db": 999.0,
+              "ours_instr_per_sample": 14.32,
+              "ratio": 0.65
+            },
+            {
+              "compared_with": "liquid-dsp 1.8.3 randnf times sigma (libc rand(), f32 Box-Muller with sqrtf, logf and sinf; no random access, no bit-exact sequence; reference does different work; -O3)",
+              "label": "misaligned by one sample",
+              "other_instr_per_sample": 242.28,
+              "other_snr_db": null,
+              "ours_instr_per_sample": 14.32,
+              "ratio": 0.06
+            }
+          ],
+          "other_instr_per_sample": 242.28,
+          "ours_instr_per_sample": 14.32,
+          "ratio": 0.06,
+          "snr_db": {
+            "other": 999.0,
+            "ours": 999.0
+          },
+          "status": "info",
+          "verdict": "info"
+        },
+        "gauss_noise_f32_fallback": {
+          "compared_with": "liquid-dsp 1.8.3 randnf times sigma (libc rand(), f32 Box-Muller with sqrtf, logf and sinf; no random access, no bit-exact sequence; reference does different work; -O3)",
+          "goal": true,
+          "informational": [
+            {
+              "compared_with": "liquid-dsp 1.8.3 randnf times sigma (libc rand(), f32 Box-Muller with sqrtf, logf and sinf; no random access, no bit-exact sequence; reference does different work; -O3)",
+              "label": "misaligned by one sample",
+              "other_instr_per_sample": 242.28,
+              "other_snr_db": null,
+              "ours_instr_per_sample": 22.02,
+              "ratio": 0.09
+            }
+          ],
+          "other_instr_per_sample": 242.28,
+          "ours_instr_per_sample": 22.02,
+          "ratio": 0.09,
+          "snr_db": {
+            "other": 999.0,
+            "ours": 999.0
+          },
+          "status": "info",
+          "verdict": "info"
+        },
+        "gauss_noise_f32_fastnoise": {
+          "compared_with": "GNU Radio fastnoise_source_f, amplitude sigma (benches/refs/gr-fastnoise.c, main at ec1bf15: one xoroshiro128+ draw and a copy from a pool of 8192 precomputed values per sample, no normal mapping, no random access; reference does less work; -O3)",
+          "goal": false,
+          "informational": [
+            {
+              "compared_with": "GNU Radio fastnoise_source_f, amplitude sigma (benches/refs/gr-fastnoise.c, main at ec1bf15: one xoroshiro128+ draw and a copy from a pool of 8192 precomputed values per sample, no normal mapping, no random access; reference does less work; -O3)",
+              "label": "misaligned by one sample",
+              "other_instr_per_sample": 10.01,
+              "other_snr_db": null,
+              "ours_instr_per_sample": 14.32,
+              "ratio": 1.43
+            }
+          ],
+          "other_instr_per_sample": 10.01,
+          "ours_instr_per_sample": 14.32,
+          "ratio": 1.43,
+          "snr_db": {
+            "other": 999.0,
+            "ours": 999.0
+          },
+          "status": "info",
+          "verdict": "info"
+        },
+        "gauss_noise_f32_ziggurat": {
+          "compared_with": "rand_distr 0.5.1 StandardNormal as f32 times sigma over rand 0.9.5 SmallRng (Ziggurat in f64 with rejection: a variable number of draws per value, no random access, no bit-exact sequence across platforms; reference does different work)",
+          "goal": true,
+          "informational": [
+            {
+              "compared_with": "rand_distr 0.5.1 StandardNormal as f32 times sigma over rand 0.9.5 SmallRng (Ziggurat in f64 with rejection: a variable number of draws per value, no random access, no bit-exact sequence across platforms; reference does different work)",
+              "label": "misaligned by one sample",
+              "other_instr_per_sample": 32.13,
+              "other_snr_db": null,
+              "ours_instr_per_sample": 14.32,
+              "ratio": 0.45
+            }
+          ],
+          "other_instr_per_sample": 32.13,
+          "ours_instr_per_sample": 14.32,
+          "ratio": 0.45,
+          "snr_db": {
+            "other": 999.0,
+            "ours": 999.0
+          },
+          "status": "info",
+          "verdict": "info"
+        },
+        "gauss_noise_q15": {
+          "compared_with": "sdrk fallback",
+          "goal": true,
+          "informational": [
+            {
+              "compared_with": "sdrk fallback",
+              "label": "misaligned by one sample",
+              "other_instr_per_sample": 30.02,
+              "other_snr_db": null,
+              "ours_instr_per_sample": 16.7,
+              "ratio": 0.56
+            }
+          ],
+          "other_instr_per_sample": 30.02,
+          "ours_instr_per_sample": 16.7,
+          "ratio": 0.56,
+          "snr_db": {
+            "other": 999.0,
+            "ours": 999.0
+          },
+          "status": "info",
+          "verdict": "info"
+        },
+        "gauss_noise_q15_fallback": {
+          "compared_with": "sdrk fallback",
+          "goal": true,
+          "informational": [
+            {
+              "compared_with": "sdrk fallback",
+              "label": "misaligned by one sample",
+              "other_instr_per_sample": 30.02,
+              "other_snr_db": null,
+              "ours_instr_per_sample": 30.02,
+              "ratio": 1.0
+            }
+          ],
+          "other_instr_per_sample": 30.02,
+          "ours_instr_per_sample": 30.02,
+          "ratio": 1.0,
+          "snr_db": {
+            "other": 999.0,
+            "ours": 999.0
+          },
+          "status": "info",
+          "verdict": "info"
+        },
         "halfband_decimate": {
           "compared_with": "liquid-dsp 1.8.3 resamp2_crcf_decim_execute (dotprod_crcf) with its NEON dot product (-O3 -ffp-contract=off, neon)",
           "goal": true,
@@ -4443,6 +4666,19 @@
           ],
           "other_instr_per_sample": 20.89,
           "ours_instr_per_sample": 20.89,
+          "ratio": 1.0,
+          "snr_db": {
+            "other": 999.0,
+            "ours": 999.0
+          },
+          "status": "info",
+          "verdict": "info"
+        },
+        "noise_block": {
+          "compared_with": "sdrk fallback",
+          "goal": true,
+          "other_instr_per_sample": 28.58,
+          "ours_instr_per_sample": 28.58,
           "ratio": 1.0,
           "snr_db": {
             "other": 999.0,
@@ -6131,6 +6367,11 @@
         "sha256": "9b5144c3705159280b99d36ecd057962c4b60dbd9b2899572edd586a74d74d4c",
         "version": "main at ec1bf15"
       },
+      "gnuradio_fastnoise_source": {
+        "build": "-O3",
+        "sha256": "2a36c5cc242cf98032c2ad773870e930a540fd0221ed22cf64d7a859f6a5260a",
+        "version": "main at ec1bf15"
+      },
       "gnuradio_linear_equalizer": {
         "build": "gr-equalizer.c (linear_equalizer with adaptive_algorithm_nlms, QPSK, decision-directed, VOLK 3.3.0 generic dot products): -O3",
         "sha256": "b28de16052b9478decba1db261bdc0a6e81b64ea8f3a9eb9d9427bb6f1aac312",
@@ -6174,6 +6415,11 @@
       "liquid_dsp_nco": {
         "build": "liquid-nco.c (nco_crcf, LIQUID_VCO_INTERP): -O3",
         "sha256": "9521d75069cff58a69a9ab5ae1e62ba9d23ee626a46dc688c7edc3cd61154f56",
+        "version": "1.8.3"
+      },
+      "liquid_dsp_randn": {
+        "build": "liquid-randn.c (randnf, crandnf over libc rand()): -O3",
+        "sha256": "0557742ba038b8b61d734e5deff550cecfac309c448eb8a09a7c902bf97456cb",
         "version": "1.8.3"
       },
       "ne10": {

@@ -1,0 +1,43 @@
+{
+  "arrays": {
+    "expected": {
+      "dtype": "ci16",
+      "file": "cq15_quarter_4096.expected.bin",
+      "len": 4096
+    },
+    "ideal": {
+      "dtype": "cf64",
+      "file": "cq15_quarter_4096.ideal.bin",
+      "len": 4096
+    }
+  },
+  "case": "cq15_quarter_4096",
+  "format_version": 1,
+  "kernel": "gauss_noise",
+  "notes": "PCG32, one draw per real value (complex: re then im); inverse CDF from the ndtri table of section 2.2 in integers; v = zq 2^-17 float64(float32(sigma)); f32 = v rounded once, Q15 = floor(v 32768 + 0.5) saturated (R7) in integers; ideal = sigma sign (-ndtri(x / 2^33)); the ideal error is compared where the ideal lies inside full scale",
+  "params": {
+    "clipped": 0,
+    "compared_ideal": 8192,
+    "generator_seed": 683,
+    "len": 4096,
+    "max_abs_err_ideal": 2.95087890625e-05,
+    "measured_max_abs_err_ideal": 2.783299237041348e-05,
+    "sample_type": "cq15",
+    "sigma": 0.25,
+    "sigma_bits": 1048576000,
+    "snr_db_guard": 86.9,
+    "snr_db_ideal": 87.99497898313484,
+    "start_index": 0,
+    "stream": 2
+  },
+  "provenance": {
+    "generator": "tests/golden/generate.py",
+    "numpy": "2.5.4",
+    "python": "3.12",
+    "scipy": "1.18.1"
+  },
+  "seed": 683,
+  "tolerance": {
+    "class": "bit_exact"
+  }
+}

@@ -29,6 +29,7 @@ use sdrk::kernels::fft::{Direction, Fft, FftPlan, Scaling};
 use sdrk::kernels::filter::{Fir, FirState};
 use sdrk::kernels::mix::{Nco, Rotate};
 use sdrk::kernels::modulate::{FmMod, FmModState};
+use sdrk::kernels::noise::{GaussNoise, GaussNoiseState};
 use sdrk::kernels::spectrum::MagSq;
 use sdrk::{C32, CQ15, Fallback, Q15, Rate};
 use sdrk_device::formats;
@@ -40,7 +41,7 @@ const DECIM_TAPS: usize = 127;
 const DECIM: usize = 10;
 
 /// The kernels of the report: the names are the keys of `benches/results/cortex-m4.json`.
-const KERNELS: [&str; 19] = [
+const KERNELS: [&str; 22] = [
     "convert_cs8",
     "convert_cs16",
     "convert_out_cs16",
@@ -60,6 +61,9 @@ const KERNELS: [&str; 19] = [
     "biquad_cq15",
     "biquad_real",
     "biquad_real_q15",
+    "gauss_noise_c32",
+    "gauss_noise_f32",
+    "gauss_noise_q15",
 ];
 
 /// A small linear congruential generator; the values only have to be varied.
@@ -376,6 +380,37 @@ fn run_dc_block_real_q15(rng: &mut Lcg, k: usize) -> bool {
     };
     for _ in 0..=k {
         let _ = black_box(Fallback.dc_block_real(&mut state, black_box(&input), &mut out));
+        black_box(&out);
+    }
+    true
+}
+
+// ---------------------------------------------------------------------------------------------
+// gauss_noise (M48): `N` samples per call, `sigma` 0.1 and stream 1 as on the host; the state
+// carries on from call to call, so every call makes new samples. The table `GAUSS_ICDF` stays
+// where the linker puts it (flash, which QEMU reads without wait states): the count is the
+// instruction count of the fallback, not a cycle figure.
+
+/// One call of `gauss_noise` in a function of its own that is never inlined, as on the host.
+#[inline(never)]
+fn gauss_noise_call<T: sdrk::Sample>(state: &mut GaussNoiseState, out: &mut [T])
+where
+    Fallback: GaussNoise<T>,
+{
+    let _ = black_box(Fallback.gauss_noise(state, out));
+}
+
+#[inline(never)]
+fn run_gauss_noise<T: sdrk::Sample + Default + Copy>(rng: &mut Lcg, k: usize) -> bool
+where
+    Fallback: GaussNoise<T>,
+{
+    let Ok(mut state) = GaussNoiseState::new(u64::from(rng.next()), 1, 0.1) else {
+        return false;
+    };
+    let mut out = [T::default(); N];
+    for _ in 0..=k {
+        gauss_noise_call(&mut state, &mut out);
         black_box(&out);
     }
     true
@@ -831,6 +866,9 @@ fn run(name: &str, k: usize) -> bool {
         "agc_cq15" => run_agc_cq15(rng, k),
         "dc_block_real" => run_dc_block_real(rng, k),
         "dc_block_real_q15" => run_dc_block_real_q15(rng, k),
+        "gauss_noise_c32" => run_gauss_noise::<C32>(rng, k),
+        "gauss_noise_f32" => run_gauss_noise::<f32>(rng, k),
+        "gauss_noise_q15" => run_gauss_noise::<Q15>(rng, k),
         _ => false,
     }
 }

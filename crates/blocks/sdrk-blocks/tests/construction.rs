@@ -688,6 +688,7 @@ fn no_block_is_larger_than_512_bytes() {
         NcoBlock,
         NcoRealBlock,
         NoiseBlankBlock,
+        NoiseBlock,
         QuadDemodBlock,
         RealPartBlock,
         RealToIqBlock,
@@ -704,7 +705,8 @@ fn no_block_is_larger_than_512_bytes() {
         DeemphasisRealBlock,
         HalfbandDecimateRealBlock,
         InterpolateRealBlock,
-        MulRealBlock
+        MulRealBlock,
+        NoiseRealBlock
     );
     plain!(
         AdsbDecodeBlock,

@@ -313,6 +313,67 @@ fn backend_table_lists_the_m38_kernels() {
 }
 
 #[test]
+fn backend_table_lists_the_m48_kernels() {
+    // The inverse-CDF noise has a lane-parallel path on every SIMD level, with the bits of the
+    // fallback.
+    for ty in [
+        SampleType::C32,
+        SampleType::CQ15,
+        SampleType::F32,
+        SampleType::Q15,
+    ] {
+        assert_eq!(backend_for("gauss_noise", ty), ACCEL, "{ty:?}");
+    }
+}
+
+#[test]
+fn m48_kernels_give_the_bits_of_the_fallback() -> Result<()> {
+    use sdrk::kernels::noise::{GaussNoise, GaussNoiseState};
+
+    let mut a = GaussNoiseState::new(680, 1, 0.5)?;
+    let mut b = a;
+    let (mut ya, mut yb) = (vec![C32::default(); 1000], vec![C32::default(); 1000]);
+    Sdrk.gauss_noise(&mut a, &mut ya)?;
+    Fallback.gauss_noise(&mut b, &mut yb)?;
+    assert_eq!(flat(&ya), flat(&yb));
+    assert_eq!(a, b);
+
+    let mut a = GaussNoiseState::new(681, 7, 0.6)?;
+    a.seek(1_000_000_007);
+    let mut b = a;
+    let (mut qa, mut qb) = (vec![CQ15::default(); 1000], vec![CQ15::default(); 1000]);
+    Sdrk.gauss_noise(&mut a, &mut qa)?;
+    Fallback.gauss_noise(&mut b, &mut qb)?;
+    assert_eq!(qa, qb);
+    assert_eq!(a, b);
+
+    let mut a = GaussNoiseState::new(682, 1, 1.0)?;
+    let mut b = a;
+    let (mut ra, mut rb) = (vec![0.0f32; 1000], vec![0.0f32; 1000]);
+    Sdrk.gauss_noise(&mut a, &mut ra)?;
+    Fallback.gauss_noise(&mut b, &mut rb)?;
+    assert_eq!(
+        ra.iter().map(|x| x.to_bits()).collect::<Vec<_>>(),
+        rb.iter().map(|x| x.to_bits()).collect::<Vec<_>>()
+    );
+    assert_eq!(a, b);
+
+    let mut a = GaussNoiseState::new(684, 3, 0.6)?;
+    let mut b = a;
+    let (mut sa, mut sb) = (vec![Q15(0); 1000], vec![Q15(0); 1000]);
+    Sdrk.gauss_noise(&mut a, &mut sa)?;
+    Fallback.gauss_noise(&mut b, &mut sb)?;
+    assert_eq!(sa, sb);
+    assert_eq!(a, b);
+    // A type change is refused through the facade as well.
+    assert!(matches!(
+        Sdrk.gauss_noise(&mut a, &mut ra),
+        Err(Error::InvalidState(_))
+    ));
+    Ok(())
+}
+
+#[test]
 fn backend_table_lists_the_m40_kernels() {
     // The carrier loop is a recursion over the symbols: not accelerated (`C32` only).
     assert_eq!(backend_for("costas", SampleType::C32), "fallback");

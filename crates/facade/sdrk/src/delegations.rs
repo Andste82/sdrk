@@ -32,6 +32,7 @@ use sdrk_core::kernels::interp::{
 use sdrk_core::kernels::math::{Add, AddReal, Interleave, Mul, MulReal};
 use sdrk_core::kernels::mix::{Nco, Oscillate, Rotate};
 use sdrk_core::kernels::modulate::{AmMod, FmMod, FmModState};
+use sdrk_core::kernels::noise::{GaussNoise, GaussNoiseState};
 use sdrk_core::kernels::noise_blank::{NoiseBlank, NoiseBlankState};
 use sdrk_core::kernels::preemph_limit::{
     PreemphLimit, PreemphLimitState, PreemphLimitStereo, PreemphLimitStereoState,
@@ -158,6 +159,10 @@ crate::delegate! {
     DotComplex<C32>::dot_complex(&self, x: &[C32], w: &[C32]) -> Result<C32> => Fast;
     QamSoftBits<C32>::qam_soft_bits(&self, qam: Qam, input: &[C32], output: &mut [f32], scale: f32) -> Result<()> => Fast;
     Channelize<C32>::channelize[Taps: AsRef<[f32]>, Hist: AsRef<[C32]> + AsMut<[C32]>, Tw: AsRef<[C32]>](&self, s: &mut ChannelizeState<C32, Taps, Hist, Tw>, input: &[C32], output: &mut [C32]) -> Result<Progress> => Fast;
+    GaussNoise<C32>::gauss_noise(&self, state: &mut GaussNoiseState, output: &mut [C32]) -> Result<()> => Fast;
+    GaussNoise<CQ15>::gauss_noise(&self, state: &mut GaussNoiseState, output: &mut [CQ15]) -> Result<()> => Fast;
+    GaussNoise<f32>::gauss_noise(&self, state: &mut GaussNoiseState, output: &mut [f32]) -> Result<()> => Fast;
+    GaussNoise<Q15>::gauss_noise(&self, state: &mut GaussNoiseState, output: &mut [Q15]) -> Result<()> => Fast;
     @extra [
         ("interleave", C32, Fast),
         ("deinterleave", C32, Fast),

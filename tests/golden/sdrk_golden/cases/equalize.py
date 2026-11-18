@@ -115,8 +115,16 @@ def start_weights(n, taps):
 
 
 # The CMA radius R2 = E|s|^4 / E|s|^2 of the unit-power constellations: 1 for PSK, the exact
-# fractions of M44 section 1 for QAM (33 / 25 and 29 / 21).
-R2 = {"qpsk": 1.0, "8psk": 1.0, "qam16": 33.0 / 25.0, "qam64": 29.0 / 21.0}
+# fractions of M44 section 1 and M44.2 section 1 for QAM (33 / 25, 29 / 21, 593 / 425 and
+# 477 / 341).
+R2 = {
+    "qpsk": 1.0,
+    "8psk": 1.0,
+    "qam16": 33.0 / 25.0,
+    "qam64": 29.0 / 21.0,
+    "qam256": 593.0 / 425.0,
+    "qam1024": 477.0 / 341.0,
+}
 
 
 def decide_f32(constellation, yr, yi):
@@ -500,6 +508,54 @@ def dd_qam16(rng):
         "that every decision of the second half is the transmitted symbol delayed by 5 and turned "
         "by quarter_turns quarter turns (symbol_errors_second_half) and that mse ends below 0.02; "
         "snr_db_guard compares with the float64 loop (D111)",
+    )
+
+
+@case(kernel="equalize", name="dd_qam256_c32_16384", seed=824)
+def dd_qam256(rng):
+    n, taps, feedback, mu_cma, mu_dd, ebn0_db, phase_bw = 16384, 11, 0, 0.02, 0.01, 24.0, 0.02
+    cma_symbols, phase = 4000, 0.2
+    sym, bps = qam_symbols(rng, n, "qam256")
+    chan = [(0, 1.0 + 0j), (1, polar(0.2, 0.9)), (2, polar(0.08, -1.7))]
+    sigma = math.sqrt(1.0 / (2.0 * bps * 10.0 ** (ebn0_db / 10.0)))
+    x = channel(sym, chan, phase, sigma, rng)
+    args = (taps, feedback, "qam256", mu_cma, mu_dd, cma_symbols, phase_bw)
+    out, w, mse, mode, ph, fr = equalize_f32(x, *args)
+    guard = guard_db(out, equalize_f64(x, *args))
+    # CMA with the 256-QAM radius opens the eye, the decision mode and the tracker settle on the
+    # grid; the generator asserts that every decision of the last quarter is the transmitted
+    # symbol delayed by (taps - 1) / 2, turned by the quarter turn the blind start settled on.
+    delay = (taps - 1) // 2
+    best = None
+    for quarter in range(4):
+        turn = 1j**quarter
+        errors = 0
+        for k in range(3 * n // 4, n):
+            d = decide_f64("qam256", float(out[k].real), float(out[k].imag))
+            errors += abs(complex(*d) - turn * sym[k - delay]) > 1e-6
+        if best is None or errors < best[1]:
+            best = (quarter, errors)
+    assert mode == "decision" and float(mse) < 0.002 and best[1] == 0, (float(mse), best)
+    return dict(
+        params=eq_params(
+            *args[:3], mu_cma, mu_dd, cma_symbols, phase_bw, (mse, mode, ph, fr), guard,
+            ebn0_db=ebn0_db, sigma=sigma, phase_rad=phase, channel=channel_param(chan), delay=delay,
+            quarter_turns=best[0], symbol_errors_last_quarter=best[1],
+        ),
+        arrays={"input": Array("cf32", x), "expected": Array("cf32", out), "weights": Array("cf32", w)},
+        tolerance={"class": "bit_exact"},
+        model="float32",
+        notes="256-QAM with the Gray mapping of M44.2 section 1 (unit average power), one sample per "
+        "symbol, through the symbol-spaced channel 1 + 0.2 e^(j0.9) z^-1 + 0.08 e^(-j1.7) z^-2 "
+        "(channel: [lag, magnitude, phase]), turned by the carrier phase 0.2 rad, plus complex noise "
+        "for Eb/N0 24 dB per transmitted symbol energy; equalize with 11 taps, no feedback, the "
+        "constellation qam256 (CMA radius R2 = 593 / 425), mu_cma 0.02 for the first 4000 symbols, "
+        "then decision-directed with mu_dd 0.01, the phase tracker at phase_bw 0.02; exact "
+        "float32 model over the whole input in one call; weights are the final weights, "
+        "final_mse_bits, final_mode, final_phase and final_frequency_bits the final state; the "
+        "generator asserts that every decision of the last quarter is the transmitted symbol "
+        "delayed by 5 and turned by quarter_turns quarter turns (symbol_errors_last_quarter) and "
+        "that mse ends below 0.002; snr_db_guard compares with the float64 loop (D111)",
     )
 
 

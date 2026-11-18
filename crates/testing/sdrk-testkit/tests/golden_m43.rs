@@ -9,7 +9,8 @@
 //! the stored inputs (the regression guard of decision D111).
 //!
 //! The M44 case `dd_qam16_c32_16384` (seed 601, M44 test 2: the constellation `qam16`, CMA with
-//! its radius, then the grid decisions) runs with the same machinery and checks.
+//! its radius, then the grid decisions) and the M44.2 case `dd_qam256_c32_16384` (seed 824, M44.2
+//! test 2: the constellation `qam256`) run with the same machinery and checks.
 //!
 //! `dot_complex`: every window of every case must match the golden file bit for bit on every
 //! implementation, and the float64 sum of the products checks the stored `snr_db_guard`.
@@ -40,10 +41,11 @@ const PLANS: u64 = 20;
 /// The largest chunk of the plans.
 const MAX_CHUNK: usize = 700;
 
-const EQ_CASES: [&str; 3] = [
+const EQ_CASES: [&str; 4] = [
     "cma_qpsk_c32_16384",
     "dd_8psk_c32_16384",
     "dd_qam16_c32_16384",
+    "dd_qam256_c32_16384",
 ];
 const DOT_CASES: [&str; 2] = ["c32_1021", "c32_13"];
 
@@ -72,6 +74,8 @@ fn constellation_of(case: &GoldenCase) -> EqConstellation {
         "8psk" => EqConstellation::Psk8,
         "qam16" => EqConstellation::Qam16,
         "qam64" => EqConstellation::Qam64,
+        "qam256" => EqConstellation::Qam256,
+        "qam1024" => EqConstellation::Qam1024,
         other => panic!("{}: unknown constellation {other}", case.case),
     }
 }
@@ -229,6 +233,10 @@ fn decide_f64(c: EqConstellation, yr: f64, yi: f64) -> (f64, f64) {
         ][octant(yr, yi)],
         EqConstellation::Qam16 => (qam_level_f64(Qam::Qam16, yr), qam_level_f64(Qam::Qam16, yi)),
         EqConstellation::Qam64 => (qam_level_f64(Qam::Qam64, yr), qam_level_f64(Qam::Qam64, yi)),
+        EqConstellation::Qam256 => (
+            qam_level_f64(Qam::Qam256, yr),
+            qam_level_f64(Qam::Qam256, yi),
+        ),
         _ => panic!("no float64 guard for {c:?}"),
     }
 }

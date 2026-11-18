@@ -1,7 +1,8 @@
 //! M44.2 §5: the example flows `qam256_transmitter` and `qam256_receiver` validate without
 //! warnings, with the rates of 256-QAM at 25 kBd (200 kbit/s). Test 7 of M44.2 (the flow loop
-//! through multipath, noise and a carrier offset) is stopped: the blind equalizer of 256-QAM does
-//! not converge on the framed data of the flows (open item I44.2-6).
+//! through multipath, noise and a carrier offset) is stopped: with the scrambler of the flows
+//! (I44.2-6, D1529) the receiver decodes the frames at every rotation, but 930 of 1000 packets at
+//! Eb/N0 26 dB, not 990, the packets lost to the equalizer (open item I44.2-8, D1534).
 #![allow(clippy::unwrap_used, clippy::print_stderr)]
 
 mod common;

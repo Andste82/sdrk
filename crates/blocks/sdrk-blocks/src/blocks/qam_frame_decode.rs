@@ -1,11 +1,14 @@
-//! `qam_frame_decode`: square QAM baseband (4-QAM to 1024-QAM) to the packets of the test framing, the
-//! composite `qam_demod` -> `frame_decode` with a watch at frame level (M44.1 §7).
+//! `qam_frame_decode`: square QAM baseband (4-QAM to 1024-QAM) to the packets of the test
+//! framing, the composite `qam_demod` -> `bit_descramble` -> `frame_decode` with a watch at frame
+//! level (M44.1 §7; the descrambler since M44.2, the maintainer's decision on I44.2-6).
 
 use sdrk::{Progress, Rate, Ratio, RatioKind};
 use sdrk_core::C32;
 use sdrk_proto::frame::frame_bits;
 use sdrk_proto::{Packet, PacketFlags};
 
+use super::bit_descramble::BitDescrambleBlock;
+use super::bit_scramble::{BitScrambleConfig, POLYNOMIAL_PARAM, SCRAMBLER_PARAM, Scrambler};
 use super::frame_decode::{
     DECODE_WHITENING_PARAM, EMIT_BAD_PARAM, FrameDecodeBlock, FrameDecodeConfig, FrameRotations,
     MAX_SYNC_ERRORS_PARAM,
@@ -63,10 +66,14 @@ pub(crate) const FRAME_TIMEOUT_PARAM: ParamDesc = ParamDesc {
 /// The flat parameter names of `qam_frame_decode` and the stages they stand for: `0` is
 /// `qam_demod`, `1` is `frame_decode` (its `rotations` are `four`, fixed by the composite; its
 /// bits per symbol follow from its `constellation`), `2` the frame watch (`FrameWatch`, a
-/// crate-internal building block). `constellation` reaches both `qam_demod` and `frame_decode`.
+/// crate-internal building block), `3` is `bit_descramble` (left out for `scrambler` `none`; its
+/// values are then those of the configuration) and `4` the structure of the composite, the
+/// choice `scrambler` (D1823). `constellation` reaches `qam_demod`, `frame_decode` and
+/// `bit_descramble`.
 pub const QAM_FRAME_DECODE_PARAMS: ParamMap = ParamMap::new(&[
     ("constellation", "0.constellation"),
     ("constellation", "1.constellation"),
+    ("constellation", "3.constellation"),
     ("symbol_rate_hz", "0.symbol_rate_hz"),
     ("rolloff", "0.rolloff"),
     ("span", "0.span"),
@@ -77,6 +84,8 @@ pub const QAM_FRAME_DECODE_PARAMS: ParamMap = ParamMap::new(&[
     ("emit_bad", "1.emit_bad"),
     ("whitening", "1.whitening"),
     ("frame_timeout", "2.frame_timeout"),
+    ("scrambler", "4.scrambler"),
+    ("polynomial", "3.polynomial"),
 ]);
 
 /// Description of the `qam_frame_decode` block.
@@ -86,8 +95,11 @@ pub static DESCRIPTION: BlockDescription = BlockDescription {
         framing, with a watch at frame level.",
     details: "The receive side of qam_frame_encode, a composite of qam_demod (matched filter, \
         symbol timing, frequency acquisition, equalizer, carrier loop and soft bits, with its \
-        parameters) and frame_decode with rotations four and the same constellation (2, 4, 6, 8 or 10 bits per \
-        symbol), which resolves the 90 degree ambiguity of the square constellation and reports the \
+        parameters), the self-synchronizing descrambler bit_descramble (scrambler \
+        multiplicative, the default, with polynomial and the constellation; none leaves it \
+        out; it locks by itself after a symbols of the polynomial, and a quarter turn of the \
+        constellation commutes with it) and frame_decode with rotations four and the same \
+        constellation (2, 4, 6, 8 or 10 bits per symbol), which resolves the 90 degree ambiguity of the square constellation and reports the \
         quarter turns in bits 16 and 17 of the packet flags (max_sync_errors, emit_bad and \
         whitening as frame_decode). The watch at frame level: after a first frame with CRC_OK \
         since the start, a reset or its last restart, frames are expected, and when no frame \
@@ -95,10 +107,11 @@ pub static DESCRIPTION: BlockDescription = BlockDescription {
         again 256 symbols later (the equalizer from its start weights, the loops at frequency \
         0 and a new search of the acquisition) and the watch waits for the next frame with \
         CRC_OK; frame_timeout 0 turns it off, and the block then gives the packets of the pair \
-        qam_demod -> frame_decode. The packet index is the input sample of the first symbol of \
+        qam_demod -> bit_descramble -> frame_decode (qam_demod -> frame_decode with scrambler \
+        none). The packet index is the input sample of the first symbol of \
         the sync word at the nominal symbol rate after the delay of the demodulator, counted \
-        since construction or reset. Parameters are the flat names of both blocks and \
-        frame_timeout.",
+        since construction or reset. Parameters are the flat names of the three blocks, \
+        frame_timeout and scrambler.",
     inputs: &[PortDesc {
         name: "in",
         types: &[PortType::C32],
@@ -123,6 +136,8 @@ pub static DESCRIPTION: BlockDescription = BlockDescription {
         EMIT_BAD_PARAM,
         DECODE_WHITENING_PARAM,
         FRAME_TIMEOUT_PARAM,
+        SCRAMBLER_PARAM,
+        POLYNOMIAL_PARAM,
     ],
     required: &["symbol_rate_hz"],
 };
@@ -151,20 +166,41 @@ pub struct QamFrameDecodeConfig {
     /// Symbols without a frame with `CRC_OK` after which the demodulator starts again (0 to
     /// 1048576; 0 = off).
     pub frame_timeout: usize,
+    /// Whether the stage `bit_descramble` is there (`scrambler`, default `multiplicative`).
+    pub scrambler: Scrambler,
+    /// The descrambler: `polynomial` (its `constellation` is replaced by that of the
+    /// demodulator, [`QamFrameDecodeConfig::descramble`]).
+    pub scramble: BitScrambleConfig,
 }
 
 impl Default for QamFrameDecodeConfig {
-    /// The defaults of `qam_demod` and `frame_decode`, `frame_timeout` [`QAM_FRAME_TIMEOUT`].
+    /// The defaults of `qam_demod` and `frame_decode`, `frame_timeout` [`QAM_FRAME_TIMEOUT`], the
+    /// descrambler on with its default polynomial over the constellation of `qam_demod`.
     fn default() -> Self {
+        let demod = QamDemodConfig::default();
         Self {
-            demod: QamDemodConfig::default(),
+            demod,
             frame: FrameDecodeConfig::default(),
             frame_timeout: QAM_FRAME_TIMEOUT,
+            scrambler: Scrambler::default(),
+            scramble: BitScrambleConfig {
+                constellation: demod.constellation,
+                ..BitScrambleConfig::default()
+            },
         }
     }
 }
 
 impl QamFrameDecodeConfig {
+    /// The configuration of the descrambler: the `polynomial`, the constellation of the
+    /// demodulator.
+    pub fn descramble(&self) -> BitScrambleConfig {
+        BitScrambleConfig {
+            constellation: self.demod.constellation,
+            ..self.scramble
+        }
+    }
+
     /// The configuration of the decoder: `rotations` `four`, the constellation of the
     /// demodulator.
     pub fn decoder(&self) -> FrameDecodeConfig {
@@ -204,6 +240,11 @@ impl QamFrameDecodeConfig {
                     FRAME_TIMEOUT_PARAM.check(&value)?;
                     next.frame_timeout = value.as_usize()?;
                 }
+                Some(("3", n)) => next.scramble.set(n, value)?,
+                Some(("4", _)) => {
+                    SCRAMBLER_PARAM.check(&value)?;
+                    next.scrambler = Scrambler::from_index(value.as_choice()?);
+                }
                 _ => return unknown(),
             }
             any = true;
@@ -227,6 +268,8 @@ impl QamFrameDecodeConfig {
             Some(("0", n)) => self.demod.get(n),
             Some(("1", n)) => self.frame.get(n),
             Some(("2", _)) => Ok(ParamValue::I64(self.frame_timeout as i64)),
+            Some(("3", n)) => self.descramble().get(n),
+            Some(("4", _)) => Ok(ParamValue::Choice(self.scrambler.index())),
             _ => unknown(),
         }
     }
@@ -240,15 +283,18 @@ fn buffer_len(bps: usize) -> usize {
 /// Square QAM receiver (`qpsk` to `qam1024`) of the test framing: `C32` in, [`Packets`] out (M44.1 §7).
 ///
 /// A composite block: [`QamDemodBlock`] writes the soft bits of each piece of at most
-/// [`QAM_DEMOD_CHUNK`] input samples into a buffer, which [`FrameDecodeBlock`] (`rotations`
-/// `four`, the same constellation) reads before the next piece; a packet output that is full
+/// [`QAM_DEMOD_CHUNK`] input samples into a buffer, [`BitDescrambleBlock`] descrambles them there
+/// in place (for `scrambler` `multiplicative`; with the constellation of the demodulator, so that
+/// a quarter turn commutes with it), and [`FrameDecodeBlock`] (`rotations` `four`, the same
+/// constellation) reads them before the next piece; a packet output that is full
 /// keeps the rest of the buffer for the next call. The watch at frame level ([`FrameWatch`]):
 /// after a frame with `CRC_OK` (since the start, a reset or its last restart) frames are
 /// expected; when none ends within `frame_timeout` symbols after the last one, the demodulator
 /// starts again at the symbol [`QAM_FRAME_WATCH_LAG`] after the end of the timeout
 /// ([`QamDemodBlock::restart_at`], the transition `Silence` of its controller, the action
 /// `RestartAll`), at the same symbol however the input is cut. `frame_timeout` 0 turns the watch
-/// off: the packets are then those of the pair `qam_demod` -> `frame_decode`. The packet index is
+/// off: the packets are then those of the chain `qam_demod` -> `bit_descramble` -> `frame_decode`
+/// (without `bit_descramble` for `scrambler` `none`). The packet index is
 /// the input sample `floor(k n + d)` of the first symbol `k` of the sync word, with `n` the exact
 /// samples per symbol and `d` the delay of the demodulator. Timing: packets, at most one per 56
 /// soft bits at the nominal symbol rate; the delay of `qam_demod`. Storage: that of `qam_demod`
@@ -287,6 +333,10 @@ fn buffer_len(bps: usize) -> usize {
 /// ```
 pub struct QamFrameDecodeBlock<S: Storage> {
     demod: QamDemodBlock<S>,
+    /// The descrambler (`None` for `scrambler` `none`).
+    descramble: Option<BitDescrambleBlock<S>>,
+    /// The configuration of the descrambler, also when it is left out (its parameters).
+    scramble_cfg: BitScrambleConfig,
     decode: FrameDecodeBlock<S>,
     /// The soft bits between the stages, `bits[at..len]` not decoded yet.
     bits: S::Buf<f32>,
@@ -316,6 +366,13 @@ impl<S: Storage> QamFrameDecodeBlock<S> {
     pub fn new(config: &QamFrameDecodeConfig, rate_in: Rate, storage: &mut S) -> Result<Self> {
         config.validate(rate_in)?;
         let demod = QamDemodBlock::new(&config.demod, rate_in, storage)?;
+        let scramble_cfg = config.descramble();
+        let descramble = match config.scrambler {
+            Scrambler::Multiplicative => {
+                Some(BitDescrambleBlock::new(&scramble_cfg, rate_in, storage)?)
+            }
+            Scrambler::Off => None,
+        };
         let decode = FrameDecodeBlock::new(&config.decoder(), rate_in, storage)?;
         let bits = storage.alloc::<f32>(buffer_len(config.demod.bits_per_symbol()))?;
         let d = demod.timing().delay;
@@ -323,6 +380,8 @@ impl<S: Storage> QamFrameDecodeBlock<S> {
             delay: d.num() as f64 / d.den() as f64,
             sps: rate_in.as_f64() / config.demod.symbol_rate_hz,
             demod,
+            descramble,
+            scramble_cfg,
             decode,
             bits,
             at: 0,
@@ -338,7 +397,7 @@ impl<S: Storage> QamFrameDecodeBlock<S> {
     /// As [`QamFrameDecodeConfig::validate`].
     pub fn storage_bytes(config: &QamFrameDecodeConfig, rate_in: Rate) -> Result<usize> {
         config.validate(rate_in)?;
-        // `frame_decode` needs no storage.
+        // `frame_decode` and `bit_descramble` need no storage.
         let mut plan = Plan::default();
         QamDemodBlock::<S>::plan(&config.demod, rate_in, &mut plan)?;
         plan.add::<f32>(buffer_len(config.demod.bits_per_symbol()))?;
@@ -351,7 +410,18 @@ impl<S: Storage> QamFrameDecodeBlock<S> {
             demod: self.demod.config(),
             frame: self.decode.config(),
             frame_timeout: self.watch.timeout() as usize,
+            scrambler: if self.descramble.is_some() {
+                Scrambler::Multiplicative
+            } else {
+                Scrambler::Off
+            },
+            scramble: self.scramble_cfg,
         }
+    }
+
+    /// The descrambler stage (`None` for `scrambler` `none`).
+    pub fn descrambler(&self) -> Option<&BitDescrambleBlock<S>> {
+        self.descramble.as_ref()
     }
 
     /// The demodulator stage (its state, lock and restarts).
@@ -444,6 +514,9 @@ impl<S: Storage> Block for QamFrameDecodeBlock<S> {
                 )));
             }
             consumed += m;
+            if let Some(d) = self.descramble.as_mut() {
+                d.process_in_place(head_mut(self.bits.as_mut(), q.produced)?);
+            }
             self.at = 0;
             self.len = u16::try_from(q.produced)
                 .map_err(|_| Error::Core(sdrk_core::Error::Internal("qam_frame_decode count")))?;
@@ -468,6 +541,9 @@ impl<S: Storage> Block for QamFrameDecodeBlock<S> {
 
     fn reset(&mut self) {
         self.demod.reset();
+        if let Some(d) = self.descramble.as_mut() {
+            d.reset();
+        }
         self.decode.reset();
         self.at = 0;
         self.len = 0;
@@ -501,6 +577,11 @@ impl<S: Storage> Stages for QamFrameDecodeBlock<S> {
             ("0", n) => self.demod.param(n),
             ("1", n) => self.decode.param(n),
             ("2", _) => Ok(ParamValue::I64(i64::from(self.watch.timeout()))),
+            ("3", n) => match self.descramble.as_ref() {
+                Some(d) => d.param(n),
+                None => self.scramble_cfg.get(n),
+            },
+            ("4", "scrambler") => Ok(ParamValue::Choice(self.config().scrambler.index())),
             _ => unknown(),
         }
     }
@@ -510,6 +591,13 @@ impl<S: Storage> Stages for QamFrameDecodeBlock<S> {
             ("0", n) => self.demod.check_param(n, value),
             ("1", n) => self.decode.check_param(n, value),
             ("2", _) => check_runtime(&FRAME_TIMEOUT_PARAM, value),
+            ("3", n) => check_runtime(
+                super::bit_descramble::DESCRIPTION
+                    .param(n)
+                    .ok_or(Error::UnknownParameter)?,
+                value,
+            ),
+            ("4", "scrambler") => check_runtime(&SCRAMBLER_PARAM, value),
             _ => unknown(),
         }
     }
@@ -518,7 +606,7 @@ impl<S: Storage> Stages for QamFrameDecodeBlock<S> {
         match stage_of(path)? {
             ("0", n) => self.demod.set_param(n, value),
             ("1", n) => self.decode.set_param(n, value),
-            ("2", _) => Err(Error::ReadOnlyParameter),
+            ("2" | "3" | "4", _) => Err(Error::ReadOnlyParameter),
             _ => unknown(),
         }
     }

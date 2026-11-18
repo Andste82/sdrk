@@ -8,7 +8,9 @@
 //! exactly one); every path reaches a parameter of a building block of the same type, unit and
 //! mutability whose range holds the range of the composite (a choice: the same names at the
 //! same indices; `equalizer_taps` adds the value 0, which leaves the optional equalizer out;
-//! the `iq_offset` of `psk_mod` is there for the variant `offset` only);
+//! the `iq_offset` of `psk_mod` is there for the variant `offset` only; the `bit_scramble` and
+//! `bit_descramble` of the QAM frame composites, left out for `scrambler` `none`, answer from the
+//! configuration);
 //! `param` answers the value of the first path, all paths hold the same value, and the value is
 //! the one the composite was built with; a `set` reaches all paths or none (all parameters are
 //! build parameters: `ReadOnlyParameter`, nothing changes); the old name `order` is unknown.
@@ -32,6 +34,7 @@ use std::vec::Vec;
 
 use sdrk::Rate;
 
+use super::bit_scramble::{BitPolynomial, BitScrambleConfig, SCRAMBLER_PARAM, Scrambler};
 use super::frame_decode::FrameRotations;
 use super::psk_mod::{PskModBlock, PskModConfig, PskVariant};
 use super::qam_demod::{QamDemodBlock, QamDemodConfig};
@@ -40,8 +43,8 @@ use super::qam_frame_encode::{QamFrameEncodeBlock, QamFrameEncodeConfig};
 use super::qam_mod::{QAM_MOD_PARAMS, QamModBlock, QamModConfig};
 use super::symbol_map::SymbolMapConstellation;
 use super::{
-    costas, equalize, frame_decode, frame_encode, iq_offset, pulse_match, pulse_shape, qam_demod,
-    qam_mod, symbol_demap, symbol_map, symbol_sync,
+    bit_descramble, bit_scramble, costas, equalize, frame_decode, frame_encode, iq_offset,
+    pulse_match, pulse_shape, qam_demod, qam_mod, symbol_demap, symbol_map, symbol_sync,
 };
 use crate::block::{Block, ParamValue};
 use crate::describe::{ParamDesc, ParamKind};
@@ -80,6 +83,8 @@ fn encode_stage(path: &str) -> Option<&'static ParamDesc> {
     match split(path) {
         ("0", n) => frame_encode::DESCRIPTION.param(n),
         ("1", n) => qam_mod::DESCRIPTION.param(n),
+        ("2", n) => bit_scramble::DESCRIPTION.param(n),
+        ("3", "scrambler") => Some(&SCRAMBLER_PARAM),
         _ => None,
     }
 }
@@ -89,6 +94,8 @@ fn decode_stage(path: &str) -> Option<&'static ParamDesc> {
         ("0", n) => qam_demod::DESCRIPTION.param(n),
         ("1", n) => frame_decode::DESCRIPTION.param(n),
         ("2", "frame_timeout") => Some(&FRAME_TIMEOUT_PARAM),
+        ("3", n) => bit_descramble::DESCRIPTION.param(n),
+        ("4", "scrambler") => Some(&SCRAMBLER_PARAM),
         _ => None,
     }
 }
@@ -387,7 +394,7 @@ fn the_parameters_of_every_composite_follow_the_naming_rule() {
             &demod_values(&cfg),
         );
     }
-    // qam_frame_encode
+    // qam_frame_encode: with the scrambler (the default) and without it
     let mut enc = QamFrameEncodeConfig::default();
     enc.qam = QamModConfig {
         constellation: SymbolMapConstellation::Qam64,
@@ -396,16 +403,39 @@ fn the_parameters_of_every_composite_follow_the_naming_rule() {
         span: 6,
     };
     enc.frame.preamble_bytes = 6;
-    {
+    let without = QamFrameEncodeConfig {
+        scrambler: Scrambler::Off,
+        scramble: BitScrambleConfig {
+            polynomial: BitPolynomial::X58X39,
+            ..BitScrambleConfig::default()
+        },
+        ..enc
+    };
+    for enc in [enc, without] {
         let mut mem = arena();
         let mut st = ArenaStorage::new(&mut mem);
         let mut b = QamFrameEncodeBlock::new(&enc, rate(4800), &mut st).unwrap();
+        assert_eq!(
+            (b.config().scrambler, b.config().scramble()),
+            (enc.scrambler, enc.scramble())
+        );
+        assert_eq!(
+            b.scrambler().is_some(),
+            enc.scrambler == Scrambler::Multiplicative
+        );
         let mut values = vec![
             ("preamble_bytes", ParamValue::I64(6)),
             ("idle", ParamValue::Choice(0)),
             ("whitening", ParamValue::Choice(0)),
         ];
         values.extend(mod_values(&enc.qam));
+        values.extend([
+            ("scrambler", ParamValue::Choice(enc.scrambler.index())),
+            (
+                "polynomial",
+                ParamValue::Choice(enc.scramble.polynomial.index()),
+            ),
+        ]);
         check(
             "qam_frame_encode",
             &mut b,
@@ -424,17 +454,34 @@ fn the_parameters_of_every_composite_follow_the_naming_rule() {
     dec.demod.equalizer_taps = 15;
     dec.frame.max_sync_errors = 2;
     dec.frame.emit_bad = true;
-    {
+    let without = QamFrameDecodeConfig {
+        scrambler: Scrambler::Off,
+        scramble: BitScrambleConfig {
+            polynomial: BitPolynomial::X17X12,
+            ..BitScrambleConfig::default()
+        },
+        ..dec
+    };
+    for dec in [dec, without] {
         let mut mem = arena();
         let mut st = ArenaStorage::new(&mut mem);
         let mut b = QamFrameDecodeBlock::new(&dec, rate(200_000), &mut st).unwrap();
         assert_eq!(b.config().decoder().rotations, FrameRotations::Four);
+        assert_eq!(
+            b.descrambler().is_some(),
+            dec.scrambler == Scrambler::Multiplicative
+        );
         let mut values = demod_values(&dec.demod);
         values.extend([
             ("max_sync_errors", ParamValue::I64(2)),
             ("emit_bad", ParamValue::Bool(true)),
             ("whitening", ParamValue::Choice(0)),
             ("frame_timeout", ParamValue::I64(8192)),
+            ("scrambler", ParamValue::Choice(dec.scrambler.index())),
+            (
+                "polynomial",
+                ParamValue::Choice(dec.scramble.polynomial.index()),
+            ),
         ]);
         check(
             "qam_frame_decode",

@@ -73,7 +73,14 @@ fn qam_frame_encode_plans_as_the_pair() {
     assert!(report.is_ok(), "{}", report.to_json());
     let node = &report.nodes[0];
     assert_eq!(node.rate_out, Rate::hz(200_000).unwrap());
-    // `frame_encode` 1 and `qam_mod` 4 span per bit
+    // `frame_encode` 1, `bit_scramble` 2 (the default `scrambler`, M44.2) and `qam_mod` 4 span
+    // per bit
+    assert_eq!(report.cost_per_input_sample, 43.0);
+    // without the scrambler, the pair of M44.1
+    let report = validate(&encoder(
+        json!({ "constellation": "qam16", "samples_per_symbol": 8, "scrambler": "none" }),
+    ));
+    assert!(report.is_ok(), "{}", report.to_json());
     assert_eq!(report.cost_per_input_sample, 41.0);
     let report = validate(&encoder(
         json!({ "constellation": "qam64", "samples_per_symbol": 4 }),
@@ -108,12 +115,16 @@ fn qam_frame_decode_plans_as_the_pair() {
     let report = validate(&decoder("c32", params.clone()));
     assert!(report.is_ok(), "{}", report.to_json());
     let mut pair = decoder("c32", json!({}));
+    // the chain of M44.2: the demodulator, the descrambler (the default `scrambler`) and the
+    // decoder
     pair["nodes"] = json!({
         "d": { "kind": "qam_demod", "params": params },
+        "s": { "kind": "bit_descramble", "params": { "constellation": "qam16" } },
         "f": { "kind": "frame_decode", "params": { "rotations": "four", "constellation": "qam16" } }
     });
     pair["edges"] = json!([
-        { "from": "in", "to": "d" }, { "from": "d", "to": "f" }, { "from": "f", "to": "out" }
+        { "from": "in", "to": "d" }, { "from": "d", "to": "s" }, { "from": "s", "to": "f" },
+        { "from": "f", "to": "out" }
     ]);
     let pair = validate(&pair);
     assert!(pair.is_ok(), "{}", pair.to_json());

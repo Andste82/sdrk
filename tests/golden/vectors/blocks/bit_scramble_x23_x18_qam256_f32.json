@@ -1,0 +1,41 @@
+{
+  "arrays": {
+    "descrambled": {
+      "dtype": "f32",
+      "file": "bit_scramble_x23_x18_qam256_f32.descrambled.bin",
+      "len": 8192
+    },
+    "input": {
+      "dtype": "f32",
+      "file": "bit_scramble_x23_x18_qam256_f32.input.bin",
+      "len": 8192
+    },
+    "scrambled": {
+      "dtype": "f32",
+      "file": "bit_scramble_x23_x18_qam256_f32.scrambled.bin",
+      "len": 8192
+    }
+  },
+  "case": "bit_scramble_x23_x18_qam256_f32",
+  "format_version": 1,
+  "kernel": "blocks",
+  "model": "float32",
+  "notes": "bit_scramble and bit_descramble, polynomial 1 + x^-18 + x^-23 over symbols of 8 bits (delays 184 and 144 bits): input are 8192 soft bits of random sign and magnitude 0.05 to 2 (bit 100 is 0, bit 1000 is -0), scrambled is bit_scramble of input (s[n] = x[n] ^ s[n - A] ^ s[n - B], the register holds the bits sent), descrambled is bit_descramble of input (y[n] = r[n] ^ r[n - A] ^ r[n - B], the register holds the bits received); the output is the input with its sign flipped where the parity is 1, a bit is 1 when the value is above 0; one-bit-at-a-time model of the register, zero at the start; exact",
+  "params": {
+    "bits": 8192,
+    "constellation": "qam256",
+    "delay_a": 184,
+    "delay_b": 144,
+    "polynomial": "x23_x18"
+  },
+  "provenance": {
+    "generator": "tests/golden/generate.py",
+    "numpy": "2.5.4",
+    "python": "3.12",
+    "scipy": "1.18.1"
+  },
+  "seed": 871,
+  "tolerance": {
+    "class": "bit_exact"
+  }
+}

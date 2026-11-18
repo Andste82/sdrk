@@ -297,8 +297,9 @@ fn buffer_len(bps: usize) -> usize {
 /// (without `bit_descramble` for `scrambler` `none`). The packet index is
 /// the input sample `floor(k n + d)` of the first symbol `k` of the sync word, with `n` the exact
 /// samples per symbol and `d` the delay of the demodulator. Timing: packets, at most one per 56
-/// soft bits at the nominal symbol rate; the delay of `qam_demod`. Storage: that of `qam_demod`
-/// and the buffer of `256 bits` `f32`.
+/// soft bits at the nominal symbol rate; the delay of `qam_demod`. Storage: that of `qam_demod`,
+/// the ring of `bit_descramble` (`23 bits` `f32` for the default polynomial) and the buffer of
+/// `256 bits` `f32`.
 ///
 /// ```
 /// use sdrk::{Rate, C32};
@@ -397,9 +398,12 @@ impl<S: Storage> QamFrameDecodeBlock<S> {
     /// As [`QamFrameDecodeConfig::validate`].
     pub fn storage_bytes(config: &QamFrameDecodeConfig, rate_in: Rate) -> Result<usize> {
         config.validate(rate_in)?;
-        // `frame_decode` and `bit_descramble` need no storage.
+        // `frame_decode` needs no storage; `qam_demod`, then the ring of `bit_descramble`.
         let mut plan = Plan::default();
         QamDemodBlock::<S>::plan(&config.demod, rate_in, &mut plan)?;
+        if config.scrambler == Scrambler::Multiplicative {
+            plan.add::<f32>(config.descramble().delays().0)?;
+        }
         plan.add::<f32>(buffer_len(config.demod.bits_per_symbol()))?;
         Ok(plan.bytes())
     }

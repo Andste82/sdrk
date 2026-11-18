@@ -13,6 +13,9 @@
 //!   `has_grdeemph`), the reference of `deemphasis`;
 //! - [`GrCrc`]: the generic table-driven CRC `gr::digital::crc` of gr-digital (`gr-crc.c`, cfg
 //!   `has_grcrc`), the reference of the CRCs of `sdrk-proto`;
+//! - [`GrScrambler`]: the multiplicative scrambler and descrambler `gr::digital::scrambler_bb`
+//!   and `descrambler_bb` with `gr::digital::lfsr` (`gr-scrambler.c`, cfg `has_grscrambler`), the
+//!   scalar reference of the blocks `bit_scramble` and `bit_descramble`;
 //! - [`GrCostasLoopCc`]: the loop of `digital.costas_loop_cc` with `gr::blocks::control_loop`
 //!   (`gr-costas.c`, cfg `has_grcostas`), the reference of `costas`;
 //! - [`GrConstellationReceiverCb`], [`GrLinearEqualizerRect`]: `digital.constellation_receiver_cb`
@@ -451,6 +454,114 @@ impl GrCrc {
         #[cfg(not(has_grcrc))]
         {
             let _ = (data, &mut self.object);
+            0
+        }
+    }
+}
+
+#[cfg(has_grscrambler)]
+mod scrambler_ffi {
+    unsafe extern "C" {
+        pub fn sdrk_gr_lfsr_size() -> core::ffi::c_ulong;
+        pub fn sdrk_gr_lfsr_init(object: *mut u64, mask: u64, seed: u64, reg_len: u8)
+        -> core::ffi::c_int;
+        pub fn sdrk_gr_lfsr_reset(object: *mut u64);
+        pub fn sdrk_gr_scrambler_bb_work(
+            object: *mut u64,
+            noutput_items: core::ffi::c_int,
+            input: *const u8,
+            output: *mut u8,
+        ) -> core::ffi::c_int;
+        pub fn sdrk_gr_descrambler_bb_work(
+            object: *mut u64,
+            noutput_items: core::ffi::c_int,
+            input: *const u8,
+            output: *mut u8,
+        ) -> core::ffi::c_int;
+    }
+}
+
+/// Words of storage for the C object of [`GrScrambler`] (`gr::digital::lfsr`: three `uint64_t`
+/// and a `uint8_t`, 32 bytes).
+const GR_LFSR_WORDS: usize = 4;
+
+/// GNU Radio's multiplicative scrambler `gr::digital::scrambler_bb(mask, seed, len)` or
+/// descrambler `descrambler_bb(mask, seed, len)`: the shift register `gr::digital::lfsr` with one
+/// `__builtin_parityl` per bit, over unpacked bits (one bit per byte, the LSB).
+pub struct GrScrambler {
+    object: Box<[u64; GR_LFSR_WORDS]>,
+    descramble: bool,
+}
+
+impl GrScrambler {
+    /// The scrambler (`descramble` false) or the descrambler of `mask`, `seed` and the register
+    /// length `len` (at most 63); `None` without the library.
+    ///
+    /// # Panics
+    /// If the C object does not fit the storage of the wrapper.
+    #[must_use]
+    pub fn new(mask: u64, seed: u64, len: u8, descramble: bool) -> Option<Self> {
+        if !cfg!(has_grscrambler) {
+            return None;
+        }
+        #[cfg_attr(not(has_grscrambler), allow(unused_mut))]
+        let mut object = Box::new([0u64; GR_LFSR_WORDS]);
+        #[cfg(has_grscrambler)]
+        // SAFETY: the storage is checked to hold the object, and it is 8-byte aligned.
+        unsafe {
+            let size = usize::try_from(scrambler_ffi::sdrk_gr_lfsr_size()).unwrap_or(usize::MAX);
+            assert!(size <= 8 * GR_LFSR_WORDS, "lfsr: the object is too large");
+            if scrambler_ffi::sdrk_gr_lfsr_init(object.as_mut_ptr(), mask, seed, len) != 0 {
+                return None;
+            }
+        }
+        #[cfg(not(has_grscrambler))]
+        let _ = (mask, seed, len, &mut object);
+        Some(GrScrambler { object, descramble })
+    }
+
+    /// `reset()`: the register back to the seed.
+    pub fn reset(&mut self) {
+        #[cfg(has_grscrambler)]
+        // SAFETY: the object was initialized by `new`.
+        unsafe {
+            scrambler_ffi::sdrk_gr_lfsr_reset(self.object.as_mut_ptr());
+        }
+        #[cfg(not(has_grscrambler))]
+        let _ = &mut self.object;
+    }
+
+    /// `work(n, in, out)` of the block over `input.len()` unpacked bits into `output` (the same
+    /// length); returns the items (0 without the library).
+    ///
+    /// # Panics
+    /// If the lengths differ or exceed `i32::MAX`.
+    pub fn work(&mut self, input: &[u8], output: &mut [u8]) -> usize {
+        assert_eq!(input.len(), output.len(), "scrambler: the lengths differ");
+        let n = core::ffi::c_int::try_from(input.len()).expect("scrambler: too many items");
+        #[cfg(has_grscrambler)]
+        // SAFETY: both buffers hold `n` bytes; the object was initialized by `new`.
+        return unsafe {
+            let done = if self.descramble {
+                scrambler_ffi::sdrk_gr_descrambler_bb_work(
+                    self.object.as_mut_ptr(),
+                    n,
+                    input.as_ptr(),
+                    output.as_mut_ptr(),
+                )
+            } else {
+                scrambler_ffi::sdrk_gr_scrambler_bb_work(
+                    self.object.as_mut_ptr(),
+                    n,
+                    input.as_ptr(),
+                    output.as_mut_ptr(),
+                )
+            };
+            usize::try_from(done).unwrap_or(0)
+        };
+        #[cfg(not(has_grscrambler))]
+        {
+            let _ = (n, output, self.descramble, &mut self.object);
             0
         }
     }

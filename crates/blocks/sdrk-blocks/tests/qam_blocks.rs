@@ -708,7 +708,7 @@ fn demod_kernels(cfg: &QamDemodConfig, fs: sdrk::Rate, input: &[C32]) -> Vec<f32
     .sps(fs)
     .unwrap();
     let mut sync =
-        SymbolSyncState::<C32>::new(sps, Ted::Gardner, cfg.sync_bw, 0.7071, 0.005, 1.0).unwrap();
+        SymbolSyncState::<C32>::new(sps, Ted::Gardner, cfg.sync_bw(), 0.7071, 0.005, 1.0).unwrap();
     let mut syms = vec![C32::default(); input.len()];
     let p = <Sdrk as SymbolSync<C32>>::symbol_sync(&Sdrk, &mut sync, &mf, &mut syms).unwrap();
     assert_eq!(p.consumed, input.len());

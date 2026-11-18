@@ -218,6 +218,7 @@ Every golden case has a fixed seed; ranges keep cases independent so that adding
 | 840–859 | M44.1 (QAM in building blocks) |
 | 860–869 | M44.1.1 (parameter names) |
 | 870–879 | M49.1 (`scramble` for `bits ≥ 3`) |
+| 870–879 | M44.2: the bit scramblers `bit_scramble` / `bit_descramble` (the maintainer's decision on I44.2-6; 870 and 871 the golden cases, 872 the cut plans, 873 the error propagation and the quarter turns; their round trip and self-synchronization use 838 and 839 of the range of M44.2) |
 | 880–999 | free, for backlog milestones |
 | 1000+ | benchmark inputs (M13, M16) — not golden vectors |
 

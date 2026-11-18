@@ -57,6 +57,7 @@ mod proto_family;
 mod qam_family;
 mod rds_family;
 mod rds_tx_family;
+mod scramble_family;
 mod stereo_family;
 mod stereo_tx_family;
 mod symbol_family;
@@ -364,7 +365,7 @@ pub trait Kernel {
 /// are appended; a `<kernel>_fallback`, `<kernel>_airspy`, `<kernel>_fastnoise` or
 /// `<kernel>_ziggurat` entry takes the seed of `<kernel>`, so that both entries filter the same
 /// input.
-pub const KERNELS: [&str; 249] = [
+pub const KERNELS: [&str; 259] = [
     "convert_cs8",
     "convert_cs16",
     "convert_out_cs16",
@@ -614,6 +615,16 @@ pub const KERNELS: [&str; 249] = [
     "gauss_noise_f32_fastnoise",
     "gauss_noise_f32_ziggurat",
     "gauss_noise_q15_fallback",
+    "scramble_c32_b2",
+    "scramble_c32_b8",
+    "scramble_cq15_b2",
+    "scramble_cq15_b8",
+    "scramble_block",
+    "scramble_c32_b2_fallback",
+    "scramble_c32_b8_fallback",
+    "scramble_cq15_b2_fallback",
+    "scramble_cq15_b8_fallback",
+    "scramble_c32_b2_dvbs2",
 ];
 
 /// Prepares the measurement `name` with `layout` (the FFT sizes are fixed by the name).
@@ -624,6 +635,7 @@ pub fn prepare(name: &str, layout: Layout) -> Option<Box<dyn Kernel>> {
         .or_else(|| name.strip_suffix("_airspy"))
         .or_else(|| name.strip_suffix("_fastnoise"))
         .or_else(|| name.strip_suffix("_ziggurat"))
+        .or_else(|| name.strip_suffix("_dvbs2"))
         .unwrap_or(name);
     // An entry without an entry of its base name (`stereo_pll_fallback`: `stereo_pll` has no SIMD
     // entry) takes the seed of its own position.
@@ -883,6 +895,19 @@ pub fn prepare(name: &str, layout: Layout) -> Option<Box<dyn Kernel>> {
             Box::new(gauss_noise_family::GaussNoiseQ15K::new(rng, layout))
         }
         "noise_block" => Box::new(gauss_noise_family::NoiseBlockK::new(rng, layout)),
+        "scramble_c32_b2" | "scramble_c32_b2_fallback" | "scramble_c32_b2_dvbs2" => {
+            Box::new(scramble_family::ScrambleC32K::new(rng, layout, 2, entry))
+        }
+        "scramble_c32_b8" | "scramble_c32_b8_fallback" => {
+            Box::new(scramble_family::ScrambleC32K::new(rng, layout, 8, entry))
+        }
+        "scramble_cq15_b2" | "scramble_cq15_b2_fallback" => {
+            Box::new(scramble_family::ScrambleCq15K::new(rng, layout, 2, entry))
+        }
+        "scramble_cq15_b8" | "scramble_cq15_b8_fallback" => {
+            Box::new(scramble_family::ScrambleCq15K::new(rng, layout, 8, entry))
+        }
+        "scramble_block" => Box::new(scramble_family::ScrambleBlockK::new(rng, layout)),
         "qam_demod_block" => Box::new(qam_family::QamDemodBlockK::new(rng, layout)),
         "qam_demod_search_block" => Box::new(qam_family::QamDemodSearchK::new(rng, layout)),
         "frame_decode_four_block" => Box::new(qam_family::FrameDecodeFourBlockK::new(rng, layout)),

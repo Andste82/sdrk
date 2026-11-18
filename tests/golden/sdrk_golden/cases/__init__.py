@@ -46,6 +46,7 @@ from . import (  # noqa: F401
     real_to_complex,
     resample,
     rotate,
+    scramble,
     scale,
     squelch,
     ssb_mod,

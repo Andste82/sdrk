@@ -374,6 +374,49 @@ fn m48_kernels_give_the_bits_of_the_fallback() -> Result<()> {
 }
 
 #[test]
+fn backend_table_lists_the_m49_kernels() {
+    // `scramble` has SIMD paths on every level (M49 §5).
+    for ty in [SampleType::C32, SampleType::CQ15] {
+        assert_eq!(backend_for("scramble", ty), ACCEL, "{ty:?}");
+    }
+    assert_eq!(backend_for("scramble", SampleType::F32), "none");
+    assert_eq!(backend_for("scramble", SampleType::Q15), "none");
+}
+
+#[test]
+fn m49_kernels_give_the_bits_of_the_fallback() -> Result<()> {
+    use sdrk::kernels::scramble::Scramble;
+
+    let x: Vec<C32> = (0..1000)
+        .map(|i| C32::new((i as f32 * 0.37).sin(), (i as f32 * 0.11).cos()))
+        .collect();
+    let xq: Vec<CQ15> = (0..1000)
+        .map(|i| CQ15 {
+            re: Q15((i * 977 % 65536 - 32768) as i16),
+            im: Q15((i * 331 % 65536 - 32768) as i16),
+        })
+        .collect();
+    let p: Vec<u8> = (0..1000).map(|i| (i * 73 % 256) as u8).collect();
+    for bits in 1..=8 {
+        for inverse in [false, true] {
+            let (mut ya, mut yb) = (vec![C32::default(); 1000], vec![C32::default(); 1000]);
+            Sdrk.scramble(&x, &p, bits, inverse, &mut ya)?;
+            Fallback.scramble(&x, &p, bits, inverse, &mut yb)?;
+            assert_eq!(flat(&ya), flat(&yb));
+            let (mut qa, mut qb) = (vec![CQ15::default(); 1000], vec![CQ15::default(); 1000]);
+            Sdrk.scramble(&xq, &p, bits, inverse, &mut qa)?;
+            Fallback.scramble(&xq, &p, bits, inverse, &mut qb)?;
+            assert_eq!(qa, qb);
+        }
+    }
+    assert!(matches!(
+        Sdrk.scramble(&x, &p, 9, false, &mut vec![C32::default(); 1000]),
+        Err(Error::InvalidParameter(_))
+    ));
+    Ok(())
+}
+
+#[test]
 fn backend_table_lists_the_m40_kernels() {
     // The carrier loop is a recursion over the symbols: not accelerated (`C32` only).
     assert_eq!(backend_for("costas", SampleType::C32), "fallback");

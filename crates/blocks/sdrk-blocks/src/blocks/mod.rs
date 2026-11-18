@@ -70,6 +70,7 @@ pub mod real_to_iq;
 pub mod resample;
 pub mod rotate;
 pub mod scale;
+pub mod scramble;
 pub mod sensor_decode;
 pub mod sensor_encode;
 pub mod spectrum;

@@ -5476,6 +5476,258 @@
           "status": "release",
           "verdict": "pass"
         },
+        "scramble_block": {
+          "compared_with": "sdrk fallback",
+          "goal": true,
+          "other_instr_per_sample": 58.31,
+          "ours_instr_per_sample": 58.31,
+          "ratio": 1.0,
+          "snr_db": {
+            "other": 999.0,
+            "ours": 999.0
+          },
+          "status": "info",
+          "verdict": "info"
+        },
+        "scramble_c32_b2": {
+          "compared_with": "phasor lookup into a buffer of 256 + VOLK 3.3.0 volk_32fc_x2_multiply_32fc_u_avx without FMA (benches/refs/volk-nofma.c, -O3 -ffp-contract=off)",
+          "goal": true,
+          "informational": [
+            {
+              "compared_with": "phasor lookup into a buffer of 256 + volk_32fc_x2_multiply_32fc (VOLK 3.3.0 dispatcher)",
+              "label": "information: volk",
+              "other_instr_per_sample": 13.17,
+              "other_snr_db": 318.67,
+              "ours_instr_per_sample": 3.22,
+              "ratio": 0.24
+            },
+            {
+              "compared_with": "phasor lookup into a buffer of 256 + VOLK 3.3.0 volk_32fc_x2_multiply_32fc_u_avx without FMA (benches/refs/volk-nofma.c, -O3 -ffp-contract=off)",
+              "label": "misaligned by one sample",
+              "other_instr_per_sample": 13.31,
+              "other_snr_db": null,
+              "ours_instr_per_sample": 3.22,
+              "ratio": 0.24
+            }
+          ],
+          "other_instr_per_sample": 13.31,
+          "ours_instr_per_sample": 3.22,
+          "ratio": 0.24,
+          "snr_db": {
+            "other": 318.67,
+            "ours": 318.67
+          },
+          "status": "release",
+          "verdict": "pass"
+        },
+        "scramble_c32_b2_dvbs2": {
+          "compared_with": "GNU Radio dvbs2_physical_cc PL scrambling, the per-symbol switch on R_n (benches/refs/gr-dvbs2-plscramble.c, main at ec1bf15; reference does different work; -O3)",
+          "goal": true,
+          "informational": [
+            {
+              "compared_with": "GNU Radio dvbs2_physical_cc PL scrambling, the per-symbol switch on R_n (benches/refs/gr-dvbs2-plscramble.c, main at ec1bf15; reference does different work; -O3)",
+              "label": "misaligned by one sample",
+              "other_instr_per_sample": 17.52,
+              "other_snr_db": null,
+              "ours_instr_per_sample": 3.22,
+              "ratio": 0.18
+            }
+          ],
+          "other_instr_per_sample": 17.52,
+          "ours_instr_per_sample": 3.22,
+          "ratio": 0.18,
+          "snr_db": {
+            "other": 318.67,
+            "ours": 318.67
+          },
+          "status": "info",
+          "verdict": "info"
+        },
+        "scramble_c32_b2_fallback": {
+          "compared_with": "phasor lookup into a buffer of 256 + VOLK 3.3.0 volk_32fc_x2_multiply_32fc_generic (benches/refs/volk-generic.c, -O3 -ffp-contract=off)",
+          "goal": true,
+          "informational": [
+            {
+              "compared_with": "phasor lookup into a buffer of 256 + VOLK 3.3.0 volk_32fc_x2_multiply_32fc_generic (benches/refs/volk-generic.c, -O3 -ffp-contract=off)",
+              "label": "misaligned by one sample",
+              "other_instr_per_sample": 35.26,
+              "other_snr_db": null,
+              "ours_instr_per_sample": 6.28,
+              "ratio": 0.18
+            }
+          ],
+          "other_instr_per_sample": 35.26,
+          "ours_instr_per_sample": 6.28,
+          "ratio": 0.18,
+          "snr_db": {
+            "other": 318.67,
+            "ours": 318.67
+          },
+          "status": "release",
+          "verdict": "pass"
+        },
+        "scramble_c32_b8": {
+          "compared_with": "phasor lookup into a buffer of 256 + VOLK 3.3.0 volk_32fc_x2_multiply_32fc_u_avx without FMA (benches/refs/volk-nofma.c, -O3 -ffp-contract=off)",
+          "goal": false,
+          "informational": [
+            {
+              "compared_with": "phasor lookup into a buffer of 256 + volk_32fc_x2_multiply_32fc (VOLK 3.3.0 dispatcher)",
+              "label": "information: volk",
+              "other_instr_per_sample": 13.16,
+              "other_snr_db": 148.77,
+              "ours_instr_per_sample": 14.83,
+              "ratio": 1.13
+            },
+            {
+              "compared_with": "phasor lookup into a buffer of 256 + VOLK 3.3.0 volk_32fc_x2_multiply_32fc_u_avx without FMA (benches/refs/volk-nofma.c, -O3 -ffp-contract=off)",
+              "label": "misaligned by one sample",
+              "other_instr_per_sample": 13.31,
+              "other_snr_db": null,
+              "ours_instr_per_sample": 14.83,
+              "ratio": 1.11
+            }
+          ],
+          "other_instr_per_sample": 13.31,
+          "ours_instr_per_sample": 14.83,
+          "ratio": 1.11,
+          "snr_db": {
+            "other": 147.57,
+            "ours": 147.57
+          },
+          "status": "release",
+          "verdict": "waived"
+        },
+        "scramble_c32_b8_fallback": {
+          "compared_with": "phasor lookup into a buffer of 256 + VOLK 3.3.0 volk_32fc_x2_multiply_32fc_generic (benches/refs/volk-generic.c, -O3 -ffp-contract=off)",
+          "goal": false,
+          "informational": [
+            {
+              "compared_with": "phasor lookup into a buffer of 256 + VOLK 3.3.0 volk_32fc_x2_multiply_32fc_generic (benches/refs/volk-generic.c, -O3 -ffp-contract=off)",
+              "label": "misaligned by one sample",
+              "other_instr_per_sample": 35.26,
+              "other_snr_db": null,
+              "ours_instr_per_sample": 38.43,
+              "ratio": 1.09
+            }
+          ],
+          "other_instr_per_sample": 35.26,
+          "ours_instr_per_sample": 38.43,
+          "ratio": 1.09,
+          "snr_db": {
+            "other": 147.57,
+            "ours": 147.57
+          },
+          "status": "release",
+          "verdict": "warn"
+        },
+        "scramble_cq15_b2": {
+          "compared_with": "CMSIS-DSP 1.18.0 phasor lookup into a buffer of 256 + arm_cmplx_mult_cmplx_q15 (3.13 output), generic C (-O3 -ffp-contract=off, LOOPUNROLL, avx2)",
+          "goal": true,
+          "informational": [
+            {
+              "compared_with": "sdrk fallback",
+              "label": "information: fallback",
+              "other_instr_per_sample": 3.22,
+              "other_snr_db": 318.24,
+              "ours_instr_per_sample": 1.78,
+              "ratio": 0.55
+            },
+            {
+              "compared_with": "CMSIS-DSP 1.18.0 phasor lookup into a buffer of 256 + arm_cmplx_mult_cmplx_q15 (3.13 output), generic C (-O3 -ffp-contract=off, LOOPUNROLL, avx2)",
+              "label": "misaligned by one sample",
+              "other_instr_per_sample": 15.04,
+              "other_snr_db": null,
+              "ours_instr_per_sample": 1.78,
+              "ratio": 0.12
+            }
+          ],
+          "other_instr_per_sample": 15.04,
+          "ours_instr_per_sample": 1.78,
+          "ratio": 0.12,
+          "snr_db": {
+            "other": 76.04,
+            "ours": 318.24
+          },
+          "status": "release",
+          "verdict": "pass"
+        },
+        "scramble_cq15_b2_fallback": {
+          "compared_with": "CMSIS-DSP 1.18.0 phasor lookup into a buffer of 256 + arm_cmplx_mult_cmplx_q15 (3.13 output), generic C (-O3 -ffp-contract=off, LOOPUNROLL, avx2)",
+          "goal": true,
+          "informational": [
+            {
+              "compared_with": "CMSIS-DSP 1.18.0 phasor lookup into a buffer of 256 + arm_cmplx_mult_cmplx_q15 (3.13 output), generic C (-O3 -ffp-contract=off, LOOPUNROLL, avx2)",
+              "label": "misaligned by one sample",
+              "other_instr_per_sample": 15.04,
+              "other_snr_db": null,
+              "ours_instr_per_sample": 3.22,
+              "ratio": 0.21
+            }
+          ],
+          "other_instr_per_sample": 15.04,
+          "ours_instr_per_sample": 3.22,
+          "ratio": 0.21,
+          "snr_db": {
+            "other": 76.04,
+            "ours": 318.24
+          },
+          "status": "release",
+          "verdict": "pass"
+        },
+        "scramble_cq15_b8": {
+          "compared_with": "CMSIS-DSP 1.18.0 phasor lookup into a buffer of 256 + arm_cmplx_mult_cmplx_q15 (3.13 output), generic C (-O3 -ffp-contract=off, LOOPUNROLL, avx2)",
+          "goal": true,
+          "informational": [
+            {
+              "compared_with": "sdrk fallback",
+              "label": "information: fallback",
+              "other_instr_per_sample": 59.1,
+              "other_snr_db": 92.35,
+              "ours_instr_per_sample": 14.15,
+              "ratio": 0.24
+            },
+            {
+              "compared_with": "CMSIS-DSP 1.18.0 phasor lookup into a buffer of 256 + arm_cmplx_mult_cmplx_q15 (3.13 output), generic C (-O3 -ffp-contract=off, LOOPUNROLL, avx2)",
+              "label": "misaligned by one sample",
+              "other_instr_per_sample": 15.04,
+              "other_snr_db": null,
+              "ours_instr_per_sample": 14.15,
+              "ratio": 0.94
+            }
+          ],
+          "other_instr_per_sample": 15.04,
+          "ours_instr_per_sample": 14.15,
+          "ratio": 0.94,
+          "snr_db": {
+            "other": 72.22,
+            "ours": 92.35
+          },
+          "status": "release",
+          "verdict": "pass"
+        },
+        "scramble_cq15_b8_fallback": {
+          "compared_with": "CMSIS-DSP 1.18.0 phasor lookup into a buffer of 256 + arm_cmplx_mult_cmplx_q15 (3.13 output), generic C (-O3 -ffp-contract=off, LOOPUNROLL, avx2)",
+          "goal": false,
+          "informational": [
+            {
+              "compared_with": "CMSIS-DSP 1.18.0 phasor lookup into a buffer of 256 + arm_cmplx_mult_cmplx_q15 (3.13 output), generic C (-O3 -ffp-contract=off, LOOPUNROLL, avx2)",
+              "label": "misaligned by one sample",
+              "other_instr_per_sample": 15.04,
+              "other_snr_db": null,
+              "ours_instr_per_sample": 59.1,
+              "ratio": 3.93
+            }
+          ],
+          "other_instr_per_sample": 15.04,
+          "ours_instr_per_sample": 59.1,
+          "ratio": 3.93,
+          "snr_db": {
+            "other": 72.22,
+            "ours": 92.35
+          },
+          "status": "release",
+          "verdict": "waived"
+        },
         "squelch": {
           "compared_with": "GNU Radio pwr_squelch_cc (squelch_base_cc_impl.cc of gr-analog, generic compiler flags)",
           "goal": true,
@@ -7643,6 +7895,71 @@
             "ours": 93.67
           },
           "status": "dev",
+          "verdict": "pass"
+        },
+        "scramble_block": {
+          "compared_with": "ours at avx2",
+          "goal": false,
+          "other_instr_per_sample": 58.31,
+          "ours_instr_per_sample": 67.24,
+          "ratio": 1.15,
+          "snr_db": {
+            "other": 999.0,
+            "ours": 999.0
+          },
+          "status": "info",
+          "verdict": "info"
+        },
+        "scramble_c32_b2": {
+          "compared_with": "ours at avx2",
+          "goal": false,
+          "other_instr_per_sample": 3.22,
+          "ours_instr_per_sample": 3.23,
+          "ratio": 1.0,
+          "snr_db": {
+            "other": 318.67,
+            "ours": 318.67
+          },
+          "status": "release",
+          "verdict": "pass"
+        },
+        "scramble_c32_b8": {
+          "compared_with": "ours at avx2",
+          "goal": true,
+          "other_instr_per_sample": 14.83,
+          "ours_instr_per_sample": 12.37,
+          "ratio": 0.83,
+          "snr_db": {
+            "other": 147.57,
+            "ours": 147.57
+          },
+          "status": "release",
+          "verdict": "pass"
+        },
+        "scramble_cq15_b2": {
+          "compared_with": "ours at avx2",
+          "goal": false,
+          "other_instr_per_sample": 1.78,
+          "ours_instr_per_sample": 1.79,
+          "ratio": 1.01,
+          "snr_db": {
+            "other": 318.24,
+            "ours": 318.24
+          },
+          "status": "release",
+          "verdict": "pass"
+        },
+        "scramble_cq15_b8": {
+          "compared_with": "ours at avx2",
+          "goal": true,
+          "other_instr_per_sample": 14.15,
+          "ours_instr_per_sample": 11.45,
+          "ratio": 0.81,
+          "snr_db": {
+            "other": 92.35,
+            "ours": 92.35
+          },
+          "status": "release",
           "verdict": "pass"
         },
         "squelch": {
@@ -13383,6 +13700,242 @@
           },
           "status": "release",
           "verdict": "pass"
+        },
+        "scramble_block": {
+          "compared_with": "sdrk fallback",
+          "goal": true,
+          "other_instr_per_sample": 78.51,
+          "ours_instr_per_sample": 78.51,
+          "ratio": 1.0,
+          "snr_db": {
+            "other": 999.0,
+            "ours": 999.0
+          },
+          "status": "info",
+          "verdict": "info"
+        },
+        "scramble_c32_b2": {
+          "compared_with": "phasor lookup into a buffer of 256 + volk_32fc_x2_multiply_32fc (VOLK 3.3.0 dispatcher)",
+          "goal": true,
+          "informational": [
+            {
+              "compared_with": "phasor lookup into a buffer of 256 + volk_32fc_x2_multiply_32fc (VOLK 3.3.0 dispatcher)",
+              "label": "misaligned by one sample",
+              "other_instr_per_sample": 33.36,
+              "other_snr_db": null,
+              "ours_instr_per_sample": 9.0,
+              "ratio": 0.27
+            }
+          ],
+          "other_instr_per_sample": 33.36,
+          "ours_instr_per_sample": 9.0,
+          "ratio": 0.27,
+          "snr_db": {
+            "other": 318.67,
+            "ours": 318.67
+          },
+          "status": "info",
+          "verdict": "info"
+        },
+        "scramble_c32_b2_dvbs2": {
+          "compared_with": "GNU Radio dvbs2_physical_cc PL scrambling, the per-symbol switch on R_n (benches/refs/gr-dvbs2-plscramble.c, main at ec1bf15; reference does different work; -O3)",
+          "goal": true,
+          "informational": [
+            {
+              "compared_with": "GNU Radio dvbs2_physical_cc PL scrambling, the per-symbol switch on R_n (benches/refs/gr-dvbs2-plscramble.c, main at ec1bf15; reference does different work; -O3)",
+              "label": "misaligned by one sample",
+              "other_instr_per_sample": 17.52,
+              "other_snr_db": null,
+              "ours_instr_per_sample": 9.0,
+              "ratio": 0.51
+            }
+          ],
+          "other_instr_per_sample": 17.52,
+          "ours_instr_per_sample": 9.0,
+          "ratio": 0.51,
+          "snr_db": {
+            "other": 318.67,
+            "ours": 318.67
+          },
+          "status": "info",
+          "verdict": "info"
+        },
+        "scramble_c32_b2_fallback": {
+          "compared_with": "phasor lookup into a buffer of 256 + VOLK 3.3.0 volk_32fc_x2_multiply_32fc_generic (benches/refs/volk-generic.c, -O3 -ffp-contract=off)",
+          "goal": true,
+          "informational": [
+            {
+              "compared_with": "phasor lookup into a buffer of 256 + VOLK 3.3.0 volk_32fc_x2_multiply_32fc_generic (benches/refs/volk-generic.c, -O3 -ffp-contract=off)",
+              "label": "misaligned by one sample",
+              "other_instr_per_sample": 33.27,
+              "other_snr_db": null,
+              "ours_instr_per_sample": 14.53,
+              "ratio": 0.44
+            }
+          ],
+          "other_instr_per_sample": 33.27,
+          "ours_instr_per_sample": 14.53,
+          "ratio": 0.44,
+          "snr_db": {
+            "other": 318.67,
+            "ours": 318.67
+          },
+          "status": "release",
+          "verdict": "pass"
+        },
+        "scramble_c32_b8": {
+          "compared_with": "phasor lookup into a buffer of 256 + volk_32fc_x2_multiply_32fc (VOLK 3.3.0 dispatcher)",
+          "goal": true,
+          "informational": [
+            {
+              "compared_with": "phasor lookup into a buffer of 256 + volk_32fc_x2_multiply_32fc (VOLK 3.3.0 dispatcher)",
+              "label": "misaligned by one sample",
+              "other_instr_per_sample": 33.36,
+              "other_snr_db": null,
+              "ours_instr_per_sample": 23.27,
+              "ratio": 0.7
+            }
+          ],
+          "other_instr_per_sample": 33.36,
+          "ours_instr_per_sample": 23.27,
+          "ratio": 0.7,
+          "snr_db": {
+            "other": 147.57,
+            "ours": 147.57
+          },
+          "status": "info",
+          "verdict": "info"
+        },
+        "scramble_c32_b8_fallback": {
+          "compared_with": "phasor lookup into a buffer of 256 + VOLK 3.3.0 volk_32fc_x2_multiply_32fc_generic (benches/refs/volk-generic.c, -O3 -ffp-contract=off)",
+          "goal": false,
+          "informational": [
+            {
+              "compared_with": "phasor lookup into a buffer of 256 + VOLK 3.3.0 volk_32fc_x2_multiply_32fc_generic (benches/refs/volk-generic.c, -O3 -ffp-contract=off)",
+              "label": "misaligned by one sample",
+              "other_instr_per_sample": 33.27,
+              "other_snr_db": null,
+              "ours_instr_per_sample": 44.49,
+              "ratio": 1.34
+            }
+          ],
+          "other_instr_per_sample": 33.27,
+          "ours_instr_per_sample": 44.49,
+          "ratio": 1.34,
+          "snr_db": {
+            "other": 147.57,
+            "ours": 147.57
+          },
+          "status": "release",
+          "verdict": "waived"
+        },
+        "scramble_cq15_b2": {
+          "compared_with": "CMSIS-DSP 1.18.0 phasor lookup into a buffer of 256 + arm_cmplx_mult_cmplx_q15 (3.13 output), generic C (-O3 -ffp-contract=off, LOOPUNROLL, sse2)",
+          "goal": true,
+          "informational": [
+            {
+              "compared_with": "sdrk fallback",
+              "label": "information: fallback",
+              "other_instr_per_sample": 11.28,
+              "other_snr_db": 318.24,
+              "ours_instr_per_sample": 7.87,
+              "ratio": 0.7
+            },
+            {
+              "compared_with": "CMSIS-DSP 1.18.0 phasor lookup into a buffer of 256 + arm_cmplx_mult_cmplx_q15 (3.13 output), generic C (-O3 -ffp-contract=off, LOOPUNROLL, sse2)",
+              "label": "misaligned by one sample",
+              "other_instr_per_sample": 23.23,
+              "other_snr_db": null,
+              "ours_instr_per_sample": 7.87,
+              "ratio": 0.34
+            }
+          ],
+          "other_instr_per_sample": 23.23,
+          "ours_instr_per_sample": 7.87,
+          "ratio": 0.34,
+          "snr_db": {
+            "other": 76.04,
+            "ours": 318.24
+          },
+          "status": "release",
+          "verdict": "pass"
+        },
+        "scramble_cq15_b2_fallback": {
+          "compared_with": "CMSIS-DSP 1.18.0 phasor lookup into a buffer of 256 + arm_cmplx_mult_cmplx_q15 (3.13 output), generic C (-O3 -ffp-contract=off, LOOPUNROLL, sse2)",
+          "goal": true,
+          "informational": [
+            {
+              "compared_with": "CMSIS-DSP 1.18.0 phasor lookup into a buffer of 256 + arm_cmplx_mult_cmplx_q15 (3.13 output), generic C (-O3 -ffp-contract=off, LOOPUNROLL, sse2)",
+              "label": "misaligned by one sample",
+              "other_instr_per_sample": 23.23,
+              "other_snr_db": null,
+              "ours_instr_per_sample": 11.28,
+              "ratio": 0.49
+            }
+          ],
+          "other_instr_per_sample": 23.23,
+          "ours_instr_per_sample": 11.28,
+          "ratio": 0.49,
+          "snr_db": {
+            "other": 76.04,
+            "ours": 318.24
+          },
+          "status": "release",
+          "verdict": "pass"
+        },
+        "scramble_cq15_b8": {
+          "compared_with": "CMSIS-DSP 1.18.0 phasor lookup into a buffer of 256 + arm_cmplx_mult_cmplx_q15 (3.13 output), generic C (-O3 -ffp-contract=off, LOOPUNROLL, sse2)",
+          "goal": true,
+          "informational": [
+            {
+              "compared_with": "sdrk fallback",
+              "label": "information: fallback",
+              "other_instr_per_sample": 62.18,
+              "other_snr_db": 92.35,
+              "ours_instr_per_sample": 22.1,
+              "ratio": 0.36
+            },
+            {
+              "compared_with": "CMSIS-DSP 1.18.0 phasor lookup into a buffer of 256 + arm_cmplx_mult_cmplx_q15 (3.13 output), generic C (-O3 -ffp-contract=off, LOOPUNROLL, sse2)",
+              "label": "misaligned by one sample",
+              "other_instr_per_sample": 23.23,
+              "other_snr_db": null,
+              "ours_instr_per_sample": 22.1,
+              "ratio": 0.95
+            }
+          ],
+          "other_instr_per_sample": 23.23,
+          "ours_instr_per_sample": 22.1,
+          "ratio": 0.95,
+          "snr_db": {
+            "other": 72.22,
+            "ours": 92.35
+          },
+          "status": "release",
+          "verdict": "pass"
+        },
+        "scramble_cq15_b8_fallback": {
+          "compared_with": "CMSIS-DSP 1.18.0 phasor lookup into a buffer of 256 + arm_cmplx_mult_cmplx_q15 (3.13 output), generic C (-O3 -ffp-contract=off, LOOPUNROLL, sse2)",
+          "goal": false,
+          "informational": [
+            {
+              "compared_with": "CMSIS-DSP 1.18.0 phasor lookup into a buffer of 256 + arm_cmplx_mult_cmplx_q15 (3.13 output), generic C (-O3 -ffp-contract=off, LOOPUNROLL, sse2)",
+              "label": "misaligned by one sample",
+              "other_instr_per_sample": 23.23,
+              "other_snr_db": null,
+              "ours_instr_per_sample": 62.18,
+              "ratio": 2.68
+            }
+          ],
+          "other_instr_per_sample": 23.23,
+          "ours_instr_per_sample": 62.18,
+          "ratio": 2.68,
+          "snr_db": {
+            "other": 72.22,
+            "ours": 92.35
+          },
+          "status": "release",
+          "verdict": "waived"
         },
         "squelch": {
           "compared_with": "GNU Radio pwr_squelch_cc (squelch_base_cc_impl.cc of gr-analog, generic compiler flags)",
@@ -19300,6 +19853,242 @@
           "status": "release",
           "verdict": "pass"
         },
+        "scramble_block": {
+          "compared_with": "sdrk fallback",
+          "goal": true,
+          "other_instr_per_sample": 75.51,
+          "ours_instr_per_sample": 75.51,
+          "ratio": 1.0,
+          "snr_db": {
+            "other": 999.0,
+            "ours": 999.0
+          },
+          "status": "info",
+          "verdict": "info"
+        },
+        "scramble_c32_b2": {
+          "compared_with": "phasor lookup into a buffer of 256 + volk_32fc_x2_multiply_32fc (VOLK 3.3.0 dispatcher)",
+          "goal": true,
+          "informational": [
+            {
+              "compared_with": "phasor lookup into a buffer of 256 + volk_32fc_x2_multiply_32fc (VOLK 3.3.0 dispatcher)",
+              "label": "misaligned by one sample",
+              "other_instr_per_sample": 16.4,
+              "other_snr_db": null,
+              "ours_instr_per_sample": 7.0,
+              "ratio": 0.43
+            }
+          ],
+          "other_instr_per_sample": 16.4,
+          "ours_instr_per_sample": 7.0,
+          "ratio": 0.43,
+          "snr_db": {
+            "other": 318.67,
+            "ours": 318.67
+          },
+          "status": "release",
+          "verdict": "pass"
+        },
+        "scramble_c32_b2_dvbs2": {
+          "compared_with": "GNU Radio dvbs2_physical_cc PL scrambling, the per-symbol switch on R_n (benches/refs/gr-dvbs2-plscramble.c, main at ec1bf15; reference does different work; -O3)",
+          "goal": true,
+          "informational": [
+            {
+              "compared_with": "GNU Radio dvbs2_physical_cc PL scrambling, the per-symbol switch on R_n (benches/refs/gr-dvbs2-plscramble.c, main at ec1bf15; reference does different work; -O3)",
+              "label": "misaligned by one sample",
+              "other_instr_per_sample": 17.52,
+              "other_snr_db": null,
+              "ours_instr_per_sample": 7.0,
+              "ratio": 0.4
+            }
+          ],
+          "other_instr_per_sample": 17.52,
+          "ours_instr_per_sample": 7.0,
+          "ratio": 0.4,
+          "snr_db": {
+            "other": 318.67,
+            "ours": 318.67
+          },
+          "status": "info",
+          "verdict": "info"
+        },
+        "scramble_c32_b2_fallback": {
+          "compared_with": "phasor lookup into a buffer of 256 + VOLK 3.3.0 volk_32fc_x2_multiply_32fc_generic (benches/refs/volk-generic.c, -O3 -ffp-contract=off)",
+          "goal": true,
+          "informational": [
+            {
+              "compared_with": "phasor lookup into a buffer of 256 + VOLK 3.3.0 volk_32fc_x2_multiply_32fc_generic (benches/refs/volk-generic.c, -O3 -ffp-contract=off)",
+              "label": "misaligned by one sample",
+              "other_instr_per_sample": 36.27,
+              "other_snr_db": null,
+              "ours_instr_per_sample": 13.53,
+              "ratio": 0.37
+            }
+          ],
+          "other_instr_per_sample": 36.27,
+          "ours_instr_per_sample": 13.53,
+          "ratio": 0.37,
+          "snr_db": {
+            "other": 318.67,
+            "ours": 318.67
+          },
+          "status": "release",
+          "verdict": "pass"
+        },
+        "scramble_c32_b8": {
+          "compared_with": "phasor lookup into a buffer of 256 + volk_32fc_x2_multiply_32fc (VOLK 3.3.0 dispatcher)",
+          "goal": false,
+          "informational": [
+            {
+              "compared_with": "phasor lookup into a buffer of 256 + volk_32fc_x2_multiply_32fc (VOLK 3.3.0 dispatcher)",
+              "label": "misaligned by one sample",
+              "other_instr_per_sample": 16.4,
+              "other_snr_db": null,
+              "ours_instr_per_sample": 20.27,
+              "ratio": 1.24
+            }
+          ],
+          "other_instr_per_sample": 16.4,
+          "ours_instr_per_sample": 20.27,
+          "ratio": 1.24,
+          "snr_db": {
+            "other": 147.57,
+            "ours": 147.57
+          },
+          "status": "release",
+          "verdict": "waived"
+        },
+        "scramble_c32_b8_fallback": {
+          "compared_with": "phasor lookup into a buffer of 256 + VOLK 3.3.0 volk_32fc_x2_multiply_32fc_generic (benches/refs/volk-generic.c, -O3 -ffp-contract=off)",
+          "goal": false,
+          "informational": [
+            {
+              "compared_with": "phasor lookup into a buffer of 256 + VOLK 3.3.0 volk_32fc_x2_multiply_32fc_generic (benches/refs/volk-generic.c, -O3 -ffp-contract=off)",
+              "label": "misaligned by one sample",
+              "other_instr_per_sample": 36.27,
+              "other_snr_db": null,
+              "ours_instr_per_sample": 44.49,
+              "ratio": 1.23
+            }
+          ],
+          "other_instr_per_sample": 36.27,
+          "ours_instr_per_sample": 44.49,
+          "ratio": 1.23,
+          "snr_db": {
+            "other": 147.57,
+            "ours": 147.57
+          },
+          "status": "release",
+          "verdict": "waived"
+        },
+        "scramble_cq15_b2": {
+          "compared_with": "CMSIS-DSP 1.18.0 phasor lookup into a buffer of 256 + arm_cmplx_mult_cmplx_q15 (3.13 output), generic C (-O3 -ffp-contract=off, LOOPUNROLL, sse4.2)",
+          "goal": true,
+          "informational": [
+            {
+              "compared_with": "sdrk fallback",
+              "label": "information: fallback",
+              "other_instr_per_sample": 8.53,
+              "other_snr_db": 318.24,
+              "ours_instr_per_sample": 5.38,
+              "ratio": 0.63
+            },
+            {
+              "compared_with": "CMSIS-DSP 1.18.0 phasor lookup into a buffer of 256 + arm_cmplx_mult_cmplx_q15 (3.13 output), generic C (-O3 -ffp-contract=off, LOOPUNROLL, sse4.2)",
+              "label": "misaligned by one sample",
+              "other_instr_per_sample": 21.74,
+              "other_snr_db": null,
+              "ours_instr_per_sample": 5.38,
+              "ratio": 0.25
+            }
+          ],
+          "other_instr_per_sample": 21.74,
+          "ours_instr_per_sample": 5.38,
+          "ratio": 0.25,
+          "snr_db": {
+            "other": 76.04,
+            "ours": 318.24
+          },
+          "status": "release",
+          "verdict": "pass"
+        },
+        "scramble_cq15_b2_fallback": {
+          "compared_with": "CMSIS-DSP 1.18.0 phasor lookup into a buffer of 256 + arm_cmplx_mult_cmplx_q15 (3.13 output), generic C (-O3 -ffp-contract=off, LOOPUNROLL, sse4.2)",
+          "goal": true,
+          "informational": [
+            {
+              "compared_with": "CMSIS-DSP 1.18.0 phasor lookup into a buffer of 256 + arm_cmplx_mult_cmplx_q15 (3.13 output), generic C (-O3 -ffp-contract=off, LOOPUNROLL, sse4.2)",
+              "label": "misaligned by one sample",
+              "other_instr_per_sample": 21.74,
+              "other_snr_db": null,
+              "ours_instr_per_sample": 8.53,
+              "ratio": 0.39
+            }
+          ],
+          "other_instr_per_sample": 21.74,
+          "ours_instr_per_sample": 8.53,
+          "ratio": 0.39,
+          "snr_db": {
+            "other": 76.04,
+            "ours": 318.24
+          },
+          "status": "release",
+          "verdict": "pass"
+        },
+        "scramble_cq15_b8": {
+          "compared_with": "CMSIS-DSP 1.18.0 phasor lookup into a buffer of 256 + arm_cmplx_mult_cmplx_q15 (3.13 output), generic C (-O3 -ffp-contract=off, LOOPUNROLL, sse4.2)",
+          "goal": true,
+          "informational": [
+            {
+              "compared_with": "sdrk fallback",
+              "label": "information: fallback",
+              "other_instr_per_sample": 62.18,
+              "other_snr_db": 92.35,
+              "ours_instr_per_sample": 18.85,
+              "ratio": 0.3
+            },
+            {
+              "compared_with": "CMSIS-DSP 1.18.0 phasor lookup into a buffer of 256 + arm_cmplx_mult_cmplx_q15 (3.13 output), generic C (-O3 -ffp-contract=off, LOOPUNROLL, sse4.2)",
+              "label": "misaligned by one sample",
+              "other_instr_per_sample": 21.74,
+              "other_snr_db": null,
+              "ours_instr_per_sample": 18.85,
+              "ratio": 0.87
+            }
+          ],
+          "other_instr_per_sample": 21.74,
+          "ours_instr_per_sample": 18.85,
+          "ratio": 0.87,
+          "snr_db": {
+            "other": 72.22,
+            "ours": 92.35
+          },
+          "status": "release",
+          "verdict": "pass"
+        },
+        "scramble_cq15_b8_fallback": {
+          "compared_with": "CMSIS-DSP 1.18.0 phasor lookup into a buffer of 256 + arm_cmplx_mult_cmplx_q15 (3.13 output), generic C (-O3 -ffp-contract=off, LOOPUNROLL, sse4.2)",
+          "goal": false,
+          "informational": [
+            {
+              "compared_with": "CMSIS-DSP 1.18.0 phasor lookup into a buffer of 256 + arm_cmplx_mult_cmplx_q15 (3.13 output), generic C (-O3 -ffp-contract=off, LOOPUNROLL, sse4.2)",
+              "label": "misaligned by one sample",
+              "other_instr_per_sample": 21.74,
+              "other_snr_db": null,
+              "ours_instr_per_sample": 62.18,
+              "ratio": 2.86
+            }
+          ],
+          "other_instr_per_sample": 21.74,
+          "ours_instr_per_sample": 62.18,
+          "ratio": 2.86,
+          "snr_db": {
+            "other": 72.22,
+            "ours": 92.35
+          },
+          "status": "release",
+          "verdict": "waived"
+        },
         "squelch": {
           "compared_with": "GNU Radio pwr_squelch_cc (squelch_base_cc_impl.cc of gr-analog, generic compiler flags)",
           "goal": true,
@@ -19796,6 +20585,11 @@
       "gnuradio_crc": {
         "build": "gr-crc.c (gr::digital::crc): -O3",
         "sha256": "332a0f06bc91b00d04dd1cebe6c1394ae722c3a89598765b15f98f0ec0f9d243",
+        "version": "main at ec1bf15"
+      },
+      "gnuradio_dvbs2_plscramble": {
+        "build": "-O3",
+        "sha256": "b5c16d5ffa81048f441bc51f9a9a17007cdbb3f90cd2a121b06a358240166c5c",
         "version": "main at ec1bf15"
       },
       "gnuradio_fallback_references": {

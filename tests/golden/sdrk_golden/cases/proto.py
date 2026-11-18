@@ -1,4 +1,5 @@
-"""Cases for ``sdrk-proto``: the four CRCs and the test framing (M37).
+"""Cases for ``sdrk-proto``: the four CRCs and the test framing (M37), and the first bits of the
+PRBS polynomials (M49, ``prbs_first_bits`` from the model ``sdrk_golden/prbs.py``).
 
 The expected CRCs come from the Python standard library where it has the CRC
 (``binascii.crc_hqx`` with init 0xFFFF is CRC-16/CCITT-FALSE, ``binascii.crc32`` is
@@ -16,6 +17,7 @@ import binascii
 
 import numpy as np
 
+from .. import prbs
 from ..registry import Array, case
 
 SEED = 479
@@ -142,4 +144,29 @@ def frame_encode(rng):
         tolerance={"class": "bit_exact"},
         notes="16 frames (payloads 0, 1, 253 and 13 random lengths; preambles 4, 0, 4 and 13 "
         "random of 0 to 32 bytes); CRC-16/CCITT-FALSE from binascii.crc_hqx; bits MSB first",
+    )
+
+
+@case("proto", "prbs_first_bits", 696)
+def prbs_first_bits(rng):
+    """The first 64 bits of every PRBS polynomial from seed 1 and from a random seed (M49 §6)."""
+    names = list(prbs.POLYS)
+    seeds = []
+    bits = []
+    for name in names:
+        n = prbs.POLYS[name][0]
+        for seed in (1, int(rng.integers(1, 1 << n))):
+            seeds.append(seed)
+            bits.extend(prbs.Prbs(name, seed).bits(64))
+    return dict(
+        params={"polys": names, "bits_per_seed": 64, "seeds_per_poly": 2},
+        arrays={
+            "degree": Array("i32", np.array([prbs.POLYS[k][0] for k in names], dtype=np.int32)),
+            "tap": Array("i32", np.array([prbs.POLYS[k][1] for k in names], dtype=np.int32)),
+            "seed": Array("i32", np.array(seeds, dtype=np.int32)),
+            "bits": Array("u8", np.array(bits, dtype=np.uint8)),
+        },
+        tolerance={"class": "bit_exact"},
+        notes="Fibonacci LFSR model of sdrk_golden/prbs.py; per polynomial (order of `polys`) "
+        "two seeds (1 and a random non-zero seed), 64 bits each from Prbs::next_bit",
     )

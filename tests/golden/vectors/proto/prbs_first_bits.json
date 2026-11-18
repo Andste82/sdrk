@@ -1,0 +1,50 @@
+{
+  "arrays": {
+    "bits": {
+      "dtype": "u8",
+      "file": "prbs_first_bits.bits.bin",
+      "len": 768
+    },
+    "degree": {
+      "dtype": "i32",
+      "file": "prbs_first_bits.degree.bin",
+      "len": 6
+    },
+    "seed": {
+      "dtype": "i32",
+      "file": "prbs_first_bits.seed.bin",
+      "len": 12
+    },
+    "tap": {
+      "dtype": "i32",
+      "file": "prbs_first_bits.tap.bin",
+      "len": 6
+    }
+  },
+  "case": "prbs_first_bits",
+  "format_version": 1,
+  "kernel": "proto",
+  "notes": "Fibonacci LFSR model of sdrk_golden/prbs.py; per polynomial (order of `polys`) two seeds (1 and a random non-zero seed), 64 bits each from Prbs::next_bit",
+  "params": {
+    "bits_per_seed": 64,
+    "polys": [
+      "prbs5",
+      "prbs7",
+      "prbs9",
+      "prbs10",
+      "prbs11",
+      "prbs15"
+    ],
+    "seeds_per_poly": 2
+  },
+  "provenance": {
+    "generator": "tests/golden/generate.py",
+    "numpy": "2.5.4",
+    "python": "3.12",
+    "scipy": "1.18.1"
+  },
+  "seed": 696,
+  "tolerance": {
+    "class": "bit_exact"
+  }
+}

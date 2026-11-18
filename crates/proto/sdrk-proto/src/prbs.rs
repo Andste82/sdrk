@@ -6,7 +6,11 @@
 //!
 //! | [`Poly`] | Polynomial | Taps (stages) | Period |
 //! | --- | --- | --- | --- |
+//! | `Prbs5` | `x^5 + x^3 + 1` | 5, 3 | 31 |
+//! | `Prbs7` | `x^7 + x^6 + 1` | 7, 6 | 127 |
 //! | `Prbs9` | `x^9 + x^5 + 1` | 9, 5 | 511 |
+//! | `Prbs10` | `x^10 + x^7 + 1` | 10, 7 | 1023 |
+//! | `Prbs11` | `x^11 + x^9 + 1` | 11, 9 | 2047 |
 //! | `Prbs15` | `x^15 + x^14 + 1` | 15, 14 | 32767 |
 //!
 //! The seed is the initial register content (bit `k` = stage `k + 1`, only the low `n` bits
@@ -31,6 +35,14 @@ pub enum Poly {
     Prbs9,
     /// `x^15 + x^14 + 1`, period 32767.
     Prbs15,
+    /// `x^5 + x^3 + 1`, period 31 (M49).
+    Prbs5,
+    /// `x^7 + x^6 + 1`, period 127 (M49).
+    Prbs7,
+    /// `x^10 + x^7 + 1`, period 1023 (M49).
+    Prbs10,
+    /// `x^11 + x^9 + 1`, period 2047 (M49).
+    Prbs11,
 }
 
 impl Poly {
@@ -43,7 +55,11 @@ impl Poly {
     /// ```
     pub const fn degree(self) -> u32 {
         match self {
+            Self::Prbs5 => 5,
+            Self::Prbs7 => 7,
             Self::Prbs9 => 9,
+            Self::Prbs10 => 10,
+            Self::Prbs11 => 11,
             Self::Prbs15 => 15,
         }
     }
@@ -58,10 +74,20 @@ impl Poly {
         (1u32 << self.degree()) - 1
     }
 
-    /// The second tap (the first tap is stage `n`).
-    const fn second_tap(self) -> u32 {
+    /// The second tap `t` of `x^n + x^t + 1` (the first tap is stage `n`).
+    ///
+    /// ```
+    /// use sdrk_proto::prbs::Poly;
+    /// assert_eq!(Poly::Prbs5.second_tap(), 3);
+    /// assert_eq!(Poly::Prbs15.second_tap(), 14);
+    /// ```
+    pub const fn second_tap(self) -> u32 {
         match self {
+            Self::Prbs5 => 3,
+            Self::Prbs7 => 6,
             Self::Prbs9 => 5,
+            Self::Prbs10 => 7,
+            Self::Prbs11 => 9,
             Self::Prbs15 => 14,
         }
     }
@@ -163,5 +189,42 @@ impl Prbs {
         let bit = self.poly.feedback(self.state);
         self.state = self.poly.shift(self.state, bit);
         bit
+    }
+
+    /// The next `count` bits (0 to 32) as one word, the first bit as the most significant of
+    /// the `count` bits: the same bits and the same final state as `count` calls of
+    /// [`next_bit`](Self::next_bit), with `0` for `count = 0`.
+    ///
+    /// The register is stepped up to `t` bits at a time (`t` the second tap): the next `m ≤ t`
+    /// bits depend only on stages that are already in the register (bit `j` is stage `n − j`
+    /// XOR stage `t − j`), so they come from two shifts and one XOR of the register content.
+    ///
+    /// A `count` above 32 is taken as 32.
+    ///
+    /// ```
+    /// use sdrk_proto::prbs::{Poly, Prbs};
+    /// let mut a = Prbs::new(Poly::Prbs9, 0x1ff)?;
+    /// let mut b = a.clone();
+    /// let word = a.next_bits(8);
+    /// let bits: u32 = (0..8).fold(0, |w, _| (w << 1) | u32::from(b.next_bit()));
+    /// assert_eq!(word, bits);
+    /// assert_eq!(word, 0b0000_0111);
+    /// assert_eq!(a, b);
+    /// # Ok::<(), sdrk_proto::Error>(())
+    /// ```
+    pub fn next_bits(&mut self, count: u32) -> u32 {
+        let n = self.poly.degree();
+        let t = self.poly.second_tap();
+        let mut left = count.min(32);
+        let mut word = 0u32;
+        while left > 0 {
+            let m = left.min(t);
+            let low = (1u32 << m) - 1;
+            let bits = ((self.state >> (n - m)) ^ (self.state >> (t - m))) & low;
+            self.state = ((self.state << m) | bits) & self.poly.mask();
+            word = (word << m) | bits;
+            left -= m;
+        }
+        word
     }
 }

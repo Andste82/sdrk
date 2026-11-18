@@ -70,6 +70,8 @@ mod noise;
 mod qam;
 mod recursion;
 mod scale;
+mod scramble;
+pub mod sign;
 mod spectrum;
 mod stereo;
 mod table;

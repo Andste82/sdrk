@@ -123,6 +123,7 @@ mod noise;
 mod noise_blank;
 mod preemph_limit;
 mod rds;
+mod scramble;
 mod spectrum;
 mod squelch;
 mod stereo;

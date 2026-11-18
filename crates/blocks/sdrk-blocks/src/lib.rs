@@ -152,6 +152,7 @@ pub use blocks::resample::{
 };
 pub use blocks::rotate::{RotateBlock, RotateConfig};
 pub use blocks::scale::{ScaleBlock, ScaleConfig};
+pub use blocks::scramble::{SCRAMBLE_CHUNK, ScrambleBlock, ScrambleConfig};
 pub use blocks::sensor_decode::{
     SENSOR_ALL_DECODERS, SENSOR_CROSS_CHANNEL_S, SENSOR_SEEN, SENSOR_TRAIN_PAIRS,
     SensorDecodeBlock, SensorDecodeConfig,

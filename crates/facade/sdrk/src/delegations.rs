@@ -38,6 +38,7 @@ use sdrk_core::kernels::preemph_limit::{
     PreemphLimit, PreemphLimitState, PreemphLimitStereo, PreemphLimitStereoState,
 };
 use sdrk_core::kernels::rds::{RdsShape, RdsShapeState};
+use sdrk_core::kernels::scramble::Scramble;
 use sdrk_core::kernels::spectrum::{Mag, MagSq, PowerDb, Window};
 use sdrk_core::kernels::squelch::{Squelch, SquelchState};
 use sdrk_core::kernels::stereo::{
@@ -163,6 +164,8 @@ crate::delegate! {
     GaussNoise<CQ15>::gauss_noise(&self, state: &mut GaussNoiseState, output: &mut [CQ15]) -> Result<()> => Fast;
     GaussNoise<f32>::gauss_noise(&self, state: &mut GaussNoiseState, output: &mut [f32]) -> Result<()> => Fast;
     GaussNoise<Q15>::gauss_noise(&self, state: &mut GaussNoiseState, output: &mut [Q15]) -> Result<()> => Fast;
+    Scramble<C32>::scramble(&self, input: &[C32], phase: &[u8], bits: u32, inverse: bool, output: &mut [C32]) -> Result<()> => Fast;
+    Scramble<CQ15>::scramble(&self, input: &[CQ15], phase: &[u8], bits: u32, inverse: bool, output: &mut [CQ15]) -> Result<()> => Fast;
     @extra [
         ("interleave", C32, Fast),
         ("deinterleave", C32, Fast),

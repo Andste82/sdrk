@@ -772,6 +772,15 @@ pub enum Family {
     /// (Ziggurat, rejection sampling) as `f32` (`info` with the waiver "reference does different
     /// work" at every level); not measured at a level with run-time detection.
     GaussNoiseZiggurat,
+    /// `scramble_cq15_b2`, `scramble_cq15_b8` (M49 §5): our kernel through the facade against the
+    /// phasor looked up into a buffer plus CMSIS-DSP's `arm_cmplx_mult_cmplx_q15` (generic C
+    /// compiled for the level, Q3.13 output), our fallback as information.
+    ScrambleCmsis,
+    /// `scramble_c32_b2_dvbs2` (M49 §5): our `scramble` at `bits = 2` against the per-symbol
+    /// switch on `R_n` of GNU Radio's `dvbs2_physical_cc` (`benches/refs/gr-dvbs2-plscramble.c`;
+    /// `info` with the waiver "reference does different work" at every level). Not measured at a
+    /// level with run-time detection, whose kernel entry is judged against the fixed level.
+    ScrambleDvbs2,
     /// `real_to_complex` of `C32`: liquid-dsp's `firhilbf` with its SIMD dot product; at `sse2`
     /// libairspy's `iqconverter_float` (SSE2) is the second gate, the entry
     /// [`Family::HilbertAirspy`].
@@ -851,7 +860,10 @@ impl Family {
         !((self.is_fallback_entry()
             || matches!(
                 self,
-                Family::Workload | Family::GaussNoiseFastnoise | Family::GaussNoiseZiggurat
+                Family::Workload
+                    | Family::GaussNoiseFastnoise
+                    | Family::GaussNoiseZiggurat
+                    | Family::ScrambleDvbs2
             ))
             && plan.baseline.is_some())
     }
@@ -924,7 +936,8 @@ const fn spec_own(name: &'static str, family: Family, own: &'static str) -> Kern
 /// `pulse_shape_block` (one output sample) and `pulse_match_block` (one input sample),
 /// `frame_decode_four_block` (one soft bit, `frame_decode` with `rotations` `four`), and the
 /// noise source of M48 `noise_block` (one output sample, the block around the kernel entries
-/// `gauss_noise_c32` and `gauss_noise_f32`).
+/// `gauss_noise_c32` and `gauss_noise_f32`), and the scrambler of M49 `scramble_block` (one
+/// sample, the PRBS indices and the kernel entry `scramble_c32_b8`).
 const fn proto(name: &'static str, family: Family) -> KernelSpec {
     KernelSpec {
         name,
@@ -948,7 +961,7 @@ const fn fft(name: &'static str, family: Family, samples: u64) -> KernelSpec {
 }
 
 /// The kernels of the benchmark table, in report order.
-pub static KERNELS: [KernelSpec; 249] = [
+pub static KERNELS: [KernelSpec; 259] = [
     spec("convert_cs8", Family::Volk, true),
     spec("convert_cs16", Family::Volk, true),
     spec("convert_cu8", Family::VolkAndOwn, true),
@@ -989,6 +1002,24 @@ pub static KERNELS: [KernelSpec; 249] = [
     spec("rotate_cq15", Family::Q15Own, false),
     spec("rotate_fallback", Family::FallbackVsGnuRadio, false),
     spec("rotate_cq15_fallback", Family::FallbackVsCmsis, false),
+    spec("scramble_c32_b2", Family::VolkNoFmaGate, false),
+    spec("scramble_c32_b8", Family::VolkNoFmaGate, false),
+    spec("scramble_cq15_b2", Family::ScrambleCmsis, false),
+    spec("scramble_cq15_b8", Family::ScrambleCmsis, false),
+    spec(
+        "scramble_c32_b2_fallback",
+        Family::FallbackVsVolkGeneric,
+        false,
+    ),
+    spec(
+        "scramble_c32_b8_fallback",
+        Family::FallbackVsVolkGeneric,
+        false,
+    ),
+    spec("scramble_cq15_b2_fallback", Family::FallbackVsCmsis, false),
+    spec("scramble_cq15_b8_fallback", Family::FallbackVsCmsis, false),
+    spec("scramble_c32_b2_dvbs2", Family::ScrambleDvbs2, false),
+    proto("scramble_block", Family::Own),
     spec("fir", Family::Volk, false),
     spec("fir_decimate", Family::Volk, false),
     spec("fir_interpolate", Family::Volk, false),
@@ -1666,8 +1697,9 @@ fn family_comparisons(plan: &LevelPlan, spec: &KernelSpec) -> (Reference, Vec<Re
         Family::ChannelizeLiquid | Family::LiquidDifferentWork => {
             (Reference::Liquid, vec![Reference::Fallback])
         }
-        Family::GaussNoiseFastnoise => (Reference::GnuRadio, Vec::new()),
+        Family::GaussNoiseFastnoise | Family::ScrambleDvbs2 => (Reference::GnuRadio, Vec::new()),
         Family::GaussNoiseZiggurat => (Reference::RandDistr, Vec::new()),
+        Family::ScrambleCmsis => (Reference::Cmsis, vec![Reference::Fallback]),
         Family::HilbertAirspyQ15 => (Reference::Libairspy, vec![Reference::Fallback]),
         Family::FallbackHilbert => (Reference::Liquid, vec![Reference::Libairspy]),
         Family::HilbertAirspy | Family::FallbackVsAirspy => (Reference::Libairspy, Vec::new()),
@@ -4889,6 +4921,7 @@ mod tests {
             "pulse_shape_block",
             "pulse_match_block",
             "noise_block",
+            "scramble_block",
         ];
         let names = crcs.iter().chain(&framing).copied().collect::<Vec<_>>();
         for level in ["sse2", "sse4.2", "avx2", "avx512", "neon", "simd128"] {
@@ -5196,6 +5229,100 @@ mod tests {
                 if let Some(limit) = limit.filter(|l| l.status == Status::Info) {
                     assert!(limit.waiver.is_some(), "{name} at {}", p.level);
                 }
+            }
+        }
+    }
+
+    #[test]
+    fn scramble_is_judged_against_the_library_compositions_on_every_level() {
+        let plan = |l: &str| PLANS.iter().find(|p| p.level == l).unwrap();
+        let kernel = |k: &str| KERNELS.iter().find(|s| s.name == k).unwrap();
+        let limits = Limits::parse(include_str!("../../benches/limits.json")).unwrap();
+        // `C32`: the phasor lookup plus VOLK's product without FMA where the level has FMA, VOLK's
+        // dispatcher elsewhere (M49 §5); the fallbacks against VOLK's generic product.
+        for name in ["scramble_c32_b2", "scramble_c32_b8"] {
+            for level in ["avx2", "avx512", "neon"] {
+                assert_eq!(
+                    comparisons(plan(level), kernel(name)).0,
+                    Reference::VolkNoFma,
+                    "{name} at {level}"
+                );
+            }
+            for level in ["sse2", "sse4.2", "simd128"] {
+                assert_eq!(
+                    comparisons(plan(level), kernel(name)).0,
+                    Reference::Volk,
+                    "{name} at {level}"
+                );
+            }
+            let fallback = kernel(&format!("{name}_fallback"));
+            assert_eq!(fallback.family.measured(), "fallback");
+            for level in ["sse2", "sse4.2", "avx2", "avx512", "neon", "simd128"] {
+                assert_eq!(
+                    comparisons(plan(level), fallback),
+                    (Reference::VolkGeneric, Vec::new()),
+                    "{name}_fallback at {level}"
+                );
+            }
+        }
+        // `CQ15`: the same lookup plus CMSIS-DSP's `arm_cmplx_mult_cmplx_q15`, the fallback as
+        // information beside it.
+        for name in ["scramble_cq15_b2", "scramble_cq15_b8"] {
+            for level in ["sse2", "sse4.2", "avx2", "avx512", "neon", "simd128"] {
+                assert_eq!(
+                    comparisons(plan(level), kernel(name)),
+                    (Reference::Cmsis, vec![Reference::Fallback]),
+                    "{name} at {level}"
+                );
+                assert_eq!(
+                    comparisons(plan(level), kernel(&format!("{name}_fallback"))),
+                    (Reference::Cmsis, Vec::new()),
+                    "{name}_fallback at {level}"
+                );
+            }
+            assert_eq!(
+                comparisons(plan("avx2-runtime"), kernel(name)).0,
+                Reference::OwnLevel("avx2")
+            );
+        }
+        // GNU Radio's DVB-S2 switch: information (reference does different work), not measured
+        // with run-time detection.
+        let dvbs2 = kernel("scramble_c32_b2_dvbs2");
+        assert_eq!(dvbs2.family.measured(), "ours");
+        assert!(!dvbs2.family.measured_at(plan("avx2-runtime")));
+        for level in ["sse2", "sse4.2", "avx2", "avx512", "neon", "simd128"] {
+            assert_eq!(
+                comparisons(plan(level), dvbs2),
+                (Reference::GnuRadio, Vec::new()),
+                "scramble_c32_b2_dvbs2 at {level}"
+            );
+            let limit = limits.get("scramble_c32_b2_dvbs2", level).unwrap();
+            assert_eq!(limit.status, Status::Info, "at {level}");
+            assert!(
+                limit
+                    .waiver
+                    .as_deref()
+                    .is_some_and(|w| w.contains("reference does different work"))
+            );
+        }
+        for name in [
+            "scramble_c32_b2",
+            "scramble_c32_b8",
+            "scramble_cq15_b2",
+            "scramble_cq15_b8",
+            "scramble_c32_b2_fallback",
+            "scramble_c32_b8_fallback",
+            "scramble_cq15_b2_fallback",
+            "scramble_cq15_b8_fallback",
+            "scramble_c32_b2_dvbs2",
+            "scramble_block",
+        ] {
+            for p in PLANS.iter().filter(|p| kernel(name).family.measured_at(p)) {
+                assert!(
+                    limits.get(name, p.level).is_some(),
+                    "{name} at {}: no entry",
+                    p.level
+                );
             }
         }
     }

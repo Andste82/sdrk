@@ -1,0 +1,37 @@
+{
+  "arrays": {
+    "expected": {
+      "dtype": "ci16",
+      "file": "qpsk_cq15_2048.expected.bin",
+      "len": 2048
+    },
+    "input": {
+      "dtype": "ci16",
+      "file": "qpsk_cq15_2048.input.bin",
+      "len": 2048
+    },
+    "phase": {
+      "dtype": "u8",
+      "file": "qpsk_cq15_2048.phase.bin",
+      "len": 2048
+    }
+  },
+  "case": "qpsk_cq15_2048",
+  "format_version": 1,
+  "kernel": "scramble",
+  "notes": "CQ15, bits 2: the quadrant map j^q with the saturating negation (q15.neg_sat, -(-32768) = 32767); uniform full-range input with the Q15 corners first",
+  "params": {
+    "bits": 2,
+    "inverse": false
+  },
+  "provenance": {
+    "generator": "tests/golden/generate.py",
+    "numpy": "2.5.4",
+    "python": "3.12",
+    "scipy": "1.18.1"
+  },
+  "seed": 694,
+  "tolerance": {
+    "class": "bit_exact"
+  }
+}

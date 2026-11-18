@@ -70,6 +70,7 @@ Up to M25.1 the milestones are strictly sequential: each depends on all previous
 | M47 | [M47-morse.md](M47-morse.md) | 10 | Morse (CW) receive and transmit: `sdrk_proto::morse` (ITU-R M.1677-1 table, encoder, decoder with speed estimate), `morse_encode`, `morse_decode` (adaptive threshold), flows `cw_transmitter` and `cw_receiver` with tone variants |
 | M48 | [M48-gauss-noise.md](M48-gauss-noise.md) | 10 | **Implemented** (2026-11-17; open items I48-1 and I48-2 wait for the maintainer). Kernel `gauss_noise` (`C32`/`CQ15`/`f32`/`Q15`): deterministic Gaussian noise from a seed with random access, one PCG32 draw per real value through a 4 KiB inverse-CDF table (bit-exact on every level, SIMD on every level), block and kind `noise`; first of the DSSS/OFDM kernel series (one kernel per milestone) |
 | M49 | [M49-scramble.md](M49-scramble.md) | 10 | **Implemented** (2026-11-18, branch `m49-scramble`; no open items, I49-1 and I49-2 closed by the maintainer's decision D2092). Kernel `scramble` (`C32`/`CQ15`): keyed phase scrambling / descrambling by unit phasors from a caller-supplied index sequence; the quadrant part (`±1`, `±j`) exact by sign and swap (`b ≤ 2`, the DVB-S2 pattern, bit-exact), a residual `rotate` product only for `b ≥ 3`; introduces the shared exact sign operations (§A); SIMD on every level (revised 2026-11-17) |
+| M49.1 | [M49.1-scramble-simplify.md](M49.1-scramble-simplify.md) | 10 | Planned (2026-11-18). `scramble` for `bits ≥ 3`: one table phasor and one product per sample (the quadrant split stays for `bits ≤ 2`), a faster index production in the block `scramble`, fair reference rows (`bits = 8` against lookup + VOLK gated again; new `bits = 1` row) |
 | M50 | [M50-xcorr-fft.md](M50-xcorr-fft.md) | 10 | Kernel `xcorr_fft` (`C32`): overlap-save fast convolution / long matched filter for sync-word and spreading-code correlation (the backlog's "FFT fast convolution" item), bit-exact chunk invariance per backend, `from_spectrum` for a stored tap spectrum, SIMD composed per level; `CQ15` a concrete backlog item (revised 2026-11-17) |
 | M51 | [M51-spread.md](M51-spread.md) | 10 | Kernel `spread` (`C32`/`CQ15`): direct-sequence spreading, short and long codes, chip phase tracked across calls; introduces the shared bit-packed code format `Code`/`CodeBits` and `Prbs::fill_words` (§B), binary chips by exact signs, complex chips by product; SIMD on every level (revised 2026-11-17) |
 | M52 | [M52-despread.md](M52-despread.md) | 10 | Kernel `despread` (`C32`/`CQ15`): integrate-and-dump correlation (the `dot_complex` order) with running accumulators instead of a chip history, the matched receiver for `spread`; introduces the `CQ15` output shift (§C.1, default `ceil(log2 sf)`); SIMD on every level (revised 2026-11-17) |
@@ -123,6 +124,7 @@ From M26 on, the dependencies (the *Depends on* line of each file; dependencies 
 | M47 Morse (CW) | M39.1 | M42, M43, M44, M45, M45.1, M46 |
 | M48 `gauss_noise` | M38 | everything after M38 (the DSSS/OFDM kernels are independent of one another unless listed) |
 | M49 `scramble` | M38 | everything after M38 |
+| M49.1 `scramble` `bits ≥ 3` | M49 | everything after M49 |
 | M50 `xcorr_fft` | M07, M43, M49 | everything after M43 and M49 |
 | M51 `spread` | M38, M49 | everything after M49 |
 | M52 `despread` | M43, M51 | everything after M51 |
@@ -215,7 +217,8 @@ Every golden case has a fixed seed; ranges keep cases independent so that adding
 | 820–839 | M44.2 (QAM of any square order) |
 | 840–859 | M44.1 (QAM in building blocks) |
 | 860–869 | M44.1.1 (parameter names) |
-| 870–999 | free, for backlog milestones |
+| 870–879 | M49.1 (`scramble` for `bits ≥ 3`) |
+| 880–999 | free, for backlog milestones |
 | 1000+ | benchmark inputs (M13, M16) — not golden vectors |
 
 ## Files in this directory

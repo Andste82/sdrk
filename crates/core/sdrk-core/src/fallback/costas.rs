@@ -24,8 +24,8 @@ use crate::fallback::mix::interp_f32_pair;
 use crate::fallback::modulate::phase_step;
 use crate::kernels::check_len;
 use crate::kernels::costas::{
-    BPSK, Costas, CostasState, LOCK_ALPHA, LOCK_OFF, LOCK_ON, PSK8, QAM16, QAM64, QPSK, derotate,
-    detector, lock_metric, qam_of, qam_product,
+    BPSK, Costas, CostasState, LOCK_ALPHA, LOCK_OFF, LOCK_ON, PSK8, QAM16, QAM64, QAM256, QAM1024,
+    QPSK, derotate, detector, lock_metric, qam_of, qam_product,
 };
 use crate::num::flush_denormal;
 use crate::types::C32;
@@ -215,7 +215,7 @@ fn run<const CODE: u8>(s: &mut CostasState, input: &[C32], output: &mut [C32]) -
         *o = y;
         let e = if CODE == QPSK {
             detector4(y)
-        } else if CODE == QAM16 || CODE == QAM64 {
+        } else if CODE >= QAM16 {
             detector_qam(CODE, y)
         } else {
             detector(CODE, y)
@@ -250,10 +250,11 @@ impl Costas for Fallback {
 /// The QAM loops, a function of their own, so that the PSK loops keep the code of M40.1.
 #[inline(never)]
 fn run_qam(code: u8, s: &mut CostasState, input: &[C32], output: &mut [C32]) -> Result<()> {
-    if code == QAM16 {
-        run::<QAM16>(s, input, output)
-    } else {
-        run::<QAM64>(s, input, output)
+    match code {
+        QAM16 => run::<QAM16>(s, input, output),
+        QAM256 => run::<QAM256>(s, input, output),
+        QAM1024 => run::<QAM1024>(s, input, output),
+        _ => run::<QAM64>(s, input, output),
     }
 }
 
@@ -269,7 +270,7 @@ mod tests {
         phase_step_f32,
     };
     use crate::fallback::modulate::phase_step;
-    use crate::kernels::costas::{QAM16, QAM64, QPSK, detector};
+    use crate::kernels::costas::{QAM16, QAM64, QAM256, QAM1024, QPSK, detector};
     use crate::num::flush_denormal;
     use crate::types::C32;
 
@@ -418,7 +419,7 @@ mod tests {
             seed ^= seed << 17;
             s.push(f32::from_bits(seed as u32));
         }
-        for code in [QAM16, QAM64] {
+        for code in [QAM16, QAM64, QAM256, QAM1024] {
             for &re in &s {
                 for &im in &s {
                     let y = C32::new(re, im);

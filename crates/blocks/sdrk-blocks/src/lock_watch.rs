@@ -7,7 +7,9 @@ use core::marker::PhantomData;
 /// The thresholds and time limits of a [`LockWatch`], fixed by the composite that holds it
 /// (M44.1 §2.3; associated constants, so that the watch holds none of them).
 pub trait LockPolicy {
-    /// Symbols between two checks of the carrier loop (1 to 65535).
+    /// Symbols between two checks of the carrier loop (1 to 65535): the interval of
+    /// [`LockWatch::new`]; a composite whose interval depends on its configuration (the
+    /// constellation of `qam_demod`, M44.2) gives it to [`LockWatch::with_check`].
     const CHECK: u16;
     /// The largest distance in cycles per symbol of a clear verify estimate from the frequency of
     /// the loops, modulo a quarter cycle per symbol, that keeps the estimate.
@@ -227,6 +229,8 @@ pub struct LockWatch<P: LockPolicy> {
     low_checks: u8,
     /// Whether the conditions of step 2 are on.
     recovery: bool,
+    /// Symbols between two checks (at least 1).
+    check: u16,
     /// Acquisition windows in a row without a clear peak (saturating).
     misses: u8,
     _policy: PhantomData<fn() -> P>,
@@ -242,6 +246,7 @@ impl<P: LockPolicy> core::fmt::Debug for LockWatch<P> {
             .field("misses", &self.misses)
             .field("low_checks", &self.low_checks())
             .field("recovery", &self.recovery())
+            .field("check", &self.check)
             .finish_non_exhaustive()
     }
 }
@@ -256,6 +261,26 @@ impl<P: LockPolicy> LockWatch<P> {
     /// A watch in `Search` with the conditions of step 2 on (a `CHECK` of 0 counts as 1; a
     /// `WEIGHT_CHECKS` above 31 counts as 31).
     pub fn new() -> Self {
+        Self::with_check(P::CHECK)
+    }
+
+    /// A watch as [`new`](LockWatch::new) with `check` symbols between two checks instead of
+    /// `CHECK` (0 counts as 1).
+    ///
+    /// ```
+    /// use sdrk_blocks::{LockPolicy, LockWatch};
+    /// struct Policy;
+    /// impl LockPolicy for Policy {
+    ///     const CHECK: u16 = 4096;
+    ///     const TOLERANCE: f64 = 2e-4;
+    ///     const WEIGHT_CHECKS: u8 = 2;
+    ///     const GAP_WINDOWS: u8 = 6;
+    /// }
+    /// let mut w = LockWatch::<Policy>::with_check(20_480);
+    /// w.window(Some(0.001), 0.0);
+    /// assert_eq!((w.check(), w.remaining()), (20_480, 20_480));
+    /// ```
+    pub fn with_check(check: u16) -> Self {
         Self {
             acquired: f64::NAN,
             restarts: 0,
@@ -264,13 +289,14 @@ impl<P: LockPolicy> LockWatch<P> {
             low_checks: 0,
             recovery: true,
             misses: 0,
+            check: if check == 0 { 1 } else { check },
             _policy: PhantomData,
         }
     }
 
     /// Symbols between two checks.
-    const fn check() -> u16 {
-        if P::CHECK == 0 { 1 } else { P::CHECK }
+    pub fn check(&self) -> u16 {
+        self.check
     }
 
     /// The low checks in a row that start the receiver again (0 = off).
@@ -353,15 +379,15 @@ impl<P: LockPolicy> LockWatch<P> {
     pub fn remaining(&self) -> usize {
         match self.state() {
             LockState::Search => usize::MAX,
-            _ => usize::from(Self::check().saturating_sub(self.since)),
+            _ => usize::from(self.check.saturating_sub(self.since)),
         }
     }
 
     /// Back to `Search` as after `new` (the restarts at 0, no estimate); the switch of
-    /// [`set_recovery`](LockWatch::set_recovery) is kept.
+    /// [`set_recovery`](LockWatch::set_recovery) and the interval of the checks are kept.
     pub fn reset(&mut self) {
         let on = self.recovery();
-        *self = Self::new();
+        *self = Self::with_check(self.check);
         self.set_recovery(on);
     }
 
@@ -464,7 +490,7 @@ impl<P: LockPolicy> LockWatch<P> {
         self.since = self
             .since
             .saturating_add(u16::try_from(n).unwrap_or(u16::MAX));
-        if self.since < Self::check() {
+        if self.since < self.check {
             return None;
         }
         self.since = 0;

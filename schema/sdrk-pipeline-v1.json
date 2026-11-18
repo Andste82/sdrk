@@ -3885,7 +3885,7 @@
           },
           {
             "additionalProperties": false,
-            "description": "Estimates the carrier offset of 16-QAM or 64-QAM symbols by the fourth power and optionally turns it out.",
+            "description": "Estimates the carrier offset of square QAM symbols (4-QAM to 1024-QAM) by the fourth power and optionally turns it out.",
             "properties": {
               "align": {
                 "$ref": "#/$defs/AlignMode"
@@ -3924,7 +3924,7 @@
           },
           {
             "additionalProperties": false,
-            "description": "Demodulates 16-QAM or 64-QAM to soft bits: matched filter, symbol timing, equalizer and carrier recovery.",
+            "description": "Demodulates square QAM (4-QAM to 1024-QAM) to soft bits: matched filter, symbol timing, equalizer and carrier recovery.",
             "properties": {
               "align": {
                 "$ref": "#/$defs/AlignMode"
@@ -3956,7 +3956,7 @@
                   },
                   "constellation": {
                     "default": "qam16",
-                    "description": "The constellation: qam16 (16-QAM, 4 bits per symbol) or qam64 (64-QAM, 6 bits per symbol); bpsk, qpsk and 8psk are those of psk_mod and psk_demod. Typical: qam16 or qam64 (bpsk, qpsk and 8psk are refused: psk_mod). Build-time.",
+                    "description": "The square constellation: qpsk (4-QAM, 2 bits per symbol), qam16 (4 bits), qam64 (6 bits), qam256 (8 bits) or qam1024 (10 bits); bpsk and 8psk are those of psk_mod and psk_demod. Typical: qam16; qam64 to qam1024 for a good SNR, qpsk for a weak one (bpsk and 8psk are refused: psk_mod). Build-time.",
                     "enum": [
                       "bpsk",
                       "qpsk",
@@ -3997,7 +3997,7 @@
                   },
                   "sync_bw": {
                     "default": 0.005,
-                    "description": "Loop bandwidth of the symbol timing, normalized to the symbol rate. Typical: 0.005; up to 0.01 for a faster acquisition. Build-time.",
+                    "description": "Loop bandwidth of the symbol timing, normalized to the symbol rate. Typical: 0.005; 0.002 for qam256 and qam1024 (less timing jitter), up to 0.01 for a faster acquisition. Build-time.",
                     "maximum": 0.1,
                     "minimum": 0.0001,
                     "type": "number"
@@ -4017,7 +4017,7 @@
           },
           {
             "additionalProperties": false,
-            "description": "Demodulates 16-QAM or 64-QAM and decodes the packets of the test framing, with a watch at frame level.",
+            "description": "Demodulates square QAM (4-QAM to 1024-QAM) and decodes the packets of the test framing, with a watch at frame level.",
             "properties": {
               "align": {
                 "$ref": "#/$defs/AlignMode"
@@ -4049,7 +4049,7 @@
                   },
                   "constellation": {
                     "default": "qam16",
-                    "description": "The constellation: qam16 (16-QAM, 4 bits per symbol) or qam64 (64-QAM, 6 bits per symbol); bpsk, qpsk and 8psk are those of psk_mod and psk_demod. Typical: qam16 or qam64 (bpsk, qpsk and 8psk are refused: psk_mod). Build-time.",
+                    "description": "The square constellation: qpsk (4-QAM, 2 bits per symbol), qam16 (4 bits), qam64 (6 bits), qam256 (8 bits) or qam1024 (10 bits); bpsk and 8psk are those of psk_mod and psk_demod. Typical: qam16; qam64 to qam1024 for a good SNR, qpsk for a weak one (bpsk and 8psk are refused: psk_mod). Build-time.",
                     "enum": [
                       "bpsk",
                       "qpsk",
@@ -4109,7 +4109,7 @@
                   },
                   "sync_bw": {
                     "default": 0.005,
-                    "description": "Loop bandwidth of the symbol timing, normalized to the symbol rate. Typical: 0.005; up to 0.01 for a faster acquisition. Build-time.",
+                    "description": "Loop bandwidth of the symbol timing, normalized to the symbol rate. Typical: 0.005; 0.002 for qam256 and qam1024 (less timing jitter), up to 0.01 for a faster acquisition. Build-time.",
                     "maximum": 0.1,
                     "minimum": 0.0001,
                     "type": "number"
@@ -4138,7 +4138,7 @@
           },
           {
             "additionalProperties": false,
-            "description": "Frames packets and modulates them as 16-QAM or 64-QAM: frame_encode then qam_mod in one block.",
+            "description": "Frames packets and modulates them as square QAM (4-QAM to 1024-QAM): frame_encode then qam_mod in one block.",
             "properties": {
               "align": {
                 "$ref": "#/$defs/AlignMode"
@@ -4163,7 +4163,7 @@
                 "properties": {
                   "constellation": {
                     "default": "qam16",
-                    "description": "The constellation: qam16 (16-QAM, 4 bits per symbol) or qam64 (64-QAM, 6 bits per symbol); bpsk, qpsk and 8psk are those of psk_mod and psk_demod. Typical: qam16 or qam64 (bpsk, qpsk and 8psk are refused: psk_mod). Build-time.",
+                    "description": "The square constellation: qpsk (4-QAM, 2 bits per symbol), qam16 (4 bits), qam64 (6 bits), qam256 (8 bits) or qam1024 (10 bits); bpsk and 8psk are those of psk_mod and psk_demod. Typical: qam16; qam64 to qam1024 for a good SNR, qpsk for a weak one (bpsk and 8psk are refused: psk_mod). Build-time.",
                     "enum": [
                       "bpsk",
                       "qpsk",
@@ -4236,7 +4236,7 @@
           },
           {
             "additionalProperties": false,
-            "description": "Turns soft bits into 16-QAM or 64-QAM symbols shaped with a root-raised-cosine pulse.",
+            "description": "Turns soft bits into square QAM symbols (4-QAM to 1024-QAM) shaped with a root-raised-cosine pulse.",
             "properties": {
               "align": {
                 "$ref": "#/$defs/AlignMode"
@@ -4261,7 +4261,7 @@
                 "properties": {
                   "constellation": {
                     "default": "qam16",
-                    "description": "The constellation: qam16 (16-QAM, 4 bits per symbol) or qam64 (64-QAM, 6 bits per symbol); bpsk, qpsk and 8psk are those of psk_mod and psk_demod. Typical: qam16 or qam64 (bpsk, qpsk and 8psk are refused: psk_mod). Build-time.",
+                    "description": "The square constellation: qpsk (4-QAM, 2 bits per symbol), qam16 (4 bits), qam64 (6 bits), qam256 (8 bits) or qam1024 (10 bits); bpsk and 8psk are those of psk_mod and psk_demod. Typical: qam16; qam64 to qam1024 for a good SNR, qpsk for a weak one (bpsk and 8psk are refused: psk_mod). Build-time.",
                     "enum": [
                       "bpsk",
                       "qpsk",
@@ -5331,7 +5331,7 @@
                 "properties": {
                   "constellation": {
                     "default": "bpsk",
-                    "description": "The symbol alphabet: real (f32, 1 bit), bpsk (C32, 1 bit), qpsk (C32, 2 bits, re then im), fsk4 (f32, 2 bits, -v then |v| - 2/3), 8psk (C32, 3 bits, max-log, Gray), qam16 (C32, 4 bits), qam64 (C32, 6 bits), qam256 (C32, 8 bits) or qam1024 (C32, 10 bits; the QAM Gray, in-phase bits first, piecewise-linear max-log). Typical: bpsk; real after an FSK discriminator, qpsk for QPSK, fsk4 for 4-FSK, 8psk for 8PSK, qam16 to qam1024 for QAM. Build-time.",
+                    "description": "The symbol alphabet: real (f32, 1 bit), bpsk (C32, 1 bit), qpsk (C32, 2 bits, re sqrt(2) then im sqrt(2)), fsk4 (f32, 2 bits, -v then |v| - 2/3), 8psk (C32, 3 bits, max-log, Gray), qam16 (C32, 4 bits), qam64 (C32, 6 bits), qam256 (C32, 8 bits) or qam1024 (C32, 10 bits; the QAM Gray, in-phase bits first, piecewise-linear max-log). Typical: bpsk; real after an FSK discriminator, qpsk for QPSK, fsk4 for 4-FSK, 8psk for 8PSK, qam16 to qam1024 for QAM. Build-time.",
                     "enum": [
                       "bpsk",
                       "qpsk",

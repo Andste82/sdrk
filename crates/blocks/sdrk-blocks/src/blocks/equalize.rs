@@ -291,6 +291,49 @@ impl Default for EqualizeConfig {
 }
 
 impl EqualizeConfig {
+    /// The blind start of the equalizer for a constellation, `(mu_cma, cma_symbols)` (the maintainer's
+    /// decision on I44.2-3, D1517): the denser grids need a smaller CMA step and more blind symbols
+    /// (D1511: at `mu_cma` 0.05 the CMA output stops improving near 18 dB SINR, below what 1024-QAM
+    /// needs for its decisions). BPSK to 64-QAM: 0.05 over 1000 symbols (the defaults of the
+    /// parameters, D828); 256-QAM: 0.02 over 8000 (4000 in D1511; in `qam_demod` through the
+    /// multipath of M44.2 test 4 too short, D1517); 1024-QAM: 0.005 over 16000. The composites that
+    /// hold an equalizer without exposing these parameters (`qam_demod`) take them from here
+    /// (rule 4 of M44.1.1); the parameters of the `equalize` block keep their one default.
+    ///
+    /// ```
+    /// use sdrk_blocks::{EqConstellation, EqualizeConfig};
+    /// assert_eq!(EqualizeConfig::blind_start(EqConstellation::Qam64), (0.05, 1000));
+    /// assert_eq!(EqualizeConfig::blind_start(EqConstellation::Qam1024), (0.005, 16_000));
+    /// ```
+    pub const fn blind_start(c: EqConstellation) -> (f64, u32) {
+        match c {
+            EqConstellation::Qam256 => (0.02, 8000),
+            EqConstellation::Qam1024 => (0.005, 16_000),
+            _ => (DEFAULT_MU_CMA, DEFAULT_CMA_SYMBOLS),
+        }
+    }
+
+    /// The default configuration with the constellation `c` and its blind start
+    /// ([`EqualizeConfig::blind_start`]).
+    ///
+    /// ```
+    /// use sdrk_blocks::{EqConstellation, EqualizeConfig};
+    /// let cfg = EqualizeConfig::for_constellation(EqConstellation::Qam256);
+    /// assert_eq!((cfg.mu_cma, cfg.cma_symbols, cfg.taps), (0.02, 8000, 11));
+    /// ```
+    pub const fn for_constellation(c: EqConstellation) -> Self {
+        let (mu_cma, cma_symbols) = Self::blind_start(c);
+        Self {
+            taps: DEFAULT_TAPS,
+            feedback_taps: 0,
+            constellation: c,
+            mu_cma,
+            mu_dd: DEFAULT_MU_DD,
+            cma_symbols,
+            phase_bw: DEFAULT_PHASE_BW,
+        }
+    }
+
     /// Checks the ranges.
     ///
     /// # Errors

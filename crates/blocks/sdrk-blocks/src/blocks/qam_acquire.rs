@@ -36,8 +36,8 @@ const ACQUISITION_POWER_ALPHA: f32 = 1.0 / 64.0;
 /// Description of the `qam_acquire` block.
 pub static DESCRIPTION: BlockDescription = BlockDescription {
     kind: "qam_acquire",
-    summary: "Estimates the carrier offset of 16-QAM or 64-QAM symbols by the fourth power and \
-        optionally turns it out.",
+    summary: "Estimates the carrier offset of square QAM symbols (4-QAM to 1024-QAM) by the \
+        fourth power and optionally turns it out.",
     details: "The input is one complex sample per symbol (after symbol_sync). From symbol 256 \
         on, windows of 512 symbols of x^4 / p^2 (p the symbol power smoothed over 64 symbols) \
         are zero-padded to 1024 points and transformed by fft; the largest bin, refined by a \
@@ -136,7 +136,7 @@ enum Mode {
     Idle,
 }
 
-/// The frequency acquisition of square QAM (16-QAM, 64-QAM) by the fourth power: `C32` symbols
+/// The frequency acquisition of square QAM (4-QAM to 1024-QAM, one window length for every order, D1519) by the fourth power: `C32` symbols
 /// in, `C32` symbols out, one sample per symbol (M44.1 §2.2; the acquisition of `qam_demod`,
 /// D1403 to D1405, D1421).
 ///

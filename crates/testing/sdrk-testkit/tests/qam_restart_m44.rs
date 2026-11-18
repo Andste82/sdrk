@@ -639,7 +639,7 @@ fn the_decision_mode_starts_at_the_phase_of_the_output() {
                         constellation: c_of(order),
                         symbol_rate_hz: SYMBOL_RATE as f64,
                         equalizer_taps: taps,
-                        sync_bw,
+                        sync_bw: Some(sync_bw),
                         ..QamDemodConfig::default()
                     };
                     let rate = Rate::hz(SYMBOL_RATE * SPS as u64).unwrap();

@@ -365,7 +365,7 @@ pub trait Kernel {
 /// are appended; a `<kernel>_fallback`, `<kernel>_airspy`, `<kernel>_fastnoise` or
 /// `<kernel>_ziggurat` entry takes the seed of `<kernel>`, so that both entries filter the same
 /// input.
-pub const KERNELS: [&str; 261] = [
+pub const KERNELS: [&str; 268] = [
     "convert_cs8",
     "convert_cs16",
     "convert_out_cs16",
@@ -627,6 +627,13 @@ pub const KERNELS: [&str; 261] = [
     "scramble_cq15_b2_fallback",
     "scramble_cq15_b8_fallback",
     "scramble_c32_b2_dvbs2",
+    "qam_soft_bits_qpsk",
+    "qam_soft_bits_qam256",
+    "qam_soft_bits_qam1024",
+    "costas_qam256",
+    "costas_qam1024",
+    "equalize_qam256",
+    "equalize_qam1024",
 ];
 
 /// Prepares the measurement `name` with `layout` (the FFT sizes are fixed by the name).
@@ -858,18 +865,38 @@ pub fn prepare(name: &str, layout: Layout) -> Option<Box<dyn Kernel>> {
             layout,
             sdrk_core::kernels::constellation::Qam::Qam64,
         )),
-        "costas_qam16" | "costas_qam16_fallback" | "costas_qam64" | "costas_qam64_fallback" => {
-            Box::new(qam_family::CostasQamK::new(
-                rng,
-                layout,
-                qam_of(seed_of),
-                name.ends_with("_fallback"),
-            ))
-        }
+        "qam_soft_bits_qpsk" => Box::new(qam_family::QamSoftBitsK::new(
+            rng,
+            layout,
+            sdrk_core::kernels::constellation::Qam::Qpsk,
+        )),
+        "qam_soft_bits_qam256" => Box::new(qam_family::QamSoftBitsK::new(
+            rng,
+            layout,
+            sdrk_core::kernels::constellation::Qam::Qam256,
+        )),
+        "qam_soft_bits_qam1024" => Box::new(qam_family::QamSoftBitsK::new(
+            rng,
+            layout,
+            sdrk_core::kernels::constellation::Qam::Qam1024,
+        )),
+        "costas_qam16"
+        | "costas_qam16_fallback"
+        | "costas_qam64"
+        | "costas_qam64_fallback"
+        | "costas_qam256"
+        | "costas_qam1024" => Box::new(qam_family::CostasQamK::new(
+            rng,
+            layout,
+            qam_of(seed_of),
+            name.ends_with("_fallback"),
+        )),
         "equalize_qam16"
         | "equalize_qam16_fallback"
         | "equalize_qam64"
-        | "equalize_qam64_fallback" => Box::new(qam_family::EqualizeQamK::new(
+        | "equalize_qam64_fallback"
+        | "equalize_qam256"
+        | "equalize_qam1024" => Box::new(qam_family::EqualizeQamK::new(
             rng,
             layout,
             qam_of(seed_of),
@@ -1173,6 +1200,8 @@ fn qam_of(name: &str) -> sdrk_core::kernels::constellation::Qam {
     match name {
         "costas_qam16" | "equalize_qam16" => Qam::Qam16,
         "costas_qam64" | "equalize_qam64" => Qam::Qam64,
+        "costas_qam256" | "equalize_qam256" => Qam::Qam256,
+        "costas_qam1024" | "equalize_qam1024" => Qam::Qam1024,
         other => unreachable!("no QAM entry {other}"),
     }
 }

@@ -4,7 +4,9 @@
 //! `equalize_qam64`, `equalize_qam64_fallback`, `qam_mod_block`, `qam_demod_block` and
 //! `frame_decode_four_block`, the entries of M44.1 `psk_mod_block`, `symbol_map_block`,
 //! `iq_offset_block`, `qam_acquire_block`, `qam_frame_encode_block` and `qam_frame_decode_block`,
-//! and the entries of M44.1.1 `pulse_shape_block` and `pulse_match_block`.
+//! the entries of M44.1.1 `pulse_shape_block` and `pulse_match_block`, and the entries of M44.2
+//! `qam_soft_bits_qpsk`, `qam_soft_bits_qam256`, `qam_soft_bits_qam1024`, `costas_qam256`,
+//! `costas_qam1024`, `equalize_qam256` and `equalize_qam1024` (D1507).
 //!
 //! | entry | measured | gate | unit of a "sample" |
 //! | --- | --- | --- | --- |
@@ -31,6 +33,9 @@
 //! | `qam_frame_decode_block` | `sdrk_blocks::QamFrameDecodeBlock`, 16-QAM | none (`info`) | one input sample |
 //! | `pulse_shape_block` | `sdrk_blocks::PulseShapeBlock`, 8 samples per symbol, roll-off 0.35, span 10 | none (`info`) | one output sample |
 //! | `pulse_match_block` | `sdrk_blocks::PulseMatchBlock`, 25 kBd at 200 kHz, roll-off 0.35, span 10 | none (`info`) | one input sample |
+//! | `qam_soft_bits_qpsk`, `qam_soft_bits_qam256`, `qam_soft_bits_qam1024` | the kernel `qam_soft_bits` with `Qpsk`, `Qam256`, `Qam1024` through the facade | our fallback (`info`) | one input symbol (2, 8 or 10 soft bits) |
+//! | `costas_qam256`, `costas_qam1024` | facade (= the fallback), the noise and the start phase scaled by the level spacing | none (`info`) | one symbol |
+//! | `equalize_qam256`, `equalize_qam1024` | facade (= the fallback's loop), the noise scaled by the level spacing | none (`info`) | one symbol |
 //!
 //! The kernel `qam_soft_bits` (I44-1, D1412) puts both components of every symbol on the
 //! integer grid (`v = x √E`) and forms the piecewise-linear max-log soft bits of M44 §2 (`v`,
@@ -246,18 +251,15 @@ fn symbol_demap_call(
     let _ = block.process(black_box(x), out);
 }
 
-/// The soft bits of one axis value in `f64`: `v = x √E`, then `v`, `2 - |v|` (16-QAM) or `v`,
-/// `4 - |v|`, `2 - ||v| - 4|` (64-QAM).
+/// The soft bits of one axis value in `f64` (M44.2 §2): `t_0 = x √E`, then
+/// `t_i = 2^(b - i) - |t_(i - 1)|` for the `b` bits per axis.
 fn axis_f64(qam: Qam, x: f32, out: &mut Vec<f64>) {
-    let v = f64::from(x) * qam.energy().sqrt();
-    let a = v.abs();
-    out.push(v);
-    match qam {
-        Qam::Qam16 => out.push(2.0 - a),
-        _ => {
-            out.push(4.0 - a);
-            out.push(2.0 - (a - 4.0).abs());
-        }
+    let b = qam.bits_per_axis();
+    let mut t = f64::from(x) * qam.energy().sqrt();
+    out.push(t);
+    for i in 1..b {
+        t = f64::from(1u32 << (b - i)) - t.abs();
+        out.push(t);
     }
 }
 
@@ -400,10 +402,19 @@ const CR_PHASE0_QAM16: f64 = 0.3;
 const CR_PHASE0_QAM64: f64 = 0.05;
 const CR_OFFSET: f64 = 0.0005;
 const CR_NOISE: f64 = 0.05;
+/// The start phase and the noise of 256-QAM and 1024-QAM (M44.2): the 64-QAM phase scaled by
+/// the level spacing, and the 16-QAM noise in units of the level spacing (`0.05 sqrt(10 / E)`),
+/// so that the loop locks and decides on the grid as for the smaller orders.
+const CR_PHASE0_QAM256: f64 = 0.025;
+const CR_PHASE0_QAM1024: f64 = 0.0125;
+const CR_NOISE_QAM256: f64 = 0.012;
+const CR_NOISE_QAM1024: f64 = 0.006;
 
 fn costas_state(qam: Qam) -> CostasState {
     let c = match qam {
         Qam::Qam64 => CostasConstellation::Qam64,
+        Qam::Qam256 => CostasConstellation::Qam256,
+        Qam::Qam1024 => CostasConstellation::Qam1024,
         _ => CostasConstellation::Qam16,
     };
     CostasState::new(c, LOOP_BW, DAMPING, MAX_OFFSET).expect("costas")
@@ -467,21 +478,15 @@ pub(crate) struct CostasQamK {
 impl CostasQamK {
     pub(crate) fn new(rng: &mut Pcg32, layout: Layout, qam: Qam, fallback_entry: bool) -> Self {
         let skew = layout.skew(core::mem::size_of::<C32>());
-        let phase0 = match qam {
-            Qam::Qam64 => CR_PHASE0_QAM64,
-            _ => CR_PHASE0_QAM16,
+        let (phase0, noise) = match qam {
+            Qam::Qam64 => (CR_PHASE0_QAM64, CR_NOISE),
+            Qam::Qam256 => (CR_PHASE0_QAM256, CR_NOISE_QAM256),
+            Qam::Qam1024 => (CR_PHASE0_QAM1024, CR_NOISE_QAM1024),
+            _ => (CR_PHASE0_QAM16, CR_NOISE),
         };
         CostasQamK {
             qam,
-            input: qam_input(
-                rng,
-                qam,
-                layout,
-                &[(0, 1.0, 0.0)],
-                phase0,
-                CR_OFFSET,
-                CR_NOISE,
-            ),
+            input: qam_input(rng, qam, layout, &[(0, 1.0, 0.0)], phase0, CR_OFFSET, noise),
             out: Aligned::skewed(layout.n, skew),
             points: qam_points(qam),
             fallback_entry,
@@ -563,6 +568,16 @@ const EQ_TAPS: usize = 11;
 /// The carrier phase (rad) and the uniform noise per component of the workload.
 const EQ_PHASE: f64 = 0.2;
 const EQ_NOISE: f64 = 0.02;
+
+/// The noise of the equalizer workload: [`EQ_NOISE`] for 16-QAM and 64-QAM, for 256-QAM and
+/// 1024-QAM the 16-QAM noise in units of the level spacing (M44.2).
+fn eq_noise(qam: Qam) -> f64 {
+    match qam {
+        Qam::Qam256 => 0.005,
+        Qam::Qam1024 => 0.0025,
+        _ => EQ_NOISE,
+    }
+}
 /// The channel: `(delay in symbols, magnitude, phase)`.
 const EQ_CHANNEL: [(usize, f64, f64); 3] = [(0, 1.0, 0.0), (1, 0.2, 0.6), (2, 0.05, -2.0)];
 
@@ -572,6 +587,8 @@ fn eq_params(qam: Qam) -> EqParams {
     EqParams {
         constellation: match qam {
             Qam::Qam64 => EqConstellation::Qam64,
+            Qam::Qam256 => EqConstellation::Qam256,
+            Qam::Qam1024 => EqConstellation::Qam1024,
             _ => EqConstellation::Qam16,
         },
         ..EqParams::default()
@@ -669,7 +686,7 @@ impl EqualizeQamK {
         };
         EqualizeQamK {
             qam,
-            input: qam_input(rng, qam, layout, &EQ_CHANNEL, EQ_PHASE, 0.0, EQ_NOISE),
+            input: qam_input(rng, qam, layout, &EQ_CHANNEL, EQ_PHASE, 0.0, eq_noise(qam)),
             out: Aligned::skewed(layout.n, skew),
             points,
             state: eq_state(qam),

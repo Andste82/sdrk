@@ -1,5 +1,6 @@
 //! Golden tests of the M44 kernel `qam_soft_bits` (open item I44-1, decisions D1412 to D1414)
-//! through the facade `Sdrk`, `Fallback` and `Reference`.
+//! through the facade `Sdrk`, `Fallback` and `Reference`, with the cases of every square order of
+//! M44.2 (`qpsk`, `qam256` and `qam1024`, seeds 820 to 822, M44.2 test 2).
 //!
 //! Every case must match the golden file bit for bit on the facade (the SIMD backend where the
 //! build has it) and on the fallback, whole and in 20 cut plans of seed 777 (the kernel is
@@ -21,7 +22,13 @@ use sdrk_core::{C32, Fallback, Reference};
 use sdrk_testkit::ChunkPlan;
 use sdrk_testkit::golden::{self, Array, GoldenCase};
 
-const CASES: [&str; 2] = ["qam16_c32_4096", "qam64_c32_4096"];
+const CASES: [&str; 5] = [
+    "qam1024_c32_4096",
+    "qam16_c32_4096",
+    "qam256_c32_4096",
+    "qam64_c32_4096",
+    "qpsk_c32_4096",
+];
 /// The seed of the cut plans; plan `k` uses `PLAN_SEED * 100 + k`.
 const PLAN_SEED: u64 = 777;
 /// Cut plans per case.
@@ -30,14 +37,17 @@ const PLANS: u64 = 20;
 const MAX_CHUNK: usize = 300;
 
 #[test]
-fn the_cases_of_m44_are_present() {
+fn the_cases_of_m44_and_m44_2_are_present() {
     assert_eq!(golden::list("qam_soft_bits").unwrap(), CASES);
 }
 
 fn qam_of(case: &GoldenCase) -> Qam {
     match case.param_str("constellation").unwrap() {
+        "qpsk" => Qam::Qpsk,
         "qam16" => Qam::Qam16,
         "qam64" => Qam::Qam64,
+        "qam256" => Qam::Qam256,
+        "qam1024" => Qam::Qam1024,
         other => panic!("{}: unknown constellation {other}", case.case),
     }
 }
@@ -100,20 +110,19 @@ fn snr_db(got: &[f32], f64_of: &[f64]) -> (f64, f64) {
     )
 }
 
-/// The `f64` definition of M44 §2 with the exact `√E` (the `Reference` before its rounding).
+/// The `f64` definition of M44 §2 and M44.2 §2 with the exact `√E` (the `Reference` before its
+/// rounding): `t_0 = x √E`, `t_i = 2^(b - i) - |t_(i - 1)|`, each times the scale.
 fn definition_f64(qam: Qam, input: &[C32], scale: f32) -> Vec<f64> {
     let c = libm::sqrt(qam.energy());
     let s = f64::from(scale);
+    let b = qam.bits_per_axis();
     let mut out = Vec::with_capacity(input.len() * qam.bits_per_symbol());
     for x in input.iter().flat_map(|x| [x.re, x.im]) {
-        let v = f64::from(x) * c;
-        let a = v.abs();
-        out.push(s * v);
-        if qam == Qam::Qam16 {
-            out.push(s * (2.0 - a));
-        } else {
-            out.push(s * (4.0 - a));
-            out.push(s * (2.0 - (a - 4.0).abs()));
+        let mut t = f64::from(x) * c;
+        out.push(s * t);
+        for i in 1..b {
+            t = f64::from(1u32 << (b - i)) - t.abs();
+            out.push(s * t);
         }
     }
     out

@@ -7,6 +7,7 @@ from . import (  # noqa: F401
     band_pulse_detect,
     basic_math,
     biquad,
+    bit_scramble,
     channelize,
     blocks,
     convert,

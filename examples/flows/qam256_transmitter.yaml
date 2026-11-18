@@ -33,14 +33,19 @@ nodes:
     kind: scale
     params:
       gain_db: -6
-  # Framing and modulation in one block (qam_frame_encode = frame_encode -> qam_mod, M44.1).
+  # Framing, scrambler and modulation in one block (qam_frame_encode = frame_encode ->
+  # bit_scramble -> qam_mod, M44.1, the scrambler since M44.2).
   # Framing: 4 preamble bytes 0x55, the sync word 0x1ACFFC1D, length, payload and CRC-16.
   # Between packets the bits of the PN9 sequence (idle pn9): random-looking 256-QAM symbols on
   # which the receiver's timing loop, frequency acquisition and blind equalizer keep training
   # while there is nothing to send (idle preamble would be one constant symbol, bits 01010101
   # of 0x55). Modulation: Gray mapping (the first four bits of a symbol select the in-phase
   # level, the last four the quadrature level), root-raised-cosine pulse with roll-off 0.35
-  # over 10 symbols, 8 samples per symbol (200 kHz).
+  # over 10 symbols, 8 samples per symbol (200 kHz). Scrambler: the self-synchronizing
+  # scrambler 1 + x^-18 + x^-23 over the bits of the 256-QAM symbols (scrambler multiplicative,
+  # polynomial x23_x18, the defaults) makes the preamble, the sync word and the short period
+  # of the PN9 idle signal look random on the air; the blind equalizer of 256-QAM does not
+  # converge on them without it (D1523). qam256_receiver descrambles with the same polynomial.
   tx:
     kind: qam_frame_encode
     params:
@@ -49,6 +54,7 @@ nodes:
       preamble_bytes: 4
       rolloff: 0.35
       samples_per_symbol: 8
+      scrambler: multiplicative
       span: 10
 edges:
   - { from: msg, to: tx }

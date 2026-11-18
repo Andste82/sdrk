@@ -14,31 +14,32 @@ use sdrk_blocks::{
     AddBlock, AddRealBlock, AdsbDecodeBlock, AdsbDecodeConfig, AdsbParseBlock, AdsbParseConfig,
     AfcBlock, AfcConfig, AgcBlock, AgcConfig, AmDemodBlock, AmDemodConfig, AmModBlock, AmModConfig,
     AutoNotchConfig, AutoNotchRealBlock, BandPulseDetectBlock, BandPulseDetectConfig, BiquadBlock,
-    BiquadConfig, BiquadRealBlock, Block, BlockDescription, BlockSample, ChannelSelectBlock,
-    ChannelSelectConfig, ChannelizeBlock, ChannelizeConfig, ConvertBlock, ConvertConfig,
-    ConvertOutBlock, ConvertOutConfig, ConvertRealBlock, CostasBlock, CostasConfig, DcBlockBlock,
-    DcBlockConfig, DcBlockRealBlock, DdcBlock, DdcConfig, DecimateBlock, DecimateConfig,
-    DecimateRealBlock, DeemphasisBlock, DeemphasisConfig, DeemphasisRealBlock, DelayBlock,
-    DelayConfig, DelayRealBlock, DesignSpec, DucBlock, DucConfig, EqualizeBlock, EqualizeConfig,
-    FirBlock, FirConfig, FmDemodBlock, FmDemodConfig, FmModBlock, FmModConfig, FmStereoDemodBlock,
-    FmStereoDemodConfig, FmStereoModBlock, FmStereoModConfig, FmStereoRdsModBlock,
-    FmStereoRdsModConfig, FrameDecodeBlock, FrameDecodeConfig, FrameEncodeBlock, FrameEncodeConfig,
-    FrameRotations, FskDemodBlock, FskDemodConfig, FskModBlock, FskModConfig,
-    HalfbandDecimateBlock, HalfbandDecimateConfig, HalfbandDecimateRealBlock, HdlcDecodeBlock,
-    HdlcDecodeConfig, HdlcEncodeBlock, HdlcEncodeConfig, ImagPartBlock, InterpolateBlock,
-    InterpolateConfig, InterpolateRealBlock, IqOffsetBlock, IqOffsetConfig, MagBlock, MagConfig,
-    MakeComplexBlock, MorseDecodeBlock, MorseDecodeConfig, MorseEncodeBlock, MorseEncodeConfig,
-    MulBlock, MulRealBlock, NcoBlock, NcoConfig, NcoRealBlock, NoiseBlankBlock, NoiseBlankConfig,
-    NoiseBlock, NoiseConfig, NoiseRealBlock, OokDemodBlock, OokDemodConfig, OokModBlock,
-    OokModConfig, ParamValue, PortType, PreemphLimitBlock, PreemphLimitConfig, PskDemodBlock,
-    PskDemodConfig, PskModBlock, PskModConfig, PskVariant, PulseKeyBlock, PulseKeyConfig,
-    PulseMatchBlock, PulseMatchConfig, PulseShapeBlock, PulseShapeConfig, QamAcquireBlock,
-    QamAcquireConfig, QamDemodBlock, QamDemodConfig, QamFrameDecodeBlock, QamFrameDecodeConfig,
-    QamFrameEncodeBlock, QamFrameEncodeConfig, QamModBlock, QamModConfig, QuadDemodBlock,
-    QuadDemodConfig, RESAMPLE_TUNED_PHASES, RdsDecodeBlock, RdsDecodeConfig, RdsDemodBlock,
-    RdsDemodConfig, RdsEncodeBlock, RdsEncodeConfig, RealPartBlock, RealToIqBlock, ResampleBlock,
-    ResampleConfig, ResampleRealBlock, RotateBlock, RotateConfig, ScaleBlock, ScaleConfig,
-    ScrambleBlock, ScrambleConfig, SensorDecodeBlock, SensorDecodeConfig, SensorEncodeBlock,
+    BiquadConfig, BiquadRealBlock, BitDescrambleBlock, BitScrambleBlock, BitScrambleConfig, Block,
+    BlockDescription, BlockSample, ChannelSelectBlock, ChannelSelectConfig, ChannelizeBlock,
+    ChannelizeConfig, ConvertBlock, ConvertConfig, ConvertOutBlock, ConvertOutConfig,
+    ConvertRealBlock, CostasBlock, CostasConfig, DcBlockBlock, DcBlockConfig, DcBlockRealBlock,
+    DdcBlock, DdcConfig, DecimateBlock, DecimateConfig, DecimateRealBlock, DeemphasisBlock,
+    DeemphasisConfig, DeemphasisRealBlock, DelayBlock, DelayConfig, DelayRealBlock, DesignSpec,
+    DucBlock, DucConfig, EqualizeBlock, EqualizeConfig, FirBlock, FirConfig, FmDemodBlock,
+    FmDemodConfig, FmModBlock, FmModConfig, FmStereoDemodBlock, FmStereoDemodConfig,
+    FmStereoModBlock, FmStereoModConfig, FmStereoRdsModBlock, FmStereoRdsModConfig,
+    FrameDecodeBlock, FrameDecodeConfig, FrameEncodeBlock, FrameEncodeConfig, FrameRotations,
+    FskDemodBlock, FskDemodConfig, FskModBlock, FskModConfig, HalfbandDecimateBlock,
+    HalfbandDecimateConfig, HalfbandDecimateRealBlock, HdlcDecodeBlock, HdlcDecodeConfig,
+    HdlcEncodeBlock, HdlcEncodeConfig, ImagPartBlock, InterpolateBlock, InterpolateConfig,
+    InterpolateRealBlock, IqOffsetBlock, IqOffsetConfig, MagBlock, MagConfig, MakeComplexBlock,
+    MorseDecodeBlock, MorseDecodeConfig, MorseEncodeBlock, MorseEncodeConfig, MulBlock,
+    MulRealBlock, NcoBlock, NcoConfig, NcoRealBlock, NoiseBlankBlock, NoiseBlankConfig, NoiseBlock,
+    NoiseConfig, NoiseRealBlock, OokDemodBlock, OokDemodConfig, OokModBlock, OokModConfig,
+    ParamValue, PortType, PreemphLimitBlock, PreemphLimitConfig, PskDemodBlock, PskDemodConfig,
+    PskModBlock, PskModConfig, PskVariant, PulseKeyBlock, PulseKeyConfig, PulseMatchBlock,
+    PulseMatchConfig, PulseShapeBlock, PulseShapeConfig, QamAcquireBlock, QamAcquireConfig,
+    QamDemodBlock, QamDemodConfig, QamFrameDecodeBlock, QamFrameDecodeConfig, QamFrameEncodeBlock,
+    QamFrameEncodeConfig, QamModBlock, QamModConfig, QuadDemodBlock, QuadDemodConfig,
+    RESAMPLE_TUNED_PHASES, RdsDecodeBlock, RdsDecodeConfig, RdsDemodBlock, RdsDemodConfig,
+    RdsEncodeBlock, RdsEncodeConfig, RealPartBlock, RealToIqBlock, ResampleBlock, ResampleConfig,
+    ResampleRealBlock, RotateBlock, RotateConfig, ScaleBlock, ScaleConfig, ScrambleBlock,
+    ScrambleConfig, Scrambler, SensorDecodeBlock, SensorDecodeConfig, SensorEncodeBlock,
     SensorEncodeConfig, SpectrumBlock, SpectrumConfig, SquelchBlock, SquelchConfig, SsbDemodBlock,
     SsbDemodConfig, SsbModBlock, SsbModConfig, StereoMatrixBlock, StereoPllBlock, StereoPllConfig,
     SymbolDemapBlock, SymbolDemapConfig, SymbolDemapConstellation, SymbolMapBlock, SymbolMapConfig,
@@ -3859,6 +3860,119 @@ impl Kind for IqOffsetKind {
     }
 }
 
+// -------------------------------------------------------- bit_scramble, bit_descramble
+
+pub(crate) struct BitScrambleKind;
+
+impl Kind for BitScrambleKind {
+    type Cfg = BitScrambleConfig;
+
+    const KIND: &'static str = "bit_scramble";
+    fn kernels() -> &'static [&'static str] {
+        &[]
+    }
+    fn default_cfg() -> BitScrambleConfig {
+        BitScrambleConfig::default()
+    }
+    fn set(cfg: &mut BitScrambleConfig, name: &str, value: ParamValue) -> BlockResult<()> {
+        cfg.set(name, value)
+    }
+    fn plan(
+        cfg: &BitScrambleConfig,
+        input: PortType,
+        rate: Rate,
+        _p: Precision,
+    ) -> BlockResult<Figures> {
+        if input != PortType::F32 {
+            return Err(mismatch("bit_scramble needs f32 soft bits"));
+        }
+        Ok(scramble_figures(BitScrambleBlock::<VecStorage>::rate_out(
+            cfg, rate,
+        )?))
+    }
+    fn build(
+        cfg: &BitScrambleConfig,
+        _input: PortType,
+        rate: Rate,
+        _p: Precision,
+        st: &mut VecStorage,
+    ) -> BlockResult<Box<dyn Node>> {
+        Ok(Box::new(StreamNode::new(BitScrambleBlock::new(
+            cfg, rate, st,
+        )?)))
+    }
+}
+
+pub(crate) struct BitDescrambleKind;
+
+impl Kind for BitDescrambleKind {
+    type Cfg = BitScrambleConfig;
+
+    const KIND: &'static str = "bit_descramble";
+    fn kernels() -> &'static [&'static str] {
+        &[]
+    }
+    fn default_cfg() -> BitScrambleConfig {
+        BitScrambleConfig::default()
+    }
+    fn set(cfg: &mut BitScrambleConfig, name: &str, value: ParamValue) -> BlockResult<()> {
+        cfg.set(name, value)
+    }
+    fn plan(
+        cfg: &BitScrambleConfig,
+        input: PortType,
+        rate: Rate,
+        _p: Precision,
+    ) -> BlockResult<Figures> {
+        if input != PortType::F32 {
+            return Err(mismatch("bit_descramble needs f32 soft bits"));
+        }
+        Ok(scramble_figures(
+            BitDescrambleBlock::<VecStorage>::rate_out(cfg, rate)?,
+        ))
+    }
+    fn build(
+        cfg: &BitScrambleConfig,
+        _input: PortType,
+        rate: Rate,
+        _p: Precision,
+        st: &mut VecStorage,
+    ) -> BlockResult<Box<dyn Node>> {
+        Ok(Box::new(StreamNode::new(BitDescrambleBlock::new(
+            cfg, rate, st,
+        )?)))
+    }
+}
+
+/// The figures of `bit_scramble` and `bit_descramble`: no storage, no delay, one sample in per
+/// sample out; cost 2 per bit (a comparison for the register and the sign flip, the register
+/// itself steps 64 bits at a time).
+fn scramble_figures(rate_out: Rate) -> Figures {
+    Figures {
+        rate_out,
+        memory_bytes: 0,
+        cost: SCRAMBLE_COST,
+        taps: 0,
+        delay: Delay::ZERO,
+        min_input: 1,
+        output: stream(PortType::F32),
+    }
+}
+
+/// The cost per bit of `bit_scramble` and `bit_descramble` (and of the stage in the QAM frame
+/// composites).
+pub(crate) const SCRAMBLE_COST: f64 = 2.0;
+
+/// The cost per bit of the scrambler stage of a QAM frame composite: [`SCRAMBLE_COST`], 0 for
+/// `scrambler` `none`.
+fn scrambler_cost(s: Scrambler) -> f64 {
+    if s == Scrambler::Off {
+        0.0
+    } else {
+        SCRAMBLE_COST
+    }
+}
+
 // ------------------------------------------------------------------ pulse_shape
 
 pub(crate) struct PulseShapeKind;
@@ -4151,8 +4265,9 @@ impl Kind for QamFrameEncodeKind {
         Ok(Figures {
             rate_out: QamFrameEncodeBlock::<VecStorage>::rate_out(cfg, rate)?,
             memory_bytes: QamFrameEncodeBlock::<VecStorage>::storage_bytes(cfg, rate)?,
-            // The costs of the pair per bit: `frame_encode` 1, `qam_mod` 4 span.
-            cost: 1.0 + 4.0 * cfg.qam.span as f64,
+            // The costs of the chain per bit: `frame_encode` 1, `bit_scramble` (when it is
+            // there), `qam_mod` 4 span.
+            cost: 1.0 + scrambler_cost(cfg.scrambler) + 4.0 * cfg.qam.span as f64,
             taps: block.modulator().num_taps(),
             delay: block.timing().delay,
             min_input: 1,
@@ -4210,9 +4325,11 @@ impl Kind for QamFrameDecodeKind {
         Ok(Figures {
             rate_out: demod.rate_out.scale(sdrk::Ratio::new(1, 56)?)?,
             memory_bytes,
-            // The costs of the pair: `qam_demod`, and `frame_decode` with the rotations `four`, 4
-            // per soft bit (D1213), `bits / sps` soft bits per input sample.
-            cost: demod.cost + 4.0 * cfg.demod.bits_per_symbol() as f64 / sps,
+            // The costs of the chain: `qam_demod`, `bit_descramble` (when it is there) and
+            // `frame_decode` with the rotations `four`, 4 per soft bit (D1213), `bits / sps` soft
+            // bits per input sample.
+            cost: demod.cost
+                + (scrambler_cost(cfg.scrambler) + 4.0) * cfg.demod.bits_per_symbol() as f64 / sps,
             taps: demod.taps,
             delay: demod.delay,
             min_input: demod.min_input,

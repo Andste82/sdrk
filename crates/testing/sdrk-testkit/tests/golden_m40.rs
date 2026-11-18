@@ -6,7 +6,8 @@
 //! case of M40.1, 607 for the 16-QAM case of M44, chunks of 1 to 700 symbols). The cases of M40
 //! and M40.1 store the PSK order, which gives the constellations `bpsk`, `qpsk` and `8psk`: the
 //! files are unchanged since M40.1, so these constellations give the bits of the former orders 2,
-//! 4 and 8 (M44 test 1). The M44 case `dd_qam16_c32_8192` (seed 600, test 2) stores the
+//! 4 and 8 (M44 test 1). The M44 case `dd_qam16_c32_8192` (seed 600, test 2) and the M44.2 case
+//! `dd_qam256_c32_8192` (seed 823, test 2; its chunk plans also use seed 607) store the
 //! constellation. Every run
 //! must match the golden file bit for bit (the exact float32 model) and end in the stored state.
 //! The state is built from the parameters stored in the case, and its loop constants must equal
@@ -48,10 +49,11 @@ const PLANS: u64 = 20;
 /// The largest chunk of the plans.
 const MAX_CHUNK: usize = 700;
 
-const CASES: [&str; 5] = [
+const CASES: [&str; 6] = [
     "8psk_lock_c32_8192",
     "bpsk_lock_c32_8192",
     "dd_qam16_c32_8192",
+    "dd_qam256_c32_8192",
     "qpsk_lock_c32_8192",
     "qpsk_offset_c32_8192",
 ];
@@ -193,6 +195,8 @@ fn constellation_of(case: &GoldenCase) -> CostasConstellation {
     match case.param_str("constellation") {
         Ok("qam16") => CostasConstellation::Qam16,
         Ok("qam64") => CostasConstellation::Qam64,
+        Ok("qam256") => CostasConstellation::Qam256,
+        Ok("qam1024") => CostasConstellation::Qam1024,
         Ok(other) => panic!("{}: constellation {other}", case.case),
         Err(_) => psk(case.param_u64("order").unwrap() as u32),
     }
@@ -262,7 +266,10 @@ fn run<K: Costas>(
         Some(k) => {
             let seed = match st.constellation() {
                 CostasConstellation::Psk8 => PLAN_SEED_8PSK,
-                CostasConstellation::Qam16 | CostasConstellation::Qam64 => PLAN_SEED_QAM,
+                CostasConstellation::Qam16
+                | CostasConstellation::Qam64
+                | CostasConstellation::Qam256
+                | CostasConstellation::Qam1024 => PLAN_SEED_QAM,
                 _ => PLAN_SEED,
             };
             let mut sizes = ChunkPlan::new(seed * 100 + k, MAX_CHUNK).sizes();

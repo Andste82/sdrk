@@ -65,8 +65,9 @@ S8 = fm.f32(math.sin(math.pi / 8.0))
 GRAY_TO_INDEX8 = (0, 1, 3, 2, 7, 6, 4, 5)
 GUARD_SKIP = 0
 
-# The square QAM of M44 section 1: levels per axis m and the power E of the integer grid.
-QAM = {"qam16": (4, 10), "qam64": (8, 42)}
+# The square QAM of M44 section 1 and M44.2 section 1: levels per axis m and the power E of the
+# integer grid.
+QAM = {"qam16": (4, 10), "qam64": (8, 42), "qam256": (16, 170), "qam1024": (32, 682)}
 
 
 def qam_levels_f32(name):
@@ -369,6 +370,21 @@ def dd_qam16(rng):
         "float32 model over the whole input; locked is the lock flag after every symbol; "
         "snr_db_guard compares with the float64 loop (D111)",
         phase0=0.3,
+    )
+
+
+@case(kernel="costas", name="dd_qam256_c32_8192", seed=823)
+def dd_qam256(rng):
+    return run_case(
+        rng, "qam256", 0.0002, 24.0,
+        "256-QAM with the Gray mapping of M44.2 section 1 (unit average power), one sample per "
+        "symbol, rotated by the start phase phase0_rad (0.1 rad) and a carrier offset of 0.0002 "
+        "cycles per symbol, complex noise for Eb/N0 24 dB; constellation qam256 (the "
+        "decision-directed detector arg(y conj d) against the grid decision, atan2f of msun, the "
+        "lock metric of the decision error with g = 1.5 E = 255) with the block defaults; exact "
+        "float32 model over the whole input; locked is the lock flag after every symbol; "
+        "snr_db_guard compares with the float64 loop (D111)",
+        phase0=0.1,
     )
 
 

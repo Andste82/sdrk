@@ -1,0 +1,76 @@
+# SDRk pipeline: PMR446 transmitter (license-free 446 MHz PMR, 12.5 kHz channels, 2.5 kHz
+# deviation) in pull mode (YAML). The same chain as nfm_transmitter.yaml with the PMR446 values.
+# Use it with the pmr446_receiver flow. The caller asks for bytes with Pipeline::pull; the audio
+# is supplied on demand.
+sdrk: 1
+name: pmr446-transmitter
+description: "Modulate 48 kHz voice audio to PMR446 narrow-band FM (2.5 kHz deviation, 12.5 kHz channels) with pre-emphasis, a peak limiter and a voice band filter and output a 2.4 MHz signed 8-bit baseband for a transmitter, in pull mode."
+# Chunks of 4800 audio samples (100 ms).
+settings:
+  precision: f32
+  max_chunk: 4800
+inputs:
+  audio:
+    type: f32
+    rate_hz: 48000
+    description: "mono audio"
+nodes:
+  # Voice band: 4th-order Butterworth low-pass at 3 kHz before the pre-emphasis, as in
+  # nfm_transmitter.yaml. Hiss above the voice band would otherwise eat the deviation.
+  voice:
+    kind: biquad
+    params:
+      cutoff_hz: 3000
+      order: 4
+      response: lowpass
+  # Pre-emphasis 530 us (ETSI EN 300 086, the value of PMR446 radios) and peak limiter at 0.85;
+  # the nfm_receiver counterpart de-emphasises with the same 530 us. See nfm_transmitter.yaml
+  # for why the limit is 0.85.
+  shape:
+    kind: preemph_limit
+    params:
+      limit: 0.85
+      preemphasis_us: 530
+  # Splatter filter: removes the harmonics the limiter makes above the voice band, so the
+  # signal stays inside its 12.5 kHz channel.
+  splatter:
+    kind: biquad
+    params:
+      cutoff_hz: 3000
+      order: 4
+      response: lowpass
+  # FM modulator at 48 kHz with the PMR446 deviation of 2.5 kHz (the 12.5 kHz channel). The
+  # receiver must use the same deviation_hz.
+  mod:
+    kind: fm_mod
+    params:
+      deviation_hz: 2500
+  # 48 kHz -> 240 kHz (ratio 5/1), complex resampler.
+  up:
+    kind: resample
+    params:
+      rate_out_hz: 240000
+  # Digital up converter: x10 to 2.4 MS/s and shift to +200 kHz. The offset keeps the signal away
+  # from the carrier leakage at the centre of a transmitter. sdrk-tx sets this frequency_hz from
+  # its --offset (default 600000 for a flow), so pass --offset 200000 to keep the value above.
+  # The HackRF is then tuned 200 kHz below the channel, for example 446.00625 MHz - 200 kHz.
+  duc:
+    kind: duc
+    params:
+      frequency_hz: 200000
+      interpolation: 10
+# Voice filter, pre-emphasis and limiter, splatter filter, modulator, resampler, up converter.
+edges:
+  - { from: audio, to: voice }
+  - { from: voice, to: shape }
+  - { from: shape, to: splatter }
+  - { from: splatter, to: mod }
+  - { from: mod, to: up }
+  - { from: up, to: duc }
+  - { from: duc, to: rf }
+# Raw signed 8-bit IQ; fill with silence when the audio source runs dry.
+outputs:
+  rf:
+    type: stream
+    format: cs8
+    underrun: zeros

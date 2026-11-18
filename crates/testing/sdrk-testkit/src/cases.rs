@@ -178,6 +178,9 @@
 //! | `gauss_noise_c32` | quick | 32 KiB |
 //! | `gauss_noise_q15` | quick | 16 KiB |
 //! | `extremes_m48` | full | 12 KiB |
+//! | `scramble_c32` | quick | about 33 KiB |
+//! | `scramble_cq15` | quick | about 17 KiB |
+//! | `extremes_m49` | full | about 9 KiB |
 //! | `backend_vs_fallback_stereo_matrix` | quick | up to 62 KiB |
 //! | `backend_vs_fallback_convert` | quick | up to 60 KiB |
 //! | `backend_vs_fallback_convert_out` | quick | up to 60 KiB |
@@ -245,13 +248,14 @@ mod m42;
 mod m43;
 mod m45;
 mod m48;
+mod m49;
 
 pub use m27::{
     CHAIN_FM_RECEIVER_AUDIO, CHAIN_FM_RECEIVER_DIGEST, CHAIN_FM_RECEIVER_SAMPLES, DIGEST_START,
     chain_fm_receiver_digest, digest_q15,
 };
 
-pub(crate) static CASES: [TestCase; 195] = [
+pub(crate) static CASES: [TestCase; 198] = [
     TestCase {
         name: "rng_known_answer",
         tier: Tier::Quick,
@@ -1226,6 +1230,21 @@ pub(crate) static CASES: [TestCase; 195] = [
         name: "extremes_m48",
         tier: Tier::Full,
         run: m48::extremes_m48,
+    },
+    TestCase {
+        name: "scramble_c32",
+        tier: Tier::Quick,
+        run: m49::scramble_c32,
+    },
+    TestCase {
+        name: "scramble_cq15",
+        tier: Tier::Quick,
+        run: m49::scramble_cq15,
+    },
+    TestCase {
+        name: "extremes_m49",
+        tier: Tier::Full,
+        run: m49::extremes_m49,
     },
 ];
 

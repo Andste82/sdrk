@@ -31,6 +31,11 @@ def add(a, b):
     return sat16(np.asarray(a, dtype=np.int64) + np.asarray(b, dtype=np.int64))
 
 
+def neg_sat(x):
+    """Saturating Q15 negation (``i16::saturating_neg``): -(-32768) = 32767, -x otherwise."""
+    return sat16(-np.asarray(x, dtype=np.int64))
+
+
 def mul(a, b):
     """Q15 multiply: sat16((a * b + (1 << 14)) >> 15)."""
     a = np.asarray(a, dtype=np.int64)
@@ -72,3 +77,4 @@ def self_test():
     re, im = cmul(-32768, -32768, -32768, -32768)
     assert int(re) == 0 and int(im) == 32767
     assert float(to_float(np.int64(-32768))) == -1.0
+    assert neg_sat(np.array([-32768, -32767, 0, 5, 32767])).tolist() == [32767, 32767, 0, -5, -32767]

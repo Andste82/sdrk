@@ -61,6 +61,7 @@ use sdrk_blocks::{
     SymbolSyncBlock, SymbolSyncConfig, Ted, ToComplexBlock, all_descriptions,
 };
 use sdrk_blocks::{PulseMatchBlock, PulseMatchConfig, PulseShapeBlock, PulseShapeConfig};
+use sdrk_blocks::{ScrambleBlock, ScrambleConfig};
 use sdrk_testkit::VecStorage;
 
 fn is_snake_case(s: &str) -> bool {
@@ -81,8 +82,8 @@ fn text_ok(what: &str, s: &str) {
 #[test]
 fn there_are_sixty_one_unique_kinds() {
     let kinds: BTreeSet<_> = all_descriptions().iter().map(|d| d.kind).collect();
-    assert_eq!(kinds.len(), 80);
-    assert_eq!(all_descriptions().len(), 80);
+    assert_eq!(kinds.len(), 81);
+    assert_eq!(all_descriptions().len(), 81);
     for kind in [
         "convert",
         "convert_out",
@@ -162,6 +163,7 @@ fn there_are_sixty_one_unique_kinds() {
         "pulse_shape",
         "pulse_match",
         "noise",
+        "scramble",
     ] {
         assert!(kinds.contains(kind), "missing kind {kind}");
     }
@@ -362,6 +364,7 @@ fn config_defaults_match_the_descriptions() {
     defaults_match("delay", |n| DelayConfig::default().get(n), &[]);
     defaults_match("nco", |n| NcoConfig::default().get(n), &[]);
     defaults_match("noise", |n| NoiseConfig::default().get(n), &[]);
+    defaults_match("scramble", |n| ScrambleConfig::default().get(n), &[]);
     defaults_match("stereo_pll", |n| StereoPllConfig::default().get(n), &[]);
     defaults_match("noise_blank", |n| NoiseBlankConfig::default().get(n), &[]);
     defaults_match("auto_notch", |n| AutoNotchConfig::default().get(n), &[]);
@@ -538,6 +541,7 @@ fn configs_accept_every_described_parameter() {
     round_trip!("biquad", BiquadConfig);
     round_trip!("nco", NcoConfig);
     round_trip!("noise", NoiseConfig);
+    round_trip!("scramble", ScrambleConfig);
     round_trip!("stereo_pll", StereoPllConfig);
     round_trip!("noise_blank", NoiseBlankConfig);
     round_trip!("auto_notch", AutoNotchConfig);
@@ -700,6 +704,14 @@ fn blocks_accept_and_report_every_described_parameter() {
     check_block_params(
         "noise",
         &mut NoiseRealBlock::<sdrk::Q15, _>::new(&NoiseConfig::default(), r, &mut s).unwrap(),
+    );
+    check_block_params(
+        "scramble",
+        &mut ScrambleBlock::<C32, _>::new(&ScrambleConfig::default(), r, &mut s).unwrap(),
+    );
+    check_block_params(
+        "scramble",
+        &mut ScrambleBlock::<CQ15, _>::new(&ScrambleConfig::default(), r, &mut s).unwrap(),
     );
     check_block_params(
         "stereo_pll",

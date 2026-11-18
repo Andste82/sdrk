@@ -13,13 +13,14 @@
 # | FFTW | 3.3.10 | GPL-2.0-or-later | x86_64 (`--enable-sse2`), aarch64 (`--enable-neon`); static, single precision | the C32 FFT reference at `sse2`, information on `neon` |
 # | KissFFT | 131.1.0 | BSD-3-Clause | all (static, `FIXED_POINT=16`) | the CQ15 FFT reference |
 # | Ne10 | 1f059a7 (last commit of the archived repository) | BSD-3-Clause | aarch64 (static, DSP module) | information next to KissFFT on `neon` |
-# | VOLK generic | 3.3.0 (the `generic` protokernels of `volk_32f_x2_interleave_32fc`, `volk_32fc_deinterleave_32f_x2`, `volk_16ic_deinterleave_16i_x2`, and their 16-bit interleave loop), see volk-generic.c | LGPL-3.0-or-later | x86_64, aarch64, wasm32 (static, one library per level) | the scalar references of the `interleave` and `deinterleave` fallbacks |
+# | VOLK generic | 3.3.0 (the `generic` protokernels of `volk_32f_x2_interleave_32fc`, `volk_32fc_deinterleave_32f_x2`, `volk_16ic_deinterleave_16i_x2`, `volk_32fc_x2_multiply_32fc`, and their 16-bit interleave loop), see volk-generic.c | LGPL-3.0-or-later | x86_64, aarch64, wasm32 (static, one library per level) | the scalar references of the `interleave` and `deinterleave` fallbacks, and with a phasor lookup of the `C32` `scramble` fallback |
 # | VOLK without FMA | 3.3.0 (the protokernels of `volk_32fc_x2_multiply_32fc` and `volk_32fc_x2_dot_prod_32fc` without fused operations: `u_avx` on x86_64, `neon` on aarch64), see volk-nofma.c | LGPL-3.0-or-later | x86_64 (`avx2`, `avx512`), aarch64 (`neon`) (static, one library per level) | information for `mul` `C32` (its gate from D287 until D326) and the gate of `dot_complex` (D821) at the levels where VOLK's dispatcher picks a fused implementation |
 # | GNU Radio `agc_cc` | main at ec1bf15 (agc.h of gr-analog), see gr-agc.c | GPL-3.0-or-later | all (static, one object file) | the reference of the `C32` `agc` |
 # | GNU Radio `costas_loop_cc` | main at ec1bf15 (costas_loop_cc_impl.cc of gr-digital, control_loop of gr-blocks), see gr-costas.c | GPL-3.0-or-later | x86_64, aarch64, wasm32 (static, one object file) | the reference of `costas_fallback` |
 # | GNU Radio `linear_equalizer` | main at ec1bf15 (linear_equalizer_impl.cc and the NLMS of adaptive_algorithm_nlms.h of gr-digital, the decision of constellation_qpsk, fir_filter_ccc of gr-filter, VOLK's generic dot products), see gr-equalizer.c | GPL-3.0-or-later | x86_64, aarch64, wasm32 (static, one object file) | the reference of `equalize_fallback` (D838) |
 # | GNU Radio `constellation_receiver_cb` and `linear_equalizer` on a `constellation_rect` | main at ec1bf15 (constellation_receiver_cb_impl.cc, the `constellation_rect` decision and `decision_maker_pe` of constellation.cc, linear_equalizer_impl.cc with adaptive_algorithm_nlms.h of gr-digital, control_loop of gr-blocks, VOLK's generic dot products), see gr-constellation.c | GPL-3.0-or-later | x86_64, aarch64, wasm32 (static, one object file) | the references of `costas_qam16_fallback`, `equalize_qam16_fallback`, `costas_qam64_fallback` and `equalize_qam64_fallback` (D1210, D1601) |
 # | GNU Radio `fastnoise_source_f` and `fastnoise_source_c` | main at ec1bf15 (fastnoise_source_impl.cc of gr-analog, xoroshiro128p.h of gnuradio-runtime; the pool filled by a stand-in for `gr::random::gasdev`), see gr-fastnoise.c | GPL-3.0-or-later | x86_64, aarch64, wasm32 (static, one object file) | the information reference of `gauss_noise` (reference does less work: one copy from a precomputed pool per sample) |
+# | GNU Radio `dvbs2_physical_cc` PL scrambling | main at ec1bf15 (the per-symbol switch on `R_n` of `general_work` in dvbs2_physical_cc_impl.cc of gr-dtv), see gr-dvbs2-plscramble.c | GPL-3.0-or-later | x86_64, aarch64, wasm32 (static, one object file) | the information reference of `scramble` at `bits = 2` (reference does different work: a switch per symbol on a precomputed `int` sequence) |
 # | GNU Radio `pwr_squelch_cc` | main at ec1bf15 (squelch_base_cc_impl.cc and pwr_squelch_cc_impl of gr-analog), see gr-squelch.c | GPL-3.0-or-later | all (static, one object file) | the reference of the `C32` `squelch` |
 # | GNU Radio `rotator` | main at ec1bf15 (rotator.h of gr-blocks, the scalar `rotate`), see gr-rotator.c | GPL-3.0-or-later | x86_64, aarch64, wasm32 (static, one object file) | the scalar reference of the `C32` `rotate` fallback |
 # | GNU Radio `frequency_modulator_fc` | main at ec1bf15 (frequency_modulator_fc_impl.cc of gr-analog with `gr::fxpt` and its sine table), see gr-fm-mod.c | GPL-3.0-or-later | x86_64, aarch64, wasm32 (static, one object file) | the scalar reference of `fm_mod` |
@@ -157,7 +158,7 @@ fi
 stamp="$prefix/refs.stamp"
 want=$( (cat "${BASH_SOURCE[0]}" "$here/volk-wasm.c" "$here/gr-agc.c" "$here/gr-squelch.c" "$here/kfr-biquad.cpp" "$here/cmsis-biquad.c" "$here/cmsis-m4-heap.c" \
     "$here/cmsis-dsp.c" "$here/gr-rotator.c" "$here/gr-fm-mod.c" "$here/gr-quad-demod.c" "$here/gr-fast-atan2f.c" "$here/gr-deemph.c" "$here/gr-crc.c" \
-    "$here/liquid-dotprod.c" "$here/liquid-dcblock.c" "$here/liquid-halfband.c" "$here/liquid-nco.c" "$here/liquid-ampmodem.c" "$here/liquid-randn.c" "$here/gr-fastnoise.c" "$here/airspy-iqconv.c" \
+    "$here/liquid-dotprod.c" "$here/liquid-dcblock.c" "$here/liquid-halfband.c" "$here/liquid-nco.c" "$here/liquid-ampmodem.c" "$here/liquid-randn.c" "$here/gr-fastnoise.c" "$here/gr-dvbs2-plscramble.c" "$here/airspy-iqconv.c" \
     "$here/volk-nofma.c" "$here/volk-generic.c" "$here/gr-costas.c" "$here/gr-equalizer.c" "$here/gr-constellation.c" "$here/liquid-channelizer.c"; echo "$platform|$cc_version|$cxx_version|$kfr_cxx_version") | sha256sum | cut -d ' ' -f 1)
 if [ -f "$stamp" ] && [ "$(cat "$stamp")" = "$want" ]; then
     exit 0
@@ -363,6 +364,13 @@ build_liquid_randn() {
 build_gr_fastnoise() {
     $cc $GR_AGC_FLAGS -c "$here/gr-fastnoise.c" -o "$work/gr-fastnoise.o"
     $ar rcs "$prefix/lib/libgrfastnoise.a" "$work/gr-fastnoise.o"
+}
+
+# The per-symbol PL scrambling switch of GNU Radio's dvbs2_physical_cc (gr-dvbs2-plscramble.c),
+# with the same generic flags as agc_cc.
+build_gr_dvbs2() {
+    $cc $GR_AGC_FLAGS -c "$here/gr-dvbs2-plscramble.c" -o "$work/gr-dvbs2-plscramble.o"
+    $ar rcs "$prefix/lib/libgrdvbs2.a" "$work/gr-dvbs2-plscramble.o"
 }
 
 # The levels of the biquad references with their instruction-set flags: those of the measured
@@ -698,7 +706,7 @@ build_volk_nofma() {
     done
 }
 
-# VOLK's generic interleave and deinterleave protokernels (volk-generic.c), one library per level:
+# VOLK's generic interleave, deinterleave and complex multiply protokernels (volk-generic.c), one library per level:
 # libvolkgeneric-<level>.a. From the unpacked VOLK release (so it runs after build_volk or
 # build_volk_wasm), compiled with the flags of the other per-level scalar references.
 build_volk_generic() {
@@ -733,6 +741,7 @@ case $platform in
         build_liquid_ampmodem
         build_liquid_randn
         build_gr_fastnoise
+        build_gr_dvbs2
         build_kfr_biquad
         build_cmsis_biquad
         build_cmsis_dsp
@@ -740,7 +749,7 @@ case $platform in
         build_airspy
         build_volk_nofma
         build_volk_generic
-        libraries=(volk fftw kissfft gragc grsquelch grfallback grcrc grcostas grequalizer grconstellation liquiddc liquidnco liquidam liquidrandn grfastnoise kfr cmsisdsp liquidhb airspy volknofma volkgeneric)
+        libraries=(volk fftw kissfft gragc grsquelch grfallback grcrc grcostas grequalizer grconstellation liquiddc liquidnco liquidam liquidrandn grfastnoise grdvbs2 kfr cmsisdsp liquidhb airspy volknofma volkgeneric)
         ;;
     aarch64)
         build_volk
@@ -759,6 +768,7 @@ case $platform in
         build_liquid_ampmodem
         build_liquid_randn
         build_gr_fastnoise
+        build_gr_dvbs2
         build_kfr_biquad
         build_cmsis_biquad
         build_cmsis_dsp
@@ -766,7 +776,7 @@ case $platform in
         build_airspy
         build_volk_nofma
         build_volk_generic
-        libraries=(volk fftw kissfft ne10 gragc grsquelch grfallback grcrc grcostas grequalizer grconstellation liquiddc liquidnco liquidam liquidrandn grfastnoise kfr cmsisdsp liquidhb airspy volknofma volkgeneric)
+        libraries=(volk fftw kissfft ne10 gragc grsquelch grfallback grcrc grcostas grequalizer grconstellation liquiddc liquidnco liquidam liquidrandn grfastnoise grdvbs2 kfr cmsisdsp liquidhb airspy volknofma volkgeneric)
         ;;
     wasm32)
         build_volk_wasm
@@ -783,13 +793,14 @@ case $platform in
         build_liquid_ampmodem
         build_liquid_randn
         build_gr_fastnoise
+        build_gr_dvbs2
         build_kfr_biquad
         build_cmsis_biquad
         build_cmsis_dsp
         build_liquid_halfband
         build_airspy
         build_volk_generic
-        libraries=(volk kissfft gragc grsquelch grfallback grcrc grcostas grequalizer grconstellation liquiddc liquidnco liquidam liquidrandn grfastnoise kfr wasisysroot emscripten cmsisdsp liquidhb airspy volkgeneric)
+        libraries=(volk kissfft gragc grsquelch grfallback grcrc grcostas grequalizer grconstellation liquiddc liquidnco liquidam liquidrandn grfastnoise grdvbs2 kfr wasisysroot emscripten cmsisdsp liquidhb airspy volkgeneric)
         ;;
     cortex-m4)
         build_cmsis_biquad
@@ -822,6 +833,7 @@ esac
             liquidnco) entry="\"liquid_dsp_nco\": { \"version\": \"$LIQUID_VERSION\", \"sha256\": \"$(sha256sum "$here/liquid-nco.c" | cut -d ' ' -f 1)\", \"build\": \"liquid-nco.c (nco_crcf, LIQUID_VCO_INTERP): $GR_AGC_FLAGS\" }" ;;
             liquidam) entry="\"liquid_dsp_ampmodem\": { \"version\": \"$LIQUID_VERSION\", \"sha256\": \"$(sha256sum "$here/liquid-ampmodem.c" | cut -d ' ' -f 1)\", \"build\": \"liquid-ampmodem.c (ampmodem, LIQUID_AMPMODEM_DSB with the carrier): $GR_AGC_FLAGS\" }" ;;
             grfastnoise) entry="\"gnuradio_fastnoise_source\": { \"version\": \"main at ec1bf15\", \"sha256\": \"$(sha256sum "$here/gr-fastnoise.c" | cut -d ' ' -f 1)\", \"build\": \"$GR_AGC_FLAGS\" }" ;;
+            grdvbs2) entry="\"gnuradio_dvbs2_plscramble\": { \"version\": \"main at ec1bf15\", \"sha256\": \"$(sha256sum "$here/gr-dvbs2-plscramble.c" | cut -d ' ' -f 1)\", \"build\": \"$GR_AGC_FLAGS\" }" ;;
             liquidrandn) entry="\"liquid_dsp_randn\": { \"version\": \"$LIQUID_VERSION\", \"sha256\": \"$(sha256sum "$here/liquid-randn.c" | cut -d ' ' -f 1)\", \"build\": \"liquid-randn.c (randnf, crandnf over libc rand()): $GR_AGC_FLAGS\" }" ;;
             liquidhb) entry="\"liquid_dsp_halfband\": { \"version\": \"$LIQUID_VERSION\", \"sha256\": \"$LIQUID_SHA256\", \"build\": \"liquid-halfband.c over resamp2.proto.c, firhilb.proto.c and the dot products of the release, liquid-channelizer.c over firpfbch2.proto.c with FFTW (not on wasm32) and with the FFT of the release: $BIQUAD_OPT, per level $(biquad_levels | tr , ' '), dot products (crcf / rrrf) $(for e in $(biquad_levels); do printf '%s=%s/%s ' "${e%%:*}" "$(liquid_simd "${e%%:*}" crcf)" "$(liquid_simd "${e%%:*}" rrrf)"; done)\" }" ;;
             airspy) entry="\"libairspy\": { \"version\": \"$AIRSPY_VERSION\", \"sha256\": \"$AIRSPY_SHA256\", \"build\": \"airspy-iqconv.c over iqconverter_float.c and iqconverter_int16.c (conversion without remove_dc; the SSE2 converter with the FreeBSD branch, x86_64 only): $BIQUAD_OPT, per level $(biquad_levels | tr , ' ')\" }" ;;
@@ -831,7 +843,7 @@ esac
             cmsisdsp) entry="\"cmsis_dsp\": { \"version\": \"$CMSISDSP_VERSION\", \"sha256\": \"$CMSISDSP_SHA256\", \"build\": \"$([ "$platform" = cortex-m4 ] && echo "CMSIS-Core, DSP extension and FPU, cmsis-biquad.c and cmsis-m4-heap.c" || echo "generic C with cmsis-biquad.c and cmsis-dsp.c"): $CMSISDSP_DEFINES $BIQUAD_OPT, per level $(biquad_levels | tr , ' ')\" }" ;;
             cmsiscore) entry="\"cmsis_core\": { \"version\": \"$CMSISCORE_VERSION\", \"sha256\": \"$CMSISCORE_SHA256\", \"build\": \"headers of CMSIS/Core/Include\" }" ;;
             volknofma) entry="\"volk_nofma\": { \"version\": \"$VOLK_VERSION\", \"sha256\": \"$(sha256sum "$here/volk-nofma.c" | cut -d ' ' -f 1)\", \"build\": \"volk-nofma.c over volk_32fc_x2_multiply_32fc.h and volk_32fc_x2_dot_prod_32fc.h ($([ "$platform" = aarch64 ] && echo neon || echo u_avx)): $BIQUAD_OPT, per level $(biquad_levels | tr , ' ' | tr ' ' '\n' | grep -E '^(avx2|avx512|neon):' | tr '\n' ' ' | sed 's/ $//')\" }" ;;
-            volkgeneric) entry="\"volk_generic\": { \"version\": \"$VOLK_VERSION\", \"sha256\": \"$(sha256sum "$here/volk-generic.c" | cut -d ' ' -f 1)\", \"build\": \"volk-generic.c over the generic protokernels of volk_32f_x2_interleave_32fc.h, volk_32fc_deinterleave_32f_x2.h and volk_16ic_deinterleave_16i_x2.h: $BIQUAD_OPT, per level $(biquad_levels | tr , ' ')\" }" ;;
+            volkgeneric) entry="\"volk_generic\": { \"version\": \"$VOLK_VERSION\", \"sha256\": \"$(sha256sum "$here/volk-generic.c" | cut -d ' ' -f 1)\", \"build\": \"volk-generic.c over the generic protokernels of volk_32f_x2_interleave_32fc.h, volk_32fc_deinterleave_32f_x2.h, volk_16ic_deinterleave_16i_x2.h and volk_32fc_x2_multiply_32fc.h: $BIQUAD_OPT, per level $(biquad_levels | tr , ' ')\" }" ;;
             ne10) entry="\"ne10\": { \"version\": \"$NE10_COMMIT\", \"sha256\": \"$NE10_SHA256\", \"build\": \"CMake Release, DSP module\" }" ;;
         esac
         printf '%s    %s' "$sep" "$entry"

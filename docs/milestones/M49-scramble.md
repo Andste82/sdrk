@@ -2,7 +2,7 @@
 
 > Plan: [PLAN.md › Phase 10](../PLAN.md#phase-10--digital-modes) · Depends on: [M38](M38-symbol-sync.md) (`sdrk_proto::prbs`; through it M30) · Next: [M50](M50-xcorr-fft.md)
 
-> **Status: planned** (written 2026-11-08, revised 2026-11-17 after an algorithm review (maintainer decision)). Kernel milestone of the DSSS/OFDM series (M48 to M56), one kernel per milestone.
+> **Status: implemented** (2026-11-18, branch `m49-scramble`, decisions D2050 to D2091, see [Status](#status)); open items I49-1 and I49-2 wait for the maintainer. Written 2026-11-08, revised 2026-11-17 after an algorithm review (maintainer decision). Kernel milestone of the DSSS/OFDM series (M48 to M56), one kernel per milestone.
 
 > **Revision 2026-11-17.** The shared conventions §A to §D cited in this file are defined in [CONVENTIONS-M49-M56.md](CONVENTIONS-M49-M56.md). The maintainer accepted every recommendation of the algorithm review of M49 to M56; the shared definitions are in the shared conventions of M49 to M56 (§A exact `±1`/`±j` operations, introduced here; §D SIMD rule). Changes in this milestone:
 > 1. **Exact quadrant part** (shared conventions §A, decision 1): the index `k` is split into a quadrant `q` and a residue `r`; `±1` and `±j` are applied by exact sign and swap operations, never by a product with the table. `b = 1` and `b = 2` need no multiplication and are lossless (in `CQ15` except a component −32768, which returns as −32767), and `k = 0` is the identity. The first draft multiplied by the table value `COS_Q15[0] = 32767`, so `k = 0` was not the identity and a `CQ15` round trip lost up to 2 LSB at `b = 1, 2, 3` (measured by the review with NumPy), not the 1 LSB the draft promised. The residue `r ≠ 0` (`b ≥ 3`) keeps the `rotate` product. The kernel no longer equals "one `rotate` step at the phase `k << (32 − b)`" bit for bit; for `r ≠ 0` it equals one `rotate` step at the residual phase followed by the quadrant map, and for `r = 0` the quadrant map of the input, with no `rotate` step (§1, §2, §3, test 2).
@@ -23,7 +23,7 @@ A "noise-like" transmitter removes the structure a detector keys on: the residua
 
 ## Order
 
-M49 depends on M30 (the `rotate` tables it reuses) and on M38 (`sdrk_proto::prbs`, which the block of §6 uses). It needs none of the other kernels of the series and can run in parallel with every milestone after M38 that does not depend on it; M50 (the PRBS polynomials of §6) and M51 (the polynomials and §A) depend on it. It introduces the exact `±1`/`±j` operations of the shared conventions §A, which M51, M52 and M54 reuse.
+M49 depends on M30 (the `rotate` tables it reuses) and on M38 (`sdrk_proto::prbs`, which the block of §6 uses). It needs none of the other kernels of the series and can run in parallel with every milestone after M38 that does not depend on it; M50 (the PRBS polynomials of §6) and M51 (the polynomials and §A) depend on it. It introduces the exact `±1`/`±j` operations of the shared conventions §A, which M51, M52 and M54 reuse. The decision numbers of this milestone are D2050 to D2099.
 
 ## Ground rules (identical in every milestone — read them completely before you start)
 
@@ -222,7 +222,7 @@ pub fn c32_chip(x: C32, b: u32) -> C32;
 
 - **Fallback `C32`:** `k`, `q`, `r` as in §1. For `r = 0`, `y = x`. For `r ≠ 0`, `c = COS_F32[i]`, `s = COS_F32[i + 3072]`, `y = (re·c − im·s, re·s + im·c)` in `f32` without FMA (two products, then the difference or sum), the product of the `rotate` `C32` fallback. Then `c32_quadrant(y, q)`.
 - **Fallback `CQ15`:** for `r ≠ 0`, `c = COS_Q15[i]`, `s = COS_Q15[i + 3072]` (both in `(0, 32767]` for `r ≠ 0`), then `cq15_mul` per component, computed in `i32` as in the `CQ15` `rotate` fallback (`sat16((xr·c − xi·s + 2^14) >> 15)`, `sat16((xr·s + xi·c + 2^14) >> 15)`; `|xr·c − xi·s| ≤ 2·32768·32767 < 2^31 − 2^14`, so it is exact). Then `cq15_quadrant(y, q)`.
-- **Public per-sample helpers:** `pub fn scramble_one_c32(x: C32, k: u32, bits: u32) -> Result<C32>` and `scramble_one_cq15` in `sdrk_core::kernels::scramble` (documented "for backend crates and tests"; `k` is the already inverted index, masked inside; `bits` outside 1 to 8 is `InvalidParameter`). The fallback loop and the vector tails of the SIMD paths call them (shared conventions §D.2).
+- **Public per-sample helpers:** `pub fn scramble_one_c32(x: C32, k: u32, bits: u32) -> Result<C32>` and `scramble_one_cq15` in `sdrk_core::kernels::scramble` (documented "for backend crates and tests"; `k` is the already inverted index, masked inside; `bits` outside 1 to 8 is `InvalidParameter`). The fallback loop and the vector tails of the SIMD paths call them (shared conventions §D.2). *(Implemented: the vector tails call them; the fallback computes the same formula inline with a per-call residue table, same bits, D2056.)*
 - **Reference:** the decomposition of §1 in exact arithmetic: `z = x` as `f64` (`CQ15`: `raw / 32768`); for `r ≠ 0`, `z = z · (cos θ_r, sin θ_r)` with `θ_r = 2π r / 2^b` from `libm::cos/sin` in `f64`; then the quadrant map in `f64` (negation and swap, exact); rounded once (`C32`: `as f32`; `CQ15`: `q15_from_f64`, so `−(−1.0) = 1.0` becomes 32767 like `q15_neg_sat`). The class is **tolerance** (§3). For `r = 0` the reference and the fallback agree bit for bit (`C32`: every non-NaN input; a NaN stays NaN in the same component).
 - **SIMD:** paths in `sdrk-backend-simd` on every level (§5), bit-identical to the fallback, including the state-free tail. `backend_for("scramble", ..)` reports the level that runs it; a level reports `fallback` only under the D321 rule of §5.
 
@@ -247,7 +247,7 @@ New file `tests/golden/sdrk_golden/cases/scramble.py`. The expected values come 
 
 | Case | Seed | Type | `bits` | `inverse` | Phase sequence | Length | Class |
 | --- | --- | --- | --- | --- | --- | --- | --- |
-| `scramble/bpsk_c32_2048` | 690 | C32 | 1 | false | PN (Python `random`, 0/1) | 2048 | `bit_exact` |
+| `scramble/bpsk_c32_2048` | 690 | C32 | 1 | false | PN (0/1 from `numpy.random.default_rng(seed)`, R8.2) | 2048 | `bit_exact` |
 | `scramble/qpsk_c32_2048` | 691 | C32 | 2 | false | 0…3 | 2048 | `bit_exact` |
 | `scramble/oct_c32_2048` | 692 | C32 | 3 | false | 0…7 | 2048 | `tolerance` |
 | `scramble/qpsk_inv_c32_2048` | 693 | C32 | 2 | true | 0…3 | 2048 | `bit_exact` |
@@ -255,7 +255,7 @@ New file `tests/golden/sdrk_golden/cases/scramble.py`. The expected values come 
 | `scramble/byte_cq15_2048` | 698 | CQ15 | 8 | false | 0…255 | 2048 | `tolerance` |
 | `scramble/byte_inv_c32_2048` | 699 | C32 | 8 | true | 0…255 | 2048 | `tolerance` |
 
-- The `tolerance` cases carry the SNR thresholds of §3 (`max_abs_err` as the `rotate` cases). The phase sequence is stored as a `u8` array in the case. The `CQ15` input of `qpsk_cq15_2048` includes components −32768 and 32767 (the saturating negation).
+- The `tolerance` cases carry the SNR thresholds of §3 as `snr_db_min` only (no `max_abs_err`; the `rotate` cases have none either). The phase sequence is stored as a `u8` array in the case. The `CQ15` input of `qpsk_cq15_2048` includes components −32768 and 32767 (the saturating negation).
 - **DVB-S2 cross-check** (noted in the comment): the standard multiplies payload symbols by `j^{R_n}` with `R_n ∈ {0,1,2,3}`, which is exactly `exp(j 2π R_n / 4)`; `scramble` with `bits = 2` and `p = R_n` reproduces it exactly in both types (the quadrant map, as GNU Radio `dvbs2_physical_cc` does it by swap and negation). The `R_n` generation from the two m-sequences is a `sdrk-proto` concern of a later milestone, not this kernel.
 
 ### 5. Cost, SIMD plan and reference rows
@@ -288,7 +288,7 @@ SIMD follows the shared conventions §D (maintainer rule 2026-11-17): every lane
 | --- | --- | --- | --- |
 | `scramble_c32_b2`, `scramble_c32_b8` (and `_fallback`) | lookup of the phasor from the same table into a buffer + VOLK `volk_32fc_x2_multiply_32fc` (`benches/refs/volk-nofma.c` and `volk-generic.c`, the builds of the other VOLK rows) | fair (same task: one complex product per sample with a table phasor); for `b2` our form does less work by design | the obvious library composition; for `b ≤ 2` the gap shows the gain of the quadrant form |
 | `scramble_cq15_b2`, `scramble_cq15_b8` (and `_fallback`) | the same lookup into a buffer + CMSIS-DSP `arm_cmplx_mult_cmplx_q15` (`benches/refs/cmsis-dsp.c`) | fair (same work); output scaling differs (CMSIS writes 3.13 format), marked | the CMSIS complex multiply is the reference on Cortex-M |
-| `scramble_cq15_b2`, `scramble_c32_b2` | GNU Radio `dvbs2_physical_cc` PL scrambling loop (new `benches/refs/gr-dvbs2-plscramble.c`, transcribed from the pinned GNU Radio version, only the per-symbol `switch` on `R_n`) | **reference does different work** (information) | it generates its own `R_n` sequence and works on `gr_complex` symbols in a frame layout; it shows a switch-based quadrant loop |
+| `scramble_cq15_b2`, `scramble_c32_b2` | GNU Radio `dvbs2_physical_cc` PL scrambling loop (new `benches/refs/gr-dvbs2-plscramble.c`, transcribed from the pinned GNU Radio version, only the per-symbol `switch` on `R_n`) | **reference does different work** (information) | it generates its own `R_n` sequence and works on `gr_complex` symbols in a frame layout; it shows a switch-based quadrant loop (implemented for `C32` only, `scramble_c32_b2_dvbs2`: GNU Radio has no 16-bit form, D2083) |
 
 **Measurement (D32, D33, D68).** The entries above and the block entry of §6 are measured in cycles with `cargo measure` on every level with a core model (reference and counter model) and counted with `cargo xtask count` on all four platforms (`--merge`); cycles are the speed measure, instruction counts stand only where no core model exists (`simd128`, Cortex-M). The D321 gate applies to every SIMD path.
 
@@ -300,9 +300,9 @@ SIMD follows the shared conventions §D (maintainer rule 2026-11-17): every lane
 | --- | --- | --- | --- | --- |
 | `scramble` | `ScrambleBlock<T>` | C32/CQ15 → same | `bits` (I64, build, 1; 1 … 8), `inverse` (Bool, build, false), `key` (Choice, build, `prbs15`; `prbs5`, `prbs7`, `prbs9`, `prbs10`, `prbs11`, `prbs15`), `key_seed` (I64, build, 1; 1 … 32767, the low `n` bits are used, zero after masking is `invalid_value`) | `scramble`; a call takes at most `SCRAMBLE_CHUNK` (256) samples (the phase bytes of the call live in the struct); no real variant (§Out) |
 
-- **`sdrk_proto::prbs` gains four polynomials** (`Poly` is `#[non_exhaustive]`; two-tap Fibonacci form of M38 §4): `Prbs5` `x^5 + x^3 + 1` (31), `Prbs7` `x^7 + x^6 + 1` (127), `Prbs10` `x^10 + x^7 + 1` (1023), `Prbs11` `x^11 + x^9 + 1` (2047). `sdrk-proto/tests/prbs_m49.rs` checks that every one has the full period `2^n − 1` (every non-zero state once) and the first 16 bits from seed 1 against the Python model in `tests/golden/sdrk_golden/prbs.py`. The spreading and search blocks of M50 to M54 take their codes from the same choices.
+- **`sdrk_proto::prbs` gains four polynomials** (`Poly` is `#[non_exhaustive]`; two-tap Fibonacci form of M38 §4): `Prbs5` `x^5 + x^3 + 1` (31), `Prbs7` `x^7 + x^6 + 1` (127), `Prbs10` `x^10 + x^7 + 1` (1023), `Prbs11` `x^11 + x^9 + 1` (2047). `sdrk-proto/tests/prbs_m49.rs` checks that every one has the full period `2^n − 1` (every non-zero state once) and the first 16 bits from seed 1 against the values of the Python model `tests/golden/sdrk_golden/prbs.py` (created by M49, because M38 delivered no Python PRBS model: the Fibonacci LFSR of `prbs.rs` with all six polynomials; the values are stored in the golden case `proto/prbs_first_bits`, the first 64 bits of every polynomial from seed 1 and from one random seed, never as hand-edited vectors). The spreading and search blocks of M50 to M54 take their codes from the same choices.
 - **PRBS stepping.** The block draws `bits` PRBS bits per sample (up to 8 LFSR steps at `bits = 8`, which can cost more than the kernel). It may step the register several bits at a time from the two-tap recurrence (a word-parallel step) if the bit sequence is the same as `Prbs::next_bit`; the per-bit loop is the specification and a test compares the two. The LFSR is a serial recursion and is not part of the kernel's SIMD plan; `scramble_block` measures it.
-- `ScrambleConfig`; no storage. Timing ratio 1, delay 0. Pipeline kind `scramble` (`c32` or `cq15`), cost 2 per sample for `bits` 1 and 2 (the quadrant map and the PRBS bits) and 5 for `bits` 3 to 8 (the four products of the residual phasor, the quadrant map and the PRBS bits), relative to `rotate` (6) (both values to be confirmed), a row in `docs/pipeline.md` and `docs/timing.md`. The rustdoc states that a public PRBS key gives spectral whitening and separation, not secrecy.
+- `ScrambleConfig`; no storage. Timing ratio 1, delay 0. Pipeline kind `scramble` (`c32` or `cq15`), cost 2 per sample for `bits` 1 and 2 (the quadrant map and the PRBS bits) and 5 for `bits` 3 to 8 (the four products of the residual phasor, the quadrant map and the PRBS bits), relative to `rotate` (6) (both values to be confirmed; measured and corrected to `7 + 7·bits` at `bits` 1 and 2 and `17 + 7·bits` at `bits` 3 to 8, which includes the PRBS key, D2090), a row in `docs/pipeline.md` and `docs/timing.md`. The rustdoc states that a public PRBS key gives spectral whitening and separation, not secrecy.
 - Common rules of M29 apply: the block calls the kernel through the facade `Sdrk`, once per `process`, limited by the output room; `timing()` takes ratio and delay from the kernel state; `storage_bytes` is exact; the struct is at most 512 bytes; the description has a summary and details, and every parameter its unit, mutability, default and range.
 
 ## Tests
@@ -331,16 +331,33 @@ R1.2 commands (`cargo xtask check` includes `cargo xtask check cycles`, D321); `
 
 ## Deliverables checklist
 
-- [ ] Kernel `scramble` (`C32`, `CQ15`): trait, the decomposition into quadrant and residue, direct table lookup, Fallback, Reference, `scramble_one_c32`/`scramble_one_cq15`, facade delegation, `backend_for`
-- [ ] The exact `±1`/`±j` helpers of §1.1 in `sdrk_core::num` (`q15_neg_sat`, `cq15_quadrant`, `c32_quadrant`, `cq15_chip`, `c32_chip`) and the module `sign` in `sdrk-backend-simd`; the section "Exact `±1` and `±j` operations" (shared conventions §A) in `docs/kernels.md`
-- [ ] Contract rows and section in `docs/kernels.md` (quadrant map plus residual `rotate` product; the round-trip bounds; the relation to `rotate`; the DVB-S2 note)
-- [ ] SIMD paths of §5 on every level (each passing D321), bit-identical to the fallback; `docs/backends.md`
-- [ ] Golden cases (seeds 690–694, 698, 699) and the Python model (`q15.py` `neg_sat`)
-- [ ] Tests 1–7 (seeds 690–699); suite cases
-- [ ] Count and cycle entries of §5 (`cargo xtask count`, `cargo measure`) with the reference rows (`benches/refs/gr-dvbs2-plscramble.c` new), `docs/performance.md`
-- [ ] Block `ScrambleBlock<T>` and kind `scramble` (§6); the polynomials `Prbs5`, `Prbs7`, `Prbs10`, `Prbs11` in `sdrk_proto::prbs` with their tests; `docs/blocks.md` (entry; reserved-name row "delivered"), `docs/pipeline.md` (cost 2 / 5, to be confirmed), `docs/timing.md`, schema, WASM kind list; count entry `scramble_block`
-- [ ] CHANGELOG, decisions log (the quadrant decomposition and the exact `±1`/`±j` operations (maintainer, 2026-11-17); the direct lookup instead of the interpolation; the `inverse` index rule; the reference definition and the tolerance class; the index-mask rule; the SIMD forms per level and any level that stays on the fallback, with its numbers; the PRBS stepping of the block)
+- [x] Kernel `scramble` (`C32`, `CQ15`): trait, the decomposition into quadrant and residue, direct table lookup, Fallback, Reference, `scramble_one_c32`/`scramble_one_cq15`, facade delegation, `backend_for`
+- [x] The exact `±1`/`±j` helpers of §1.1 in `sdrk_core::num` (`q15_neg_sat`, `cq15_quadrant`, `c32_quadrant`, `cq15_chip`, `c32_chip`) and the module `sign` in `sdrk-backend-simd`; the section "Exact `±1` and `±j` operations" (shared conventions §A) in `docs/kernels.md`
+- [x] Contract rows and section in `docs/kernels.md` (quadrant map plus residual `rotate` product; the round-trip bounds; the relation to `rotate`; the DVB-S2 note)
+- [x] SIMD paths of §5 on every level (each passing D321), bit-identical to the fallback; `docs/backends.md`
+- [x] Golden cases (seeds 690–694, 698, 699) and the Python model (`q15.py` `neg_sat`)
+- [x] Tests 1–7 (seeds 690–699); suite cases
+- [x] Count and cycle entries of §5 (`cargo xtask count`, `cargo measure`) with the reference rows (`benches/refs/gr-dvbs2-plscramble.c` new), `docs/performance.md`
+- [x] Block `ScrambleBlock<T>` and kind `scramble` (§6); the polynomials `Prbs5`, `Prbs7`, `Prbs10`, `Prbs11` in `sdrk_proto::prbs` with their tests; `docs/blocks.md` (entry; reserved-name row "delivered"), `docs/pipeline.md` (cost 2 / 5, to be confirmed; measured: `7 + 7·bits` / `17 + 7·bits`, D2090), `docs/timing.md`, schema, WASM kind list; count entry `scramble_block`
+- [x] CHANGELOG, decisions log (the quadrant decomposition and the exact `±1`/`±j` operations (maintainer, 2026-11-17); the direct lookup instead of the interpolation; the `inverse` index rule; the reference definition and the tolerance class; the index-mask rule; the SIMD forms per level and any level that stays on the fallback, with its numbers; the PRBS stepping of the block)
 
 ## Status
 
-Planned (revised 2026-11-17). Nothing is implemented.
+Implemented (2026-11-18, branch `m49-scramble`, decisions D2050 to D2091; the maintainer decisions of 2026-11-17 are D2050 and the corrections of D2054). Every item of the deliverables checklist is done; two measured gaps against fair references wait for the maintainer (I49-1, I49-2).
+
+**Done:**
+- §1 to §3: `kernels::scramble` with `Scramble<T>`, the quadrant/residue split, the direct lookup from `COS_F32`/`COS_Q15`, `Fallback` (branch-free, a per-call residue table, D2055, D2056), `Reference` (`f64`, `libm`, rounded once, D2053), `scramble_one_c32`/`scramble_one_cq15` and the backend helpers (D2057; total for every `bits`, D2058), facade delegation to the SIMD backend; contract rows, the `scramble` section and the section "Exact `±1` and `±j` operations" (§A) in `docs/kernels.md`. Round trip measured: `CQ15` at most 2 LSB at every `bits` 3 to 8 (the provisional bound is confirmed, D2064), `C32` 143.9 to 147.1 dB.
+- §1.1: `q15_neg_sat`, `cq15_quadrant`, `c32_quadrant`, `cq15_chip`, `c32_chip` in `sdrk_core::num`; the module `sign` in `sdrk-backend-simd` with public slice functions (D2065).
+- §4: the seven golden cases (seeds 690 to 694, 698, 699; corrections 1 and 2 of D2054 applied), `q15.neg_sat`, and the new model `prbs.py` with the case `proto/prbs_first_bits` (seed 696, correction 3, D2061).
+- §5: SIMD paths on every level (SSE2, SSE4.2, AVX2, AVX-512, NEON, `simd128`), both types, every `bits` 1 to 8, both directions, bit-identical to the fallback; no level dispatches to the fallback (D2065 to D2071). D321 holds on every level and both core models: the SIMD paths simulate 0.10 to 0.99 of their fallbacks' cycles, the closest `scramble_c32_b8` at `avx512` (1.99 against 2.01, D2079). Three measured attempts and one dropped attempt are logged (D2085 to D2088). Count entries on all four platforms and cycles on every level with a core model, the reference rows (VOLK compositions, CMSIS-DSP composition marked 3.13, GNU Radio `dvbs2_physical_cc` as information in the new `benches/refs/gr-dvbs2-plscramble.c`; D2080 to D2084), `docs/performance.md`, `docs/backends.md`.
+- §6: `Prbs5`, `Prbs7`, `Prbs10`, `Prbs11`, `Poly::second_tap` and the word-parallel `Prbs::next_bits` (D2072, D2074); `ScrambleBlock<T>`, `ScrambleConfig`, `SCRAMBLE_CHUNK` (D2073, D2075 to D2077); the kind `scramble` with the measured cost `7 + 7·bits` / `17 + 7·bits` instead of the spec estimate 2 / 5 (D2090); `docs/blocks.md`, `docs/pipeline.md`, `docs/timing.md`, the schema and the WASM kind list (81 kinds).
+- Tests 1 to 7 (seeds 690 to 699): `golden_m49.rs`, `kernels_m49.rs`, the suite cases `scramble_c32`, `scramble_cq15`, `extremes_m49` (`suite_m49.rs`), `prbs_m49.rs`, `scramble_blocks.rs`, `scramble_kinds.rs`, the SIMD tests `scramble.rs` and `sign.rs` (run on every level: SSE2, SSE4.2, AVX2 natively and by fixed builds, AVX-512 under SDE, NEON under QEMU, `simd128` under wasmtime).
+
+**Not met (measured gaps, waived with an open item):**
+- I49-1: the fallbacks at `bits = 8` are more than 10 % above the compositions (`C32` 1.09 to 1.72 against lookup plus VOLK generic on `sse2`, `sse4.2`, `neon`; `CQ15` 2.13 to 3.62 against the CMSIS-DSP composition, which does less work).
+- I49-2: the SIMD `C32` path at `bits = 8` is above the fair VOLK composition at `sse4.2` (1.35 / 1.19), `avx2` (1.07 / 1.14) and on the `neon` reference model (1.10); within 10 % at `avx512`.
+
+**Not done:**
+- The Cortex-M4 count of `scramble` (embedded targets on hold, D2084).
+- The AVX2 gather form was dropped on a wall-clock timing only and not measured with `cargo measure` (D2070).
+- The whole `cargo test --workspace` and the complete crate suites of the acceptance list were not run here (only the M49 targets and the gate commands); the full Cortex-M4 emulator profile (which runs `extremes_m49` on the target) was not run.

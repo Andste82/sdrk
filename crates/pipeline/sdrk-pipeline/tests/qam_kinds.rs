@@ -124,7 +124,7 @@ fn the_qam_kinds_are_registered_with_their_kernels() {
         );
     }
     assert_eq!(f.kernels_for(&raw(json!({}))), [""; 0]);
-    assert_eq!(registry.descriptions().count(), 80);
+    assert_eq!(registry.descriptions().count(), 81);
 }
 
 #[test]

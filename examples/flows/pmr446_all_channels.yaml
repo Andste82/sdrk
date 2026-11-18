@@ -1,0 +1,275 @@
+# SDRk pipeline: all eight PMR446 channels at once (YAML). The whole band 446.00625 to
+# 446.09375 MHz comes in on one RTL-SDR tuned to 446.05 MHz at 2.4 MS/s. Eight digital down
+# converters each take one channel (frequency_hz = channel - 446.05 MHz), and every channel has
+# its own squelch, FM demodulator and CTCSS high-pass. The eight audio streams are added, so
+# every active channel is heard at once; two stations talking at the same time overlap.
+sdrk: 1
+name: pmr446-all-channels
+description: "All eight PMR446 channels at once: one RTL-SDR at 446.05 MHz and 2.4 MS/s, eight channel filters (digital down converters), each with squelch, FM demodulation (2.5 kHz deviation) and CTCSS removal, summed to one 48 kHz audio output."
+settings:
+  precision: f32
+  max_chunk: 4096
+inputs:
+  rf:
+    format: cu8
+    rate_hz: 2400000
+    description: "RTL-SDR IQ, tuned to 446.05 MHz"
+nodes:
+  # Output level after the channel sum: +10 dB. Narrow-band FM at 2.5 kHz deviation comes out
+  # quiet; if the sum clips (distortion when several stations talk), lower gain_db. Set it at
+  # start with --set volume.gain_db=<dB>.
+  # to_complex and real_part wrap the real audio so that scale (complex only) can amplify it.
+  to_complex:
+    kind: to_complex
+  volume:
+    kind: scale
+    params:
+      gain_db: 10
+  real_part:
+    kind: real_part
+  ch1:
+    kind: ddc
+    params:
+      cutoff_hz: 6000
+      decimation: 50
+      frequency_hz: -43750
+      max_taps: 4096
+      transition_hz: 3000
+  gate1:
+    kind: squelch
+  demod1:
+    kind: fm_demod
+    params:
+      audio_cutoff_hz: 4000
+      deemphasis_us: 530
+      deviation_hz: 2500
+  ctcss1:
+    kind: biquad
+    params:
+      cutoff_hz: 300
+      order: 4
+      response: highpass
+  ch2:
+    kind: ddc
+    params:
+      cutoff_hz: 6000
+      decimation: 50
+      frequency_hz: -31250
+      max_taps: 4096
+      transition_hz: 3000
+  gate2:
+    kind: squelch
+  demod2:
+    kind: fm_demod
+    params:
+      audio_cutoff_hz: 4000
+      deemphasis_us: 530
+      deviation_hz: 2500
+  ctcss2:
+    kind: biquad
+    params:
+      cutoff_hz: 300
+      order: 4
+      response: highpass
+  ch3:
+    kind: ddc
+    params:
+      cutoff_hz: 6000
+      decimation: 50
+      frequency_hz: -18750
+      max_taps: 4096
+      transition_hz: 3000
+  gate3:
+    kind: squelch
+  demod3:
+    kind: fm_demod
+    params:
+      audio_cutoff_hz: 4000
+      deemphasis_us: 530
+      deviation_hz: 2500
+  ctcss3:
+    kind: biquad
+    params:
+      cutoff_hz: 300
+      order: 4
+      response: highpass
+  ch4:
+    kind: ddc
+    params:
+      cutoff_hz: 6000
+      decimation: 50
+      frequency_hz: -6250
+      max_taps: 4096
+      transition_hz: 3000
+  gate4:
+    kind: squelch
+  demod4:
+    kind: fm_demod
+    params:
+      audio_cutoff_hz: 4000
+      deemphasis_us: 530
+      deviation_hz: 2500
+  ctcss4:
+    kind: biquad
+    params:
+      cutoff_hz: 300
+      order: 4
+      response: highpass
+  ch5:
+    kind: ddc
+    params:
+      cutoff_hz: 6000
+      decimation: 50
+      frequency_hz: 6250
+      max_taps: 4096
+      transition_hz: 3000
+  gate5:
+    kind: squelch
+  demod5:
+    kind: fm_demod
+    params:
+      audio_cutoff_hz: 4000
+      deemphasis_us: 530
+      deviation_hz: 2500
+  ctcss5:
+    kind: biquad
+    params:
+      cutoff_hz: 300
+      order: 4
+      response: highpass
+  ch6:
+    kind: ddc
+    params:
+      cutoff_hz: 6000
+      decimation: 50
+      frequency_hz: 18750
+      max_taps: 4096
+      transition_hz: 3000
+  gate6:
+    kind: squelch
+  demod6:
+    kind: fm_demod
+    params:
+      audio_cutoff_hz: 4000
+      deemphasis_us: 530
+      deviation_hz: 2500
+  ctcss6:
+    kind: biquad
+    params:
+      cutoff_hz: 300
+      order: 4
+      response: highpass
+  ch7:
+    kind: ddc
+    params:
+      cutoff_hz: 6000
+      decimation: 50
+      frequency_hz: 31250
+      max_taps: 4096
+      transition_hz: 3000
+  gate7:
+    kind: squelch
+  demod7:
+    kind: fm_demod
+    params:
+      audio_cutoff_hz: 4000
+      deemphasis_us: 530
+      deviation_hz: 2500
+  ctcss7:
+    kind: biquad
+    params:
+      cutoff_hz: 300
+      order: 4
+      response: highpass
+  ch8:
+    kind: ddc
+    params:
+      cutoff_hz: 6000
+      decimation: 50
+      frequency_hz: 43750
+      max_taps: 4096
+      transition_hz: 3000
+  gate8:
+    kind: squelch
+  demod8:
+    kind: fm_demod
+    params:
+      audio_cutoff_hz: 4000
+      deemphasis_us: 530
+      deviation_hz: 2500
+  ctcss8:
+    kind: biquad
+    params:
+      cutoff_hz: 300
+      order: 4
+      response: highpass
+  sum1:
+    kind: add
+  sum2:
+    kind: add
+  sum3:
+    kind: add
+  sum4:
+    kind: add
+  sum5:
+    kind: add
+  sum6:
+    kind: add
+  sum7:
+    kind: add
+edges:
+  - { from: rf, to: ch1 }
+  - { from: ch1, to: gate1 }
+  - { from: gate1, to: demod1 }
+  - { from: demod1, to: ctcss1 }
+  - { from: rf, to: ch2 }
+  - { from: ch2, to: gate2 }
+  - { from: gate2, to: demod2 }
+  - { from: demod2, to: ctcss2 }
+  - { from: rf, to: ch3 }
+  - { from: ch3, to: gate3 }
+  - { from: gate3, to: demod3 }
+  - { from: demod3, to: ctcss3 }
+  - { from: rf, to: ch4 }
+  - { from: ch4, to: gate4 }
+  - { from: gate4, to: demod4 }
+  - { from: demod4, to: ctcss4 }
+  - { from: rf, to: ch5 }
+  - { from: ch5, to: gate5 }
+  - { from: gate5, to: demod5 }
+  - { from: demod5, to: ctcss5 }
+  - { from: rf, to: ch6 }
+  - { from: ch6, to: gate6 }
+  - { from: gate6, to: demod6 }
+  - { from: demod6, to: ctcss6 }
+  - { from: rf, to: ch7 }
+  - { from: ch7, to: gate7 }
+  - { from: gate7, to: demod7 }
+  - { from: demod7, to: ctcss7 }
+  - { from: rf, to: ch8 }
+  - { from: ch8, to: gate8 }
+  - { from: gate8, to: demod8 }
+  - { from: demod8, to: ctcss8 }
+  - { from: ctcss1, to: sum1, port: a }
+  - { from: ctcss2, to: sum1, port: b }
+  - { from: ctcss3, to: sum2, port: a }
+  - { from: ctcss4, to: sum2, port: b }
+  - { from: ctcss5, to: sum3, port: a }
+  - { from: ctcss6, to: sum3, port: b }
+  - { from: ctcss7, to: sum4, port: a }
+  - { from: ctcss8, to: sum4, port: b }
+  - { from: sum1, to: sum5, port: a }
+  - { from: sum2, to: sum5, port: b }
+  - { from: sum3, to: sum6, port: a }
+  - { from: sum4, to: sum6, port: b }
+  - { from: sum5, to: sum7, port: a }
+  - { from: sum6, to: sum7, port: b }
+  - { from: sum7, to: to_complex }
+  - { from: to_complex, to: volume }
+  - { from: volume, to: real_part }
+  - { from: real_part, to: audio }
+outputs:
+  audio:
+    type: stream
+    capacity: 16384
+    drop: error

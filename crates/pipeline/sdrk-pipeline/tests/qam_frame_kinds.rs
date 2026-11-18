@@ -62,7 +62,7 @@ fn the_kinds_are_registered_with_the_kernels_of_their_parts() {
         dec.kernels(),
         registry.factory("qam_demod").unwrap().kernels()
     );
-    assert_eq!(registry.descriptions().count(), 80);
+    assert_eq!(registry.descriptions().count(), 81);
 }
 
 #[test]

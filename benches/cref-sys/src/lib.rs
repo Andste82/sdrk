@@ -34,6 +34,9 @@
 //!   `fastnoise_source_f` and `fastnoise_source_c` (GPL-3.0-or-later), a copy from a pool of
 //!   precomputed Gaussian values per sample, the information reference of `gauss_noise`
 //!   (reference does less work).
+//! - [`gr_dvbs2`]: the per-symbol PL scrambling switch of GNU Radio's `dvbs2_physical_cc`
+//!   (GPL-3.0-or-later), the information reference of `scramble` at `bits = 2` (reference does
+//!   different work).
 //! - [`LiquidResamp2Crcf`], [`LiquidResamp2Rrrf`], [`LiquidFirhilbf`]: liquid-dsp's halfband
 //!   decimators and Hilbert transform decimator with its SIMD dot products (MIT);
 //!   [`AirspyFloat`], [`AirspyInt16`]: libairspy 1.0.10's real-to-complex converters (MIT).
@@ -54,6 +57,7 @@ mod biquad;
 mod channelizer;
 pub mod cmsis_dsp;
 pub mod gnuradio;
+pub mod gr_dvbs2;
 mod gr_fastnoise;
 mod halfband;
 pub mod liquid;

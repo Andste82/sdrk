@@ -708,6 +708,7 @@ impl Engine {
             ("rfft", F32),
             ("rotate", C32),
             ("scale", C32),
+            ("scramble", C32),
             ("squelch", C32),
             ("stereo_encode", C32),
             ("stereo_matrix", C32),

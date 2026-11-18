@@ -693,6 +693,7 @@ fn no_block_is_larger_than_512_bytes() {
         RealPartBlock,
         RealToIqBlock,
         RotateBlock,
+        ScrambleBlock,
         SsbModBlock,
         StereoMatrixBlock,
         StereoPllBlock,

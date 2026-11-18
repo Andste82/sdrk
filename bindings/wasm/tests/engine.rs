@@ -247,6 +247,9 @@ fn validate_schema_and_backends() {
     // real implementation.
     assert!(matches!(backend("gauss_noise"), "simd" | "fallback"));
     assert!(Engine::schema().contains("\"const\": \"noise\""));
+    // M49: the kernel of the kind `scramble`, and the kind itself in the schema.
+    assert!(matches!(backend("scramble"), "simd" | "fallback"));
+    assert!(Engine::schema().contains("\"const\": \"scramble\""));
     assert_eq!(backend("auto_notch"), "fallback");
     assert_eq!(backend("stereo_pll"), "fallback");
     assert_eq!(backend("preemph_limit"), "fallback");

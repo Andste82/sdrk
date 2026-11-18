@@ -35,7 +35,7 @@ END = "<!-- cycle-tables:end -->"
 LEVELS = [("x86_64", "sse2"), ("x86_64", "sse4.2"), ("x86_64", "avx2"),
           ("x86_64-avx512", "avx512"), ("aarch64", "neon")]
 # The kernel prefixes in the order of the results tables; entries of a prefix are sorted.
-PREFIXES = ["convert", "rotate", "fir", "resample", "mag", "quad_demod", "fm_mod", "squelch",
+PREFIXES = ["convert", "rotate", "scramble", "fir", "resample", "mag", "quad_demod", "fm_mod", "squelch",
             "window", "power_db", "agc", "dc_block", "deemphasis", "biquad", "dot", "scale",
             "add", "mul", "interleave", "deinterleave", "oscillate", "fft", "rfft"]
 

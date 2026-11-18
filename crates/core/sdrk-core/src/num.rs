@@ -1,6 +1,6 @@
 //! Q15 arithmetic and numeric helpers. All rules are exact (see the numeric conventions).
 
-use crate::types::{CQ15, Q15};
+use crate::types::{C32, CQ15, Q15};
 
 /// Clamps `x` to `[-32768, 32767]`.
 ///
@@ -267,6 +267,131 @@ pub(crate) fn round_sqrt(s: i64) -> i64 {
     let r = isqrt_u64(s);
     let rem = s - r * r;
     (r + u64::from(rem > r)) as i64
+}
+
+/// Saturating `Q15` negation, `i16::saturating_neg`: `-(-32768) = 32767`, `-x` otherwise.
+///
+/// The negation of the exact `±1`/`±j` operations (shared conventions §A, introduced in M49)
+/// wherever the result is stored as `Q15`. Public for backend crates and tests.
+///
+/// ```
+/// use sdrk_core::{num::q15_neg_sat, Q15};
+/// assert_eq!(q15_neg_sat(Q15(-32768)), Q15(32767));
+/// assert_eq!(q15_neg_sat(Q15(5)), Q15(-5));
+/// ```
+#[inline]
+pub const fn q15_neg_sat(x: Q15) -> Q15 {
+    Q15(x.0.saturating_neg())
+}
+
+/// The lane masks of the quadrant map `j^(q & 3)`: `(swap, negate re, negate im)` as `0` or
+/// `-1`. Swap where `q & 1`, then negate `re` where `(q ^ (q >> 1)) & 1` and `im` where
+/// `(q >> 1) & 1`; this equals the table of [`cq15_quadrant`].
+#[inline]
+const fn quadrant_masks(q: u32) -> (bool, i32, i32) {
+    let swap = q & 1 != 0;
+    let neg_re = (((q ^ (q >> 1)) & 1) as i32).wrapping_neg();
+    let neg_im = (((q >> 1) & 1) as i32).wrapping_neg();
+    (swap, neg_re, neg_im)
+}
+
+/// `x` negated (saturating) where `m = -1`, unchanged where `m = 0`: `subs(xor(x, m), m)`.
+#[inline]
+const fn q15_neg_where(x: i16, m: i32) -> i16 {
+    let m = m as i16;
+    (x ^ m).saturating_sub(m)
+}
+
+/// Multiplication by `j^(q & 3)` by exact sign and swap operations (shared conventions §A.1),
+/// never by a product. Public for backend crates and tests.
+///
+/// | `q & 3` | factor | result `(re, im)` |
+/// | --- | --- | --- |
+/// | 0 | `+1` | `(x.re, x.im)` |
+/// | 1 | `+j` | `(−x.im, x.re)` |
+/// | 2 | `−1` | `(−x.re, −x.im)` |
+/// | 3 | `−j` | `(x.im, −x.re)` |
+///
+/// Every `−` is [`q15_neg_sat`], so a component −32768 that is negated becomes 32767. The
+/// inverse of `q` is `(4 − q) & 3`; the round trip returns `x` exactly except that a
+/// component −32768 that is negated on the way (`re` for `q ∈ {2, 3}`, `im` for
+/// `q ∈ {1, 2}`) returns as −32767.
+///
+/// ```
+/// use sdrk_core::{num::cq15_quadrant, CQ15, Q15};
+/// let x = CQ15 { re: Q15(100), im: Q15(-32768) };
+/// assert_eq!(cq15_quadrant(x, 1), CQ15 { re: Q15(32767), im: Q15(100) });
+/// assert_eq!(cq15_quadrant(x, 6), CQ15 { re: Q15(-100), im: Q15(32767) });
+/// ```
+#[inline]
+pub fn cq15_quadrant(x: CQ15, q: u32) -> CQ15 {
+    let (swap, neg_re, neg_im) = quadrant_masks(q);
+    let (re, im) = if swap {
+        (x.im.0, x.re.0)
+    } else {
+        (x.re.0, x.im.0)
+    };
+    CQ15 {
+        re: Q15(q15_neg_where(re, neg_re)),
+        im: Q15(q15_neg_where(im, neg_im)),
+    }
+}
+
+/// Multiplication by `j^(q & 3)` by exact sign and swap operations (shared conventions §A.2),
+/// never by a product. Public for backend crates and tests.
+///
+/// The table of [`cq15_quadrant`] with IEEE negation (only the sign bit flips): exact for every
+/// value, `±0`, `±∞` and NaN payloads included, so `±∞` stays `±∞` (never NaN) and a
+/// component that is only swapped keeps its bits. The round trip `q`, then `(4 − q) & 3`
+/// returns `x` bit for bit.
+///
+/// ```
+/// use sdrk_core::{num::c32_quadrant, C32};
+/// let x = C32::new(1.0, f32::INFINITY);
+/// let y = c32_quadrant(x, 1);
+/// assert_eq!((y.re, y.im), (f32::NEG_INFINITY, 1.0));
+/// assert_eq!(c32_quadrant(y, 3), x);
+/// ```
+#[inline]
+pub fn c32_quadrant(x: C32, q: u32) -> C32 {
+    // On the 64 bits of the sample (`re` low, `im` high): the swap is a rotation by 32, the
+    // negations flip bit 31 (`re`) and bit 63 (`im`), so the scalar code is a handful of
+    // integer operations.
+    let v = u64::from(x.re.to_bits()) | (u64::from(x.im.to_bits()) << 32);
+    let v = if q & 1 != 0 { v.rotate_left(32) } else { v };
+    let sign_re = u64::from((q ^ (q >> 1)) & 1) << 31;
+    let sign_im = u64::from((q >> 1) & 1) << 63;
+    let v = v ^ sign_re ^ sign_im;
+    C32::new(f32::from_bits(v as u32), f32::from_bits((v >> 32) as u32))
+}
+
+/// The binary chip `1 − 2 (b & 1)` applied to `x` (shared conventions §A.1): `x` for `b = 0`,
+/// [`cq15_quadrant`]`(x, 2)` (both components negated, saturating) for `b = 1`. Public for
+/// backend crates and tests.
+///
+/// ```
+/// use sdrk_core::{num::cq15_chip, CQ15, Q15};
+/// let x = CQ15 { re: Q15(-32768), im: Q15(7) };
+/// assert_eq!(cq15_chip(x, 0), x);
+/// assert_eq!(cq15_chip(x, 1), CQ15 { re: Q15(32767), im: Q15(-7) });
+/// ```
+#[inline]
+pub fn cq15_chip(x: CQ15, b: u32) -> CQ15 {
+    cq15_quadrant(x, (b & 1) << 1)
+}
+
+/// The binary chip `1 − 2 (b & 1)` applied to `x` (shared conventions §A.2): `x` for `b = 0`,
+/// `(−x.re, −x.im)` by IEEE negation for `b = 1`. Public for backend crates and tests.
+///
+/// ```
+/// use sdrk_core::{num::c32_chip, C32};
+/// let y = c32_chip(C32::new(0.0, f32::NEG_INFINITY), 1);
+/// assert_eq!(y.re.to_bits(), (-0.0f32).to_bits());
+/// assert_eq!(y.im, f32::INFINITY);
+/// ```
+#[inline]
+pub fn c32_chip(x: C32, b: u32) -> C32 {
+    c32_quadrant(x, (b & 1) << 1)
 }
 
 /// Returns 0.0 when `|x| < 1e-30` (NaN is unchanged), otherwise `x`.

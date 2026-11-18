@@ -1,0 +1,66 @@
+# SDRk pipeline: PMR446 receiver (license-free 446 MHz PMR, 12.5 kHz channels, 2.5 kHz deviation)
+# with a squelch (YAML). The same chain as nfm_receiver.yaml with the PMR446 values. Use it with
+# the pmr446_transmitter flow, or with an RTL-SDR tuned to a PMR446 channel.
+sdrk: 1
+name: pmr446-receiver
+description: "Receive one PMR446 channel (12.5 kHz, 2.5 kHz deviation) with a power squelch, CTCSS removal and de-emphasis, and output 48 kHz audio."
+# f32 pipeline; at most 4096 samples per push.
+settings:
+  precision: f32
+  max_chunk: 4096
+# RTL-SDR recording: unsigned 8-bit IQ at 2.4 MS/s.
+inputs:
+  rf:
+    format: cu8
+    rate_hz: 2400000
+    description: "RTL-SDR IQ"
+nodes:
+  # CTCSS removal: 4th-order Butterworth high-pass at 300 Hz after the demodulator, as in
+  # nfm_receiver.yaml. Some PMR446 radios send an optional sub-audible tone; the high-pass
+  # removes it and keeps the speech.
+  ctcss:
+    kind: biquad
+    params:
+      cutoff_hz: 300
+      order: 4
+      response: highpass
+  # Quadrature FM demodulation with 530 us de-emphasis (the pmr446_transmitter pre-emphasis) and
+  # the PMR446 deviation of 2.5 kHz, which reads full scale.
+  demod:
+    kind: fm_demod
+    params:
+      audio_cutoff_hz: 4000
+      deemphasis_us: 530
+      deviation_hz: 2500
+  # Power squelch with the defaults (opens at -40 dBFS, closes 3 dB lower); it sits before the
+  # demodulator. threshold_db and hysteresis_db can be changed while the flow runs (set_param).
+  gate:
+    kind: squelch
+  # Digital down converter: decimate by 50 (2.4 MS/s -> 48 kHz) with a 6 kHz channel filter.
+  # For 12.5 kHz channels the cutoff is the deviation plus about 3 kHz of audio, so 6 kHz with a
+  # 3 kHz transition, as nfm_receiver.yaml recommends for 2.5 kHz deviation. The narrow
+  # transition needs about 2900 taps, so max_taps is 4096.
+  # frequency_hz is set by the application: sdrk-live takes it from --offset (default 250000),
+  # the loopback of sdrk-tx from its --offset (default 600000 for a flow). Pass --offset 200000
+  # to match this file and pmr446_transmitter.yaml.
+  tune:
+    kind: ddc
+    params:
+      cutoff_hz: 6000
+      decimation: 50
+      frequency_hz: 200000
+      max_taps: 4096
+      transition_hz: 3000
+# Channel filter, squelch, demodulator, CTCSS high-pass.
+edges:
+  - { from: rf, to: tune }
+  - { from: tune, to: gate }
+  - { from: gate, to: demod }
+  - { from: demod, to: ctcss }
+  - { from: ctcss, to: audio }
+# Audio samples (errors when full).
+outputs:
+  audio:
+    type: stream
+    capacity: 16384
+    drop: error

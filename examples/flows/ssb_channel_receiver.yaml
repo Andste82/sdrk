@@ -1,0 +1,100 @@
+# SDRk pipeline: single-sideband voice receiver with a simulated radio link in front of it (YAML).
+# Use it as the receiver of the loopback with the transmitter flow ssb_transmitter.yaml:
+#   sdrk-tx --loopback --mic --flow examples/flows/ssb_transmitter.yaml --rx-flow examples/flows/ssb_channel_receiver.yaml
+# The link is simulated on the 48 kHz baseband after the digital down converter: path loss, a
+# 5 ms multipath echo and a 20 Hz carrier frequency offset. The receiver then runs as ssb_receiver.yaml.
+sdrk: 1
+name: ssb-channel-receiver
+description: "Single-sideband voice receiver (USB) with a simulated link in front of it: path loss, a 5 ms echo and a 20 Hz carrier offset, squelch, AGC, demodulation and 48 kHz audio output."
+# f32 pipeline; at most 4096 samples per push.
+settings:
+  precision: f32
+  max_chunk: 4096
+# Unsigned 8-bit IQ at 2.4 MS/s, as the loopback delivers the transmitter's cs8 output.
+inputs:
+  rf:
+    format: cu8
+    rate_hz: 2400000
+    description: "IQ from the transmitter flow (loopback)"
+nodes:
+  # Digital down converter, as in ssb_receiver.yaml: decimate by 50 (2.4 MS/s -> 48 kHz) with a
+  # 4 kHz channel filter. frequency_hz stays 0: the loopback has no tuner, and the transmitter
+  # puts its carrier at 0 Hz.
+  tune:
+    kind: ddc
+    params:
+      cutoff_hz: 4000
+      decimation: 50
+      max_taps: 8192
+      transition_hz: 2000
+  # Path loss of the link: -20 dB on the direct path. gain_db can be changed while the flow runs.
+  path_loss:
+    kind: scale
+    params:
+      gain_db: -20
+  # Multipath echo: the same signal 240 samples (5 ms, a path 1.5 km longer) later.
+  echo_delay:
+    kind: delay
+    params:
+      samples: 240
+  # Echo level: -10 dB relative to the direct path.
+  echo_loss:
+    kind: scale
+    params:
+      gain_db: -10
+  # Channel adder: direct path (port a) plus echo (port b).
+  channel:
+    kind: add
+  # Carrier frequency offset of the link: a complex tone of 20 Hz, clocked by the channel output.
+  # frequency_hz can be changed while the flow runs.
+  cfo_osc:
+    kind: nco
+    params:
+      frequency_hz: 20
+  # Carrier offset: the channel signal (port a) times the tone (port b).
+  cfo:
+    kind: mul
+  # Power squelch, as in ssb_receiver.yaml: opens at -50 dBFS. The link loses 20 dB, so a speaking
+  # voice still opens it; lower the threshold if the audio is cut off between words.
+  gate:
+    kind: squelch
+    params:
+      threshold_db: -50
+  # Automatic gain control, the defaults that suit SSB.
+  agc:
+    kind: agc
+  # Single-sideband demodulator, upper sideband, matching the transmitter.
+  demod:
+    kind: ssb_demod
+    params:
+      sideband: usb
+  # Audio low-pass at 2800 Hz, as in ssb_receiver.yaml.
+  audio_filter:
+    kind: biquad
+    params:
+      cutoff_hz: 2800
+      order: 4
+      response: lowpass
+# The link sits between the down converter and the squelch. add and mul take their two inputs
+# on the named ports a and b. The channel output clocks the oscillator.
+edges:
+  - { from: rf, to: tune }
+  - { from: tune, to: path_loss }
+  - { from: tune, to: echo_delay }
+  - { from: echo_delay, to: echo_loss }
+  - { from: path_loss, to: channel, port: a }
+  - { from: echo_loss, to: channel, port: b }
+  - { from: channel, to: cfo, port: a }
+  - { from: channel, to: cfo_osc }
+  - { from: cfo_osc, to: cfo, port: b }
+  - { from: cfo, to: gate }
+  - { from: gate, to: agc }
+  - { from: agc, to: demod }
+  - { from: demod, to: audio_filter }
+  - { from: audio_filter, to: audio }
+# Audio samples (errors when full), as in ssb_receiver.yaml.
+outputs:
+  audio:
+    type: stream
+    capacity: 16384
+    drop: error

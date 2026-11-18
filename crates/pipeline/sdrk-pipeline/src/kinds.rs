@@ -38,10 +38,10 @@ use sdrk_blocks::{
     QuadDemodConfig, RESAMPLE_TUNED_PHASES, RdsDecodeBlock, RdsDecodeConfig, RdsDemodBlock,
     RdsDemodConfig, RdsEncodeBlock, RdsEncodeConfig, RealPartBlock, RealToIqBlock, ResampleBlock,
     ResampleConfig, ResampleRealBlock, RotateBlock, RotateConfig, ScaleBlock, ScaleConfig,
-    SensorDecodeBlock, SensorDecodeConfig, SensorEncodeBlock, SensorEncodeConfig, SpectrumBlock,
-    SpectrumConfig, SquelchBlock, SquelchConfig, SsbDemodBlock, SsbDemodConfig, SsbModBlock,
-    SsbModConfig, StereoMatrixBlock, StereoPllBlock, StereoPllConfig, SymbolDemapBlock,
-    SymbolDemapConfig, SymbolDemapConstellation, SymbolMapBlock, SymbolMapConfig,
+    ScrambleBlock, ScrambleConfig, SensorDecodeBlock, SensorDecodeConfig, SensorEncodeBlock,
+    SensorEncodeConfig, SpectrumBlock, SpectrumConfig, SquelchBlock, SquelchConfig, SsbDemodBlock,
+    SsbDemodConfig, SsbModBlock, SsbModConfig, StereoMatrixBlock, StereoPllBlock, StereoPllConfig,
+    SymbolDemapBlock, SymbolDemapConfig, SymbolDemapConstellation, SymbolMapBlock, SymbolMapConfig,
     SymbolMapConstellation, SymbolSyncBlock, SymbolSyncConfig, ToComplexBlock,
 };
 use sdrk_device::Layout;
@@ -2758,6 +2758,69 @@ impl Kind for NoiseKind {
                 )?)))
             )
         }
+    }
+}
+
+// ------------------------------------------------------------------- scramble
+
+pub(crate) struct ScrambleKind;
+
+impl Kind for ScrambleKind {
+    type Cfg = ScrambleConfig;
+
+    const KIND: &'static str = "scramble";
+    fn kernels() -> &'static [&'static str] {
+        &["scramble"]
+    }
+    fn default_cfg() -> ScrambleConfig {
+        ScrambleConfig::default()
+    }
+    fn set(cfg: &mut ScrambleConfig, name: &str, value: ParamValue) -> BlockResult<()> {
+        cfg.set(name, value)
+    }
+    fn plan(
+        cfg: &ScrambleConfig,
+        input: PortType,
+        rate: Rate,
+        p: Precision,
+    ) -> BlockResult<Figures> {
+        if !is_complex(input) {
+            return Err(mismatch("scramble needs complex samples"));
+        }
+        // Relative to `rotate` (6), from the simulated cycles per sample of M49 §5 on the levels
+        // with a core model: the kernel costs about 7 at `bits` 1 and 2 (the quadrant map) and
+        // 17 at `bits` 3 to 8 (the residual product as well), and the PRBS key about 7 per key
+        // bit (`scramble_block` at `bits` 8: 62 to 101).
+        let kernel = if cfg.bits <= 2 { 7.0 } else { 17.0 };
+        let cost = kernel + 7.0 * f64::from(cfg.bits);
+        with_complex!(
+            p,
+            T,
+            Ok(Figures {
+                rate_out: ScrambleBlock::<T, VecStorage>::rate_out(cfg, rate)?,
+                memory_bytes: ScrambleBlock::<T, VecStorage>::storage_bytes(cfg, rate)?,
+                cost,
+                taps: 0,
+                delay: Delay::ZERO,
+                min_input: 1,
+                output: stream(complex_port(p)),
+            })
+        )
+    }
+    fn build(
+        cfg: &ScrambleConfig,
+        _input: PortType,
+        rate: Rate,
+        p: Precision,
+        st: &mut VecStorage,
+    ) -> BlockResult<Box<dyn Node>> {
+        with_complex!(
+            p,
+            T,
+            Ok(Box::new(StreamNode::new(ScrambleBlock::<T, _>::new(
+                cfg, rate, st
+            )?)))
+        )
     }
 }
 

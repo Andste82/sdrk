@@ -1,0 +1,39 @@
+{
+  "arrays": {
+    "expected": {
+      "dtype": "cf64",
+      "file": "byte_inv_c32_2048.expected.bin",
+      "len": 2048
+    },
+    "input": {
+      "dtype": "cf32",
+      "file": "byte_inv_c32_2048.input.bin",
+      "len": 2048
+    },
+    "phase": {
+      "dtype": "u8",
+      "file": "byte_inv_c32_2048.phase.bin",
+      "len": 2048
+    }
+  },
+  "case": "byte_inv_c32_2048",
+  "format_version": 1,
+  "kernel": "scramble",
+  "notes": "C32, bits 8, inverse True: quadrant map j^q of x (r = 0) or of the f64 product with exp(j 2 pi r / 2^b) (r != 0)",
+  "params": {
+    "bits": 8,
+    "inverse": true
+  },
+  "provenance": {
+    "generator": "tests/golden/generate.py",
+    "numpy": "2.5.4",
+    "python": "3.12",
+    "scipy": "1.18.1"
+  },
+  "seed": 699,
+  "tolerance": {
+    "class": "tolerance",
+    "skip": 0,
+    "snr_db_min": 120.0
+  }
+}

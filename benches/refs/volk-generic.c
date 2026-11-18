@@ -9,6 +9,10 @@
  * - `volk_32f_x2_interleave_32fc_generic`: two float buffers to complex floats.
  * - `volk_32fc_deinterleave_32f_x2_generic`: complex floats to two float buffers.
  * - `volk_16ic_deinterleave_16i_x2_generic`: complex 16-bit integers to two 16-bit buffers.
+ * - `volk_32fc_x2_multiply_32fc_generic`: the complex product of two buffers (`*c = *a * *b` in
+ *   C99 complex arithmetic, not fused under `-ffp-contract=off`), the second half of the
+ *   reference of the `C32` `scramble` fallback (M49 §5: the phasor looked up into a buffer, then
+ *   this product).
  *
  * VOLK has no 16-bit interleave (the closest kernel, `volk_32f_x2_s32f_interleave_16ic`,
  * converts scaled floats to 16-bit integers, a conversion with a multiply and a rounding per
@@ -30,6 +34,7 @@
 #include <volk/volk_32f_x2_interleave_32fc.h>
 #include <volk/volk_32fc_deinterleave_32f_x2.h>
 #include <volk/volk_16ic_deinterleave_16i_x2.h>
+#include <volk/volk_32fc_x2_multiply_32fc.h>
 
 /* `c[i] = (re[i], im[i])` for `n` samples. */
 void sdrk_volk_generic_32f_x2_interleave_32fc(lv_32fc_t* c,
@@ -56,6 +61,15 @@ void sdrk_volk_generic_16ic_deinterleave_16i_x2(int16_t* re,
                                                 unsigned int n)
 {
     volk_16ic_deinterleave_16i_x2_generic(re, im, c, n);
+}
+
+/* `c[i] = a[i] * b[i]` (complex) for `n` samples. */
+void sdrk_volk_generic_32fc_x2_multiply_32fc(lv_32fc_t* c,
+                                             const lv_32fc_t* a,
+                                             const lv_32fc_t* b,
+                                             unsigned int n)
+{
+    volk_32fc_x2_multiply_32fc_generic(c, a, b, n);
 }
 
 /*

@@ -4735,6 +4735,72 @@
           },
           {
             "additionalProperties": false,
+            "description": "Multiplies a complex stream by unit phasors from a PRBS key, or removes them (inverse).",
+            "properties": {
+              "align": {
+                "$ref": "#/$defs/AlignMode"
+              },
+              "backend": {
+                "$ref": "#/$defs/BackendSpec"
+              },
+              "description": {
+                "maxLength": 2000,
+                "type": "string"
+              },
+              "group": {
+                "description": "The group of the node (a key of `groups`); nodes without one are in `main`.",
+                "pattern": "^[a-z][a-z0-9_]{0,63}$",
+                "type": "string"
+              },
+              "kind": {
+                "const": "scramble"
+              },
+              "params": {
+                "additionalProperties": false,
+                "properties": {
+                  "bits": {
+                    "default": 1,
+                    "description": "Phase bits per sample, 1 to 8: the phasors are the 2^bits roots of unity, and each sample takes bits bits of the PRBS key. Typical: 1 for sign scrambling; 2 for the four quadrants as DVB-S2. Build-time.",
+                    "maximum": 8,
+                    "minimum": 1,
+                    "type": "integer"
+                  },
+                  "inverse": {
+                    "default": false,
+                    "description": "Descramble: multiply by the conjugate phasors of the same key. Typical: false at the transmitter; true at the receiver. Build-time.",
+                    "type": "boolean"
+                  },
+                  "key": {
+                    "default": "prbs15",
+                    "description": "The PRBS polynomial of the key: prbs5, prbs7, prbs9, prbs10, prbs11 or prbs15 (period 2^n - 1 bits). Typical: prbs15; a shorter key repeats after 2^n - 1 bits. Build-time.",
+                    "enum": [
+                      "prbs5",
+                      "prbs7",
+                      "prbs9",
+                      "prbs10",
+                      "prbs11",
+                      "prbs15"
+                    ],
+                    "type": "string"
+                  },
+                  "key_seed": {
+                    "default": 1,
+                    "description": "Initial register of the PRBS key, 1 to 32767; only the low n bits are used and they must not all be zero. Typical: 1; any other value starts the key elsewhere. Build-time.",
+                    "maximum": 32767,
+                    "minimum": 1,
+                    "type": "integer"
+                  }
+                },
+                "type": "object"
+              }
+            },
+            "required": [
+              "kind"
+            ],
+            "type": "object"
+          },
+          {
+            "additionalProperties": false,
             "description": "Decodes the pulse trains of band_pulse_detect into sensor readings as JSON text packets.",
             "properties": {
               "align": {

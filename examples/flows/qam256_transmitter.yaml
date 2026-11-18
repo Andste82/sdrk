@@ -1,0 +1,64 @@
+# SDRk pipeline: 256-QAM packet transmitter in pull mode (YAML twin of qam256_transmitter.json).
+# The caller asks for bytes with Pipeline::pull; the packets are supplied on demand by a packet
+# source. Use it with the qam256_receiver flow.
+sdrk: 1
+name: qam256-transmitter
+description: "Frame packets, modulate them as 256-QAM at 25 kBd with a root-raised-cosine pulse and output a 1 MHz signed 16-bit baseband for a transmitter, in pull mode."
+# f32 pipeline; at most 64 packets per call of the packet source. The buffers behind the
+# encoder are sized for the frames of max_chunk packets (up to 2112 bits each).
+settings:
+  precision: f32
+  max_chunk: 64
+inputs:
+  # A packet input: its rate_hz is the rate of the encoded stream, one bit per sample. 256-QAM
+  # carries eight bits per symbol, so 200000 bit/s are 25000 symbols per second.
+  msg:
+    type: packets
+    rate_hz: 200000
+    description: "Packets to send, up to 253 bytes each"
+nodes:
+  # Up converter: x5 from 200 kHz to 1 MS/s with the carrier at 0 Hz (set frequency_hz to move
+  # it). The image filter passes the 256-QAM band (25 kBd times 1.35 = 33.75 kHz wide,
+  # +-16.9 kHz) up to 20 kHz and stops from 80 kHz.
+  duc:
+    kind: duc
+    params:
+      cutoff_hz: 50000
+      interpolation: 5
+      transition_hz: 60000
+  # Level: -6 dB. The points of qam_mod have unit average power (the corners at 1.15 in I and
+  # Q for 256-QAM), and the overlapping pulses of a roll-off of 0.35 peak at about 1.5 in I or Q; at
+  # -6 dB the peaks stay at about 0.75, inside the cs16 range (full scale 1), with no clipping.
+  level:
+    kind: scale
+    params:
+      gain_db: -6
+  # Framing and modulation in one block (qam_frame_encode = frame_encode -> qam_mod, M44.1).
+  # Framing: 4 preamble bytes 0x55, the sync word 0x1ACFFC1D, length, payload and CRC-16.
+  # Between packets the bits of the PN9 sequence (idle pn9): random-looking 256-QAM symbols on
+  # which the receiver's timing loop, frequency acquisition and blind equalizer keep training
+  # while there is nothing to send (idle preamble would be one constant symbol, bits 01010101
+  # of 0x55). Modulation: Gray mapping (the first four bits of a symbol select the in-phase
+  # level, the last four the quadrature level), root-raised-cosine pulse with roll-off 0.35
+  # over 10 symbols, 8 samples per symbol (200 kHz).
+  tx:
+    kind: qam_frame_encode
+    params:
+      constellation: qam256
+      idle: pn9
+      preamble_bytes: 4
+      rolloff: 0.35
+      samples_per_symbol: 8
+      span: 10
+edges:
+  - { from: msg, to: tx }
+  - { from: tx, to: level }
+  - { from: level, to: duc }
+  - { from: duc, to: rf }
+# Raw signed 16-bit IQ; underrun zeros is the default of raw outputs (a packet input never
+# underruns: qam_frame_encode sends its idle signal instead).
+outputs:
+  rf:
+    type: stream
+    format: cs16
+    underrun: zeros

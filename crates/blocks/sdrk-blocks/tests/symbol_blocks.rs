@@ -383,7 +383,8 @@ fn symbol_demap_follows_the_table_at_corner_values() {
         let want: Vec<f32> = CORNERS.iter().map(|x| s * x).collect();
         same_f32(&want, &out[..CORNERS.len()], "real");
         assert_eq!(out[CORNERS.len()], 7.0, "real wrote past the symbols");
-        // bpsk: s re; qpsk: s re, s im
+        // bpsk: s re; qpsk: s (re sqrt 2), s (im sqrt 2), the grid units of every square QAM
+        // (M44.2, D1515; sqrt 2 rounded once to f32)
         let symbols: Vec<C32> = CORNERS
             .iter()
             .flat_map(|&re| CORNERS.iter().map(move |&im| C32::new(re, im)))
@@ -398,7 +399,11 @@ fn symbol_demap_follows_the_table_at_corner_values() {
         let mut out = vec![0.0f32; 2 * symbols.len()];
         let p = b.process(&symbols, &mut out).unwrap();
         assert_eq!((p.consumed, p.produced), (symbols.len(), 2 * symbols.len()));
-        let want: Vec<f32> = symbols.iter().flat_map(|c| [s * c.re, s * c.im]).collect();
+        let r2 = core::f32::consts::SQRT_2;
+        let want: Vec<f32> = symbols
+            .iter()
+            .flat_map(|c| [s * (c.re * r2), s * (c.im * r2)])
+            .collect();
         same_f32(&want, &out, "qpsk");
     }
     // NaN passes through as NaN.
@@ -406,7 +411,7 @@ fn symbol_demap_follows_the_table_at_corner_values() {
     let mut out = [0.0f32; 2];
     b.process(&[C32::new(f32::NAN, -1.0)], &mut out).unwrap();
     assert!(out[0].is_nan());
-    assert_eq!(out[1], -1.0);
+    assert_eq!(out[1], -core::f32::consts::SQRT_2);
 }
 
 /// The QPSK bit order: bit 0 from `re`, bit 1 from `im` (Gray), so the four quadrants give

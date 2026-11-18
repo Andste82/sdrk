@@ -23,7 +23,8 @@
     clippy::cast_precision_loss,
     clippy::cast_possible_truncation,
     clippy::cast_sign_loss,
-    clippy::too_many_lines
+    clippy::too_many_lines,
+    clippy::large_stack_frames
 )]
 
 use num_complex::Complex64;
@@ -87,6 +88,9 @@ fn transmit(order: u32) -> Sent {
             samples_per_symbol: SPS,
             ..sdrk_blocks::QamModConfig::default()
         },
+        // The signal of M44.1: no scrambler (M44.2 added it, D1531).
+        scrambler: sdrk_blocks::Scrambler::Off,
+        ..QamFrameEncodeConfig::default()
     };
     let rate = Rate::hz(SYMBOL_RATE * bps(order) as u64).unwrap();
     let mut tx = QamFrameEncodeBlock::new(&cfg, rate, &mut VecStorage).unwrap();
@@ -147,6 +151,7 @@ fn channel(sent: &[C32], order: u32, esn0_db: f64, seed: u64) -> Vec<C32> {
 fn config(order: u32, frame_timeout: usize) -> QamFrameDecodeConfig {
     let mut cfg = QamFrameDecodeConfig {
         frame_timeout,
+        scrambler: sdrk_blocks::Scrambler::Off,
         ..QamFrameDecodeConfig::default()
     };
     cfg.demod.constellation = c_of(order);

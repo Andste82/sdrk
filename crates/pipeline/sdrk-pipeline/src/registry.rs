@@ -11,19 +11,19 @@ use crate::analysis;
 use crate::error::{Error, Result};
 use crate::kinds::{
     AddKind, AdsbDecodeKind, AdsbParseKind, AfcKind, AgcKind, AmDemodKind, AmModKind,
-    AutoNotchKind, BandPulseDetectKind, BiquadKind, ChannelSelectKind, ChannelizeKind, ConvertKind,
-    ConvertOutKind, CostasKind, DcBlockKind, DdcKind, DecimateKind, DeemphasisKind, DelayKind,
-    DucKind, EqualizeKind, Factory, FirKind, FmDemodKind, FmModKind, FmStereoDemodKind,
-    FmStereoModKind, FmStereoRdsModKind, FrameDecodeKind, FrameEncodeKind, FskDemodKind,
-    FskModKind, HalfbandDecimateKind, HdlcDecodeKind, HdlcEncodeKind, ImagPartKind,
-    InterpolateKind, IqOffsetKind, Kind, MagKind, MakeComplexKind, MorseDecodeKind,
-    MorseEncodeKind, MulKind, NcoKind, NoiseBlankKind, NoiseKind, OokDemodKind, OokModKind,
-    PreemphLimitKind, PskDemodKind, PskModKind, PulseKeyKind, PulseMatchKind, PulseShapeKind,
-    QamAcquireKind, QamDemodKind, QamFrameDecodeKind, QamFrameEncodeKind, QamModKind,
-    QuadDemodKind, RdsDecodeKind, RdsDemodKind, RdsEncodeKind, RealPartKind, RealToIqKind,
-    ResampleKind, RotateKind, ScaleKind, ScrambleKind, SensorDecodeKind, SensorEncodeKind,
-    SpectrumKind, SquelchKind, SsbDemodKind, SsbModKind, StereoMatrixKind, StereoPllKind,
-    SymbolDemapKind, SymbolMapKind, SymbolSyncKind, ToComplexKind,
+    AutoNotchKind, BandPulseDetectKind, BiquadKind, BitDescrambleKind, BitScrambleKind,
+    ChannelSelectKind, ChannelizeKind, ConvertKind, ConvertOutKind, CostasKind, DcBlockKind,
+    DdcKind, DecimateKind, DeemphasisKind, DelayKind, DucKind, EqualizeKind, Factory, FirKind,
+    FmDemodKind, FmModKind, FmStereoDemodKind, FmStereoModKind, FmStereoRdsModKind,
+    FrameDecodeKind, FrameEncodeKind, FskDemodKind, FskModKind, HalfbandDecimateKind,
+    HdlcDecodeKind, HdlcEncodeKind, ImagPartKind, InterpolateKind, IqOffsetKind, Kind, MagKind,
+    MakeComplexKind, MorseDecodeKind, MorseEncodeKind, MulKind, NcoKind, NoiseBlankKind, NoiseKind,
+    OokDemodKind, OokModKind, PreemphLimitKind, PskDemodKind, PskModKind, PulseKeyKind,
+    PulseMatchKind, PulseShapeKind, QamAcquireKind, QamDemodKind, QamFrameDecodeKind,
+    QamFrameEncodeKind, QamModKind, QuadDemodKind, RdsDecodeKind, RdsDemodKind, RdsEncodeKind,
+    RealPartKind, RealToIqKind, ResampleKind, RotateKind, ScaleKind, ScrambleKind,
+    SensorDecodeKind, SensorEncodeKind, SpectrumKind, SquelchKind, SsbDemodKind, SsbModKind,
+    StereoMatrixKind, StereoPllKind, SymbolDemapKind, SymbolMapKind, SymbolSyncKind, ToComplexKind,
 };
 use crate::model::{PipelineSpec, PortName, Precision};
 use crate::node::Node;
@@ -365,6 +365,8 @@ impl Registry {
         register::<PulseMatchKind>(&mut factories);
         register::<NoiseKind>(&mut factories);
         register::<ScrambleKind>(&mut factories);
+        register::<BitScrambleKind>(&mut factories);
+        register::<BitDescrambleKind>(&mut factories);
         Self { factories }
     }
 

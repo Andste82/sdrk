@@ -10,6 +10,8 @@ pub mod am_mod;
 pub mod auto_notch;
 pub mod band_pulse_detect;
 pub mod biquad;
+pub mod bit_descramble;
+pub mod bit_scramble;
 pub mod channel_select;
 pub mod channelize;
 #[cfg(test)]

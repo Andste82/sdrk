@@ -366,12 +366,13 @@ fn qam16_flows_carry_1000_packets_through_multipath_noise_and_a_carrier_offset()
 }
 
 /// The transmitter flow before M44.1: the pair `frame_encode` -> `qam_mod` with the parameters of
-/// the `qam_frame_encode` node.
+/// the `qam_frame_encode` node (whose `scrambler` is `none`, so the pair is the whole chain).
 fn pair_transmitter() -> String {
     let mut spec: serde_json::Value = serde_json::from_str(&flow("qam16_transmitter")).unwrap();
     let nodes = spec["nodes"].as_object_mut().unwrap();
     let tx = nodes.remove("tx").unwrap();
     let p = &tx["params"];
+    assert_eq!(p["scrambler"], serde_json::json!("none"));
     nodes.insert(
         "enc".to_string(),
         serde_json::json!({ "kind": "frame_encode", "params": {
@@ -401,7 +402,14 @@ fn soft_receiver() -> String {
     let mut demod = nodes.remove("rx").unwrap();
     demod["kind"] = serde_json::json!("qam_demod");
     let params = demod["params"].as_object_mut().unwrap();
-    for name in ["frame_timeout", "max_sync_errors", "emit_bad", "whitening"] {
+    for name in [
+        "frame_timeout",
+        "max_sync_errors",
+        "emit_bad",
+        "whitening",
+        "scrambler",
+        "polynomial",
+    ] {
         params.remove(name);
     }
     nodes.insert("demod".to_string(), demod);

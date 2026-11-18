@@ -1,8 +1,9 @@
 //! M44.1 §7: the composites `qam_frame_encode` and `qam_frame_decode` and the frame watch.
 //!
-//! - `qam_frame_encode` equals the pair `frame_encode` -> `qam_mod` bit for bit, whole and in 20
-//!   cut plans of packets, idle calls and output room (seed 851), for 16-QAM and 64-QAM, every
-//!   `idle` and both whitenings.
+//! - `qam_frame_encode` equals the pair `frame_encode` -> `qam_mod` bit for bit with `scrambler`
+//!   `none`, and the chain `frame_encode` -> `bit_scramble` -> `qam_mod` with the scrambler (M44.2),
+//!   whole and in 20 cut plans of packets, idle calls and output room (seed 851), for 16-QAM and
+//!   64-QAM (and 256-QAM with the scrambler), every `idle` and both whitenings.
 //! - The flat parameters of both composites through their `ParamMap`, read-only at run time.
 //! - `FrameWatch` (test 6 for §7): scripted frames, the deadline, the restart, the frames that
 //!   end before a restart or after the timeout ran out.
@@ -10,15 +11,17 @@
     clippy::unwrap_used,
     clippy::indexing_slicing,
     clippy::cast_possible_truncation,
-    clippy::float_cmp
+    clippy::float_cmp,
+    clippy::too_many_lines
 )]
 
 use sdrk::{C32, Rate};
 use sdrk_blocks::SymbolMapConstellation;
 use sdrk_blocks::{
-    Block, Error, FrameEncodeBlock, FrameEncodeConfig, FrameIdle, FrameWatch, Packet, ParamValue,
-    QAM_FRAME_DECODE_PARAMS, QAM_FRAME_ENCODE_PARAMS, QamFrameDecodeBlock, QamFrameDecodeConfig,
-    QamFrameEncodeBlock, QamFrameEncodeConfig, QamModBlock, QamModConfig,
+    BitScrambleBlock, Block, Error, FrameEncodeBlock, FrameEncodeConfig, FrameIdle, FrameWatch,
+    Packet, ParamValue, QAM_FRAME_DECODE_PARAMS, QAM_FRAME_ENCODE_PARAMS, QamFrameDecodeBlock,
+    QamFrameDecodeConfig, QamFrameEncodeBlock, QamFrameEncodeConfig, QamModBlock, QamModConfig,
+    Scrambler,
 };
 use sdrk_proto::PacketFlags;
 use sdrk_proto::frame::Whitening;
@@ -52,12 +55,16 @@ fn script(seed: u64) -> Vec<Step> {
     steps
 }
 
-/// The pair by hand: the bits of `frame_encode` into a queue, `qam_mod` takes whole symbols. An
-/// idle step of `n` samples gives the idle bits of the whole symbols of `n` samples that the
+/// The pair (the chain with the scrambler) by hand: the bits of `frame_encode` (through
+/// `bit_scramble` for `scrambler` `multiplicative`) into a queue, `qam_mod` takes whole symbols.
+/// An idle step of `n` samples gives the idle bits of the whole symbols of `n` samples that the
 /// waiting bits do not fill.
 fn pair(cfg: &QamFrameEncodeConfig, steps: &[Step]) -> Vec<C32> {
     let rate = Rate::hz(4800).unwrap();
     let mut enc = FrameEncodeBlock::new(&cfg.frame, rate, &mut VecStorage).unwrap();
+    let mut scramble = (cfg.scrambler == Scrambler::Multiplicative)
+        .then(|| BitScrambleBlock::new(&cfg.scramble(), rate, &mut VecStorage).unwrap());
+    let mut scrambled = vec![0.0f32; 1 << 16];
     let mut qam = QamModBlock::new(&cfg.qam, rate, &mut VecStorage).unwrap();
     let (bps, sps) = (cfg.qam.bits_per_symbol(), cfg.qam.samples_per_symbol);
     let mut bits: Vec<f32> = Vec::new();
@@ -74,18 +81,41 @@ fn pair(cfg: &QamFrameEncodeConfig, steps: &[Step]) -> Vec<C32> {
             Step::Packets(packets) => {
                 let p = enc.process(packets, &mut buf).unwrap();
                 assert_eq!(p.consumed, packets.len());
-                bits.extend_from_slice(&buf[..p.produced]);
+                bits.extend_from_slice(scramble_bits(
+                    &mut scramble,
+                    &buf[..p.produced],
+                    &mut scrambled,
+                ));
                 modulate(&mut bits, &mut out);
             }
             Step::Idle(n) => {
                 let want = (n / sps * bps).saturating_sub(bits.len());
                 let p = enc.process(&[], &mut buf[..want]).unwrap();
-                bits.extend_from_slice(&buf[..p.produced]);
+                bits.extend_from_slice(scramble_bits(
+                    &mut scramble,
+                    &buf[..p.produced],
+                    &mut scrambled,
+                ));
                 modulate(&mut bits, &mut out);
             }
         }
     }
     out
+}
+
+/// The bits through the scrambler of the chain (unchanged without it).
+fn scramble_bits<'a>(
+    scramble: &mut Option<BitScrambleBlock<VecStorage>>,
+    bits: &'a [f32],
+    room: &'a mut [f32],
+) -> &'a [f32] {
+    match scramble {
+        Some(s) => {
+            let p = s.process(bits, &mut room[..bits.len()]).unwrap();
+            &room[..p.produced]
+        }
+        None => bits,
+    }
 }
 
 fn composite(cfg: &QamFrameEncodeConfig, steps: &[Step], plans: Option<&mut Pcg32>) -> Vec<C32> {
@@ -133,13 +163,35 @@ fn drain_symbols(tx: &mut QamFrameEncodeBlock<VecStorage>, buf: &mut [C32], bps:
 #[test]
 fn qam_frame_encode_equals_the_pair() {
     let mut plans = Pcg32::new(851, 11);
-    for (order, sps, idle, whitening) in [
-        (16, 8, FrameIdle::Pn9, Whitening::None),
-        (64, 4, FrameIdle::Pn9, Whitening::Pn9),
-        (16, 3, FrameIdle::Zero, Whitening::None),
-        (64, 5, FrameIdle::Preamble, Whitening::None),
+    for (order, sps, idle, whitening, scrambler) in [
+        (16, 8, FrameIdle::Pn9, Whitening::None, Scrambler::Off),
+        (64, 4, FrameIdle::Pn9, Whitening::Pn9, Scrambler::Off),
+        (16, 3, FrameIdle::Zero, Whitening::None, Scrambler::Off),
+        (64, 5, FrameIdle::Preamble, Whitening::None, Scrambler::Off),
+        (
+            16,
+            8,
+            FrameIdle::Pn9,
+            Whitening::None,
+            Scrambler::Multiplicative,
+        ),
+        (
+            64,
+            5,
+            FrameIdle::Preamble,
+            Whitening::Pn9,
+            Scrambler::Multiplicative,
+        ),
+        (
+            256,
+            4,
+            FrameIdle::Zero,
+            Whitening::None,
+            Scrambler::Multiplicative,
+        ),
     ] {
         let cfg = QamFrameEncodeConfig {
+            scrambler,
             frame: FrameEncodeConfig {
                 preamble_bytes: 3,
                 idle,
@@ -150,6 +202,7 @@ fn qam_frame_encode_equals_the_pair() {
                 samples_per_symbol: sps,
                 ..QamModConfig::default()
             },
+            ..QamFrameEncodeConfig::default()
         };
         let steps = script(u64::from(order) + sps as u64);
         let want = pair(&cfg, &steps);
@@ -190,6 +243,8 @@ fn the_flat_parameters_go_through_the_param_maps() {
         ("samples_per_symbol", ParamValue::I64(5)),
         ("rolloff", ParamValue::F64(0.25)),
         ("span", ParamValue::I64(8)),
+        ("scrambler", ParamValue::Choice(1)),
+        ("polynomial", ParamValue::Choice(3)),
     ] {
         assert!(QAM_FRAME_ENCODE_PARAMS.path(name).is_some());
         cfg.set(name, value).unwrap();
@@ -223,6 +278,8 @@ fn the_flat_parameters_go_through_the_param_maps() {
         ("emit_bad", ParamValue::Bool(true)),
         ("whitening", ParamValue::Choice(1)),
         ("frame_timeout", ParamValue::I64(8192)),
+        ("scrambler", ParamValue::Choice(1)),
+        ("polynomial", ParamValue::Choice(2)),
     ] {
         cfg.set(name, value).unwrap();
         assert_eq!(cfg.get(name).unwrap(), value, "{name}");
@@ -244,12 +301,17 @@ fn the_flat_parameters_go_through_the_param_maps() {
         cfg.set("frame_timeout", ParamValue::I64(-1)),
         Err(Error::OutOfRange { .. })
     ));
-    // `constellation` reaches the demodulator and the decoder (M44.1.1, D1824)
+    // `constellation` reaches the demodulator and the decoder (M44.1.1, D1824) and the
+    // descrambler (M44.2, D1531)
     assert_eq!(
         QAM_FRAME_DECODE_PARAMS
             .paths("constellation")
             .collect::<Vec<_>>(),
-        ["0.constellation", "1.constellation"]
+        ["0.constellation", "1.constellation", "3.constellation"]
+    );
+    assert_eq!(
+        cfg.descramble().get("constellation"),
+        Ok(ParamValue::Choice(4))
     );
     assert_eq!(cfg.frame.get("constellation"), Ok(ParamValue::Choice(4)));
     assert_eq!(cfg.decoder().bits_per_symbol(), 6);
@@ -263,12 +325,19 @@ fn the_flat_parameters_go_through_the_param_maps() {
         (got.demod, got.decoder(), got.frame_timeout),
         (cfg.demod, cfg.decoder(), cfg.frame_timeout)
     );
+    assert_eq!(
+        (got.scrambler, got.descramble()),
+        (cfg.scrambler, cfg.descramble())
+    );
+    assert!(rx.descrambler().is_none());
     for name in [
         "constellation",
         "equalizer_taps",
         "max_sync_errors",
         "whitening",
         "frame_timeout",
+        "scrambler",
+        "polynomial",
     ] {
         assert_eq!(rx.param(name).unwrap(), cfg.get(name).unwrap(), "{name}");
     }
@@ -305,7 +374,7 @@ fn the_frame_watch_follows_the_frames() {
     assert_eq!(off.deadline(), None);
 }
 
-/// The constellation of a numeric order of the tables of this file (2, 4, 8, 16 or 64).
+/// The constellation of a numeric order of the tables of this file (2, 4, 8, 16, 64 or 256).
 fn c_of(order: u32) -> SymbolMapConstellation {
     match order {
         2 => SymbolMapConstellation::Bpsk,
@@ -313,6 +382,7 @@ fn c_of(order: u32) -> SymbolMapConstellation {
         8 => SymbolMapConstellation::Psk8,
         16 => SymbolMapConstellation::Qam16,
         64 => SymbolMapConstellation::Qam64,
+        256 => SymbolMapConstellation::Qam256,
         other => unreachable!("no constellation of the order {other}"),
     }
 }

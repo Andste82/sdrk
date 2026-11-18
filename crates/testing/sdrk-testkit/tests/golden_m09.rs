@@ -328,6 +328,8 @@ fn blocks_cases_are_present() {
             "am_demod_c32_dec4_gap",
             "am_demod_cq15",
             "am_demod_cq15_dec4_gap",
+            "bit_scramble_x23_x18_bpsk_f32",
+            "bit_scramble_x23_x18_qam256_f32",
             "ddc_c32_fs2m4_f600k_d10",
             "fm_demod_c32",
             "fsk_demod_2fsk_f32",

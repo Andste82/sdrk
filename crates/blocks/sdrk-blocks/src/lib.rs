@@ -66,6 +66,8 @@ pub use blocks::band_pulse_detect::{
     BAND_PULSE_WARMUP, BandPulseDetectBlock, BandPulseDetectConfig, PulseModulation,
 };
 pub use blocks::biquad::{BiquadBlock, BiquadConfig, BiquadElem, BiquadRealBlock};
+pub use blocks::bit_descramble::BitDescrambleBlock;
+pub use blocks::bit_scramble::{BitPolynomial, BitScrambleBlock, BitScrambleConfig, Scrambler};
 pub use blocks::channel_select::{ChannelSelectBlock, ChannelSelectConfig};
 pub use blocks::channelize::{ChannelizeBlock, ChannelizeConfig};
 pub use blocks::convert::{ConvertBlock, ConvertConfig, ConvertRealBlock};
@@ -125,8 +127,8 @@ pub use blocks::qam_acquire::{
 };
 pub use blocks::qam_demod::{
     QAM_ACQUISITION_CHECK, QAM_ACQUISITION_VERIFY_TOLERANCE, QAM_DEMOD_CHUNK, QAM_DEMOD_PARAMS,
-    QAM_DENSE_SYNC_BW, QAM_HANDOVER_SYMBOLS, QAM_SYNC_BW, QAM_TRACKER_HOLD_BW, QAM_TRACKER_PULL_BW, QAM_WATCH_CHECKS,
-    QAM_WATCH_GAP_WINDOWS, QAM_WATCH_WEIGHT_ENERGY_4, QAM_WATCH_WEIGHT_ENERGY_16,
+    QAM_DENSE_SYNC_BW, QAM_HANDOVER_SYMBOLS, QAM_SYNC_BW, QAM_TRACKER_HOLD_BW, QAM_TRACKER_PULL_BW,
+    QAM_WATCH_CHECKS, QAM_WATCH_GAP_WINDOWS, QAM_WATCH_WEIGHT_ENERGY_4, QAM_WATCH_WEIGHT_ENERGY_16,
     QAM_WATCH_WEIGHT_ENERGY_64, QAM_WATCH_WEIGHT_ENERGY_256, QAM_WATCH_WEIGHT_ENERGY_1024,
     QAM256_ACQUISITION_CHECK, QAM1024_ACQUISITION_CHECK, QamDemodBlock, QamDemodConfig,
     QamDemodLock, qam_acquisition_check, qam_sync_bw, qam_watch_weight_floor,

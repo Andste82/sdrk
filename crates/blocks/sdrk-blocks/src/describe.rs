@@ -350,7 +350,7 @@ pub enum ParamKind {
 /// assert!(kinds.contains(&"resample"));
 /// ```
 pub fn all_descriptions() -> &'static [&'static BlockDescription] {
-    static ALL: [&BlockDescription; 81] = [
+    static ALL: [&BlockDescription; 83] = [
         &crate::blocks::convert::DESCRIPTION,
         &crate::blocks::convert_out::DESCRIPTION,
         &crate::blocks::scale::DESCRIPTION,
@@ -432,6 +432,8 @@ pub fn all_descriptions() -> &'static [&'static BlockDescription] {
         &crate::blocks::pulse_match::DESCRIPTION,
         &crate::blocks::noise::DESCRIPTION,
         &crate::blocks::scramble::DESCRIPTION,
+        &crate::blocks::bit_scramble::DESCRIPTION,
+        &crate::blocks::bit_descramble::DESCRIPTION,
     ];
     &ALL
 }

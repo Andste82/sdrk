@@ -1252,6 +1252,124 @@
           },
           {
             "additionalProperties": false,
+            "description": "Undoes bit_scramble: the self-synchronizing (multiplicative) descrambler of a soft-bit stream.",
+            "properties": {
+              "align": {
+                "$ref": "#/$defs/AlignMode"
+              },
+              "backend": {
+                "$ref": "#/$defs/BackendSpec"
+              },
+              "description": {
+                "maxLength": 2000,
+                "type": "string"
+              },
+              "group": {
+                "description": "The group of the node (a key of `groups`); nodes without one are in `main`.",
+                "pattern": "^[a-z][a-z0-9_]{0,63}$",
+                "type": "string"
+              },
+              "kind": {
+                "const": "bit_descramble"
+              },
+              "params": {
+                "additionalProperties": false,
+                "properties": {
+                  "constellation": {
+                    "default": "bpsk",
+                    "description": "The constellation whose symbols carry the bits (the names of symbol_map: bpsk 1 bit per symbol, qpsk 2, 8psk 3, qam16 4, qam64 6, qam256 8, qam1024 10). The delays of the polynomial count symbols: bit k of a symbol is scrambled with bit k of the symbols a and b before it, the bit polynomial 1 + x^-(b m) + x^-(a m) for m bits per symbol, so that a quarter turn of a square constellation (which swaps and inverts bits within a symbol) commutes with the scrambler. bpsk is the plain bit scrambler. Typical: bpsk for a plain bit stream; the constellation of the modulator after it. Build-time.",
+                    "enum": [
+                      "bpsk",
+                      "qpsk",
+                      "8psk",
+                      "qam16",
+                      "qam64",
+                      "qam256",
+                      "qam1024"
+                    ],
+                    "type": "string"
+                  },
+                  "polynomial": {
+                    "default": "x23_x18",
+                    "description": "The polynomial of the self-synchronizing scrambler, 1 + x^-b + x^-a: x23_x18 (1 + x^-18 + x^-23, the call-mode scrambler of ITU-T V.32, V.32bis and V.34), x23_x5 (1 + x^-5 + x^-23, their answer mode), x17_x12 (1 + x^-12 + x^-17, the G3RUH 9600 bd packet radio scrambler) or x58_x39 (1 + x^-39 + x^-58, the 64b/66b scrambler of IEEE 802.3 clause 49). The descrambler locks after a bits per symbol bits. Typical: x23_x18 (ITU-T V.32 to V.34); x17_x12 for G3RUH packet radio. Build-time.",
+                    "enum": [
+                      "x23_x18",
+                      "x23_x5",
+                      "x17_x12",
+                      "x58_x39"
+                    ],
+                    "type": "string"
+                  }
+                },
+                "type": "object"
+              }
+            },
+            "required": [
+              "kind"
+            ],
+            "type": "object"
+          },
+          {
+            "additionalProperties": false,
+            "description": "Scrambles a soft-bit stream with a self-synchronizing (multiplicative) scrambler so that it looks random on the air.",
+            "properties": {
+              "align": {
+                "$ref": "#/$defs/AlignMode"
+              },
+              "backend": {
+                "$ref": "#/$defs/BackendSpec"
+              },
+              "description": {
+                "maxLength": 2000,
+                "type": "string"
+              },
+              "group": {
+                "description": "The group of the node (a key of `groups`); nodes without one are in `main`.",
+                "pattern": "^[a-z][a-z0-9_]{0,63}$",
+                "type": "string"
+              },
+              "kind": {
+                "const": "bit_scramble"
+              },
+              "params": {
+                "additionalProperties": false,
+                "properties": {
+                  "constellation": {
+                    "default": "bpsk",
+                    "description": "The constellation whose symbols carry the bits (the names of symbol_map: bpsk 1 bit per symbol, qpsk 2, 8psk 3, qam16 4, qam64 6, qam256 8, qam1024 10). The delays of the polynomial count symbols: bit k of a symbol is scrambled with bit k of the symbols a and b before it, the bit polynomial 1 + x^-(b m) + x^-(a m) for m bits per symbol, so that a quarter turn of a square constellation (which swaps and inverts bits within a symbol) commutes with the scrambler. bpsk is the plain bit scrambler. Typical: bpsk for a plain bit stream; the constellation of the modulator after it. Build-time.",
+                    "enum": [
+                      "bpsk",
+                      "qpsk",
+                      "8psk",
+                      "qam16",
+                      "qam64",
+                      "qam256",
+                      "qam1024"
+                    ],
+                    "type": "string"
+                  },
+                  "polynomial": {
+                    "default": "x23_x18",
+                    "description": "The polynomial of the self-synchronizing scrambler, 1 + x^-b + x^-a: x23_x18 (1 + x^-18 + x^-23, the call-mode scrambler of ITU-T V.32, V.32bis and V.34), x23_x5 (1 + x^-5 + x^-23, their answer mode), x17_x12 (1 + x^-12 + x^-17, the G3RUH 9600 bd packet radio scrambler) or x58_x39 (1 + x^-39 + x^-58, the 64b/66b scrambler of IEEE 802.3 clause 49). The descrambler locks after a bits per symbol bits. Typical: x23_x18 (ITU-T V.32 to V.34); x17_x12 for G3RUH packet radio. Build-time.",
+                    "enum": [
+                      "x23_x18",
+                      "x23_x5",
+                      "x17_x12",
+                      "x58_x39"
+                    ],
+                    "type": "string"
+                  }
+                },
+                "type": "object"
+              }
+            },
+            "required": [
+              "kind"
+            ],
+            "type": "object"
+          },
+          {
+            "additionalProperties": false,
             "description": "Copies one channel of a lane stream into an ordinary complex stream.",
             "properties": {
               "align": {
@@ -3996,8 +4114,7 @@
                     "type": "number"
                   },
                   "sync_bw": {
-                    "default": 0.005,
-                    "description": "Loop bandwidth of the symbol timing, normalized to the symbol rate. Typical: 0.005; 0.002 for qam256 and qam1024 (less timing jitter), up to 0.01 for a faster acquisition. Build-time.",
+                    "description": "Loop bandwidth of the symbol timing, normalized to the symbol rate. The default depends on the constellation: 0.005 for qpsk, qam16 and qam64, 0.002 for qam256 and qam1024 (less timing jitter). Typical: the default of the constellation; up to 0.01 for a faster acquisition. Build-time.",
                     "maximum": 0.1,
                     "minimum": 0.0001,
                     "type": "number"
@@ -4087,12 +4204,32 @@
                     "minimum": 0,
                     "type": "integer"
                   },
+                  "polynomial": {
+                    "default": "x23_x18",
+                    "description": "The polynomial of the self-synchronizing scrambler, 1 + x^-b + x^-a: x23_x18 (1 + x^-18 + x^-23, the call-mode scrambler of ITU-T V.32, V.32bis and V.34), x23_x5 (1 + x^-5 + x^-23, their answer mode), x17_x12 (1 + x^-12 + x^-17, the G3RUH 9600 bd packet radio scrambler) or x58_x39 (1 + x^-39 + x^-58, the 64b/66b scrambler of IEEE 802.3 clause 49). The descrambler locks after a bits per symbol bits. Typical: x23_x18 (ITU-T V.32 to V.34); x17_x12 for G3RUH packet radio. Build-time.",
+                    "enum": [
+                      "x23_x18",
+                      "x23_x5",
+                      "x17_x12",
+                      "x58_x39"
+                    ],
+                    "type": "string"
+                  },
                   "rolloff": {
                     "default": 0.35,
                     "description": "Roll-off of the root-raised-cosine pulse. Typical: 0.35 (the roll-off of the transmitter). Build-time.",
                     "maximum": 1.0,
                     "minimum": 0.05,
                     "type": "number"
+                  },
+                  "scrambler": {
+                    "default": "multiplicative",
+                    "description": "The scrambler of the bits on the air: multiplicative (bit_scramble in the transmitter, bit_descramble in the receiver, with polynomial and the constellation; the whole bit stream, frames and idle signal, looks random on the air, so the blind equalizer of the dense constellations converges) or none (the stage is left out). Both ends of a link must use the same. Typical: multiplicative; none for a link to a receiver without the descrambler. Build-time.",
+                    "enum": [
+                      "multiplicative",
+                      "none"
+                    ],
+                    "type": "string"
                   },
                   "span": {
                     "default": 10,
@@ -4108,8 +4245,7 @@
                     "type": "number"
                   },
                   "sync_bw": {
-                    "default": 0.005,
-                    "description": "Loop bandwidth of the symbol timing, normalized to the symbol rate. Typical: 0.005; 0.002 for qam256 and qam1024 (less timing jitter), up to 0.01 for a faster acquisition. Build-time.",
+                    "description": "Loop bandwidth of the symbol timing, normalized to the symbol rate. The default depends on the constellation: 0.005 for qpsk, qam16 and qam64, 0.002 for qam256 and qam1024 (less timing jitter). Typical: the default of the constellation; up to 0.01 for a faster acquisition. Build-time.",
                     "maximum": 0.1,
                     "minimum": 0.0001,
                     "type": "number"
@@ -4138,7 +4274,7 @@
           },
           {
             "additionalProperties": false,
-            "description": "Frames packets and modulates them as square QAM (4-QAM to 1024-QAM): frame_encode then qam_mod in one block.",
+            "description": "Frames packets, scrambles their bits and modulates them as square QAM (4-QAM to 1024-QAM).",
             "properties": {
               "align": {
                 "$ref": "#/$defs/AlignMode"
@@ -4185,6 +4321,17 @@
                     ],
                     "type": "string"
                   },
+                  "polynomial": {
+                    "default": "x23_x18",
+                    "description": "The polynomial of the self-synchronizing scrambler, 1 + x^-b + x^-a: x23_x18 (1 + x^-18 + x^-23, the call-mode scrambler of ITU-T V.32, V.32bis and V.34), x23_x5 (1 + x^-5 + x^-23, their answer mode), x17_x12 (1 + x^-12 + x^-17, the G3RUH 9600 bd packet radio scrambler) or x58_x39 (1 + x^-39 + x^-58, the 64b/66b scrambler of IEEE 802.3 clause 49). The descrambler locks after a bits per symbol bits. Typical: x23_x18 (ITU-T V.32 to V.34); x17_x12 for G3RUH packet radio. Build-time.",
+                    "enum": [
+                      "x23_x18",
+                      "x23_x5",
+                      "x17_x12",
+                      "x58_x39"
+                    ],
+                    "type": "string"
+                  },
                   "preamble_bytes": {
                     "default": 4,
                     "description": "Bytes 0x55 sent before the sync word of every frame. Typical: 4; more for receivers that need time to settle. Build-time.",
@@ -4204,6 +4351,15 @@
                     "maximum": 64,
                     "minimum": 2,
                     "type": "integer"
+                  },
+                  "scrambler": {
+                    "default": "multiplicative",
+                    "description": "The scrambler of the bits on the air: multiplicative (bit_scramble in the transmitter, bit_descramble in the receiver, with polynomial and the constellation; the whole bit stream, frames and idle signal, looks random on the air, so the blind equalizer of the dense constellations converges) or none (the stage is left out). Both ends of a link must use the same. Typical: multiplicative; none for a link to a receiver without the descrambler. Build-time.",
+                    "enum": [
+                      "multiplicative",
+                      "none"
+                    ],
+                    "type": "string"
                   },
                   "span": {
                     "default": 10,

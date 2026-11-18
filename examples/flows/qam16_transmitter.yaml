@@ -41,7 +41,9 @@ nodes:
   # 0x55). Modulation: Gray mapping (the first two bits of a symbol select the in-phase level,
   # the last two the quadrature level), root-raised-cosine pulse with roll-off 0.35 over 10
   # symbols, 8 samples per symbol (200 kHz). constellation qam64 gives 64-QAM (six bits per
-  # symbol: set rate_hz to 150000 for 25 kBd).
+  # symbol: set rate_hz to 150000 for 25 kBd). scrambler none (default multiplicative): the
+  # bits go on the air as framed, the signal of M44.1; 16-QAM needs no scrambler for its blind
+  # equalizer (qam256_transmitter uses it). qam16_receiver must use the same.
   tx:
     kind: qam_frame_encode
     params:
@@ -50,6 +52,7 @@ nodes:
       preamble_bytes: 4
       rolloff: 0.35
       samples_per_symbol: 8
+      scrambler: none
       span: 10
 edges:
   - { from: msg, to: tx }

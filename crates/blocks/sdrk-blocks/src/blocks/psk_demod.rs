@@ -4,6 +4,7 @@
 
 use sdrk::{Delay, Progress, Rate, Ratio, RatioKind, Sdrk};
 use sdrk_core::C32;
+use sdrk_core::kernels::constellation::Qam;
 use sdrk_core::kernels::costas::{Costas, CostasGains, CostasState};
 use sdrk_core::kernels::equalize::{Equalize, EqualizeState};
 use sdrk_core::kernels::filter::{Fir, FirState};
@@ -22,7 +23,7 @@ use super::psk_mod::{
     PSK_CONSTELLATION_PARAM, PskVariant, VARIANT_PARAM, check_psk, check_variant,
     psk_constellation_of_value,
 };
-use super::symbol_demap::{psk8_bits, soft_bits};
+use super::symbol_demap::{psk8_bits, qam_soft_bits, soft_bits};
 use super::symbol_map::SymbolMapConstellation;
 use super::symbol_sync::{SymbolSyncBlock, min_input as sync_min_input};
 use super::{HZ_LIMIT, check_count, head, head_mut, tail, tail_mut, unknown};
@@ -72,7 +73,7 @@ pub static DESCRIPTION: BlockDescription = BlockDescription {
         max_deviation 0.005, ted_gain 1) and, for coherent detection, the Costas loop costas \
         (carrier_bw, damping 0.7071, max_offset cycles per symbol); with differential set the \
         loop is replaced by z_k = y_k conj(y_k-1) (y_-1 = 1). The symbols become soft bits as \
-        symbol_demap does (BPSK re; QPSK re then im; 8PSK the max-log soft bits of symbol_demap \
+        symbol_demap does (BPSK re; QPSK the 4-QAM grid units re sqrt(2) then im sqrt(2); 8PSK the max-log soft bits of symbol_demap \
         8psk): \
         above 0 is a 1. The variant pi4 (qpsk, differential) maps z_k back to the bits of \
         pi/4-DQPSK: -im for bit 0, then -re for bit 1. The variant offset (qpsk, not \
@@ -480,7 +481,7 @@ impl PskDemodConfig {
 /// the kernel `symbol_sync` (Gardner at the exact `fs / symbol_rate_hz`), then the kernel
 /// `costas` of the constellation (coherent) or the differential product `z_k = y_k conj(y_(k-1))`
 /// with `y_(-1) = 1` (`f32`: `(y.re p.re + y.im p.im, y.im p.re - y.re p.im)`), and the
-/// soft bits of `symbol_demap` (scale 1: BPSK `re`, QPSK `re` then `im`, 8PSK the max-log bits of
+/// soft bits of `symbol_demap` (scale 1: BPSK `re`, QPSK the 4-QAM grid units `re √2` then `im √2`, 8PSK the max-log bits of
 /// `8psk`; the variant `pi4` gives `-im` then `-re`). The variant `offset` replaces `costas` by a carrier loop at the sample
 /// rate before the timing loop (D686 to D688): between two strobes the matched-filter
 /// output is derotated with the kernel `rotate`, the in-phase part is delayed by `n / 2`
@@ -525,7 +526,8 @@ impl PskDemodConfig {
 /// let q = d.process(&sig, &mut soft)?;
 /// assert_eq!(q.consumed, 16_000);
 /// assert!((7980..=8000).contains(&q.produced));
-/// assert!(soft[q.produced - 100..q.produced].iter().all(|s| (s.abs() - 0.7071).abs() < 0.05));
+/// // QPSK soft bits in the 4-QAM grid units: the points give +-1 (D1515).
+/// assert!(soft[q.produced - 100..q.produced].iter().all(|s| (s.abs() - 1.0).abs() < 0.07));
 /// # Ok::<(), Box<dyn std::error::Error>>(())
 /// ```
 pub struct PskDemodBlock<S: Storage> {
@@ -833,11 +835,11 @@ impl<S: Storage> Block for PskDemodBlock<S> {
             let (a, b, pending) = split_work(self.work.as_mut())?;
             let syms = head(if in_b { b } else { a }, ns)?;
             let room = tail_mut(output, produced)?;
-            let direct = demod_bits(map, syms, room);
+            let direct = demod_bits(map, syms, room)?;
             produced += direct * bps;
             let rest = tail(syms, direct)?;
             if !rest.is_empty() {
-                let n = demod_bits(map, rest, pending);
+                let n = demod_bits(map, rest, pending)?;
                 self.at = 0;
                 self.len = to_u32(n * bps)?;
                 produced += self.flush(tail_mut(output, produced)?)?;
@@ -903,7 +905,8 @@ impl<S: Storage> Block for PskDemodBlock<S> {
 enum SoftMap {
     /// `re` (BPSK).
     Bpsk,
-    /// `re`, then `im` (QPSK, plain and offset).
+    /// The 4-QAM soft bits of `symbol_demap` `qpsk` in grid units, `re sqrt 2`, then
+    /// `im sqrt 2` (QPSK, plain and offset; D1515).
     Qpsk,
     /// `-im`, then `-re`: the quadrants of `z_k` back to the bit pairs of pi/4-DQPSK
     /// (`+pi/4` is `00`, `+3 pi/4` `01`, `-3 pi/4` `11`, `-pi/4` `10`).
@@ -914,10 +917,13 @@ enum SoftMap {
 
 /// The soft bits of the symbols in `input` (scale 1) with the map `map`; takes
 /// `min(input.len(), output.len() / bits)` symbols and returns that count.
-fn demod_bits(map: SoftMap, input: &[C32], output: &mut [f32]) -> usize {
-    match map {
-        SoftMap::Bpsk => soft_bits(false, 1.0, input, output),
-        SoftMap::Qpsk => soft_bits(true, 1.0, input, output),
+///
+/// # Errors
+/// `Internal` when the QPSK soft bits fail (they cannot: the lengths are consistent).
+fn demod_bits(map: SoftMap, input: &[C32], output: &mut [f32]) -> Result<usize> {
+    Ok(match map {
+        SoftMap::Bpsk => soft_bits(1.0, input, output),
+        SoftMap::Qpsk => qam_soft_bits(Qam::Qpsk, 1.0, input, output)?,
         SoftMap::Pi4 => {
             for (o, z) in output.chunks_exact_mut(2).zip(input) {
                 if let [b0, b1] = o {
@@ -933,7 +939,7 @@ fn demod_bits(map: SoftMap, input: &[C32], output: &mut [f32]) -> usize {
             }
             input.len().min(output.len() / 3)
         }
-    }
+    })
 }
 
 /// The length in `C32` of the work buffer `[a | b | pending]`: two pieces of symbols and
@@ -1214,7 +1220,7 @@ mod tests {
                 let (p, y) = (point16(prev), point16(prev.wrapping_add(step)));
                 let z = C32::new(y.re * p.re + y.im * p.im, y.im * p.re - y.re * p.im);
                 let mut out = [0.0f32; 2];
-                assert_eq!(demod_bits(SoftMap::Pi4, &[z], &mut out), 1);
+                assert_eq!(demod_bits(SoftMap::Pi4, &[z], &mut out), Ok(1));
                 assert_eq!(
                     (out.first().map(|v| *v > 0.0), out.get(1).map(|v| *v > 0.0)),
                     (Some(b0), Some(b1)),
@@ -1224,7 +1230,7 @@ mod tests {
         }
         // the plain QPSK map is a different table: +pi/4 is 11 there
         let mut out = [0.0f32; 2];
-        demod_bits(SoftMap::Qpsk, &[point16(2)], &mut out);
+        assert_eq!(demod_bits(SoftMap::Qpsk, &[point16(2)], &mut out), Ok(1));
         assert!(out.iter().all(|v| *v > 0.0));
     }
 }

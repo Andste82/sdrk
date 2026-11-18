@@ -3231,11 +3231,11 @@ impl Kind for SymbolDemapKind {
     fn kernels() -> &'static [&'static str] {
         &[]
     }
-    /// `qam16` to `qam1024` call the kernel `qam_soft_bits` (I44-1, D1412, M44.2); the other
-    /// constellations call no kernel.
+    /// `qpsk` and `qam16` to `qam1024` call the kernel `qam_soft_bits` (I44-1, D1412, M44.2,
+    /// D1515); the other constellations call no kernel.
     fn kernels_for(params: &Map<String, Value>) -> &'static [&'static str] {
         match params.get("constellation").and_then(Value::as_str) {
-            Some("qam16" | "qam64" | "qam256" | "qam1024") => &["qam_soft_bits"],
+            Some("qpsk" | "qam16" | "qam64" | "qam256" | "qam1024") => &["qam_soft_bits"],
             _ => Self::kernels(),
         }
     }
@@ -3267,20 +3267,7 @@ impl Kind for SymbolDemapKind {
         Ok(Figures {
             rate_out,
             memory_bytes,
-            // One multiplication per soft bit; 8psk: eight squared distances, six minimum
-            // searches over four points and three products per symbol (D644); qam16: two
-            // products by sqrt(E), two magnitudes, two differences and four products; qam64:
-            // two products, four magnitudes, four differences and six products (D1200); qam256
-            // and qam1024 (b bits per axis): two products by sqrt(E), 2 (b - 1) magnitudes,
-            // 2 (b - 1) differences and 2 b products, 22 and 28 (M44.2).
-            cost: match cfg.constellation {
-                SymbolDemapConstellation::Psk8 => 16.0,
-                SymbolDemapConstellation::Qam16 => 10.0,
-                SymbolDemapConstellation::Qam64 => 18.0,
-                SymbolDemapConstellation::Qam256 => 22.0,
-                SymbolDemapConstellation::Qam1024 => 28.0,
-                _ => 1.0,
-            },
+            cost: demap_cost(cfg.constellation),
             taps: 0,
             delay: Delay::ZERO,
             min_input: 1,
@@ -3454,6 +3441,32 @@ impl Kind for AfcKind {
 
 // ---------------------------------------------------------------------- costas
 
+/// The kind cost of `costas` per symbol: two table interpolations, the derotation, the
+/// detector, the loop filter and the lock detector (D615); the QAM detector adds the grid
+/// decision, an arctangent and a second division (D1206). `qam_demod` counts its carrier loop
+/// with it.
+fn costas_cost(c: sdrk_blocks::CostasConstellation) -> f64 {
+    if c.qam().is_some() { 45.0 } else { 30.0 }
+}
+
+/// The kind cost of `symbol_demap` per symbol: one multiplication per soft bit; `8psk` eight
+/// squared distances, six minimum searches over four points and three products (D644); the
+/// square QAM of `b` bits per axis (the kernel `qam_soft_bits`) two products by `sqrt(E)`,
+/// `2 (b - 1)` magnitudes, `2 (b - 1)` differences and `2 b` products: `qpsk` 4 (D1515),
+/// `qam16` 10, `qam64` 18 (D1200), `qam256` 22 and
+/// `qam1024` 28 (M44.2). `qam_demod` counts its soft bits with it.
+fn demap_cost(c: SymbolDemapConstellation) -> f64 {
+    match c {
+        SymbolDemapConstellation::Qpsk => 4.0,
+        SymbolDemapConstellation::Psk8 => 16.0,
+        SymbolDemapConstellation::Qam16 => 10.0,
+        SymbolDemapConstellation::Qam64 => 18.0,
+        SymbolDemapConstellation::Qam256 => 22.0,
+        SymbolDemapConstellation::Qam1024 => 28.0,
+        _ => 1.0,
+    }
+}
+
 pub(crate) struct CostasKind;
 
 impl Kind for CostasKind {
@@ -3481,14 +3494,7 @@ impl Kind for CostasKind {
         Ok(Figures {
             rate_out: rate,
             memory_bytes: CostasBlock::<VecStorage>::storage_bytes(cfg, rate)?,
-            // Two table interpolations, the derotation, the detector, the loop filter and the
-            // lock detector per symbol (D615); the QAM detector adds the grid decision, an
-            // arctangent and a second division (D1206).
-            cost: if cfg.constellation.qam().is_some() {
-                45.0
-            } else {
-                30.0
-            },
+            cost: costas_cost(cfg.constellation),
             taps: 0,
             delay: Delay::ZERO,
             min_input: 1,
@@ -4074,15 +4080,14 @@ impl Kind for QamDemodKind {
             rate_out: QamDemodBlock::<VecStorage>::rate_out(cfg, rate)?,
             memory_bytes: QamDemodBlock::<VecStorage>::storage_bytes(cfg, rate)?,
             // The matched filter 4 span per input sample; per symbol the timing loop 10 (the 40 of
-            // `psk_demod` less the 30 of its `costas`), `costas` with QAM 45 (D1206), the soft bits
-            // of `symbol_demap` 10 or 18 (D1200) and the equalizer 8 per weight (D830; D1212).
+            // `psk_demod` less the 30 of its `costas`), `costas` and the soft bits of
+            // `symbol_demap` of the constellation (the costs of their kinds: `costas` 45 with
+            // QAM, 30 for `qpsk`, D1206; the soft bits 4, 10, 18, 22 or 28, D1200, D1508) and
+            // the equalizer 8 per weight (D830; D1212, M44.2).
             cost: 4.0 * cfg.span as f64
-                + (55.0
-                    + if cfg.constellation == SymbolMapConstellation::Qam64 {
-                        18.0
-                    } else {
-                        10.0
-                    })
+                + (10.0
+                    + costas_cost(cfg.constellation.into())
+                    + demap_cost(cfg.constellation.into()))
                     / sps
                 + 8.0 * cfg.equalizer_taps as f64 / sps,
             taps: block.num_taps(),

@@ -88,7 +88,8 @@ pub static DESCRIPTION: BlockDescription = BlockDescription {
         the confidence.",
     details: "Maps every input symbol to bits-per-symbol soft bits in the order of the \
         constellation: real (f32 input, 1 bit: scale x), bpsk (C32 input, 1 bit: scale re), \
-        qpsk (C32 input, 2 bits, Gray: scale re for bit 0, then scale im for bit 1), fsk4 (f32 \
+        qpsk (C32 input, 2 bits, Gray, the 4-QAM grid of one bit per axis in the units of \
+        the QAM below: scale re sqrt(2) for bit 0, then scale im sqrt(2) for bit 1), fsk4 (f32 \
         input, the 4-FSK levels +1, +1/3, -1/3, -1 of fsk_mod, 2 bits: scale (-v) for bit 0, \
         which is 1 for the negative levels, then scale (|v| - 2/3) for bit 1, which is 1 for \
         the outer levels), 8psk (C32 input, the points exp(j (2 pi k / 8 + pi / 8)) of psk_mod \
@@ -130,7 +131,7 @@ pub static DESCRIPTION: BlockDescription = BlockDescription {
                 8psk for 8PSK, qam16 to qam1024 for QAM",
             mutability: Mutability::Build,
             description: "The symbol alphabet: real (f32, 1 bit), bpsk (C32, 1 bit), qpsk \
-                (C32, 2 bits, re then im), fsk4 (f32, 2 bits, -v then |v| - 2/3), 8psk (C32, \
+                (C32, 2 bits, re sqrt(2) then im sqrt(2)), fsk4 (f32, 2 bits, -v then |v| - 2/3), 8psk (C32, \
                 3 bits, max-log, Gray), qam16 (C32, 4 bits), qam64 (C32, 6 bits), qam256 (C32, \
                 8 bits) or qam1024 (C32, 10 bits; the QAM Gray, in-phase bits first, \
                 piecewise-linear max-log).",
@@ -164,7 +165,10 @@ pub enum SymbolDemapConstellation {
     Real,
     /// BPSK (`C32` input), one bit: `scale re`.
     Bpsk,
-    /// QPSK (`C32` input), two bits (Gray): `scale re` (bit 0), `scale im` (bit 1).
+    /// QPSK (`C32` input), two bits (Gray), the 4-QAM grid
+    /// [`sdrk_core::kernels::constellation::Qam::Qpsk`] in the grid units of every square QAM
+    /// (`v = component √2`): `scale v` of the in-phase part (bit 0), then of the quadrature part
+    /// (bit 1), so a point `(±1/√2, ±1/√2)` gives `±scale` (M44.2 §2, D1515).
     Qpsk,
     /// 4-FSK levels `+1, +1/3, -1/3, -1` (`f32` input), two bits: `scale (-v)` (bit 0, 1 for
     /// the negative levels), `scale (|v| - 2/3)` (bit 1, 1 for the outer levels).
@@ -364,30 +368,15 @@ impl SymbolDemapElem for C32 {
     }
 }
 
-/// The soft bits of the symbols in `input`, `scale * component` each: one per symbol (`re`) or,
-/// with `qpsk`, two (`re`, then `im`). Takes `min(input.len(), output.len() / bits)` symbols
-/// and returns that count (shared by `symbol_demap` and `psk_demod`).
-pub(crate) fn soft_bits<T: SymbolDemapElem>(
-    qpsk: bool,
-    scale: f32,
-    input: &[T],
-    output: &mut [f32],
-) -> usize {
-    if qpsk {
-        for (o, &x) in output.chunks_exact_mut(2).zip(input) {
-            let (re, im) = x.parts();
-            if let [b0, b1] = o {
-                *b0 = scale * re;
-                *b1 = scale * im;
-            }
-        }
-        input.len().min(output.len() / 2)
-    } else {
-        for (o, &x) in output.iter_mut().zip(input) {
-            *o = scale * x.parts().0;
-        }
-        input.len().min(output.len())
+/// The soft bits of the symbols in `input`, `scale * component` (the real part) each, one per
+/// symbol. Takes `min(input.len(), output.len())` symbols and returns that count (shared by
+/// `symbol_demap` and `psk_demod`; QPSK goes through [`qam_soft_bits`], the grid units of every
+/// square QAM, D1515).
+pub(crate) fn soft_bits<T: SymbolDemapElem>(scale: f32, input: &[T], output: &mut [f32]) -> usize {
+    for (o, &x) in output.iter_mut().zip(input) {
+        *o = scale * x.parts().0;
     }
+    input.len().min(output.len())
 }
 
 /// Symbol slicer: `T` symbols in (`f32` for `real` and `fsk4`, `C32` for `bpsk`, `qpsk`,
@@ -396,9 +385,10 @@ pub(crate) fn soft_bits<T: SymbolDemapElem>(
 ///
 /// Each soft bit is one `f32` product `scale * component` (`scale` rounded once to `f32`); for
 /// `fsk4` the components are `-v` and `|v| - 2/3` (the `f32` nearest to 2/3); for `8psk` they
-/// are `(m0 - m1) * 0.25` from the squared distances to the points; for `qam16` to `qam1024`
-/// `t0 = v`, `ti = 2^(b - i) - |t(i - 1)|` per axis of `b` bits with `v = component * √E` (one
-/// `f32` product, `√E` rounded once to `f32`; 16-QAM `v`, `2 - |v|`; see
+/// are `(m0 - m1) * 0.25` from the squared distances to the points; for `qpsk` and `qam16`
+/// to `qam1024` `t0 = v`, `ti = 2^(b - i) - |t(i - 1)|` per axis of `b` bits
+/// with `v = component * √E` (one `f32` product, `√E` rounded once to `f32`; `qpsk` `v` with
+/// `E = 2`, 16-QAM `v`, `2 - |v|`; see
 /// [`SymbolDemapConstellation`]).
 /// A call takes `min(input.len(), output.len() / bits_per_symbol)` symbols. Timing: constant
 /// ratio `bits_per_symbol / 1`, delay 0. The block needs no storage.
@@ -414,7 +404,9 @@ pub(crate) fn soft_bits<T: SymbolDemapElem>(
 /// let mut bits = [0.0f32; 4];
 /// let p = demap.process(&[C32::new(0.5, -1.0), C32::new(-0.25, 0.75)], &mut bits)?;
 /// assert_eq!((p.consumed, p.produced), (2, 4));
-/// assert_eq!(bits, [1.0, -2.0, -0.5, 1.5]); // re (bit 0), then im (bit 1)
+/// // re √2 (bit 0), then im √2 (bit 1): the grid units of every square QAM
+/// let r2 = core::f32::consts::SQRT_2;
+/// assert_eq!(bits, [2.0 * (0.5 * r2), 2.0 * (-1.0 * r2), 2.0 * (-0.25 * r2), 2.0 * (0.75 * r2)]);
 /// demap.set_param("scale", ParamValue::F64(1.0))?;
 /// // `real` needs f32 symbols
 /// let real = SymbolDemapConfig { constellation: SymbolDemapConstellation::Real, scale: 1.0 };
@@ -491,7 +483,7 @@ impl<T: SymbolDemapElem, S: Storage> Block for SymbolDemapBlock<T, S> {
     fn process(&mut self, input: &[T], output: &mut [f32]) -> Result<Progress> {
         let s = self.config.scale as f32;
         let n = match self.config.constellation {
-            SymbolDemapConstellation::Qpsk => soft_bits(true, s, input, output),
+            SymbolDemapConstellation::Qpsk => qam_soft_bits(Qam::Qpsk, s, input, output)?,
             SymbolDemapConstellation::Fsk4 => {
                 for (o, &x) in output.chunks_exact_mut(2).zip(input) {
                     let v = x.parts().0;
@@ -512,7 +504,7 @@ impl<T: SymbolDemapElem, S: Storage> Block for SymbolDemapBlock<T, S> {
             SymbolDemapConstellation::Qam64 => qam_soft_bits(Qam::Qam64, s, input, output)?,
             SymbolDemapConstellation::Qam256 => qam_soft_bits(Qam::Qam256, s, input, output)?,
             SymbolDemapConstellation::Qam1024 => qam_soft_bits(Qam::Qam1024, s, input, output)?,
-            _ => soft_bits(false, s, input, output),
+            _ => soft_bits(s, input, output),
         };
         Ok(Progress {
             consumed: n,

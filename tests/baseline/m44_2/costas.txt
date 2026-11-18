@@ -1,0 +1,17 @@
+# Baseline of M44.2, table costas (sdrk_testkit::baseline): <case> <level> <bytes> <FNV-1a 64>; level all: the kernels are bit-exact on every level
+qam16_lock_out all 48000 bc21492b8c798947
+qam16_lock_state all 102 d34fa37c9eefb42c
+qam16_gaussian_out all 24000 50d0ebc8ef529d0d
+qam16_gaussian_state all 51 32d26247c0208076
+qam16_uniform_out all 24000 e7911d73915a3ee5
+qam16_uniform_state all 51 3395a3e43c31921d
+qam16_axis_out all 67496 5f9da740cfe0ca5f
+qam16_axis_state all 153 05e9a45761d30622
+qam64_lock_out all 48000 bf8010e1361c1058
+qam64_lock_state all 102 8bcf5d85f77ea341
+qam64_gaussian_out all 24000 5c7b95d48d19714d
+qam64_gaussian_state all 51 dd505625edd1650d
+qam64_uniform_out all 24000 62d7abb8c08522c4
+qam64_uniform_state all 51 288989ed64361f3d
+qam64_axis_out all 67496 91ffdb217e7a1a6d
+qam64_axis_state all 153 9ca84012d4dd2dfc

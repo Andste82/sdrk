@@ -1,0 +1,15 @@
+# Baseline of M44.2, table qam_soft_bits (sdrk_testkit::baseline): <case> <level> <bytes> <FNV-1a 64>; level all: the kernels are bit-exact on every level
+qam16_scale0 all 143968 4293d006f55a977b
+qam16_scale1 all 143968 ef9c5c054dd0b6c7
+qam16_scale2 all 143968 79228312754ba99f
+qam16_scale3 all 143968 f76e03b352226106
+qam16_scale4 all 143968 22bb586f030769f1
+qam16_scale5 all 143968 4078ada906d6ac1d
+qam16_scale6 all 143968 93a9feb2766ec465
+qam64_scale0 all 215952 e381a6daf4748f82
+qam64_scale1 all 215952 27b8c7a6f056d832
+qam64_scale2 all 215952 29a09f7bf70d9fec
+qam64_scale3 all 215952 4c0507a0f9cc3da2
+qam64_scale4 all 215952 2a94ff2b2cd9a7d6
+qam64_scale5 all 215952 cae1e2f604d3ae48
+qam64_scale6 all 215952 3ad906ea0ac5cd85

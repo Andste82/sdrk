@@ -1205,13 +1205,17 @@ fn costas_block_takes_order_8() {
     }
     // the constellation is a choice: every name maps to its constellation and back, and an
     // index outside the choice is rejected
-    let names = ["bpsk", "qpsk", "8psk", "qam16", "qam64"];
+    let names = [
+        "bpsk", "qpsk", "8psk", "qam16", "qam64", "qam256", "qam1024",
+    ];
     let all = [
         CostasConstellation::Bpsk,
         CostasConstellation::Qpsk,
         CostasConstellation::Psk8,
         CostasConstellation::Qam16,
         CostasConstellation::Qam64,
+        CostasConstellation::Qam256,
+        CostasConstellation::Qam1024,
     ];
     for (i, (name, want)) in names.iter().zip(all).enumerate() {
         let mut c = CostasConfig::default();
@@ -1222,7 +1226,7 @@ fn costas_block_takes_order_8() {
         assert!(c.validate().is_ok());
     }
     let mut c = CostasConfig::default();
-    assert!(c.set("constellation", ParamValue::Choice(5)).is_err());
+    assert!(c.set("constellation", ParamValue::Choice(7)).is_err());
     assert_eq!(
         c.set("order", ParamValue::I64(8)),
         Err(Error::UnknownParameter)

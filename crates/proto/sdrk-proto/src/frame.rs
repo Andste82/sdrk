@@ -325,8 +325,8 @@ pub fn encode_bytes(
     Ok(total)
 }
 
-/// The largest `bits_per_symbol` of a [`RotatingDecoder`] (64-QAM).
-pub const MAX_BITS_PER_SYMBOL: u32 = 6;
+/// The largest `bits_per_symbol` of a [`RotatingDecoder`] (1024-QAM, M44.2).
+pub const MAX_BITS_PER_SYMBOL: u32 = 10;
 
 /// The first bit of the rotation in the flags of a packet that a [`RotatingDecoder`] returns: bits 16 and 17 (the protocol bits of [`PacketFlags`]) hold the
 /// number of quarter turns (0 to 3) by which the received symbols were turned against the
@@ -731,14 +731,14 @@ impl RotatingDecoder {
     /// four rotations) and `bits_per_symbol`, hunting at the start of a symbol.
     ///
     /// # Errors
-    /// [`Error::InvalidArgument`] for `bits_per_symbol` odd, 0 or above 6.
+    /// [`Error::InvalidArgument`] for `bits_per_symbol` odd, 0 or above 10.
     pub fn new(decoder: Decoder, bits_per_symbol: u32) -> Result<Self> {
         if bits_per_symbol == 0
             || bits_per_symbol > MAX_BITS_PER_SYMBOL
             || !bits_per_symbol.is_multiple_of(2)
         {
             return Err(Error::InvalidArgument(
-                "bits_per_symbol must be 2, 4 or 6 for four rotations",
+                "bits_per_symbol must be 2, 4, 6, 8 or 10 for four rotations",
             ));
         }
         let mut d = Self {
@@ -785,7 +785,7 @@ impl RotatingDecoder {
 
     /// Feeds one bit with its sample index; returns a packet when the symbol that this bit
     /// completes completes a frame that is delivered (at most one per symbol: a frame has more
-    /// than 6 bits).
+    /// than 10 bits).
     ///
     /// ```
     /// use sdrk_proto::frame::{Decoder, RotatingDecoder, Whitening};

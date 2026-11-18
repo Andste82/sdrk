@@ -1,6 +1,7 @@
 //! The building blocks of M44.1 (tests 1 and 11): `symbol_map` (every point of every
 //! constellation against the tables of `psk_mod` (the points at multiples of 22.5 degrees and
-//! `PSK8_GRAY`) and of `Qam`, NaN and the sign rule, the differential phase and `pi4` over all
+//! `PSK8_GRAY`) and of `Qam`, since M44.2 with `qam256` and `qam1024` and `qpsk` against the
+//! 4-QAM grid, NaN and the sign rule, the differential phase and `pi4` over all
 //! bit patterns, the invalid combinations, the timing, 20 cut plans of seed 840 and of seed
 //! 851) and `iq_offset` (the delay by half a symbol of the imaginary and of the real part,
 //! `reset`, the timing, the odd `samples_per_symbol`, 20 cut plans of seed 840 and of seed 851;
@@ -32,12 +33,14 @@ use sdrk_testkit::{Pcg32, VecStorage};
 const SEED: u64 = 840;
 const SEED_CHUNKS: u64 = 851;
 
-const ALL: [SymbolMapConstellation; 5] = [
+const ALL: [SymbolMapConstellation; 7] = [
     SymbolMapConstellation::Bpsk,
     SymbolMapConstellation::Qpsk,
     SymbolMapConstellation::Psk8,
     SymbolMapConstellation::Qam16,
     SymbolMapConstellation::Qam64,
+    SymbolMapConstellation::Qam256,
+    SymbolMapConstellation::Qam1024,
 ];
 
 fn map_block(cfg: &SymbolMapConfig) -> SymbolMapBlock<VecStorage> {
@@ -112,6 +115,8 @@ fn symbol_map_gives_every_point_of_every_constellation() {
             let want = match c {
                 SymbolMapConstellation::Qam16 => Qam::Qam16.point_table()[s],
                 SymbolMapConstellation::Qam64 => Qam::Qam64.point_table()[s],
+                SymbolMapConstellation::Qam256 => Qam::Qam256.point_table()[s],
+                SymbolMapConstellation::Qam1024 => Qam::Qam1024.point_table()[s],
                 _ => point_at(step_of(c, false, s)),
             };
             assert_eq!(y.re.to_bits(), want.re.to_bits(), "{c:?} symbol {s}");
@@ -122,15 +127,19 @@ fn symbol_map_gives_every_point_of_every_constellation() {
             SymbolMapConstellation::Bpsk => {
                 assert_eq!(out, [C32::new(-1.0, 0.0), C32::new(1.0, 0.0)]);
             }
-            SymbolMapConstellation::Qpsk => assert_eq!(
-                out,
-                [
-                    C32::new(-h, -h),
-                    C32::new(-h, h),
-                    C32::new(h, -h),
-                    C32::new(h, h)
-                ]
-            ),
+            SymbolMapConstellation::Qpsk => {
+                assert_eq!(
+                    out,
+                    [
+                        C32::new(-h, -h),
+                        C32::new(-h, h),
+                        C32::new(h, -h),
+                        C32::new(h, h)
+                    ]
+                );
+                // M44.2 (D1510): qpsk is the 4-QAM grid of §1, point for point and bit for bit.
+                same_bits(&out, Qam::Qpsk.point_table(), "qpsk against the 4-QAM grid");
+            }
             _ => {}
         }
     }
@@ -204,7 +213,12 @@ fn symbol_map_differential_phase_over_all_bit_patterns() {
 
 #[test]
 fn symbol_map_rejects_the_invalid_combinations() {
-    for c in [SymbolMapConstellation::Qam16, SymbolMapConstellation::Qam64] {
+    for c in [
+        SymbolMapConstellation::Qam16,
+        SymbolMapConstellation::Qam64,
+        SymbolMapConstellation::Qam256,
+        SymbolMapConstellation::Qam1024,
+    ] {
         let e = map_cfg(c, true, SymbolMapVariant::Plain)
             .validate()
             .unwrap_err();

@@ -32,8 +32,8 @@ pub(crate) const DEFAULT_MU_DD: f64 = 0.02;
 pub(crate) const DEFAULT_CMA_SYMBOLS: u32 = 1000;
 /// Default bandwidth of the phase tracker (that of `costas`).
 pub(crate) const DEFAULT_PHASE_BW: f64 = 0.02;
-/// The names of the constellations, in the order of the choice.
-const CONSTELLATIONS: &[&str] = &["bpsk", "qpsk", "8psk", "qam16", "qam64"];
+/// The names of the constellations, in the order of the choice: those of `symbol_map` (M44.1.1).
+const CONSTELLATIONS: &[&str] = super::symbol_map::CONSTELLATION_OPTIONS;
 
 /// Description of the `equalize` block.
 pub static DESCRIPTION: BlockDescription = BlockDescription {
@@ -47,7 +47,8 @@ pub static DESCRIPTION: BlockDescription = BlockDescription {
         and the decision d is the nearest point of the constellation to z. The weights start \
         with the centre tap 1 and adapt with the normalized LMS step mu / (sum |x|^2 + 1e-6): \
         blind with the constant-modulus algorithm (e = y (|y|^2 - R2) with R2 = 1 for PSK, \
-        1.32 for qam16 and 1.381 for qam64, each part clipped to \
+        1.32 for qam16, 1.381 for qam64, 1.3953 for qam256 and 1.3988 for qam1024, each part \
+        clipped to \
         [-1, 1], step mu_cma) for the first cma_symbols symbols, then decision-directed \
         (e = (z - d) e^(j theta), step mu_dd); w[i] = w[i] - mu e conj(x[i]). The decisions \
         are fed back (as d e^(j theta)) only in decision mode. Chain position: after \
@@ -107,8 +108,9 @@ pub static DESCRIPTION: BlockDescription = BlockDescription {
             typical: "qpsk; the constellation of the transmitter",
             mutability: Mutability::Build,
             description: "The constellation of the decisions: bpsk, qpsk or 8psk (the points \
-                of psk_mod), qam16 or qam64 (the unit-power Gray points of qam_mod; the CMA \
-                radius R2 = E|s|^4 / E|s|^2 is 1.32 and 1.381).",
+                of psk_mod; qpsk is also the 4-QAM grid), qam16, qam64, qam256 or qam1024 (the \
+                unit-power Gray points of symbol_map; the CMA radius R2 = E|s|^4 / E|s|^2 is \
+                1.32, 1.381, 1.3953 and 1.3988).",
         },
         ParamDesc {
             name: "mu_cma",
@@ -166,13 +168,16 @@ pub static DESCRIPTION: BlockDescription = BlockDescription {
     required: &[],
 };
 
-/// The constellation of a choice index (0 `bpsk`, 1 `qpsk`, 2 `8psk`, 3 `qam16`, 4 `qam64`).
+/// The constellation of a choice index (0 `bpsk`, 1 `qpsk`, 2 `8psk`, 3 `qam16`, 4 `qam64`, 5
+/// `qam256`, 6 `qam1024`).
 const fn constellation_of(i: u16) -> EqConstellation {
     match i {
         0 => EqConstellation::Bpsk,
         2 => EqConstellation::Psk8,
         3 => EqConstellation::Qam16,
         4 => EqConstellation::Qam64,
+        5 => EqConstellation::Qam256,
+        6 => EqConstellation::Qam1024,
         _ => EqConstellation::Qpsk,
     }
 }
@@ -184,6 +189,8 @@ fn constellation_index(c: EqConstellation) -> u16 {
         EqConstellation::Psk8 => 2,
         EqConstellation::Qam16 => 3,
         EqConstellation::Qam64 => 4,
+        EqConstellation::Qam256 => 5,
+        EqConstellation::Qam1024 => 6,
         _ => 1,
     }
 }

@@ -1,6 +1,6 @@
 //! `symbol_demap`: symbols to soft bits (`f32`, a value above 0 means bit 1) for real levels, BPSK,
-//! QPSK, 4-FSK levels, 8PSK (max-log soft bits) and 16-/64-QAM (piecewise-linear max-log soft
-//! bits, the kernel `qam_soft_bits`). A stateless per-symbol map.
+//! QPSK, 4-FSK levels, 8PSK (max-log soft bits) and the square QAM of 16 to 1024 points
+//! (piecewise-linear max-log soft bits, the kernel `qam_soft_bits`). A stateless per-symbol map.
 
 use core::marker::PhantomData;
 
@@ -20,7 +20,9 @@ use crate::storage::{Plan, Storage};
 /// The names of the `constellation` choice, in index order: the constellations of `symbol_map`,
 /// `costas` and `equalize` at their indices (the names and values of the `constellation` of every
 /// block, M44.1.1 §1), then the real alphabets `real` and `fsk4` that only `symbol_demap` has.
-const CONSTELLATION_OPTIONS: &[&str] = &["bpsk", "qpsk", "8psk", "qam16", "qam64", "real", "fsk4"];
+const CONSTELLATION_OPTIONS: &[&str] = &[
+    "bpsk", "qpsk", "8psk", "qam16", "qam64", "qam256", "qam1024", "real", "fsk4",
+];
 
 /// The Gray mapping of 8PSK (M40.1 §1): entry `g = b0 4 + b1 2 + b2` (bit 0 first, the most
 /// significant) is the symbol index `k` of the point `exp(j (2 pi k / 8 + pi / 8))`: `000 -> 0, 001
@@ -92,11 +94,12 @@ pub static DESCRIPTION: BlockDescription = BlockDescription {
         the outer levels), 8psk (C32 input, the points exp(j (2 pi k / 8 + pi / 8)) of psk_mod \
         with the Gray code b0 b1 b2, 3 bits, max-log: scale (min |y - p|^2 over the points \
         whose bit is 0 - the same minimum over the points whose bit is 1) / 4 for each bit), \
-        qam16 and qam64 (C32 input, the unit-power Gray square QAM of qam_mod: the first half \
-        of the bits from the in-phase level, the second half from the quadrature level, 4 or 6 \
-        bits, the piecewise-linear max-log form per axis with v = component sqrt(E), E = 10 or \
-        42: qam16 scale v, scale (2 - |v|); qam64 scale v, scale (4 - |v|), scale (2 - ||v| - \
-        4|)). A soft bit above 0 means bit 1, at or below 0 bit 0, and its magnitude is the confidence; \
+        qam16, qam64, qam256 and qam1024 (C32 input, the unit-power Gray square QAM of \
+        symbol_map: the first half of the bits from the in-phase level, the second half from \
+        the quadrature level, 4, 6, 8 or 10 bits, the piecewise-linear max-log form per axis \
+        with b bits per axis and v = component sqrt(E), E = 10, 42, 170 or 682: t0 = v, ti = \
+        2^(b - i) - |t(i - 1)|, the soft bits scale ti; qam16 scale v, scale (2 - |v|); qam64 \
+        scale v, scale (4 - |v|), scale (2 - ||v| - 4|)). A soft bit above 0 means bit 1, at or below 0 bit 0, and its magnitude is the confidence; \
         this convention holds for the whole project (frame_decode reads it). Place it after \
         symbol_sync (and carrier recovery for PSK). A receiver that wants log-likelihood \
         ratios sets scale to 2 / sigma^2 of the noise per component. NaN and infinite \
@@ -108,7 +111,7 @@ pub static DESCRIPTION: BlockDescription = BlockDescription {
         name: "in",
         types: &[PortType::C32, PortType::F32],
         description: "Symbols, one sample per symbol: f32 for real and fsk4, C32 for bpsk, qpsk, \
-            8psk, qam16 and qam64.",
+            8psk and the QAM.",
     }],
     outputs: &[PortDesc {
         name: "out",
@@ -124,12 +127,13 @@ pub static DESCRIPTION: BlockDescription = BlockDescription {
                 default: 0,
             },
             typical: "bpsk; real after an FSK discriminator, qpsk for QPSK, fsk4 for 4-FSK, \
-                8psk for 8PSK, qam16 and qam64 for QAM",
+                8psk for 8PSK, qam16 to qam1024 for QAM",
             mutability: Mutability::Build,
             description: "The symbol alphabet: real (f32, 1 bit), bpsk (C32, 1 bit), qpsk \
                 (C32, 2 bits, re then im), fsk4 (f32, 2 bits, -v then |v| - 2/3), 8psk (C32, \
-                3 bits, max-log, Gray), qam16 (C32, 4 bits) or qam64 (C32, 6 bits; both Gray, \
-                in-phase bits first, piecewise-linear max-log).",
+                3 bits, max-log, Gray), qam16 (C32, 4 bits), qam64 (C32, 6 bits), qam256 (C32, \
+                8 bits) or qam1024 (C32, 10 bits; the QAM Gray, in-phase bits first, \
+                piecewise-linear max-log).",
         },
         ParamDesc {
             name: "scale",
@@ -178,6 +182,16 @@ pub enum SymbolDemapConstellation {
     /// [`sdrk_core::kernels::constellation::Qam::Qam64`]; per axis with `v = component √42`:
     /// `scale v`, `scale (4 - |v|)`, `scale (2 - ||v| - 4|)` (M44 §2).
     Qam64,
+    /// 256-QAM (`C32` input), eight bits: the Gray code of the in-phase level (`b0 .. b3`),
+    /// then of the quadrature level (`b4 .. b7`) of
+    /// [`sdrk_core::kernels::constellation::Qam::Qam256`]; per axis with `v = component √170`:
+    /// `t0 = v`, `ti = 2^(4 - i) - |t(i - 1)|`, the soft bits `scale ti` (M44.2 §2).
+    Qam256,
+    /// 1024-QAM (`C32` input), ten bits: the Gray code of the in-phase level (`b0 .. b4`), then
+    /// of the quadrature level (`b5 .. b9`) of
+    /// [`sdrk_core::kernels::constellation::Qam::Qam1024`]; per axis with `v = component √682`:
+    /// `t0 = v`, `ti = 2^(5 - i) - |t(i - 1)|`, the soft bits `scale ti` (M44.2 §2).
+    Qam1024,
 }
 
 impl SymbolDemapConstellation {
@@ -189,6 +203,8 @@ impl SymbolDemapConstellation {
             Self::Psk8 => 3,
             Self::Qam16 => 4,
             Self::Qam64 => 6,
+            Self::Qam256 => 8,
+            Self::Qam1024 => 10,
         }
     }
 
@@ -203,7 +219,13 @@ impl SymbolDemapConstellation {
     pub const fn input_type(self) -> PortType {
         match self {
             Self::Real | Self::Fsk4 => PortType::F32,
-            Self::Bpsk | Self::Qpsk | Self::Psk8 | Self::Qam16 | Self::Qam64 => PortType::C32,
+            Self::Bpsk
+            | Self::Qpsk
+            | Self::Psk8
+            | Self::Qam16
+            | Self::Qam64
+            | Self::Qam256
+            | Self::Qam1024 => PortType::C32,
         }
     }
 
@@ -214,8 +236,10 @@ impl SymbolDemapConstellation {
             Self::Psk8 => 2,
             Self::Qam16 => 3,
             Self::Qam64 => 4,
-            Self::Real => 5,
-            Self::Fsk4 => 6,
+            Self::Qam256 => 5,
+            Self::Qam1024 => 6,
+            Self::Real => 7,
+            Self::Fsk4 => 8,
         }
     }
 
@@ -225,8 +249,10 @@ impl SymbolDemapConstellation {
             2 => Self::Psk8,
             3 => Self::Qam16,
             4 => Self::Qam64,
-            5 => Self::Real,
-            6 => Self::Fsk4,
+            5 => Self::Qam256,
+            6 => Self::Qam1024,
+            7 => Self::Real,
+            8 => Self::Fsk4,
             _ => Self::Bpsk,
         }
     }
@@ -311,7 +337,7 @@ impl SymbolDemapConfig {
 }
 
 /// An input sample type of [`SymbolDemapBlock`]: `f32` (constellations `real` and `fsk4`) or `C32`
-/// (`bpsk`, `qpsk`, `8psk`, `qam16`, `qam64`).
+/// (`bpsk`, `qpsk`, `8psk`, `qam16`, `qam64`, `qam256`, `qam1024`).
 ///
 /// ```
 /// use sdrk_blocks::SymbolDemapElem;
@@ -365,14 +391,15 @@ pub(crate) fn soft_bits<T: SymbolDemapElem>(
 }
 
 /// Symbol slicer: `T` symbols in (`f32` for `real` and `fsk4`, `C32` for `bpsk`, `qpsk`,
-/// `8psk`, `qam16` and `qam64`), `f32` soft bits out, `bits_per_symbol` per symbol; a soft bit `> 0` means bit 1 and
+/// `8psk` and `qam16` to `qam1024`), `f32` soft bits out, `bits_per_symbol` per symbol; a soft bit `> 0` means bit 1 and
 /// its magnitude is the confidence.
 ///
 /// Each soft bit is one `f32` product `scale * component` (`scale` rounded once to `f32`); for
 /// `fsk4` the components are `-v` and `|v| - 2/3` (the `f32` nearest to 2/3); for `8psk` they
-/// are `(m0 - m1) * 0.25` from the squared distances to the points; for `qam16` and `qam64`
-/// `v`, `2 - |v|` (and `4 - |v|`, `2 - ||v| - 4|`) per axis with `v = component * √E` (one
-/// `f32` product, `√E` rounded once to `f32`; see [`SymbolDemapConstellation`]).
+/// are `(m0 - m1) * 0.25` from the squared distances to the points; for `qam16` to `qam1024`
+/// `t0 = v`, `ti = 2^(b - i) - |t(i - 1)|` per axis of `b` bits with `v = component * √E` (one
+/// `f32` product, `√E` rounded once to `f32`; 16-QAM `v`, `2 - |v|`; see
+/// [`SymbolDemapConstellation`]).
 /// A call takes `min(input.len(), output.len() / bits_per_symbol)` symbols. Timing: constant
 /// ratio `bits_per_symbol / 1`, delay 0. The block needs no storage.
 ///
@@ -409,8 +436,8 @@ impl<T: SymbolDemapElem, S: Storage> SymbolDemapBlock<T, S> {
         } else {
             Err(Error::InvalidParameter {
                 name: "constellation",
-                reason: "real and fsk4 need f32 input; bpsk, qpsk, 8psk, qam16 and qam64 need c32 \
-                    input",
+                reason: "real and fsk4 need f32 input; bpsk, qpsk, 8psk and the qam constellations \
+                    need c32 input",
             })
         }
     }
@@ -419,7 +446,7 @@ impl<T: SymbolDemapElem, S: Storage> SymbolDemapBlock<T, S> {
     ///
     /// # Errors
     /// `OutOfRange` for `scale`; `InvalidParameter` for a constellation that does not take
-    /// `T` (`real` and `fsk4` need `f32`, `bpsk`, `qpsk`, `8psk`, `qam16` and `qam64` need
+    /// `T` (`real` and `fsk4` need `f32`, `bpsk`, `qpsk`, `8psk` and `qam16` to `qam1024` need
     /// `C32`).
     pub fn new(config: &SymbolDemapConfig, _rate_in: Rate, _storage: &mut S) -> Result<Self> {
         Self::check(config)?;
@@ -483,6 +510,8 @@ impl<T: SymbolDemapElem, S: Storage> Block for SymbolDemapBlock<T, S> {
             }
             SymbolDemapConstellation::Qam16 => qam_soft_bits(Qam::Qam16, s, input, output)?,
             SymbolDemapConstellation::Qam64 => qam_soft_bits(Qam::Qam64, s, input, output)?,
+            SymbolDemapConstellation::Qam256 => qam_soft_bits(Qam::Qam256, s, input, output)?,
+            SymbolDemapConstellation::Qam1024 => qam_soft_bits(Qam::Qam1024, s, input, output)?,
             _ => soft_bits(false, s, input, output),
         };
         Ok(Progress {

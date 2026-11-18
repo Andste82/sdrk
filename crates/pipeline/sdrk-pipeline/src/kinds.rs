@@ -3886,9 +3886,10 @@ impl Kind for BitScrambleKind {
         if input != PortType::F32 {
             return Err(mismatch("bit_scramble needs f32 soft bits"));
         }
-        Ok(scramble_figures(BitScrambleBlock::<VecStorage>::rate_out(
-            cfg, rate,
-        )?))
+        Ok(scramble_figures(
+            BitScrambleBlock::<VecStorage>::rate_out(cfg, rate)?,
+            BitScrambleBlock::<VecStorage>::storage_bytes(cfg, rate)?,
+        ))
     }
     fn build(
         cfg: &BitScrambleConfig,
@@ -3929,6 +3930,7 @@ impl Kind for BitDescrambleKind {
         }
         Ok(scramble_figures(
             BitDescrambleBlock::<VecStorage>::rate_out(cfg, rate)?,
+            BitDescrambleBlock::<VecStorage>::storage_bytes(cfg, rate)?,
         ))
     }
     fn build(
@@ -3944,13 +3946,12 @@ impl Kind for BitDescrambleKind {
     }
 }
 
-/// The figures of `bit_scramble` and `bit_descramble`: no storage, no delay, one sample in per
-/// sample out; cost 2 per bit (a comparison for the register and the sign flip, the register
-/// itself steps 64 bits at a time).
-fn scramble_figures(rate_out: Rate) -> Figures {
+/// The figures of `bit_scramble` and `bit_descramble`: the ring of the register, no delay, one
+/// sample in per sample out; cost 2 per bit (a comparison and two `xor`).
+fn scramble_figures(rate_out: Rate, memory_bytes: usize) -> Figures {
     Figures {
         rate_out,
-        memory_bytes: 0,
+        memory_bytes,
         cost: SCRAMBLE_COST,
         taps: 0,
         delay: Delay::ZERO,

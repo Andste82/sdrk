@@ -13,7 +13,7 @@ use crate::describe::{
     BlockDescription, Mutability, ParamDesc, ParamKind, PortDesc, PortType, Unit,
 };
 use crate::error::{Error, Result};
-use crate::storage::Storage;
+use crate::storage::{Plan, Storage};
 
 /// The names of the `polynomial` choice, in index order.
 pub(crate) const POLYNOMIAL_OPTIONS: &[&str] = &["x23_x18", "x23_x5", "x17_x12", "x58_x39"];
@@ -254,59 +254,42 @@ impl BitScrambleConfig {
     }
 }
 
-/// Words of the ring of [`Register`]: 1024 bits, more than the longest delay (58 symbols of 10
-/// bits) plus one step of 64 bits.
-const RING_WORDS: usize = 16;
-/// Bits of the ring.
-const RING_BITS: usize = RING_WORDS * 64;
-/// Bits per step of the register.
-const STEP: usize = 64;
+/// The sign bit of the hard bit of a soft bit: `0x8000_0000` for a 1 (above 0), 0 for a 0
+/// (0, below 0 or NaN).
+#[inline]
+fn sign_of(v: f32) -> u32 {
+    u32::from(v > 0.0) << 31
+}
 
-/// The bits of the register, newest last, as a ring of `RING_BITS` bits: bit `t` of the stream
-/// is bit `t % 64` of word `(t / 64) % RING_WORDS`.
-#[derive(Debug, Clone, Copy, PartialEq, Eq)]
-pub(crate) struct Register {
-    ring: [u64; RING_WORDS],
-    /// The ring position of the next bit.
+/// `x` with its sign bit flipped by the parity of the bits `a` and `b` (as sign bits).
+#[inline]
+fn flip(x: f32, a: f32, b: f32) -> f32 {
+    f32::from_bits(x.to_bits() ^ sign_of(a) ^ sign_of(b))
+}
+
+/// Soft bits per piece of the in-place descrambler (a copy on the stack, 1 KiB).
+const PIECE: usize = 256;
+
+/// The register of the scrambler and the descrambler: the last `A` soft bits (the output bits of
+/// the scrambler, the input bits of the descrambler) in a ring from the storage, the oldest at
+/// `pos`, zero at the start and after a reset. A call reads the ring for its first `A` bits and
+/// its own bits after them, so that the bulk of a call is one element-wise loop over slices
+/// (the hard bits as sign bits: a comparison, two `xor` per bit, D1532).
+pub(crate) struct Register<B> {
+    ring: B,
     pos: u16,
-    /// The delays `a m` and `b m` in bits.
+    /// The delays `A = a m` and `B = b m` in bits (`A` is the length of the ring).
     a: u16,
     b: u16,
 }
 
-/// The `k` lowest bits set (`k` 1 to 64).
-#[inline]
-fn low_mask(k: usize) -> u64 {
-    u64::MAX >> (64 - k)
-}
-
-/// The hard bits of up to 64 soft bits: bit `j` is `x[j] > 0`, and the mask of the soft bits
-/// that are not 0 or NaN (`x[j] > 0 || x[j] < 0`).
-#[inline]
-fn hard_bits(x: &[f32]) -> (u64, u64) {
-    let (mut gt, mut lt) = (0u64, 0u64);
-    for (j, &v) in x.iter().enumerate() {
-        gt |= u64::from(v > 0.0) << j;
-        lt |= u64::from(v < 0.0) << j;
-    }
-    (gt, gt | lt)
-}
-
-/// `y[j] = x[j]` with its sign bit flipped where bit `j` of `p` is set.
-#[inline]
-fn flip_signs(p: u64, x: &[f32], y: &mut [f32]) {
-    for (j, (y, &x)) in y.iter_mut().zip(x).enumerate() {
-        let s = ((p >> j) as u32 & 1) << 31;
-        *y = f32::from_bits(x.to_bits() ^ s);
-    }
-}
-
-impl Register {
-    /// The zero register of the delays of `config`.
-    pub(crate) fn new(config: BitScrambleConfig) -> Self {
+impl<B: AsRef<[f32]> + AsMut<[f32]>> Register<B> {
+    /// The zero register of the delays of `config` over `ring` (`A` values).
+    pub(crate) fn new(config: BitScrambleConfig, mut ring: B) -> Self {
         let (a, b) = config.delays();
+        ring.as_mut().fill(0.0);
         Self {
-            ring: [0; RING_WORDS],
+            ring,
             pos: 0,
             // At most 580 (58 symbols of 10 bits).
             a: a as u16,
@@ -316,109 +299,149 @@ impl Register {
 
     /// Clears the bits (the state after construction).
     pub(crate) fn reset(&mut self) {
-        self.ring = [0; RING_WORDS];
+        self.ring.as_mut().fill(0.0);
         self.pos = 0;
     }
 
-    fn word(&self, w: usize) -> u64 {
-        self.ring.get(w % RING_WORDS).copied().unwrap_or(0)
+    /// The positions in the ring of the bits `A` and `B` before the first bit of a call.
+    #[inline]
+    fn starts(&self) -> (usize, usize) {
+        let (a, b) = (usize::from(self.a), usize::from(self.b));
+        let pos = usize::from(self.pos);
+        (pos, (pos + a - b) % a)
     }
 
-    /// The `k` (1 to 64) bits from ring position `p` on, the first in bit 0.
+    /// The value at ring position `at`, and the position after it.
     #[inline]
-    fn get(&self, at: usize, len: usize) -> u64 {
-        let (word, bit) = (at / 64, at % 64);
-        // `<< 1 << (63 - bit)` is `<< (64 - bit)` for `bit` above 0 and gives 0 for `bit` 0.
-        let bits = (self.word(word) >> bit) | ((self.word(word + 1) << 1) << (63 - bit));
-        bits & low_mask(len)
+    fn next(&self, at: usize) -> (f32, usize) {
+        let ring = self.ring.as_ref();
+        let v = ring.get(at).copied().unwrap_or(0.0);
+        let at = at + 1;
+        (v, if at == ring.len() { 0 } else { at })
     }
 
-    /// Writes the `k` (1 to 64) bits of `v` (above them 0) at ring position `p`.
-    #[inline]
-    fn put(&mut self, at: usize, len: usize, bits: u64) {
-        let (word, bit) = (at / 64, at % 64);
-        let mask = low_mask(len);
-        if let Some(x) = self.ring.get_mut(word % RING_WORDS) {
-            *x = (*x & !(mask << bit)) | (bits << bit);
+    /// Puts the bits of a call, `bits`, into the ring (its last `A` of them).
+    fn remember(&mut self, bits: &[f32]) {
+        let a = usize::from(self.a);
+        let ring = self.ring.as_mut();
+        if bits.len() >= a {
+            if let Some(last) = bits.get(bits.len() - a..) {
+                ring.copy_from_slice(last);
+            }
+            self.pos = 0;
+            return;
         }
-        // `>> 1 >> (63 - bit)` is `>> (64 - bit)` for `bit` above 0 and gives 0 for `bit` 0.
-        if let Some(x) = self.ring.get_mut((word + 1) % RING_WORDS) {
-            *x = (*x & !((mask >> 1) >> (63 - bit))) | ((bits >> 1) >> (63 - bit));
+        let pos = usize::from(self.pos);
+        let (first, second) = bits.split_at(bits.len().min(a - pos));
+        if let Some(r) = ring.get_mut(pos..pos + first.len()) {
+            r.copy_from_slice(first);
         }
-    }
-
-    /// The ring position `back` bits before the next bit.
-    #[inline]
-    fn back(&self, back: u16) -> usize {
-        (usize::from(self.pos) + RING_BITS - usize::from(back)) % RING_BITS
-    }
-
-    /// Moves the position on by `k` bits.
-    #[inline]
-    fn advance(&mut self, k: usize) {
-        self.pos = ((usize::from(self.pos) + k) % RING_BITS) as u16;
-    }
-
-    /// Scrambles up to `min(b m, 64)` soft bits: the parity of the output bits `a m` and
-    /// `b m` before each bit flips its sign, and the output bits go into the register.
-    #[inline]
-    fn scramble_step(&mut self, x: &[f32], y: &mut [f32]) {
-        let k = x.len();
-        let p = self.get(self.back(self.a), k) ^ self.get(self.back(self.b), k);
-        let (gt, nonzero) = hard_bits(x);
-        // The output bit: the input bit XOR the parity, 0 for a 0 or NaN input.
-        self.put(usize::from(self.pos), k, (gt ^ p) & nonzero);
-        self.advance(k);
-        flip_signs(p, x, y);
-    }
-
-    /// Descrambles up to 64 soft bits: the input bits go into the register first (a delay
-    /// below 64 bits reaches into the same step), then the parity of the input bits `a m` and
-    /// `b m` before each bit flips its sign.
-    #[inline]
-    fn descramble_step(&mut self, x: &[f32], y: &mut [f32]) {
-        let k = x.len();
-        let (gt, _) = hard_bits(x);
-        let at = usize::from(self.pos);
-        self.put(at, k, gt);
-        let p = self.get(self.back(self.a), k) ^ self.get(self.back(self.b), k);
-        self.advance(k);
-        flip_signs(p, x, y);
-    }
-
-    /// Scrambles `x` into `y` (the same length).
-    pub(crate) fn scramble(&mut self, x: &[f32], y: &mut [f32]) {
-        let step = usize::from(self.b).min(STEP);
-        for (x, y) in x.chunks(step).zip(y.chunks_mut(step)) {
-            self.scramble_step(x, y);
+        if let Some(r) = ring.get_mut(..second.len()) {
+            r.copy_from_slice(second);
         }
+        self.pos = ((pos + bits.len()) % a) as u16;
     }
 
-    /// Descrambles `x` into `y` (the same length).
-    pub(crate) fn descramble(&mut self, x: &[f32], y: &mut [f32]) {
-        for (x, y) in x.chunks(STEP).zip(y.chunks_mut(STEP)) {
-            self.descramble_step(x, y);
-        }
-    }
-
-    /// Scrambles `data` in place.
+    /// Scrambles `data` in place: `s[n] = x[n] ^ s[n - A] ^ s[n - B]`.
     pub(crate) fn scramble_in_place(&mut self, data: &mut [f32]) {
-        let step = usize::from(self.b).min(STEP);
-        let mut x = [0.0f32; STEP];
-        for y in data.chunks_mut(step) {
-            let x = x.get_mut(..y.len()).unwrap_or_default();
-            x.copy_from_slice(y);
-            self.scramble_step(x, y);
-        }
+        self.scramble_with::<true>(&[], data);
     }
 
-    /// Descrambles `data` in place.
+    /// Scrambles `x` into `y` (the same length), without a copy of `x` into `y` first (a copy of
+    /// a whole call is a `memcpy`, D1532).
+    pub(crate) fn scramble(&mut self, x: &[f32], y: &mut [f32]) {
+        self.scramble_with::<false>(x, y);
+    }
+
+    /// The scrambler: the input is `out` itself for `IN_PLACE`, else `input` (of the length of
+    /// `out`).
+    /// After the first `A` bits it runs in pieces of `B` bits rounded down to whole vectors of 8
+    /// (`B` below 8: `B`), each one element-wise loop that reads the output of the pieces before
+    /// it (the feedback reaches `B` bits back).
+    #[inline]
+    fn scramble_with<const IN_PLACE: bool>(&mut self, input: &[f32], out: &mut [f32]) {
+        let (da, db) = (usize::from(self.a), usize::from(self.b));
+        let head = out.len().min(da);
+        let (mut at_a, mut at_b) = self.starts();
+        for i in 0..head {
+            let (va, next_a) = self.next(at_a);
+            at_a = next_a;
+            let vb = if i >= db {
+                out.get(i - db).copied().unwrap_or(0.0)
+            } else {
+                let (v, next_b) = self.next(at_b);
+                at_b = next_b;
+                v
+            };
+            let v = if IN_PLACE { out.get(i) } else { input.get(i) };
+            let v = v.copied().unwrap_or(0.0);
+            if let Some(o) = out.get_mut(i) {
+                *o = flip(v, va, vb);
+            }
+        }
+        let piece = if db >= 8 { db & !7 } else { db };
+        let mut k = head;
+        while k < out.len() {
+            let len = piece.min(out.len() - k);
+            let (done, rest) = out.split_at_mut(k);
+            let (Some(sa), Some(sb), Some(dst)) = (
+                done.get(k - da..k - da + len),
+                done.get(k - db..k - db + len),
+                rest.get_mut(..len),
+            ) else {
+                return;
+            };
+            if IN_PLACE {
+                for ((o, &va), &vb) in dst.iter_mut().zip(sa).zip(sb) {
+                    *o = flip(*o, va, vb);
+                }
+            } else if let Some(xs) = input.get(k..k + len) {
+                for (((o, &v), &va), &vb) in dst.iter_mut().zip(xs).zip(sa).zip(sb) {
+                    *o = flip(v, va, vb);
+                }
+            }
+            k += len;
+        }
+        // `out` holds the output bits, the register of the scrambler.
+        let bits: &[f32] = out;
+        self.remember(bits);
+    }
+
+    /// Descrambles `x` into `y` (the same length): `y[n] = x[n] ^ x[n - A] ^ x[n - B]`, one
+    /// element-wise loop after the first `A` bits.
+    pub(crate) fn descramble(&mut self, input: &[f32], out: &mut [f32]) {
+        let (da, db) = (usize::from(self.a), usize::from(self.b));
+        let head = input.len().min(da);
+        let (mut at_a, mut at_b) = self.starts();
+        for (i, (o, &v)) in out.iter_mut().zip(input).take(head).enumerate() {
+            let (va, next_a) = self.next(at_a);
+            at_a = next_a;
+            let vb = if i >= db {
+                input.get(i - db).copied().unwrap_or(0.0)
+            } else {
+                let (w, next_b) = self.next(at_b);
+                at_b = next_b;
+                w
+            };
+            *o = flip(v, va, vb);
+        }
+        if let (Some(dst), Some(xs), Some(sb)) =
+            (out.get_mut(da..), input.get(da..), input.get(da - db..))
+        {
+            for (((o, &v), &va), &vb) in dst.iter_mut().zip(xs).zip(input).zip(sb) {
+                *o = flip(v, va, vb);
+            }
+        }
+        self.remember(input);
+    }
+
+    /// Descrambles `data` in place, through a copy of each piece of [`PIECE`] bits.
     pub(crate) fn descramble_in_place(&mut self, data: &mut [f32]) {
-        let mut x = [0.0f32; STEP];
-        for y in data.chunks_mut(STEP) {
-            let x = x.get_mut(..y.len()).unwrap_or_default();
+        let mut copy = [0.0f32; PIECE];
+        for y in data.chunks_mut(PIECE) {
+            let x = copy.get_mut(..y.len()).unwrap_or_default();
             x.copy_from_slice(y);
-            self.descramble_step(x, y);
+            self.descramble(x, y);
         }
     }
 }
@@ -430,18 +453,21 @@ impl Register {
 /// s[n - B]` with `x[n]` the input bit (`> 0` is a 1) and `s` the output bits before it (0 before
 /// the start and after [`reset`](Block::reset)); the output sample is the input sample with its
 /// sign flipped where the parity `s[n - A] ^ s[n - B]` is 1, so it keeps the magnitude (a 0 or
-/// NaN input stays 0 or NaN and counts as a 0 bit in the register). The register runs over up to
-/// 64 bits per step (at most `B` for the feedback), and the result does not depend on how the
-/// input is cut. A call takes `min(input.len(), output.len())` bits. Timing: constant ratio 1,
-/// delay 0. Storage: none (the register of 1024 bits is in the block).
+/// NaN input stays 0 or NaN and counts as a 0 bit in the register). The register is a ring of
+/// the last `A` output bits as soft bits; after its first `A` bits a call runs in pieces of `B`
+/// bits, element-wise (the feedback reaches `B` bits back), and the result does not depend on how
+/// the input is cut. A call takes `min(input.len(), output.len())` bits. Timing: constant ratio
+/// 1, delay 0. Storage: the ring, `A` `f32` (at most 580).
 ///
 /// ```
 /// use sdrk::Rate;
 /// use sdrk_blocks::{ArenaStorage, BitDescrambleBlock, BitScrambleBlock, BitScrambleConfig, Block};
 /// let cfg = BitScrambleConfig::default();
 /// let rate = Rate::hz(9600)?;
-/// let mut tx = BitScrambleBlock::new(&cfg, rate, &mut ArenaStorage::new(&mut []))?;
-/// let mut rx = BitDescrambleBlock::new(&cfg, rate, &mut ArenaStorage::new(&mut []))?;
+/// let mut mem = [0u8; 4096];
+/// let mut st = ArenaStorage::new(&mut mem);
+/// let mut tx = BitScrambleBlock::new(&cfg, rate, &mut st)?;
+/// let mut rx = BitDescrambleBlock::new(&cfg, rate, &mut st)?;
 /// // a long run of ones becomes a pseudo-random stream
 /// let bits = [1.0f32; 100];
 /// let mut air = [0.0f32; 100];
@@ -453,9 +479,8 @@ impl Register {
 /// # Ok::<(), Box<dyn std::error::Error>>(())
 /// ```
 pub struct BitScrambleBlock<S: Storage> {
-    reg: Register,
+    reg: Register<S::Buf<f32>>,
     config: BitScrambleConfig,
-    _storage: core::marker::PhantomData<fn() -> S>,
 }
 
 impl<S: Storage> core::fmt::Debug for BitScrambleBlock<S> {
@@ -467,24 +492,26 @@ impl<S: Storage> core::fmt::Debug for BitScrambleBlock<S> {
 }
 
 impl<S: Storage> BitScrambleBlock<S> {
-    /// Creates the block (it needs no storage).
+    /// Creates the block; the ring of the register comes from `storage`.
     ///
     /// # Errors
-    /// None today; the signature is that of every block.
-    pub fn new(config: &BitScrambleConfig, _rate_in: Rate, _storage: &mut S) -> Result<Self> {
+    /// `Storage` when the storage is too small.
+    pub fn new(config: &BitScrambleConfig, _rate_in: Rate, storage: &mut S) -> Result<Self> {
         Ok(Self {
-            reg: Register::new(*config),
+            reg: Register::new(*config, storage.alloc::<f32>(config.delays().0)?),
             config: *config,
-            _storage: core::marker::PhantomData,
         })
     }
 
-    /// Exact bytes of storage the block needs: 0.
+    /// Exact bytes of storage the block needs for an arena that starts at a 16-byte aligned
+    /// address (an unaligned slice may need up to 15 bytes more): the ring of `A` `f32`.
     ///
     /// # Errors
     /// None today.
-    pub fn storage_bytes(_config: &BitScrambleConfig, _rate_in: Rate) -> Result<usize> {
-        Ok(0)
+    pub fn storage_bytes(config: &BitScrambleConfig, _rate_in: Rate) -> Result<usize> {
+        let mut plan = Plan::default();
+        plan.add::<f32>(config.delays().0)?;
+        Ok(plan.bytes())
     }
 
     /// Output rate: the input rate.
@@ -508,8 +535,10 @@ impl<S: Storage> BitScrambleBlock<S> {
     /// use sdrk_blocks::{ArenaStorage, BitScrambleBlock, BitScrambleConfig, Block};
     /// let cfg = BitScrambleConfig::default();
     /// let rate = Rate::hz(9600)?;
-    /// let mut a = BitScrambleBlock::new(&cfg, rate, &mut ArenaStorage::new(&mut []))?;
-    /// let mut b = BitScrambleBlock::new(&cfg, rate, &mut ArenaStorage::new(&mut []))?;
+    /// let mut mem = [0u8; 4096];
+    /// let mut st = ArenaStorage::new(&mut mem);
+    /// let mut a = BitScrambleBlock::new(&cfg, rate, &mut st)?;
+    /// let mut b = BitScrambleBlock::new(&cfg, rate, &mut st)?;
     /// let x: Vec<f32> = (0..50).map(|i| if i % 3 == 0 { 1.0 } else { -0.5 }).collect();
     /// let mut y = vec![0.0f32; 50];
     /// a.process(&x, &mut y)?;

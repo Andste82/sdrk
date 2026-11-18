@@ -220,7 +220,8 @@ fn buffer_len(bps: usize) -> usize {
 /// empty input is idle, as for `frame_encode`: the bits that wait are written, then idle bits for
 /// the whole symbols that still fit the output. Timing: a source, at most
 /// `ceil(frame_bits / bits) sps` output samples per packet; delay `span bits / 2` samples of the
-/// bit rate (that of `qam_mod`). Storage: that of `qam_mod` and the buffer of `256 bits` `f32`.
+/// bit rate (that of `qam_mod`). Storage: the ring of `bit_scramble` (`23 bits` `f32` for the
+/// default polynomial), that of `qam_mod` and the buffer of `256 bits` `f32`.
 ///
 /// ```
 /// use sdrk::{Rate, C32};
@@ -315,8 +316,11 @@ impl<S: Storage> QamFrameEncodeBlock<S> {
     /// As [`QamFrameEncodeConfig::validate`].
     pub fn storage_bytes(config: &QamFrameEncodeConfig, _rate_in: Rate) -> Result<usize> {
         config.validate()?;
-        // `frame_encode` and `bit_scramble` need no storage.
+        // `frame_encode` needs no storage; the ring of `bit_scramble`, then `qam_mod`.
         let mut plan = Plan::default();
+        if config.scrambler == Scrambler::Multiplicative {
+            plan.add::<f32>(config.scramble().delays().0)?;
+        }
         QamModBlock::<S>::plan(&config.qam, &mut plan)?;
         plan.add::<f32>(buffer_len(config.qam.bits_per_symbol()))?;
         Ok(plan.bytes())

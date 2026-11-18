@@ -50,15 +50,18 @@ pub static DESCRIPTION: BlockDescription = BlockDescription {
 /// [`reset`](Block::reset)); the output sample is the input sample with its sign flipped where the
 /// parity `x[n - A] ^ x[n - B]` is 1, so it keeps the magnitude. The inverse of
 /// [`BitScrambleBlock`](crate::BitScrambleBlock) with the same configuration, from any start after
-/// `A` bits. The register runs over 64 bits per step, and the result does not depend on how the
-/// input is cut. A call takes `min(input.len(), output.len())` bits. Timing: constant ratio 1,
-/// delay 0. Storage: none (the register of 1024 bits is in the block).
+/// `A` bits. The register is a ring of the last `A` input bits as soft bits; after its first `A`
+/// bits a call is one element-wise loop, and the result does not depend on how the input is cut.
+/// A call takes `min(input.len(), output.len())` bits. Timing: constant ratio 1, delay 0.
+/// Storage: the ring, `A` `f32` (at most 580).
 ///
 /// ```
 /// use sdrk::Rate;
 /// use sdrk_blocks::{ArenaStorage, BitDescrambleBlock, BitScrambleConfig, Block};
 /// let cfg = BitScrambleConfig::default();
-/// let mut rx = BitDescrambleBlock::new(&cfg, Rate::hz(9600)?, &mut ArenaStorage::new(&mut []))?;
+/// let mut mem = [0u8; 4096];
+/// let mut st = ArenaStorage::new(&mut mem);
+/// let mut rx = BitDescrambleBlock::new(&cfg, Rate::hz(9600)?, &mut st)?;
 /// // one 1 on the air gives three 1 out: at the bit, 18 and 23 bits later
 /// let mut air = [-1.0f32; 30];
 /// air[2] = 1.0;
@@ -69,9 +72,8 @@ pub static DESCRIPTION: BlockDescription = BlockDescription {
 /// # Ok::<(), Box<dyn std::error::Error>>(())
 /// ```
 pub struct BitDescrambleBlock<S: Storage> {
-    reg: Register,
+    reg: Register<S::Buf<f32>>,
     config: BitScrambleConfig,
-    _storage: core::marker::PhantomData<fn() -> S>,
 }
 
 impl<S: Storage> core::fmt::Debug for BitDescrambleBlock<S> {
@@ -83,24 +85,25 @@ impl<S: Storage> core::fmt::Debug for BitDescrambleBlock<S> {
 }
 
 impl<S: Storage> BitDescrambleBlock<S> {
-    /// Creates the block (it needs no storage).
+    /// Creates the block; the ring of the register comes from `storage`.
     ///
     /// # Errors
-    /// None today; the signature is that of every block.
-    pub fn new(config: &BitScrambleConfig, _rate_in: Rate, _storage: &mut S) -> Result<Self> {
+    /// `Storage` when the storage is too small.
+    pub fn new(config: &BitScrambleConfig, _rate_in: Rate, storage: &mut S) -> Result<Self> {
         Ok(Self {
-            reg: Register::new(*config),
+            reg: Register::new(*config, storage.alloc::<f32>(config.delays().0)?),
             config: *config,
-            _storage: core::marker::PhantomData,
         })
     }
 
-    /// Exact bytes of storage the block needs: 0.
+    /// Exact bytes of storage the block needs for an arena that starts at a 16-byte aligned
+    /// address (an unaligned slice may need up to 15 bytes more): the ring of `A` `f32`, as
+    /// [`BitScrambleBlock::storage_bytes`](crate::BitScrambleBlock::storage_bytes).
     ///
     /// # Errors
     /// None today.
-    pub fn storage_bytes(_config: &BitScrambleConfig, _rate_in: Rate) -> Result<usize> {
-        Ok(0)
+    pub fn storage_bytes(config: &BitScrambleConfig, rate_in: Rate) -> Result<usize> {
+        super::bit_scramble::BitScrambleBlock::<S>::storage_bytes(config, rate_in)
     }
 
     /// Output rate: the input rate.
@@ -124,8 +127,10 @@ impl<S: Storage> BitDescrambleBlock<S> {
     /// use sdrk_blocks::{ArenaStorage, BitDescrambleBlock, BitScrambleConfig, Block};
     /// let cfg = BitScrambleConfig::default();
     /// let rate = Rate::hz(9600)?;
-    /// let mut a = BitDescrambleBlock::new(&cfg, rate, &mut ArenaStorage::new(&mut []))?;
-    /// let mut b = BitDescrambleBlock::new(&cfg, rate, &mut ArenaStorage::new(&mut []))?;
+    /// let mut mem = [0u8; 4096];
+    /// let mut st = ArenaStorage::new(&mut mem);
+    /// let mut a = BitDescrambleBlock::new(&cfg, rate, &mut st)?;
+    /// let mut b = BitDescrambleBlock::new(&cfg, rate, &mut st)?;
     /// let x: Vec<f32> = (0..90).map(|i| if i % 7 < 3 { 0.25 } else { -2.0 }).collect();
     /// let mut y = vec![0.0f32; 90];
     /// a.process(&x, &mut y)?;

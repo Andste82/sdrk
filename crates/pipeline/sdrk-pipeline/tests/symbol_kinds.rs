@@ -170,10 +170,13 @@ fn symbol_demap_checks_the_type_per_constellation() {
     for (ty, constellation, bits, cost) in [
         ("f32", "real", 1u64, 1.0),
         ("c32", "bpsk", 1, 1.0),
-        ("c32", "qpsk", 2, 1.0),
-        // M44: the QAM soft bits (D1200).
+        // M44.2: qpsk through the instance of one bit per axis of `qam_soft_bits` (D1515).
+        ("c32", "qpsk", 2, 4.0),
+        // M44: the QAM soft bits (D1200); M44.2: 256-QAM and 1024-QAM (D1508).
         ("c32", "qam16", 4, 10.0),
         ("c32", "qam64", 6, 18.0),
+        ("c32", "qam256", 8, 22.0),
+        ("c32", "qam1024", 10, 28.0),
     ] {
         let report = validate(&single(
             "symbol_demap",

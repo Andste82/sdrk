@@ -1,4 +1,4 @@
-//! `qam_frame_decode`: 16-QAM or 64-QAM baseband to the packets of the test framing, the
+//! `qam_frame_decode`: square QAM baseband (4-QAM to 1024-QAM) to the packets of the test framing, the
 //! composite `qam_demod` -> `frame_decode` with a watch at frame level (M44.1 §7).
 
 use sdrk::{Progress, Rate, Ratio, RatioKind};
@@ -82,11 +82,11 @@ pub const QAM_FRAME_DECODE_PARAMS: ParamMap = ParamMap::new(&[
 /// Description of the `qam_frame_decode` block.
 pub static DESCRIPTION: BlockDescription = BlockDescription {
     kind: "qam_frame_decode",
-    summary: "Demodulates 16-QAM or 64-QAM and decodes the packets of the test framing, with a \
-        watch at frame level.",
+    summary: "Demodulates square QAM (4-QAM to 1024-QAM) and decodes the packets of the test \
+        framing, with a watch at frame level.",
     details: "The receive side of qam_frame_encode, a composite of qam_demod (matched filter, \
         symbol timing, frequency acquisition, equalizer, carrier loop and soft bits, with its \
-        parameters) and frame_decode with rotations four and the same constellation (4 or 6 bits per \
+        parameters) and frame_decode with rotations four and the same constellation (2, 4, 6, 8 or 10 bits per \
         symbol), which resolves the 90 degree ambiguity of the square constellation and reports the \
         quarter turns in bits 16 and 17 of the packet flags (max_sync_errors, emit_bad and \
         whitening as frame_decode). The watch at frame level: after a first frame with CRC_OK \
@@ -237,7 +237,7 @@ fn buffer_len(bps: usize) -> usize {
     QAM_DEMOD_CHUNK * bps
 }
 
-/// 16-QAM and 64-QAM receiver of the test framing: `C32` in, [`Packets`] out (M44.1 §7).
+/// Square QAM receiver (`qpsk` to `qam1024`) of the test framing: `C32` in, [`Packets`] out (M44.1 §7).
 ///
 /// A composite block: [`QamDemodBlock`] writes the soft bits of each piece of at most
 /// [`QAM_DEMOD_CHUNK`] input samples into a buffer, which [`FrameDecodeBlock`] (`rotations`

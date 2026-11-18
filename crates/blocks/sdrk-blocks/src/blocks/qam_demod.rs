@@ -1,4 +1,4 @@
-//! `qam_demod`: 16-QAM and 64-QAM demodulator (matched filter, symbol timing, frequency
+//! `qam_demod`: square QAM demodulator, 4-QAM (`qpsk`) to 1024-QAM (matched filter, symbol timing, frequency
 //! acquisition, equalizer, decision-directed carrier recovery, soft bits), a composite of the
 //! building blocks `pulse_match`, `symbol_sync`, `qam_acquire`, `equalize`, `costas` and `symbol_demap`
 //! with the lock state machine `LockWatch` (M44.1 §5).
@@ -6,15 +6,13 @@
 use sdrk::{Delay, Progress, Rate, Ratio, RatioKind};
 use sdrk_core::C32;
 use sdrk_core::kernels::costas::CostasConstellation;
-use sdrk_core::kernels::equalize::EqualizeState;
+use sdrk_core::kernels::equalize::{EqConstellation, EqualizeState};
 
 use super::costas::{
     CostasBlock, CostasConfig, DEFAULT_DAMPING, DEFAULT_MAX_OFFSET, MAX_LOOP_BW, MIN_LOOP_BW,
     check_f64,
 };
-use super::equalize::{
-    DEFAULT_CMA_SYMBOLS, DEFAULT_MU_CMA, DEFAULT_TAPS, EQ_TAPS, EqualizeBlock, EqualizeConfig,
-};
+use super::equalize::{DEFAULT_TAPS, EQ_TAPS, EqualizeBlock, EqualizeConfig};
 use super::psk_demod::{SYNC_MAX_DEVIATION, check_equalizer_taps, split_work, work_len};
 use super::pulse_match::{
     MATCH_ROLLOFF_PARAM, MATCH_SPAN_PARAM, PulseMatchBlock, PulseMatchConfig, SYMBOL_RATE_PARAM,
@@ -101,7 +99,8 @@ pub(crate) const SYNC_BW_PARAM: ParamDesc = ParamDesc {
         max: 0.1,
         default: Some(DEFAULT_SYNC_BW),
     },
-    typical: "0.005; up to 0.01 for a faster acquisition",
+    typical: "0.005; 0.002 for qam256 and qam1024 (less timing jitter), up to 0.01 for a \
+        faster acquisition",
     mutability: Mutability::Build,
     description: "Loop bandwidth of the symbol timing, normalized to the symbol rate.",
 };
@@ -123,8 +122,8 @@ pub(crate) const CARRIER_BW_PARAM: ParamDesc = ParamDesc {
 /// Description of the `qam_demod` block.
 pub static DESCRIPTION: BlockDescription = BlockDescription {
     kind: "qam_demod",
-    summary: "Demodulates 16-QAM or 64-QAM to soft bits: matched filter, symbol timing, \
-        equalizer and carrier recovery.",
+    summary: "Demodulates square QAM (4-QAM to 1024-QAM) to soft bits: matched filter, symbol \
+        timing, equalizer and carrier recovery.",
     details: "The input is the complex baseband at the nominal level of unit average power \
         (an agc before it) with fs / symbol_rate_hz within 1 % of an integer and at least 2 \
         (otherwise the rate is unsupported: resample first). The matched root-raised-cosine \
@@ -135,16 +134,18 @@ pub static DESCRIPTION: BlockDescription = BlockDescription {
         from symbol 256 on, range +-0.125 cycles per symbol, repeated on the next 512 symbols \
         until its peak stands clear of the noise; the offset then goes to the phase tracker of \
         the equalizer, or to the carrier loop without the equalizer; every 4096 \
-        symbols after that the lock of the carrier loop is checked, and after a check without \
+        symbols (12288 for qam256, 20480 for qam1024) after that the lock of the carrier loop is checked, and after a check without \
         lock a new window of the fourth powers that shows a clear carrier more than 0.0002 \
         cycles per symbol away from the loops starts the equalizer again and the acquisition \
         searches again; so does an energy of the equalizer weights (times the power of its input over the \
-        pull-in, the energy at unit input power) below 0.75 for 16-QAM or 0.85 for 64-QAM at two \
-        checks in a row, and a clear window after six or more windows \
+        pull-in, the energy at unit input power) below 0.65 for qpsk, 0.75 for qam16, 0.85 for \
+        qam64 or 0.9 for qam256 and qam1024 at two checks in a row, and a clear window after six or more windows \
         without a clear peak, a signal back after a gap, starts the equalizer again with the \
         new estimate), the adaptive equalizer \
         equalize (the constellation, equalizer_taps taps, no feedback \
-        taps, mu_cma 0.05, mu_dd 0.005, 1000 CMA symbols, then decision-directed; its phase \
+        taps, the blind start of the constellation: mu_cma 0.05 over 1000 CMA symbols for qpsk \
+        to qam64, 0.02 over 8000 for qam256, 0.005 over 16000 for qam1024, then \
+        decision-directed with mu_dd 0.005; its phase \
         tracker at 0.005 until the first check after the estimate, then at 0.0015, a narrow \
         frequency tracker; at the switch to the decision mode the tracker turns by the phase \
         of the fourth power of the equalizer's output over its last 256 blind symbols after the \
@@ -192,7 +193,7 @@ pub static DESCRIPTION: BlockDescription = BlockDescription {
 /// ```
 #[derive(Debug, Clone, Copy, PartialEq)]
 pub struct QamDemodConfig {
-    /// The constellation: `Qam16` or `Qam64`.
+    /// The constellation: `Qpsk` (4-QAM), `Qam16`, `Qam64`, `Qam256` or `Qam1024`.
     pub constellation: SymbolMapConstellation,
     /// Symbol rate in Hz (required).
     pub symbol_rate_hz: f64,
@@ -225,8 +226,9 @@ impl Default for QamDemodConfig {
 }
 
 impl QamDemodConfig {
-    /// Bits per symbol: 4 for `qam16`, 6 for `qam64` (that of the constellation for another
-    /// one, which [`QamDemodConfig::validate`] refuses).
+    /// Bits per symbol: 2 for `qpsk`, 4 for `qam16`, 6 for `qam64`, 8 for `qam256`, 10 for
+    /// `qam1024` (that of the constellation for another one, which [`QamDemodConfig::validate`]
+    /// refuses).
     pub fn bits_per_symbol(&self) -> usize {
         self.constellation.bits_per_symbol()
     }
@@ -244,20 +246,24 @@ impl QamDemodConfig {
     }
 
     /// The configuration of the equalizer (`None` for `equalizer_taps` 0): the forward taps,
-    /// no feedback, the constellation, `mu_cma` and the CMA symbols of the
-    /// `equalize` defaults, `mu_dd` 0.005 (D1618) and the phase tracker at
+    /// no feedback, the constellation, `mu_cma` and the CMA symbols of the blind start of
+    /// `equalize` for the constellation ([`EqualizeConfig::blind_start`], D1517), `mu_dd` 0.005
+    /// (D1618) and the phase tracker at
     /// [`QAM_TRACKER_PULL_BW`] (the block narrows it to [`QAM_TRACKER_HOLD_BW`] at the first check
     /// after an estimate, D1622).
     pub fn equalizer(&self) -> Option<EqualizeConfig> {
         (self.equalizer_taps != 0).then(|| EqualizeConfig {
             taps: self.equalizer_taps,
-            feedback_taps: 0,
-            constellation: self.constellation.into(),
-            mu_cma: DEFAULT_MU_CMA,
             mu_dd: QAM_MU_DD,
-            cma_symbols: DEFAULT_CMA_SYMBOLS,
             phase_bw: QAM_TRACKER_PULL_BW,
+            ..EqualizeConfig::for_constellation(self.constellation.into())
         })
+    }
+
+    /// Symbols after a used estimate, and then between two checks, at which the controller
+    /// checks the carrier loop: [`qam_acquisition_check`] of the constellation.
+    pub fn acquisition_check(&self) -> usize {
+        qam_acquisition_check(self.constellation)
     }
 
     /// The ranges, and the integer samples per symbol of the matched filter.
@@ -304,8 +310,8 @@ impl QamDemodConfig {
     /// Checks the configuration against the input sample rate.
     ///
     /// # Errors
-    /// `OutOfRange` for a value outside its range; `InvalidParameter` for a constellation other
-    /// than `qam16` and `qam64`, for an `equalizer_taps` of 1 or an even count and for a symbol rate whose samples per
+    /// `OutOfRange` for a value outside its range; `InvalidParameter` for a constellation that
+    /// is not a square QAM (`bpsk`, `8psk`), for an `equalizer_taps` of 1 or an even count and for a symbol rate whose samples per
     /// symbol are not within 1 % of an integer from 2 to 1024 or are below 2 (the pipeline
     /// reports it as `rate_unsupported` with the hint to resample).
     pub fn validate(&self, rate_in: Rate) -> Result<()> {
@@ -316,8 +322,8 @@ impl QamDemodConfig {
     ///
     /// # Errors
     /// `UnknownParameter`, `WrongParamType`, `OutOfRange`; `InvalidParameter` for a
-    /// constellation other than `qam16` and `qam64` and for an `equalizer_taps` of 1 or an
-    /// even count.
+    /// constellation that is not a square QAM (`bpsk`, `8psk`) and for an `equalizer_taps` of 1
+    /// or an even count.
     pub fn set(&mut self, name: &str, value: ParamValue) -> Result<()> {
         let p = DESCRIPTION.param(name).ok_or(Error::UnknownParameter)?;
         p.check(&value)?;
@@ -367,6 +373,31 @@ impl QamDemodConfig {
 /// the acquisition searches again from the start of its window. A verify window without a clear
 /// peak (noise, or a weak signal whose lock level noise also reaches) keeps the estimate.
 pub const QAM_ACQUISITION_CHECK: usize = 4096;
+/// The check interval of 256-QAM (D1517): it covers the 8000 blind symbols of its equalizer and
+/// the settling of the decision mode before the first check after an estimate.
+pub const QAM256_ACQUISITION_CHECK: usize = 12_288;
+/// The check interval of 1024-QAM (D1517): it covers the 16000 blind symbols of its equalizer and
+/// the settling of the decision mode before the first check after an estimate.
+pub const QAM1024_ACQUISITION_CHECK: usize = 20_480;
+
+/// The symbols between two checks of the controller of `qam_demod` for a constellation (the
+/// maintainer's decision on I44.2-3, D1517): [`QAM_ACQUISITION_CHECK`] for `qpsk` to `qam64`
+/// (D1421), [`QAM256_ACQUISITION_CHECK`] and [`QAM1024_ACQUISITION_CHECK`] for the denser grids,
+/// whose equalizer has a longer blind start ([`EqualizeConfig::blind_start`]); the check must
+/// come after the switch of the equalizer to the decision mode and its settling.
+///
+/// ```
+/// use sdrk_blocks::{SymbolMapConstellation, qam_acquisition_check};
+/// assert_eq!(qam_acquisition_check(SymbolMapConstellation::Qam16), 4096);
+/// assert_eq!(qam_acquisition_check(SymbolMapConstellation::Qam1024), 20_480);
+/// ```
+pub const fn qam_acquisition_check(c: SymbolMapConstellation) -> usize {
+    match c {
+        SymbolMapConstellation::Qam256 => QAM256_ACQUISITION_CHECK,
+        SymbolMapConstellation::Qam1024 => QAM1024_ACQUISITION_CHECK,
+        _ => QAM_ACQUISITION_CHECK,
+    }
+}
 /// The largest distance in cycles per symbol between a clear estimate of the verify window and
 /// the frequency of the loops for which the estimate is kept; beyond it the loops sit on a wrong
 /// frequency or have not converged on the signal (D1605, D1618; 2e-4 since D1623: the narrow
@@ -390,6 +421,36 @@ pub const QAM_WATCH_WEIGHT_ENERGY_16: f32 = 0.75;
 /// receiver of the comparison that keeps one alignment stays at 0.874 or above (16 dB), and the
 /// false state of D1700 falls below 0.85 within about 6000 symbols (D1567).
 pub const QAM_WATCH_WEIGHT_ENERGY_64: f32 = 0.85;
+/// The weight watch of `qam_demod` for 4-QAM (`qpsk`, as [`QAM_WATCH_WEIGHT_ENERGY_16`]; D1518):
+/// the energy of the correct weights falls to 0.714 at Eb/N0 4 dB (Es/N0 7 dB) and to 0.776 at
+/// 5 dB through `Multipath::mild`, so the floor lies below them.
+pub const QAM_WATCH_WEIGHT_ENERGY_4: f32 = 0.65;
+/// The weight watch of `qam_demod` for 256-QAM (as [`QAM_WATCH_WEIGHT_ENERGY_16`]; D1518): every
+/// receiver that kept its alignment stayed at 0.998 or above (Eb/N0 22 dB over AWGN; 1.15 through
+/// `Multipath::mild`), while equalizers in a false state measured 0.83 to 1.03.
+pub const QAM_WATCH_WEIGHT_ENERGY_256: f32 = 0.9;
+/// The weight watch of `qam_demod` for 1024-QAM (as [`QAM_WATCH_WEIGHT_ENERGY_16`]; D1518): every
+/// receiver that kept its alignment stayed at 1.000 or above (Eb/N0 27 dB over AWGN).
+pub const QAM_WATCH_WEIGHT_ENERGY_1024: f32 = 0.9;
+
+/// The floor of the weight watch of `qam_demod` for the constellation of its carrier loop: the
+/// `QAM_WATCH_WEIGHT_ENERGY_*` of the order (D1567, D1587, D1518).
+///
+/// ```
+/// use sdrk_blocks::{QAM_WATCH_WEIGHT_ENERGY_64, qam_watch_weight_floor};
+/// use sdrk_core::kernels::costas::CostasConstellation;
+/// assert_eq!(qam_watch_weight_floor(CostasConstellation::Qam64), QAM_WATCH_WEIGHT_ENERGY_64);
+/// ```
+pub const fn qam_watch_weight_floor(c: CostasConstellation) -> f32 {
+    match c {
+        CostasConstellation::Qpsk => QAM_WATCH_WEIGHT_ENERGY_4,
+        CostasConstellation::Qam64 => QAM_WATCH_WEIGHT_ENERGY_64,
+        CostasConstellation::Qam256 => QAM_WATCH_WEIGHT_ENERGY_256,
+        CostasConstellation::Qam1024 => QAM_WATCH_WEIGHT_ENERGY_1024,
+        _ => QAM_WATCH_WEIGHT_ENERGY_16,
+    }
+}
+
 /// The low checks in a row of the weight watch of `qam_demod` (M44.1 §6, condition 1): two, so
 /// that a single dip of the energy (multipath, a burst of noise) restarts nothing (D1567).
 pub const QAM_WATCH_CHECKS: u8 = 2;
@@ -414,8 +475,21 @@ impl LockPolicy for QamDemodLock {
 
 // The check fits the counter of `LockWatch`, and the switch of the equalizer to the decision
 // mode comes before the first check after an estimate (the hand-over runs in `PullIn`).
-const _: () = assert!(QAM_ACQUISITION_CHECK <= u16::MAX as usize);
-const _: () = assert!(DEFAULT_CMA_SYMBOLS as usize <= QAM_ACQUISITION_CHECK);
+/// Whether the blind symbols of a constellation lie below its check interval, which fits `u16`.
+const fn blind_fits(check: usize, c: EqConstellation) -> bool {
+    check <= u16::MAX as usize && (EqualizeConfig::blind_start(c).1 as usize) < check
+}
+const _: () = assert!(blind_fits(QAM_ACQUISITION_CHECK, EqConstellation::Qpsk));
+const _: () = assert!(blind_fits(QAM_ACQUISITION_CHECK, EqConstellation::Qam16));
+const _: () = assert!(blind_fits(QAM_ACQUISITION_CHECK, EqConstellation::Qam64));
+const _: () = assert!(blind_fits(
+    QAM256_ACQUISITION_CHECK,
+    EqConstellation::Qam256
+));
+const _: () = assert!(blind_fits(
+    QAM1024_ACQUISITION_CHECK,
+    EqConstellation::Qam1024
+));
 
 /// The hand-over of the equalizer from its blind (CMA) symbols to the decision mode (I44-17,
 /// D1700): the action of the state `PullIn` at the switch.
@@ -437,7 +511,8 @@ struct HandOver {
     /// The sum of the fourth powers of the output.
     sum: C32,
     /// The blind symbols of the equalizer left before its switch to the decision mode; 0 when it
-    /// is past (the steady state) or without the equalizer (at most `DEFAULT_CMA_SYMBOLS`).
+    /// is past (the steady state) or without the equalizer (at most the CMA symbols of the blind
+    /// start, D1517).
     blind_left: u16,
     /// Whether an estimate went to the equalizer's tracker since its start (only then the phase of
     /// its output stands still and is measured).
@@ -445,16 +520,12 @@ struct HandOver {
 }
 
 impl HandOver {
-    /// The equalizer (`with_eq`) starts (again) from its start weights and blind symbols: the
-    /// hand-over waits for its blind symbols and an estimate.
-    fn start(with_eq: bool) -> Self {
+    /// The equalizer starts (again) from its start weights and its `blind` symbols (0 without
+    /// the equalizer): the hand-over waits for its blind symbols and an estimate.
+    fn start(blind: u16) -> Self {
         Self {
             sum: C32::new(0.0, 0.0),
-            blind_left: if with_eq {
-                DEFAULT_CMA_SYMBOLS as u16
-            } else {
-                0
-            },
+            blind_left: blind,
             armed: false,
         }
     }
@@ -504,22 +575,25 @@ impl HandOver {
     }
 }
 
-/// 16-QAM and 64-QAM demodulator: `C32` in, `f32` soft bits out (`bits_per_symbol` per symbol,
-/// above 0 is a 1), a composite of building blocks with a controller (M44.1 §5).
+/// Square QAM demodulator (`qpsk`, `qam16`, `qam64`, `qam256`, `qam1024`): `C32` in, `f32` soft
+/// bits out (`bits_per_symbol` per symbol, above 0 is a 1), a composite of building blocks with a
+/// controller (M44.1 §5, M44.2 §4).
 ///
 /// The building blocks, per piece of at most [`QAM_DEMOD_CHUNK`] input samples:
 /// [`PulseMatchBlock`] (the matched filter, taps `rrc(rolloff, n, span) / sqrt(n)` as `f32` with
 /// `n` the rounded samples per symbol, M44.1.1 §3.2), [`SymbolSyncBlock`] (Gardner at the exact `fs / symbol_rate_hz`),
 /// [`QamAcquireBlock`] (`correct` false: it only estimates), [`EqualizeBlock`] (when
-/// `equalizer_taps` is above 0), [`CostasBlock`] with the constellation `qam16` or `qam64`, and
-/// [`SymbolDemapBlock`] `qam16` or `qam64` (scale 1). Every sample the block writes comes from
+/// `equalizer_taps` is above 0), [`CostasBlock`] with the constellation (for `qpsk` the PSK loop of M40, D1516), and
+/// [`SymbolDemapBlock`] with the constellation (scale 1). The equalizer starts blind with the
+/// blind start of its constellation ([`EqualizeConfig::blind_start`]) and the checks fall every
+/// [`qam_acquisition_check`] symbols of the constellation (D1517). Every sample the block writes comes from
 /// them; it only holds them, one work buffer and the controller.
 ///
 /// The controller is the state machine [`LockWatch`] (the states `Search`, `PullIn`, `Track` and
 /// `Verify`, [`state`](QamDemodBlock::state)) and the hand-over of the equalizer, between the
 /// calls of the building blocks: the symbols of the timing loop of a piece run through the
 /// acquisition, the equalizer and the carrier loop in runs that end where an acquisition window
-/// completes, where a check falls (every [`QAM_ACQUISITION_CHECK`] symbols after an estimate) and
+/// completes, where a check falls (every [`qam_acquisition_check`] symbols after an estimate) and
 /// at the equalizer's switch to the decision mode; after each run the controller carries out the
 /// named transition ([`LockTransition`]): in `Search` a clear window goes to the frequency
 /// integrator of the equalizer's phase tracker (the carrier loop's frequency to 0; the tracker at
@@ -533,7 +607,7 @@ impl HandOver {
 /// equalizer starts again from its start weights and blind symbols, the frequencies go to 0 and
 /// the acquisition searches again (D1421, D1605, D1618, D1623). The recovery of M44.1 §6 adds two
 /// conditions (D1566 to D1569): the weight watch (the energy of the equalizer's weights below
-/// [`QAM_WATCH_WEIGHT_ENERGY_16`] or [`QAM_WATCH_WEIGHT_ENERGY_64`] at [`QAM_WATCH_CHECKS`] checks
+/// the floor of the constellation, [`qam_watch_weight_floor`], at [`QAM_WATCH_CHECKS`] checks
 /// in a row in `Track` starts the receiver again as a verify window away from the loops does) and
 /// the signal back after a gap (a clear verify window within the tolerance after at least
 /// [`QAM_WATCH_GAP_WINDOWS`] windows without a clear peak starts the equalizer again and hands it
@@ -633,7 +707,12 @@ impl<S: Storage> QamDemodBlock<S> {
             rate_in,
             storage,
         )?;
-        let hand = HandOver::start(eq.is_some());
+        // The blind symbols of the equalizer (below the check, which fits `u16`).
+        let blind = config
+            .equalizer()
+            .map_or(0, |e| u16::try_from(e.cma_symbols).unwrap_or(u16::MAX));
+        let hand = HandOver::start(blind);
+        let check = u16::try_from(config.acquisition_check()).unwrap_or(u16::MAX);
         Ok(Self {
             pulse,
             sync,
@@ -641,7 +720,8 @@ impl<S: Storage> QamDemodBlock<S> {
                 acquire,
                 eq,
                 costas,
-                watch: LockWatch::new(),
+                watch: LockWatch::with_check(check),
+                blind,
                 hand,
                 level: Level::default(),
                 reference: 1.0,
@@ -692,11 +772,7 @@ impl<S: Storage> QamDemodBlock<S> {
         let sync = self.sync.config();
         let pulse = self.pulse.config();
         QamDemodConfig {
-            constellation: if self.bits() == 6 {
-                SymbolMapConstellation::Qam64
-            } else {
-                SymbolMapConstellation::Qam16
-            },
+            constellation: self.constellation(),
             symbol_rate_hz: sync.symbol_rate_hz,
             rolloff: pulse.rolloff,
             span: pulse.span,
@@ -706,9 +782,18 @@ impl<S: Storage> QamDemodBlock<S> {
         }
     }
 
-    /// Bits per symbol (4 or 6).
+    /// Bits per symbol (2 to 10).
     fn bits(&self) -> usize {
         self.demap.config().constellation.bits_per_symbol()
+    }
+
+    /// The constellation, read from `symbol_demap` (the same choice index in every building
+    /// block, M44.1.1 §1).
+    fn constellation(&self) -> SymbolMapConstellation {
+        match self.demap.param("constellation") {
+            Ok(ParamValue::Choice(i)) => SymbolMapConstellation::from_index(i),
+            _ => SymbolMapConstellation::Qam16,
+        }
     }
 
     /// Number of taps of the matched filter (`span n + 1`).
@@ -894,6 +979,8 @@ struct Loops<S: Storage> {
     eq: Option<EqualizeBlock<S>>,
     costas: CostasBlock<S>,
     watch: LockWatch<QamDemodLock>,
+    /// The blind (CMA) symbols of the equalizer after a start (0 without it, D1517).
+    blind: u16,
     hand: HandOver,
     /// The power of the symbols into the equalizer over the pull-in (from the estimate to the
     /// first check after it).
@@ -1013,10 +1100,7 @@ impl<S: Storage> Loops<S> {
                 locked: costas.locked(),
                 // The energy at unit input power.
                 weight_energy: eq.map(|e| e.weight_energy() * reference),
-                weight_floor: match costas.state().constellation() {
-                    CostasConstellation::Qam64 => QAM_WATCH_WEIGHT_ENERGY_64,
-                    _ => QAM_WATCH_WEIGHT_ENERGY_16,
-                },
+                weight_floor: qam_watch_weight_floor(costas.state().constellation()),
             });
             if matches!(
                 t,
@@ -1089,7 +1173,7 @@ impl<S: Storage> Loops<S> {
             // A valid bandwidth: the call cannot fail.
             let _ = eq.set_phase_bw(QAM_TRACKER_PULL_BW);
         }
-        self.hand = HandOver::start(self.eq.is_some());
+        self.hand = HandOver::start(self.blind);
     }
 
     /// Hands the acquired frequency `f` (cycles per symbol) to the loops: with the equalizer the
@@ -1190,7 +1274,7 @@ impl<S: Storage> Block for QamDemodBlock<S> {
         }
         self.rx.acquire.reset();
         self.rx.watch.reset();
-        self.rx.hand = HandOver::start(self.rx.eq.is_some());
+        self.rx.hand = HandOver::start(self.rx.blind);
         self.rx.level = Level::default();
         self.rx.reference = 1.0;
         self.rx.symbols = 0;

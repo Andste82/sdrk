@@ -1,4 +1,5 @@
-//! `qam_mod`: 16-QAM and 64-QAM modulator (soft bits to root-raised-cosine shaped symbols).
+//! `qam_mod`: square QAM modulator, 4-QAM (`qpsk`) to 1024-QAM (soft bits to root-raised-cosine
+//! shaped symbols).
 
 use sdrk::{Delay, Progress, Rate, Ratio, RatioKind};
 use sdrk_core::C32;
@@ -25,8 +26,8 @@ pub const QAM_MOD_CHUNK: usize = 256;
 
 /// The `constellation` parameter of `qam_mod`, `qam_demod`, `qam_frame_encode` and
 /// `qam_frame_decode`: the choice of `symbol_map` (the same names at the same indices in
-/// `costas`, `equalize` and `symbol_demap`), of which these blocks take `qam16` and `qam64`
-/// (M44.1.1 §2).
+/// `costas`, `equalize` and `symbol_demap`), of which these blocks take the square orders `qpsk`
+/// (4-QAM), `qam16`, `qam64`, `qam256` and `qam1024` (M44.1.1 §2, M44.2 §4).
 pub(crate) const QAM_CONSTELLATION_PARAM: ParamDesc = ParamDesc {
     name: "constellation",
     unit: Unit::None,
@@ -34,21 +35,27 @@ pub(crate) const QAM_CONSTELLATION_PARAM: ParamDesc = ParamDesc {
         options: CONSTELLATION_OPTIONS,
         default: 3,
     },
-    typical: "qam16 or qam64 (bpsk, qpsk and 8psk are refused: psk_mod)",
+    typical: "qam16; qam64 to qam1024 for a good SNR, qpsk for a weak one (bpsk and 8psk are \
+        refused: psk_mod)",
     mutability: Mutability::Build,
-    description: "The constellation: qam16 (16-QAM, 4 bits per symbol) or qam64 (64-QAM, 6 bits \
-        per symbol); bpsk, qpsk and 8psk are those of psk_mod and psk_demod.",
+    description: "The square constellation: qpsk (4-QAM, 2 bits per symbol), qam16 (4 bits), \
+        qam64 (6 bits), qam256 (8 bits) or qam1024 (10 bits); bpsk and 8psk are those of \
+        psk_mod and psk_demod.",
 };
 
-/// The square QAM of a constellation: `qam16` or `qam64`, otherwise `InvalidParameter` of
-/// `constellation` (`bpsk`, `qpsk` and `8psk` are in the choice but not QAM).
+/// The square QAM of a constellation: `qpsk` (4-QAM, M44.2), `qam16`, `qam64`, `qam256` or
+/// `qam1024`, otherwise `InvalidParameter` of `constellation` (`bpsk` and `8psk` are in the
+/// choice but not square QAM).
 pub(crate) fn qam_of(c: SymbolMapConstellation) -> Result<Qam> {
     match c {
+        SymbolMapConstellation::Qpsk => Ok(Qam::Qpsk),
         SymbolMapConstellation::Qam16 => Ok(Qam::Qam16),
         SymbolMapConstellation::Qam64 => Ok(Qam::Qam64),
+        SymbolMapConstellation::Qam256 => Ok(Qam::Qam256),
+        SymbolMapConstellation::Qam1024 => Ok(Qam::Qam1024),
         _ => Err(Error::InvalidParameter {
             name: "constellation",
-            reason: "the constellation must be qam16 or qam64",
+            reason: "the constellation must be qpsk, qam16, qam64, qam256 or qam1024",
         }),
     }
 }
@@ -63,16 +70,17 @@ pub(crate) fn qam_constellation_of_value(value: &ParamValue) -> Result<SymbolMap
 /// Description of the `qam_mod` block.
 pub static DESCRIPTION: BlockDescription = BlockDescription {
     kind: "qam_mod",
-    summary: "Turns soft bits into 16-QAM or 64-QAM symbols shaped with a root-raised-cosine \
-        pulse.",
+    summary: "Turns soft bits into square QAM symbols (4-QAM to 1024-QAM) shaped with a \
+        root-raised-cosine pulse.",
     details: "Reads one soft bit per input sample (above 0 is a 1, anything else, NaN \
-        included, a 0; frame_encode produces them) and maps 4 (qam16) or 6 (qam64) bits, \
+        included, a 0; frame_encode produces them) and maps 2 (qpsk, 4-QAM), 4 (qam16), 6 \
+        (qam64), 8 (qam256) or 10 (qam1024) bits, \
         the first one the most significant, to a point of the square constellation: the first \
         half of the bits selects the in-phase level, the second half the quadrature level, \
         each by the Gray code of the level index i (i XOR (i >> 1)); the level value is \
-        2 i - (m - 1) with m = 4 or 8 levels per axis, scaled by 1 / sqrt(E) with E = 10 or 42 \
-        (unit average power). These are the constellations qam16 and qam64 of symbol_map, \
-        symbol_demap, equalize and costas. The symbols are interpolated by samples_per_symbol with the \
+        2 i - (m - 1) with m = 2, 4, 8, 16 or 32 levels per axis, scaled by 1 / sqrt(E) with \
+        E = 2, 10, 42, 170 or 682 (unit average power; qpsk is the QPSK of psk_mod point for \
+        point). These are the constellations of symbol_map, symbol_demap, equalize and costas. The symbols are interpolated by samples_per_symbol with the \
         root-raised-cosine pulse (rolloff, span symbols) scaled by sqrt(samples_per_symbol), \
         so the matched filter of qam_demod gives the points at the symbol centres. The output \
         rate is the bit rate times samples_per_symbol / bits per symbol; the group delay is \
@@ -109,13 +117,17 @@ pub static DESCRIPTION: BlockDescription = BlockDescription {
 /// };
 /// assert!(cfg.validate().is_ok());
 /// assert_eq!(cfg.bits_per_symbol(), 6);
+/// // 4-QAM is `qpsk`; `bpsk` and `8psk` are not square QAM
 /// let qpsk = QamModConfig { constellation: SymbolMapConstellation::Qpsk, ..cfg };
-/// assert!(qpsk.validate().is_err());
+/// assert_eq!(qpsk.bits_per_symbol(), 2);
+/// assert!(qpsk.validate().is_ok());
+/// let bpsk = QamModConfig { constellation: SymbolMapConstellation::Bpsk, ..cfg };
+/// assert!(bpsk.validate().is_err());
 /// assert!(QamModConfig { samples_per_symbol: 1, ..cfg }.validate().is_err());
 /// ```
 #[derive(Debug, Clone, Copy, PartialEq)]
 pub struct QamModConfig {
-    /// The constellation: `Qam16` or `Qam64`.
+    /// The constellation: `Qpsk` (4-QAM), `Qam16`, `Qam64`, `Qam256` or `Qam1024`.
     pub constellation: SymbolMapConstellation,
     /// Output samples per symbol, 2 to 64 (required).
     pub samples_per_symbol: usize,
@@ -139,8 +151,9 @@ impl Default for QamModConfig {
 }
 
 impl QamModConfig {
-    /// Bits per symbol: 4 for `qam16`, 6 for `qam64` (that of the constellation for another
-    /// one, which [`QamModConfig::validate`] refuses).
+    /// Bits per symbol: 2 for `qpsk`, 4 for `qam16`, 6 for `qam64`, 8 for `qam256`, 10 for
+    /// `qam1024` (that of the constellation for another one, which [`QamModConfig::validate`]
+    /// refuses).
     pub fn bits_per_symbol(&self) -> usize {
         self.constellation.bits_per_symbol()
     }
@@ -148,8 +161,8 @@ impl QamModConfig {
     /// Checks the ranges.
     ///
     /// # Errors
-    /// `OutOfRange` for a value outside its range; `InvalidParameter` for a constellation other
-    /// than `qam16` and `qam64`.
+    /// `OutOfRange` for a value outside its range; `InvalidParameter` for a constellation that
+    /// is not a square QAM (`bpsk`, `8psk`).
     pub fn validate(&self) -> Result<()> {
         qam_of(self.constellation)?;
         self.pulse().validate()
@@ -159,7 +172,7 @@ impl QamModConfig {
     ///
     /// # Errors
     /// `UnknownParameter`, `WrongParamType`, `OutOfRange`; `InvalidParameter` for a
-    /// constellation other than `qam16` and `qam64`.
+    /// constellation that is not a square QAM (`bpsk`, `8psk`).
     pub fn set(&mut self, name: &str, value: ParamValue) -> Result<()> {
         let p = DESCRIPTION.param(name).ok_or(Error::UnknownParameter)?;
         p.check(&value)?;
@@ -217,11 +230,12 @@ pub const QAM_MOD_PARAMS: ParamMap = ParamMap::new(&[
     ("span", "1.span"),
 ]);
 
-/// 16-QAM and 64-QAM modulator: `f32` soft bits in (one per sample), `C32` out at
+/// Square QAM modulator (4-QAM to 1024-QAM): `f32` soft bits in (one per sample), `C32` out at
 /// `samples_per_symbol` samples per symbol.
 ///
-/// A composite block (M44.1 §4, M44.1.1 §3.3): [`SymbolMapBlock`] (the `constellation` `qam16`
-/// or `qam64`, the `f32` points of `sdrk_core::kernels::constellation::Qam`, M44 §1) then
+/// A composite block (M44.1 §4, M44.1.1 §3.3): [`SymbolMapBlock`] (the `constellation` `qpsk`,
+/// `qam16`, `qam64`, `qam256` or `qam1024`, the `f32` points of
+/// `sdrk_core::kernels::constellation::Qam`, M44 §1, M44.2 §1) then
 /// [`PulseShapeBlock`] (the taps `rrc(rolloff, sps, span) sqrt(sps)` as `f32`, the kernel
 /// `fir_interpolate` through the facade, as in `psk_mod`), as a [`Chain`] whose buffer holds
 /// [`QAM_MOD_CHUNK`] symbols. A call takes `min(input / bits, output / sps)` whole

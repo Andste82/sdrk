@@ -717,6 +717,18 @@ fn the_round_trip_at_bits_3_to_8_stays_within_2_lsb_and_120_db() {
 // ---------------------------------------------------------------------------------------------
 // Fallback against Reference, the per-sample helpers.
 
+/// `a` equals `b` by `to_bits()` per component, except that a NaN is compared by class (D296).
+#[inline(never)]
+fn assert_eq_nan_by_class(a: C32, b: C32, bits: u32, i: usize) {
+    for (a, b) in [(a.re, b.re), (a.im, b.im)] {
+        if a.is_nan() || b.is_nan() {
+            assert!(a.is_nan() && b.is_nan(), "bits {bits}, sample {i}");
+        } else {
+            assert_eq!(a.to_bits(), b.to_bits(), "bits {bits}, sample {i}");
+        }
+    }
+}
+
 /// `Fallback` against `Reference`: bit for bit where `r = 0` (a `C32` NaN by class), within the
 /// contract SNR elsewhere (finite values).
 fn fallback_vs_reference(x: &[C32], xq: &[CQ15], p: &[u8]) {
@@ -731,13 +743,7 @@ fn fallback_vs_reference(x: &[C32], xq: &[CQ15], p: &[u8]) {
                 let k = phase_index(p[i], bits, inverse);
                 let (_, res) = split_index(k, bits);
                 if res == 0 {
-                    for (a, b) in [(f[i].re, r[i].re), (f[i].im, r[i].im)] {
-                        if a.is_nan() || b.is_nan() {
-                            assert!(a.is_nan() && b.is_nan(), "bits {bits}, sample {i}");
-                        } else {
-                            assert_eq!(a.to_bits(), b.to_bits(), "bits {bits}, sample {i}");
-                        }
-                    }
+                    assert_eq_nan_by_class(f[i], r[i], bits, i);
                     assert_eq!(fq[i], rq[i], "bits {bits}, sample {i}");
                 } else {
                     if x[i].re.is_finite() && x[i].im.is_finite() {
@@ -747,11 +753,16 @@ fn fallback_vs_reference(x: &[C32], xq: &[CQ15], p: &[u8]) {
                     wfq.push(fq[i]);
                     wrq.push(rq[i]);
                 }
-                // The per-sample helpers equal the kernel.
-                assert_eq!(
-                    bits_of(scramble_one_c32(x[i], k, bits).unwrap()),
-                    bits_of(f[i])
-                );
+                // The per-sample helpers equal the kernel: by `to_bits()` where `r = 0` (pure sign
+                // and swap operations), with a NaN of the residual product compared by class
+                // where `r != 0` (D296: the compiler may order the loop's operations differently
+                // from the helper's, which changes the sign and payload of a NaN).
+                let one = scramble_one_c32(x[i], k, bits).unwrap();
+                if res == 0 {
+                    assert_eq!(bits_of(one), bits_of(f[i]), "bits {bits}, sample {i}");
+                } else {
+                    assert_eq_nan_by_class(one, f[i], bits, i);
+                }
                 assert_eq!(scramble_one_cq15(xq[i], k, bits).unwrap(), fq[i]);
             }
             if !wr.is_empty() && wr.iter().any(|v| v.re != 0.0 || v.im != 0.0) {

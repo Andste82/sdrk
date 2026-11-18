@@ -15,6 +15,9 @@
 //! The outputs of tolerance kernels depend on the SIMD level (`docs/kernels.md`), so every case
 //! has one line per level the test suite runs at (`fallback`, `avx2`, `avx512`, `neon`). The
 //! level is the caller's: the facade's backend for the kernels of the block, or `fallback`.
+//! The outputs of bit-exact kernels are the same on every level, so their tables can have one
+//! line per case at the level `all`, against which every level is checked (the kernels of
+//! M44.2 in `tests/baseline/m44_2/`).
 //!
 //! These files are not golden vectors (those come from the Python generator only, R8): they are
 //! the outputs of this repository's own code at one commit, written by the tests themselves in

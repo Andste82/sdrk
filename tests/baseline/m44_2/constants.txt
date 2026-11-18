@@ -1,0 +1,3 @@
+# Baseline of M44.2, table constants (sdrk_testkit::baseline): <case> <level> <bytes> <FNV-1a 64>; level all: the kernels are bit-exact on every level
+qam16 all 552 49012819a684b524
+qam64 all 2104 ce88b62b1691c84e

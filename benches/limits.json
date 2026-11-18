@@ -6028,26 +6028,27 @@
   "scramble_c32_b8": {
     "sse2": {
       "status": "info",
-      "waiver": "VOLK has no SSE2 implementation of `volk_32fc_x2_multiply_32fc` (its first is SSE3): the dispatcher of its `sse2_64_mmx` machine takes the scalar `generic` protokernel, so the composition (the phasor looked up into a buffer, then VOLK's product; M49 §5) is no SIMD reference of this level and is information"
+      "waiver": "VOLK has no SSE2 implementation of `volk_32fc_x2_multiply_32fc` (its first is SSE3): the dispatcher of its `sse2_64_mmx` machine takes the scalar `generic` protokernel, so the composition (the phasor looked up into a buffer, then VOLK's product; M49 §5) is no SIMD reference of this level and is information; besides, the reference does less work than the `scramble` contract at `bits = 8` (maintainer decision D2092: no index split, quadrant map or `r = 0` selection)"
     },
     "sse4.2": {
-      "status": "release",
-      "waiver": "the `C32` scramble at `bits = 8` does more work than the library composition it is compared with (the phasor looked up into a buffer, then VOLK's complex product): the exact quadrant map after the residual product (swap and sign by lane masks), the selection of the input where `r = 0` and the index arithmetic; at this level it needs 1.24 times the instructions of the composition and 4.90 / 5.09 against 3.63 / 4.29 simulated cycles per sample (reference / counter model, 1.35 / 1.19) (docs/performance.md, M49); open item I49-2"
+      "status": "info",
+      "waiver": "the library composition (the phasor looked up into a buffer, then VOLK's complex product) does less work than the `scramble` contract at `bits = 8` (reference does less work, maintainer decision D2092): it looks up the phasor and does one complex product, while ours also splits the index into quadrant and residue, applies the exact quadrant map (swap and sign by lane masks) and selects the input where `r = 0`. The row is information, not a gap to close (numbers in docs/performance.md, M49); the D321 cycle gate against `scramble_c32_b8_fallback` is unchanged"
     },
     "avx2": {
-      "status": "release",
-      "waiver": "the `C32` scramble at `bits = 8` does more work than the library composition it is compared with (the phasor looked up into a buffer, then VOLK's complex product): the exact quadrant map after the residual product (swap and sign by lane masks), the selection of the input where `r = 0` and the index arithmetic; at this level it needs 1.11 times the instructions of the composition and 2.53 / 2.73 against 2.37 / 2.40 simulated cycles per sample (reference / counter model, 1.07 / 1.14) (docs/performance.md, M49); open item I49-2"
+      "status": "info",
+      "waiver": "the library composition (the phasor looked up into a buffer, then VOLK's complex product) does less work than the `scramble` contract at `bits = 8` (reference does less work, maintainer decision D2092): it looks up the phasor and does one complex product, while ours also splits the index into quadrant and residue, applies the exact quadrant map (swap and sign by lane masks) and selects the input where `r = 0`. The row is information, not a gap to close (numbers in docs/performance.md, M49); the D321 cycle gate against `scramble_c32_b8_fallback` is unchanged"
     },
     "avx512": {
-      "status": "release"
+      "status": "info",
+      "waiver": "the library composition (the phasor looked up into a buffer, then VOLK's complex product) does less work than the `scramble` contract at `bits = 8` (reference does less work, maintainer decision D2092): it looks up the phasor and does one complex product, while ours also splits the index into quadrant and residue, applies the exact quadrant map (swap and sign by lane masks) and selects the input where `r = 0`. The row is information, not a gap to close (numbers in docs/performance.md, M49); the D321 cycle gate against `scramble_c32_b8_fallback` is unchanged"
     },
     "neon": {
-      "status": "release",
-      "waiver": "the `C32` scramble at `bits = 8` does more work than the library composition it is compared with (the phasor looked up into a buffer, then VOLK's complex product): the exact quadrant map after the residual product (swap and sign by lane masks), the selection of the input where `r = 0` and the index arithmetic; at this level it needs 1.12 times the instructions of the composition and 9.40 / 6.31 against 8.53 / 6.76 simulated cycles per sample (reference / counter model, 1.10 / 0.93) (docs/performance.md, M49); open item I49-2"
+      "status": "info",
+      "waiver": "the library composition (the phasor looked up into a buffer, then VOLK's complex product) does less work than the `scramble` contract at `bits = 8` (reference does less work, maintainer decision D2092): it looks up the phasor and does one complex product, while ours also splits the index into quadrant and residue, applies the exact quadrant map (swap and sign by lane masks) and selects the input where `r = 0`. The row is information, not a gap to close (numbers in docs/performance.md, M49); the D321 cycle gate against `scramble_c32_b8_fallback` is unchanged"
     },
     "simd128": {
       "status": "info",
-      "waiver": "decision D12: VOLK for wasm32 is its portable `generic` code; it is a fair reference only for `mag_sq` and the conversions, so this comparison (the phasor looked up into a buffer, then VOLK's generic product; M49 §5) is information"
+      "waiver": "decision D12: VOLK for wasm32 is its portable `generic` code; it is a fair reference only for `mag_sq` and the conversions, so this comparison (the phasor looked up into a buffer, then VOLK's generic product; M49 §5) is information; besides, the reference does less work than the `scramble` contract at `bits = 8` (maintainer decision D2092: no index split, quadrant map or `r = 0` selection)"
     },
     "avx2-runtime": {
       "status": "release"
@@ -6078,22 +6079,28 @@
   },
   "scramble_cq15_b8": {
     "sse2": {
-      "status": "release"
+      "status": "info",
+      "waiver": "the composition of the phasor lookup plus CMSIS-DSP's `arm_cmplx_mult_cmplx_q15` (generic C compiled at `-O3` for the level, which the compiler may vectorize) does less work than the `scramble` contract at `bits = 8` (reference does less work, maintainer decision D2092): it looks up the phasor and does one complex product that truncates to Q3.13 without rounding or saturation, while ours also splits the index into quadrant and residue, forms the correctly rounded and saturated product, applies the exact quadrant map with saturating negation and selects the input where `r = 0`. The row is information, not a gap to close (numbers in docs/performance.md, M49)"
     },
     "sse4.2": {
-      "status": "release"
+      "status": "info",
+      "waiver": "the composition of the phasor lookup plus CMSIS-DSP's `arm_cmplx_mult_cmplx_q15` (generic C compiled at `-O3` for the level, which the compiler may vectorize) does less work than the `scramble` contract at `bits = 8` (reference does less work, maintainer decision D2092): it looks up the phasor and does one complex product that truncates to Q3.13 without rounding or saturation, while ours also splits the index into quadrant and residue, forms the correctly rounded and saturated product, applies the exact quadrant map with saturating negation and selects the input where `r = 0`. The row is information, not a gap to close (numbers in docs/performance.md, M49)"
     },
     "avx2": {
-      "status": "release"
+      "status": "info",
+      "waiver": "the composition of the phasor lookup plus CMSIS-DSP's `arm_cmplx_mult_cmplx_q15` (generic C compiled at `-O3` for the level, which the compiler may vectorize) does less work than the `scramble` contract at `bits = 8` (reference does less work, maintainer decision D2092): it looks up the phasor and does one complex product that truncates to Q3.13 without rounding or saturation, while ours also splits the index into quadrant and residue, forms the correctly rounded and saturated product, applies the exact quadrant map with saturating negation and selects the input where `r = 0`. The row is information, not a gap to close (numbers in docs/performance.md, M49)"
     },
     "avx512": {
-      "status": "release"
+      "status": "info",
+      "waiver": "the composition of the phasor lookup plus CMSIS-DSP's `arm_cmplx_mult_cmplx_q15` (generic C compiled at `-O3` for the level, which the compiler may vectorize) does less work than the `scramble` contract at `bits = 8` (reference does less work, maintainer decision D2092): it looks up the phasor and does one complex product that truncates to Q3.13 without rounding or saturation, while ours also splits the index into quadrant and residue, forms the correctly rounded and saturated product, applies the exact quadrant map with saturating negation and selects the input where `r = 0`. The row is information, not a gap to close (numbers in docs/performance.md, M49)"
     },
     "neon": {
-      "status": "release"
+      "status": "info",
+      "waiver": "the composition of the phasor lookup plus CMSIS-DSP's `arm_cmplx_mult_cmplx_q15` (generic C compiled at `-O3` for the level, which the compiler may vectorize) does less work than the `scramble` contract at `bits = 8` (reference does less work, maintainer decision D2092): it looks up the phasor and does one complex product that truncates to Q3.13 without rounding or saturation, while ours also splits the index into quadrant and residue, forms the correctly rounded and saturated product, applies the exact quadrant map with saturating negation and selects the input where `r = 0`. The row is information, not a gap to close (numbers in docs/performance.md, M49)"
     },
     "simd128": {
-      "status": "release"
+      "status": "info",
+      "waiver": "the composition of the phasor lookup plus CMSIS-DSP's `arm_cmplx_mult_cmplx_q15` (generic C compiled at `-O3` for the level, which the compiler may vectorize) does less work than the `scramble` contract at `bits = 8` (reference does less work, maintainer decision D2092): it looks up the phasor and does one complex product that truncates to Q3.13 without rounding or saturation, while ours also splits the index into quadrant and residue, forms the correctly rounded and saturated product, applies the exact quadrant map with saturating negation and selects the input where `r = 0`. The row is information, not a gap to close (numbers in docs/performance.md, M49)"
     },
     "avx2-runtime": {
       "status": "release"
@@ -6121,28 +6128,28 @@
   },
   "scramble_c32_b8_fallback": {
     "sse2": {
-      "status": "release",
-      "waiver": "the `C32` scramble fallback at `bits = 8` (one sample at a time: index, residue table, product, `r = 0` selection and the exact quadrant map on the 64 bits of the sample) needs more instructions per sample than the phasor lookup plus VOLK's generic complex product, which has no quadrant map and no selection (numbers in docs/performance.md, M49); open item I49-1"
+      "status": "info",
+      "waiver": "the composition of the phasor lookup plus VOLK's generic `volk_32fc_x2_multiply_32fc` does less work than the `scramble` contract at `bits = 8` (reference does less work, maintainer decision D2092): it looks up the phasor and does one complex product, while our fallback (one sample at a time) also splits the index into quadrant and residue, applies the exact quadrant map on the 64 bits of the sample and selects the input where `r = 0`. The row is information, not a gap to close (numbers in docs/performance.md, M49)"
     },
     "sse4.2": {
-      "status": "release",
-      "waiver": "the `C32` scramble fallback at `bits = 8` (one sample at a time: index, residue table, product, `r = 0` selection and the exact quadrant map on the 64 bits of the sample) needs more instructions per sample than the phasor lookup plus VOLK's generic complex product, which has no quadrant map and no selection (numbers in docs/performance.md, M49); open item I49-1"
+      "status": "info",
+      "waiver": "the composition of the phasor lookup plus VOLK's generic `volk_32fc_x2_multiply_32fc` does less work than the `scramble` contract at `bits = 8` (reference does less work, maintainer decision D2092): it looks up the phasor and does one complex product, while our fallback (one sample at a time) also splits the index into quadrant and residue, applies the exact quadrant map on the 64 bits of the sample and selects the input where `r = 0`. The row is information, not a gap to close (numbers in docs/performance.md, M49)"
     },
     "avx2": {
-      "status": "release",
-      "waiver": "the `C32` scramble fallback at `bits = 8` (one sample at a time: index, residue table, product, `r = 0` selection and the exact quadrant map on the 64 bits of the sample) needs more instructions per sample than the phasor lookup plus VOLK's generic complex product, which has no quadrant map and no selection (numbers in docs/performance.md, M49); open item I49-1"
+      "status": "info",
+      "waiver": "the composition of the phasor lookup plus VOLK's generic `volk_32fc_x2_multiply_32fc` does less work than the `scramble` contract at `bits = 8` (reference does less work, maintainer decision D2092): it looks up the phasor and does one complex product, while our fallback (one sample at a time) also splits the index into quadrant and residue, applies the exact quadrant map on the 64 bits of the sample and selects the input where `r = 0`. The row is information, not a gap to close (numbers in docs/performance.md, M49)"
     },
     "avx512": {
-      "status": "release",
-      "waiver": "the `C32` scramble fallback at `bits = 8` (one sample at a time: index, residue table, product, `r = 0` selection and the exact quadrant map on the 64 bits of the sample) needs more instructions per sample than the phasor lookup plus VOLK's generic complex product, which has no quadrant map and no selection (numbers in docs/performance.md, M49); open item I49-1"
+      "status": "info",
+      "waiver": "the composition of the phasor lookup plus VOLK's generic `volk_32fc_x2_multiply_32fc` does less work than the `scramble` contract at `bits = 8` (reference does less work, maintainer decision D2092): it looks up the phasor and does one complex product, while our fallback (one sample at a time) also splits the index into quadrant and residue, applies the exact quadrant map on the 64 bits of the sample and selects the input where `r = 0`. The row is information, not a gap to close (numbers in docs/performance.md, M49)"
     },
     "neon": {
-      "status": "release",
-      "waiver": "the `C32` scramble fallback at `bits = 8` (one sample at a time: index, residue table, product, `r = 0` selection and the exact quadrant map on the 64 bits of the sample) needs more instructions per sample than the phasor lookup plus VOLK's generic complex product, which has no quadrant map and no selection (numbers in docs/performance.md, M49); open item I49-1"
+      "status": "info",
+      "waiver": "the composition of the phasor lookup plus VOLK's generic `volk_32fc_x2_multiply_32fc` does less work than the `scramble` contract at `bits = 8` (reference does less work, maintainer decision D2092): it looks up the phasor and does one complex product, while our fallback (one sample at a time) also splits the index into quadrant and residue, applies the exact quadrant map on the 64 bits of the sample and selects the input where `r = 0`. The row is information, not a gap to close (numbers in docs/performance.md, M49)"
     },
     "simd128": {
-      "status": "release",
-      "waiver": "the `C32` scramble fallback at `bits = 8` (one sample at a time: index, residue table, product, `r = 0` selection and the exact quadrant map on the 64 bits of the sample) needs more instructions per sample than the phasor lookup plus VOLK's generic complex product, which has no quadrant map and no selection (numbers in docs/performance.md, M49); open item I49-1"
+      "status": "info",
+      "waiver": "the composition of the phasor lookup plus VOLK's generic `volk_32fc_x2_multiply_32fc` does less work than the `scramble` contract at `bits = 8` (reference does less work, maintainer decision D2092): it looks up the phasor and does one complex product, while our fallback (one sample at a time) also splits the index into quadrant and residue, applies the exact quadrant map on the 64 bits of the sample and selects the input where `r = 0`. The row is information, not a gap to close (numbers in docs/performance.md, M49)"
     }
   },
   "scramble_cq15_b2_fallback": {
@@ -6167,28 +6174,28 @@
   },
   "scramble_cq15_b8_fallback": {
     "sse2": {
-      "status": "release",
-      "waiver": "the `CQ15` scramble fallback at `bits = 8` (index, residue table, the rounded `i32` product with saturation, `r = 0` selection and the exact quadrant map with saturating negation) does more work than the phasor lookup plus CMSIS-DSP's `arm_cmplx_mult_cmplx_q15`, which truncates to Q3.13 without rounding, saturation or quadrant map (numbers in docs/performance.md, M49); open item I49-1"
+      "status": "info",
+      "waiver": "the composition of the phasor lookup plus CMSIS-DSP's `arm_cmplx_mult_cmplx_q15` (generic C compiled at `-O3` for the level, which the compiler may vectorize) does less work than the `scramble` contract at `bits = 8` (reference does less work, maintainer decision D2092): it looks up the phasor and does one complex product that truncates to Q3.13 without rounding or saturation, while ours also splits the index into quadrant and residue, forms the correctly rounded and saturated product, applies the exact quadrant map with saturating negation and selects the input where `r = 0`. The row is information, not a gap to close (numbers in docs/performance.md, M49)"
     },
     "sse4.2": {
-      "status": "release",
-      "waiver": "the `CQ15` scramble fallback at `bits = 8` (index, residue table, the rounded `i32` product with saturation, `r = 0` selection and the exact quadrant map with saturating negation) does more work than the phasor lookup plus CMSIS-DSP's `arm_cmplx_mult_cmplx_q15`, which truncates to Q3.13 without rounding, saturation or quadrant map (numbers in docs/performance.md, M49); open item I49-1"
+      "status": "info",
+      "waiver": "the composition of the phasor lookup plus CMSIS-DSP's `arm_cmplx_mult_cmplx_q15` (generic C compiled at `-O3` for the level, which the compiler may vectorize) does less work than the `scramble` contract at `bits = 8` (reference does less work, maintainer decision D2092): it looks up the phasor and does one complex product that truncates to Q3.13 without rounding or saturation, while ours also splits the index into quadrant and residue, forms the correctly rounded and saturated product, applies the exact quadrant map with saturating negation and selects the input where `r = 0`. The row is information, not a gap to close (numbers in docs/performance.md, M49)"
     },
     "avx2": {
-      "status": "release",
-      "waiver": "the `CQ15` scramble fallback at `bits = 8` (index, residue table, the rounded `i32` product with saturation, `r = 0` selection and the exact quadrant map with saturating negation) does more work than the phasor lookup plus CMSIS-DSP's `arm_cmplx_mult_cmplx_q15`, which truncates to Q3.13 without rounding, saturation or quadrant map (numbers in docs/performance.md, M49); open item I49-1"
+      "status": "info",
+      "waiver": "the composition of the phasor lookup plus CMSIS-DSP's `arm_cmplx_mult_cmplx_q15` (generic C compiled at `-O3` for the level, which the compiler may vectorize) does less work than the `scramble` contract at `bits = 8` (reference does less work, maintainer decision D2092): it looks up the phasor and does one complex product that truncates to Q3.13 without rounding or saturation, while ours also splits the index into quadrant and residue, forms the correctly rounded and saturated product, applies the exact quadrant map with saturating negation and selects the input where `r = 0`. The row is information, not a gap to close (numbers in docs/performance.md, M49)"
     },
     "avx512": {
-      "status": "release",
-      "waiver": "the `CQ15` scramble fallback at `bits = 8` (index, residue table, the rounded `i32` product with saturation, `r = 0` selection and the exact quadrant map with saturating negation) does more work than the phasor lookup plus CMSIS-DSP's `arm_cmplx_mult_cmplx_q15`, which truncates to Q3.13 without rounding, saturation or quadrant map (numbers in docs/performance.md, M49); open item I49-1"
+      "status": "info",
+      "waiver": "the composition of the phasor lookup plus CMSIS-DSP's `arm_cmplx_mult_cmplx_q15` (generic C compiled at `-O3` for the level, which the compiler may vectorize) does less work than the `scramble` contract at `bits = 8` (reference does less work, maintainer decision D2092): it looks up the phasor and does one complex product that truncates to Q3.13 without rounding or saturation, while ours also splits the index into quadrant and residue, forms the correctly rounded and saturated product, applies the exact quadrant map with saturating negation and selects the input where `r = 0`. The row is information, not a gap to close (numbers in docs/performance.md, M49)"
     },
     "neon": {
-      "status": "release",
-      "waiver": "the `CQ15` scramble fallback at `bits = 8` (index, residue table, the rounded `i32` product with saturation, `r = 0` selection and the exact quadrant map with saturating negation) does more work than the phasor lookup plus CMSIS-DSP's `arm_cmplx_mult_cmplx_q15`, which truncates to Q3.13 without rounding, saturation or quadrant map (numbers in docs/performance.md, M49); open item I49-1"
+      "status": "info",
+      "waiver": "the composition of the phasor lookup plus CMSIS-DSP's `arm_cmplx_mult_cmplx_q15` (generic C compiled at `-O3` for the level, which the compiler may vectorize) does less work than the `scramble` contract at `bits = 8` (reference does less work, maintainer decision D2092): it looks up the phasor and does one complex product that truncates to Q3.13 without rounding or saturation, while ours also splits the index into quadrant and residue, forms the correctly rounded and saturated product, applies the exact quadrant map with saturating negation and selects the input where `r = 0`. The row is information, not a gap to close (numbers in docs/performance.md, M49)"
     },
     "simd128": {
-      "status": "release",
-      "waiver": "the `CQ15` scramble fallback at `bits = 8` (index, residue table, the rounded `i32` product with saturation, `r = 0` selection and the exact quadrant map with saturating negation) does more work than the phasor lookup plus CMSIS-DSP's `arm_cmplx_mult_cmplx_q15`, which truncates to Q3.13 without rounding, saturation or quadrant map (numbers in docs/performance.md, M49); open item I49-1"
+      "status": "info",
+      "waiver": "the composition of the phasor lookup plus CMSIS-DSP's `arm_cmplx_mult_cmplx_q15` (generic C compiled at `-O3` for the level, which the compiler may vectorize) does less work than the `scramble` contract at `bits = 8` (reference does less work, maintainer decision D2092): it looks up the phasor and does one complex product that truncates to Q3.13 without rounding or saturation, while ours also splits the index into quadrant and residue, forms the correctly rounded and saturated product, applies the exact quadrant map with saturating negation and selects the input where `r = 0`. The row is information, not a gap to close (numbers in docs/performance.md, M49)"
     }
   },
   "scramble_c32_b2_dvbs2": {

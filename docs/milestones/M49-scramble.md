@@ -2,7 +2,7 @@
 
 > Plan: [PLAN.md › Phase 10](../PLAN.md#phase-10--digital-modes) · Depends on: [M38](M38-symbol-sync.md) (`sdrk_proto::prbs`; through it M30) · Next: [M50](M50-xcorr-fft.md)
 
-> **Status: implemented** (2026-11-18, branch `m49-scramble`, decisions D2050 to D2091, see [Status](#status)); open items I49-1 and I49-2 wait for the maintainer. Written 2026-11-08, revised 2026-11-17 after an algorithm review (maintainer decision). Kernel milestone of the DSSS/OFDM series (M48 to M56), one kernel per milestone.
+> **Status: implemented** (2026-11-18, branch `m49-scramble`, decisions D2050 to D2093, see [Status](#status)); no open items (I49-1 and I49-2 closed by the maintainer's decision D2092 of 2026-11-18). Written 2026-11-08, revised 2026-11-17 after an algorithm review (maintainer decision). Kernel milestone of the DSSS/OFDM series (M48 to M56), one kernel per milestone.
 
 > **Revision 2026-11-17.** The shared conventions §A to §D cited in this file are defined in [CONVENTIONS-M49-M56.md](CONVENTIONS-M49-M56.md). The maintainer accepted every recommendation of the algorithm review of M49 to M56; the shared definitions are in the shared conventions of M49 to M56 (§A exact `±1`/`±j` operations, introduced here; §D SIMD rule). Changes in this milestone:
 > 1. **Exact quadrant part** (shared conventions §A, decision 1): the index `k` is split into a quadrant `q` and a residue `r`; `±1` and `±j` are applied by exact sign and swap operations, never by a product with the table. `b = 1` and `b = 2` need no multiplication and are lossless (in `CQ15` except a component −32768, which returns as −32767), and `k = 0` is the identity. The first draft multiplied by the table value `COS_Q15[0] = 32767`, so `k = 0` was not the identity and a `CQ15` round trip lost up to 2 LSB at `b = 1, 2, 3` (measured by the review with NumPy), not the 1 LSB the draft promised. The residue `r ≠ 0` (`b ≥ 3`) keeps the `rotate` product. The kernel no longer equals "one `rotate` step at the phase `k << (32 − b)`" bit for bit; for `r ≠ 0` it equals one `rotate` step at the residual phase followed by the quadrant map, and for `r = 0` the quadrant map of the input, with no `rotate` step (§1, §2, §3, test 2).
@@ -343,7 +343,7 @@ R1.2 commands (`cargo xtask check` includes `cargo xtask check cycles`, D321); `
 
 ## Status
 
-Implemented (2026-11-18, branch `m49-scramble`, decisions D2050 to D2091; the maintainer decisions of 2026-11-17 are D2050 and the corrections of D2054). Every item of the deliverables checklist is done; two measured gaps against fair references wait for the maintainer (I49-1, I49-2).
+Implemented (2026-11-18, branch `m49-scramble`, decisions D2050 to D2093; the maintainer decisions of 2026-11-17 are D2050 and the corrections of D2054, that of 2026-11-18 is D2092). Every item of the deliverables checklist is done; no open item is left (I49-1 and I49-2 are closed by D2092).
 
 **Done:**
 - §1 to §3: `kernels::scramble` with `Scramble<T>`, the quadrant/residue split, the direct lookup from `COS_F32`/`COS_Q15`, `Fallback` (branch-free, a per-call residue table, D2055, D2056), `Reference` (`f64`, `libm`, rounded once, D2053), `scramble_one_c32`/`scramble_one_cq15` and the backend helpers (D2057; total for every `bits`, D2058), facade delegation to the SIMD backend; contract rows, the `scramble` section and the section "Exact `±1` and `±j` operations" (§A) in `docs/kernels.md`. Round trip measured: `CQ15` at most 2 LSB at every `bits` 3 to 8 (the provisional bound is confirmed, D2064), `C32` 143.9 to 147.1 dB.
@@ -353,11 +353,10 @@ Implemented (2026-11-18, branch `m49-scramble`, decisions D2050 to D2091; the ma
 - §6: `Prbs5`, `Prbs7`, `Prbs10`, `Prbs11`, `Poly::second_tap` and the word-parallel `Prbs::next_bits` (D2072, D2074); `ScrambleBlock<T>`, `ScrambleConfig`, `SCRAMBLE_CHUNK` (D2073, D2075 to D2077); the kind `scramble` with the measured cost `7 + 7·bits` / `17 + 7·bits` instead of the spec estimate 2 / 5 (D2090); `docs/blocks.md`, `docs/pipeline.md`, `docs/timing.md`, the schema and the WASM kind list (81 kinds).
 - Tests 1 to 7 (seeds 690 to 699): `golden_m49.rs`, `kernels_m49.rs`, the suite cases `scramble_c32`, `scramble_cq15`, `extremes_m49` (`suite_m49.rs`), `prbs_m49.rs`, `scramble_blocks.rs`, `scramble_kinds.rs`, the SIMD tests `scramble.rs` and `sign.rs` (run on every level: SSE2, SSE4.2, AVX2 natively and by fixed builds, AVX-512 under SDE, NEON under QEMU, `simd128` under wasmtime).
 
-**Not met (measured gaps, waived with an open item):**
-- I49-1: the fallbacks at `bits = 8` are more than 10 % above the compositions (`C32` 1.09 to 1.72 against lookup plus VOLK generic on `sse2`, `sse4.2`, `neon`; `CQ15` 2.13 to 3.62 against the CMSIS-DSP composition, which does less work).
-- I49-2: the SIMD `C32` path at `bits = 8` is above the fair VOLK composition at `sse4.2` (1.35 / 1.19), `avx2` (1.07 / 1.14) and on the `neon` reference model (1.10); within 10 % at `avx512`.
+**Reference does less work (information, D2092):**
+- The library compositions at `bits = 8` (the phasor lookup plus VOLK's `volk_32fc_x2_multiply_32fc`, its generic protokernel for the fallback, or CMSIS-DSP's `arm_cmplx_mult_cmplx_q15`) only look up the phasor and do one complex product; the contract also does the index split into quadrant and residue, the exact quadrant map and the `r = 0` selection, and in `CQ15` the correctly rounded and saturated product (CMSIS truncates to Q3.13). The maintainer decided on 2026-11-18 (D2092) that these comparisons are not fair: `scramble_c32_b8` (every level), `scramble_c32_b8_fallback`, `scramble_cq15_b8` and `scramble_cq15_b8_fallback` are `info` with the waiver "reference does less work". The former open items I49-1 (the fallbacks, `C32` 1.09 to 1.72, `CQ15` 2.13 to 3.62) and I49-2 (the SIMD `C32` path at `sse4.2` 1.35 / 1.19, `avx2` 1.07 / 1.14, `neon` reference model 1.10) are closed (D2093). The D321 gate against our own fallbacks is unchanged and holds.
 
 **Not done:**
-- The Cortex-M4 count of `scramble` (embedded targets on hold, D2084).
-- The AVX2 gather form was dropped on a wall-clock timing only and not measured with `cargo measure` (D2070).
+- The Cortex-M4 count of `scramble` (deferred: embedded targets on hold, D2084).
+- The AVX2 gather form was dropped on a wall-clock timing only and not measured with `cargo measure` (D2070); this stays a note, not an open item (D2093).
 - The whole `cargo test --workspace` and the complete crate suites of the acceptance list were not run here (only the M49 targets and the gate commands); the full Cortex-M4 emulator profile (which runs `extremes_m49` on the target) was not run.

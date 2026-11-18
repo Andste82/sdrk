@@ -29,8 +29,9 @@
 //! The chain is that of `qam_ber_m44` (D1217): random bits (stream 1 of the `Pcg32` of the
 //! test's seed) as soft bits `+-1` -> `QamModBlock` (4 samples per symbol, roll-off 0.35, span
 //! 10) -> the channel -> `Awgn::from_ebn0` (the test's seed) with the measured mean power of the
-//! signal after the channel -> `QamDemodBlock` with its defaults, the `equalizer_taps` of the
-//! test and, for 256-QAM and 1024-QAM, `sync_bw` 0.002 ([`sync_bw`], D1520). The first symbols
+//! signal after the channel -> `QamDemodBlock` with its defaults (among them the `sync_bw` of the
+//! constellation, 0.002 for 256-QAM and 1024-QAM, D1527) and the `equalizer_taps` of the test.
+//! The first symbols
 //! are skipped (the training of the equalizer, [`training_symbols`], or the acquisition); the
 //! next 400 received symbols fix the alignment with the sent symbols (the lag and the rotation
 //! with the fewest bit errors), and the bit errors are counted over the next 10^6 bits. A window
@@ -80,11 +81,6 @@ const ACQUISITION_SYMBOLS: usize = 5000;
 /// lock of the carrier loop (measured, D1522).
 const QAM1024_ACQUISITION_SYMBOLS: usize = 40_000;
 
-/// The `sync_bw` of the receivers: the default 0.005 for 4-QAM, 0.002 for 256-QAM and 1024-QAM,
-/// whose timing jitter at 0.005 costs 1.5 dB of MER at 1024-QAM (D1520).
-fn sync_bw(order: u32) -> f64 {
-    if order >= 256 { 0.002 } else { 0.005 }
-}
 /// Samples per symbol.
 const SPS: usize = 4;
 /// Symbol rate (the sample rate is `SPS` times it).
@@ -213,7 +209,6 @@ fn demod(order: u32, taps: usize) -> QamDemodBlock<VecStorage> {
         constellation: c_of(order),
         symbol_rate_hz: SYMBOL_RATE as f64,
         equalizer_taps: taps,
-        sync_bw: sync_bw(order),
         ..QamDemodConfig::default()
     };
     QamDemodBlock::new(

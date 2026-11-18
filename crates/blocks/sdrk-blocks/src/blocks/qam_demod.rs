@@ -67,9 +67,31 @@ pub const QAM_TRACKER_PULL_BW: f64 = 0.005;
 /// three sets 1513.65 and 1365.34 against 1146.68).
 pub const QAM_TRACKER_HOLD_BW: f64 = 0.0015;
 
-/// The default loop bandwidth of the symbol timing of `qam_demod` (half that of `psk_demod`:
-/// the self-noise of the Gardner detector on 64-QAM costs 0.9 dB at 0.01, D1215).
-const DEFAULT_SYNC_BW: f64 = 0.005;
+/// The default loop bandwidth of the symbol timing of `qam_demod` for `qpsk`, `qam16` and
+/// `qam64` (half that of `psk_demod`: the self-noise of the Gardner detector on 64-QAM costs
+/// 0.9 dB at 0.01, D1215).
+pub const QAM_SYNC_BW: f64 = 0.005;
+/// The default loop bandwidth of the symbol timing of `qam_demod` for `qam256` and `qam1024`
+/// (the maintainer's decision on I44.2-4, D1527): the timing jitter at [`QAM_SYNC_BW`] costs
+/// 1024-QAM 1.5 dB of MER at Es/N0 39 dB (36.95 against 38.4 dB) and 256-QAM 0.5 dB at 33 dB
+/// (D1520).
+pub const QAM_DENSE_SYNC_BW: f64 = 0.002;
+
+/// The default `sync_bw` of `qam_demod` for a constellation (the maintainer's decision on
+/// I44.2-4, D1527): [`QAM_SYNC_BW`] for `qpsk`, `qam16` and `qam64`, [`QAM_DENSE_SYNC_BW`] for
+/// `qam256` and `qam1024`.
+///
+/// ```
+/// use sdrk_blocks::{SymbolMapConstellation, qam_sync_bw};
+/// assert_eq!(qam_sync_bw(SymbolMapConstellation::Qam64), 0.005);
+/// assert_eq!(qam_sync_bw(SymbolMapConstellation::Qam256), 0.002);
+/// ```
+pub const fn qam_sync_bw(c: SymbolMapConstellation) -> f64 {
+    match c {
+        SymbolMapConstellation::Qam256 | SymbolMapConstellation::Qam1024 => QAM_DENSE_SYNC_BW,
+        _ => QAM_SYNC_BW,
+    }
+}
 
 /// The reason of the rate error (a hint to resample).
 const RATE_REASON: &str = "the sample rate must be within 1 % of an integer multiple (2 to \
@@ -97,12 +119,13 @@ pub(crate) const SYNC_BW_PARAM: ParamDesc = ParamDesc {
     kind: ParamKind::F64 {
         min: 0.0001,
         max: 0.1,
-        default: Some(DEFAULT_SYNC_BW),
+        default: None,
     },
-    typical: "0.005; 0.002 for qam256 and qam1024 (less timing jitter), up to 0.01 for a \
-        faster acquisition",
+    typical: "the default of the constellation; up to 0.01 for a faster acquisition",
     mutability: Mutability::Build,
-    description: "Loop bandwidth of the symbol timing, normalized to the symbol rate.",
+    description: "Loop bandwidth of the symbol timing, normalized to the symbol rate. The \
+        default depends on the constellation: 0.005 for qpsk, qam16 and qam64, 0.002 for \
+        qam256 and qam1024 (less timing jitter).",
 };
 
 /// The `carrier_bw` parameter of `qam_demod` and `qam_frame_decode`.
@@ -129,7 +152,7 @@ pub static DESCRIPTION: BlockDescription = BlockDescription {
         (otherwise the rate is unsupported: resample first). The matched root-raised-cosine \
         filter pulse_match (rolloff, span symbols, normalized so that the pulse of qam_mod \
         gives the points at the symbol centres) is followed by symbol_sync (Gardner, loop bandwidth \
-        sync_bw, default 0.005, damping 0.7071, max_deviation 0.005, ted_gain 1), a frequency \
+        sync_bw, default 0.005 for qpsk to qam64 and 0.002 for qam256 and qam1024, damping 0.7071, max_deviation 0.005, ted_gain 1), a frequency \
         acquisition (the carrier offset from the spectrum of the fourth powers of 512 symbols \
         from symbol 256 on, range +-0.125 cycles per symbol, repeated on the next 512 symbols \
         until its peak stands clear of the noise; the offset then goes to the phase tracker of \
@@ -203,15 +226,17 @@ pub struct QamDemodConfig {
     pub span: usize,
     /// Forward taps of the equalizer: 0 (off) or odd from 3 to 63.
     pub equalizer_taps: usize,
-    /// Loop bandwidth of the symbol timing (0.0001 to 0.1).
-    pub sync_bw: f64,
+    /// Loop bandwidth of the symbol timing (0.0001 to 0.1); `None` for the default of the
+    /// constellation ([`qam_sync_bw`], [`QamDemodConfig::sync_bw`]).
+    pub sync_bw: Option<f64>,
     /// Loop bandwidth of the carrier loop (0.0001 to 0.2).
     pub carrier_bw: f64,
 }
 
 impl Default for QamDemodConfig {
     /// `qam16`, `symbol_rate_hz` 1200 (a placeholder: the pipeline requires the parameter),
-    /// `rolloff` 0.35, `span` 10, `equalizer_taps` 11, `sync_bw` 0.005, `carrier_bw` 0.0025.
+    /// `rolloff` 0.35, `span` 10, `equalizer_taps` 11, `sync_bw` that of the constellation
+    /// (0.005 for `qam16`), `carrier_bw` 0.0025.
     fn default() -> Self {
         Self {
             constellation: SymbolMapConstellation::Qam16,
@@ -219,7 +244,7 @@ impl Default for QamDemodConfig {
             rolloff: 0.35,
             span: 10,
             equalizer_taps: DEFAULT_TAPS,
-            sync_bw: DEFAULT_SYNC_BW,
+            sync_bw: None,
             carrier_bw: DEFAULT_CARRIER_BW,
         }
     }
@@ -233,12 +258,28 @@ impl QamDemodConfig {
         self.constellation.bits_per_symbol()
     }
 
+    /// The loop bandwidth of the symbol timing: `sync_bw`, or the default of the constellation
+    /// ([`qam_sync_bw`]) when it is not set.
+    ///
+    /// ```
+    /// use sdrk_blocks::{QamDemodConfig, SymbolMapConstellation};
+    /// let mut cfg = QamDemodConfig::default();
+    /// assert_eq!(cfg.sync_bw(), 0.005);
+    /// cfg.constellation = SymbolMapConstellation::Qam1024;
+    /// assert_eq!(cfg.sync_bw(), 0.002);
+    /// cfg.sync_bw = Some(0.01);
+    /// assert_eq!(cfg.sync_bw(), 0.01);
+    /// ```
+    pub fn sync_bw(&self) -> f64 {
+        self.sync_bw.unwrap_or(qam_sync_bw(self.constellation))
+    }
+
     /// The configuration of the timing loop.
     fn sync(&self) -> SymbolSyncConfig {
         SymbolSyncConfig {
             symbol_rate_hz: self.symbol_rate_hz,
             ted: Ted::Gardner,
-            loop_bw: self.sync_bw,
+            loop_bw: self.sync_bw(),
             damping: DEFAULT_DAMPING,
             max_deviation: SYNC_MAX_DEVIATION,
             ted_gain: 1.0,
@@ -273,7 +314,7 @@ impl QamDemodConfig {
         // The ranges of `symbol_rate_hz`, `rolloff` and `span` and the rate rule are those of
         // `pulse_match` (M44.1.1 §3.2).
         let n = self.pulse().samples_per_symbol(rate_in)?;
-        check_f64("sync_bw", self.sync_bw, 0.0001, 0.1)?;
+        check_f64("sync_bw", self.sync_bw(), 0.0001, 0.1)?;
         check_f64("carrier_bw", self.carrier_bw, MIN_LOOP_BW, MAX_LOOP_BW)?;
         // The exact checks of the timing loop, reported with the hint to resample (as in
         // `psk_demod`).
@@ -337,7 +378,7 @@ impl QamDemodConfig {
                 check_equalizer_taps(t)?;
                 self.equalizer_taps = t;
             }
-            "sync_bw" => self.sync_bw = value.as_f64()?,
+            "sync_bw" => self.sync_bw = Some(value.as_f64()?),
             "carrier_bw" => self.carrier_bw = value.as_f64()?,
             _ => return unknown(),
         }
@@ -355,7 +396,7 @@ impl QamDemodConfig {
             "rolloff" => Ok(ParamValue::F64(self.rolloff)),
             "span" => Ok(ParamValue::I64(self.span as i64)),
             "equalizer_taps" => Ok(ParamValue::I64(self.equalizer_taps as i64)),
-            "sync_bw" => Ok(ParamValue::F64(self.sync_bw)),
+            "sync_bw" => Ok(ParamValue::F64(self.sync_bw())),
             "carrier_bw" => Ok(ParamValue::F64(self.carrier_bw)),
             _ => unknown(),
         }
@@ -777,7 +818,7 @@ impl<S: Storage> QamDemodBlock<S> {
             rolloff: pulse.rolloff,
             span: pulse.span,
             equalizer_taps: self.rx.eq.as_ref().map_or(0, |e| e.state().taps()),
-            sync_bw: sync.loop_bw,
+            sync_bw: Some(sync.loop_bw),
             carrier_bw: self.rx.costas.state().loop_bw(),
         }
     }

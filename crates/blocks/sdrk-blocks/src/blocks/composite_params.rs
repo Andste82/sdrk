@@ -274,7 +274,7 @@ fn demod_values(c: &QamDemodConfig) -> Vec<(&'static str, ParamValue)> {
         ("rolloff", ParamValue::F64(c.rolloff)),
         ("span", ParamValue::I64(c.span as i64)),
         ("equalizer_taps", ParamValue::I64(c.equalizer_taps as i64)),
-        ("sync_bw", ParamValue::F64(c.sync_bw)),
+        ("sync_bw", ParamValue::F64(c.sync_bw())),
         ("carrier_bw", ParamValue::F64(c.carrier_bw)),
     ]
 }
@@ -371,7 +371,7 @@ fn the_parameters_of_every_composite_follow_the_naming_rule() {
             rolloff: 0.25,
             span: 8,
             equalizer_taps: 0,
-            sync_bw: 0.01,
+            sync_bw: Some(0.01),
             carrier_bw: 0.004,
         },
     ] {

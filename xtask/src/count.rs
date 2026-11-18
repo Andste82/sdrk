@@ -1245,6 +1245,8 @@ pub static KERNELS: [KernelSpec; 268] = [
     spec("costas_qam1024", Family::Own, false),
     spec("equalize_qam256", Family::Own, false),
     spec("equalize_qam1024", Family::Own, false),
+    proto("bit_scramble_block", Family::GnuRadio),
+    proto("bit_descramble_block", Family::GnuRadio),
     proto("symbol_demap_qam16_block", Family::Own),
     proto("symbol_demap_qam64_block", Family::Own),
     proto("qam_mod_block", Family::Own),
@@ -4905,7 +4907,14 @@ mod tests {
         // The RDS blocks of M41 (D678) are information like the framing.
         let plan = |l: &str| PLANS.iter().find(|p| p.level == l).unwrap();
         let kernel = |k: &str| KERNELS.iter().find(|s| s.name == k).unwrap();
-        let crcs = ["crc16_ccitt_false", "crc16_x25", "crc32", "crc24_adsb"];
+        let crcs = [
+            "crc16_ccitt_false",
+            "crc16_x25",
+            "crc32",
+            "crc24_adsb",
+            "bit_scramble_block",
+            "bit_descramble_block",
+        ];
         let framing = [
             "frame_decode",
             "frame_encode_block",
@@ -4938,7 +4947,8 @@ mod tests {
         ];
         let names = crcs.iter().chain(&framing).copied().collect::<Vec<_>>();
         for level in ["sse2", "sse4.2", "avx2", "avx512", "neon", "simd128"] {
-            // The CRCs against GNU Radio's `gr::digital::crc` (D527), the framing against our
+            // The CRCs against GNU Radio's `gr::digital::crc` (D527) and the bit scramblers
+            // against its `scrambler_bb` and `descrambler_bb` (M44.2), the framing against our
             // own code (no library has it).
             for k in crcs {
                 assert_eq!(

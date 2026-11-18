@@ -51,6 +51,8 @@ const SEED: u64 = 559;
 const M40_1_SEED: u64 = 564;
 
 const H: f32 = core::f32::consts::FRAC_1_SQRT_2;
+/// `sqrt 2` in `f32`: the factor of the 4-QAM grid units of the QPSK soft bits (D1515).
+const R2: f32 = core::f32::consts::SQRT_2;
 
 /// Random soft bits `+-1` (stream `stream` of the seed).
 fn soft_bits(n: usize, stream: u64) -> Vec<f32> {
@@ -286,7 +288,8 @@ fn soft_of(cfg: &PskDemodConfig, y: Vec<C32>) -> Vec<f32> {
         match (order_of(cfg.constellation), cfg.variant) {
             (8, _) => bits.extend_from_slice(&psk8_reference(1.0, s)),
             (4, PskVariant::Pi4) => bits.extend_from_slice(&[-s.im, -s.re]),
-            (4, _) => bits.extend_from_slice(&[s.re, s.im]),
+            // The 4-QAM grid units of `symbol_demap` `qpsk` (M44.2, D1515).
+            (4, _) => bits.extend_from_slice(&[s.re * R2, s.im * R2]),
             _ => bits.push(s.re),
         }
     }
@@ -908,7 +911,13 @@ fn psk_mod_to_psk_demod_without_noise_is_error_free() {
         // OQPSK: 0.2, for the phase jitter of its detector, whose terms at the other rail's
         // transition carry data (D687; measured 0.57 to 0.77 for H = 0.707 over 10^4 symbols)
         let tail = &soft[soft.len() - 200..];
-        let want = if order == 4 { H } else { 1.0 };
+        // QPSK in the 4-QAM grid units: the points (+-H, +-H) give +-1 (D1515); pi/4-DQPSK
+        // keeps the parts of z_k, +-H.
+        let want = if order == 4 && variant == PskVariant::Pi4 {
+            H
+        } else {
+            1.0
+        };
         let tol = if variant == PskVariant::Offset {
             0.2
         } else {

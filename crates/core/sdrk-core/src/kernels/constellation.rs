@@ -582,8 +582,12 @@ impl Qam {
     /// `costas` around them differently (up to 46 % slower), and as two separate functions still
     /// 3 to 8 % slower on `znver3`, `znver4` and `cortex-a72` (the 64-QAM loop of `costas` and the
     /// 16-QAM loop of `equalize` vectorized the two axes on AArch64); in this form the loops
-    /// compile to the code of M44 (the measure step of M44.2, D1525). Any other order gives its
-    /// [`Grid::value`].
+    /// compile to the code of M44 (the measure step of M44.2, D1525). Only for 16-QAM and 64-QAM:
+    /// the callers ([`Qam::decide`], [`Grid::value`] for `B` = 2 and 3 and the decision of
+    /// `equalize`) pass no other order. For another order the result is not specified (the
+    /// select tree of AArch64 and AVX2 gives 64-QAM levels, the other targets [`Grid::value`]);
+    /// the arms stay as they are because a change of this function moved the code of the loops
+    /// around it (D1525; the review of M44.2, D1538).
     #[inline]
     pub(crate) fn decide_m44(self, v: f32) -> f32 {
         if cfg!(any(target_arch = "aarch64", target_feature = "avx2")) {

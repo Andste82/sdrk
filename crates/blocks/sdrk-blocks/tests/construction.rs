@@ -774,6 +774,7 @@ impl sdrk_blocks::LockPolicy for Policy {
     const TOLERANCE: f64 = 2e-4;
     const WEIGHT_CHECKS: u8 = 2;
     const GAP_WINDOWS: u8 = 6;
+    const STALL_CHECKS: u8 = 2;
 }
 fn assert_sync<T: Sync>() {}
 

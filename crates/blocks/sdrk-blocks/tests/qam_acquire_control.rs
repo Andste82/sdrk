@@ -542,6 +542,7 @@ impl LockPolicy for Policy {
     const TOLERANCE: f64 = 2e-4;
     const WEIGHT_CHECKS: u8 = 2;
     const GAP_WINDOWS: u8 = 6;
+    const STALL_CHECKS: u8 = 2;
 }
 
 /// The inputs of a check: the lock, and a weight energy above the floor.
@@ -550,6 +551,7 @@ fn chk(locked: bool) -> impl FnOnce() -> LockCheck {
         locked,
         weight_energy: Some(1.0),
         weight_floor: 0.75,
+        converged: true,
     }
 }
 
@@ -625,6 +627,7 @@ fn chk_e(locked: bool, energy: f32) -> impl FnOnce() -> LockCheck {
         locked,
         weight_energy: Some(energy),
         weight_floor: 0.75,
+        converged: true,
     }
 }
 
@@ -686,6 +689,7 @@ fn lock_watch_takes_the_weight_watch_of_step_two() {
         locked: true,
         weight_energy: None,
         weight_floor: 0.75,
+        converged: true,
     };
     for _ in 0..10 {
         assert_eq!(w.advance(4096, none), Some(LockTransition::Hold));
@@ -756,12 +760,105 @@ fn lock_watch_takes_the_signal_back_after_a_gap_and_names_the_actions() {
         (LockTransition::Doubt, LockAction::Verify),
         (LockTransition::Confirm, LockAction::Keep),
         (LockTransition::Restart, LockAction::RestartAll),
+        (
+            LockTransition::Stall { frequency: 0.0 },
+            LockAction::RestartEqualizer,
+        ),
     ] {
         assert_eq!(t.action(), a, "{t:?}");
     }
 }
 
-/// A policy with both conditions of step two off.
+/// The inputs of a check without lock, the weight energy above the floor, the equalizer
+/// converged or not.
+fn chk_c(converged: bool) -> impl FnOnce() -> LockCheck {
+    move || LockCheck {
+        locked: false,
+        weight_energy: Some(1.0),
+        weight_floor: 0.75,
+        converged,
+    }
+}
+
+#[test]
+fn lock_watch_takes_the_restart_of_a_false_state() {
+    // M44.3 §2: `STALL_CHECKS` checks in a row without lock at which the equalizer had not
+    // converged, then a clear verify window within the tolerance: `Stall`, the equalizer starts
+    // again with the estimate of the window. The first check after an estimate counts.
+    let mut w = LockWatch::<Policy>::new();
+    w.window(Some(0.001), 0.0);
+    assert_eq!(
+        w.advance(4096, chk_c(false)),
+        Some(LockTransition::SettleUnlocked)
+    );
+    assert_eq!(w.stall_checks(), 1);
+    assert_eq!(w.window(Some(0.00102), 0.001), LockTransition::Confirm);
+    assert_eq!(w.advance(4096, chk_c(false)), Some(LockTransition::Doubt));
+    assert_eq!(w.stall_checks(), 2);
+    let t = w.window(Some(0.00102), 0.001);
+    assert_eq!(t, LockTransition::Stall { frequency: 0.00102 });
+    assert_eq!(t.action(), LockAction::RestartEqualizer);
+    assert_eq!(t.frequency(), Some(0.00102));
+    assert_eq!(
+        (
+            w.state(),
+            w.remaining(),
+            w.acquired(),
+            w.restarts(),
+            w.stall_checks()
+        ),
+        (LockState::PullIn, 4096, Some(0.00102), 1, 0)
+    );
+    // a check with lock, or at which the equalizer converged, starts the count again
+    let mut w = tracking::<Policy>();
+    for (locked, converged, count) in [
+        (false, false, 1u8),
+        (true, false, 0),
+        (false, false, 1),
+        (false, true, 0),
+        (false, false, 1),
+    ] {
+        w.advance(4096, || LockCheck {
+            locked,
+            weight_energy: Some(1.0),
+            weight_floor: 0.75,
+            converged,
+        });
+        assert_eq!(w.stall_checks(), count);
+        if w.state() == LockState::Verify {
+            assert_eq!(w.window(Some(0.001), 0.001), LockTransition::Confirm);
+        }
+    }
+    // a verify window without a clear peak keeps the count, and the next clear one acts
+    assert_eq!(w.advance(4096, chk_c(false)), Some(LockTransition::Doubt));
+    assert_eq!(w.window(None, 0.001), LockTransition::Confirm);
+    assert_eq!(w.stall_checks(), 2);
+    assert_eq!(w.advance(4096, chk_c(false)), Some(LockTransition::Doubt));
+    assert_eq!(
+        w.window(Some(0.0009), 0.001),
+        LockTransition::Stall { frequency: 0.0009 }
+    );
+    // a clear window away from the loops is a full restart, which clears the count
+    let mut w = tracking::<Policy>();
+    for _ in 0..3 {
+        w.advance(4096, chk_c(false));
+        w.window(None, 0.001);
+    }
+    w.advance(4096, chk_c(false));
+    assert_eq!(w.window(Some(0.003), 0.001), LockTransition::Restart);
+    assert_eq!((w.state(), w.stall_checks()), (LockState::Search, 0));
+    // with the recovery off nothing counts
+    let mut w = tracking::<Policy>();
+    w.set_recovery(false);
+    for _ in 0..5 {
+        assert_eq!(w.advance(4096, chk_c(false)), Some(LockTransition::Doubt));
+        assert_eq!(w.stall_checks(), 0);
+        assert_eq!(w.window(Some(0.001), 0.001), LockTransition::Confirm);
+    }
+    assert_eq!(w.restarts(), 0);
+}
+
+/// A policy with the conditions of step two and the restart of a false state off.
 struct Off;
 
 impl LockPolicy for Off {
@@ -769,6 +866,7 @@ impl LockPolicy for Off {
     const TOLERANCE: f64 = 2e-4;
     const WEIGHT_CHECKS: u8 = 0;
     const GAP_WINDOWS: u8 = 0;
+    const STALL_CHECKS: u8 = 0;
 }
 
 #[test]
@@ -782,6 +880,11 @@ fn lock_watch_without_the_conditions_of_step_two_keeps_step_one() {
         assert_eq!(w.window(None, 0.001), LockTransition::Confirm);
     }
     assert_eq!((w.misses(), w.low_checks()), (100, 31));
+    for _ in 0..4 {
+        assert_eq!(w.advance(4096, chk_c(false)), Some(LockTransition::Doubt));
+        assert_eq!(w.window(Some(0.001), 0.001), LockTransition::Confirm);
+    }
+    assert_eq!(w.stall_checks(), 4);
     assert_eq!(w.advance(4096, chk(false)), Some(LockTransition::Doubt));
     assert_eq!(w.window(Some(0.001), 0.001), LockTransition::Confirm);
     assert_eq!((w.restarts(), w.misses(), w.low_checks()), (0, 0, 0));

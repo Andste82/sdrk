@@ -377,7 +377,7 @@ fn qam16_symbols(n: usize, stream: u64) -> Vec<C32> {
 fn eq_config() -> EqualizeConfig {
     EqualizeConfig {
         constellation: EqConstellation::Qam16,
-        cma_symbols: 300,
+        cma_symbols: Some(300),
         phase_bw: 0.005,
         ..EqualizeConfig::default()
     }
@@ -390,9 +390,9 @@ fn eq_state(cfg: &EqualizeConfig) -> EqualizeState<Vec<C32>, Vec<C32>> {
         EqParams {
             constellation: cfg.constellation,
             feedback_taps: cfg.feedback_taps,
-            mu_cma: cfg.mu_cma as f32,
+            mu_cma: cfg.mu_cma() as f32,
             mu_dd: cfg.mu_dd as f32,
-            cma_symbols: cfg.cma_symbols,
+            cma_symbols: cfg.cma_symbols(),
             phase_bw: cfg.phase_bw,
         },
     )

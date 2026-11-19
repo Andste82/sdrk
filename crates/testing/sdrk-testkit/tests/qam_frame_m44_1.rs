@@ -150,7 +150,7 @@ fn channel(sent: &[C32], order: u32, esn0_db: f64, seed: u64) -> Vec<C32> {
 
 fn config(order: u32, frame_timeout: usize) -> QamFrameDecodeConfig {
     let mut cfg = QamFrameDecodeConfig {
-        frame_timeout,
+        frame_timeout: Some(frame_timeout),
         scrambler: sdrk_blocks::Scrambler::Off,
         ..QamFrameDecodeConfig::default()
     };

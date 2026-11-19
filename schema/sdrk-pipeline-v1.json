@@ -2068,8 +2068,7 @@
                 "additionalProperties": false,
                 "properties": {
                   "cma_symbols": {
-                    "default": 1000,
-                    "description": "Symbols in CMA mode before the switch to decision mode (0: decision mode from the start, 4294967295: never). Typical: 1000; 0 for decision mode only, 4294967295 for CMA only. Build-time.",
+                    "description": "Symbols in CMA mode before the switch to decision mode (0: decision mode from the start, 4294967295: never). The default depends on the constellation: 1000 for bpsk to qam64, 8000 for qam256, 16000 for qam1024. Typical: the default of the constellation; 0 for decision mode only, 4294967295 for CMA only. Build-time.",
                     "maximum": 4294967295,
                     "minimum": 0,
                     "type": "integer"
@@ -2096,8 +2095,7 @@
                     "type": "integer"
                   },
                   "mu_cma": {
-                    "default": 0.05,
-                    "description": "Normalized step size of the CMA update (used as f32); a change applies from the next symbol. Typical: 0.05. Runtime.",
+                    "description": "Normalized step size of the CMA update (used as f32); a change applies from the next symbol. The default depends on the constellation: 0.05 for bpsk to qam64, 0.02 for qam256, 0.005 for qam1024 (the denser grids need a smaller blind step). Typical: the default of the constellation. Runtime.",
                     "maximum": 1.0,
                     "minimum": 0.00001,
                     "type": "number"
@@ -4191,8 +4189,7 @@
                     "type": "integer"
                   },
                   "frame_timeout": {
-                    "default": 16384,
-                    "description": "Symbols without a frame with CRC_OK, after one since the start, a reset or the last restart by the watch, after which the demodulator starts again (the equalizer, the loops at frequency 0 and a new search of the acquisition); 0 turns the watch off. Typical: 16384 (four checks of the demodulator); above the longest pause of the sender between frames; 0 for off. Build-time.",
+                    "description": "Symbols without a frame with CRC_OK, after one since the start, a reset or the last restart by the watch, after which the demodulator starts again (the equalizer, the loops at frequency 0 and a new search of the acquisition); 0 turns the watch off. The default depends on the constellation, four checks of the demodulator: 16384 for qpsk to qam64, 49152 for qam256, 81920 for qam1024. Typical: the default of the constellation (four checks of the demodulator); above the longest pause of the sender between frames; 0 for off. Build-time.",
                     "maximum": 1048576,
                     "minimum": 0,
                     "type": "integer"

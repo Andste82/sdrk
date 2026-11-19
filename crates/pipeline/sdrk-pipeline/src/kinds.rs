@@ -3628,17 +3628,26 @@ impl Kind for PskDemodKind {
     /// `offset` runs its own carrier loop with `rotate` instead of `costas` (D686), so its
     /// backend check looks at `rotate` (D689); every other variant keeps the kind's list.
     /// `equalizer_taps` above 0 adds `equalize` (M43 §3, D816), before `costas` (D825).
+    /// `qpsk` with every variant but `pi4` takes its soft bits from `qam_soft_bits` (M44.2,
+    /// D1515, D1536), after the carrier loop.
     fn kernels_for(params: &Map<String, Value>) -> &'static [&'static str] {
-        let offset = params.get("variant").and_then(Value::as_str) == Some("offset");
+        let variant = params.get("variant").and_then(Value::as_str);
+        let offset = variant == Some("offset");
+        let qpsk = params.get("constellation").and_then(Value::as_str) == Some("qpsk")
+            && variant != Some("pi4");
         let eq = params
             .get("equalizer_taps")
             .and_then(Value::as_i64)
             .is_some_and(|t| t != 0);
-        match (offset, eq) {
-            (true, true) => &["fir", "symbol_sync", "rotate", "equalize"],
-            (true, false) => &["fir", "symbol_sync", "rotate"],
-            (false, true) => &["fir", "symbol_sync", "equalize", "costas"],
-            (false, false) => Self::kernels(),
+        match (offset, eq, qpsk) {
+            (true, true, true) => &["fir", "symbol_sync", "rotate", "equalize", "qam_soft_bits"],
+            (true, true, false) => &["fir", "symbol_sync", "rotate", "equalize"],
+            (true, false, true) => &["fir", "symbol_sync", "rotate", "qam_soft_bits"],
+            (true, false, false) => &["fir", "symbol_sync", "rotate"],
+            (false, true, true) => &["fir", "symbol_sync", "equalize", "costas", "qam_soft_bits"],
+            (false, true, false) => &["fir", "symbol_sync", "equalize", "costas"],
+            (false, false, true) => &["fir", "symbol_sync", "costas", "qam_soft_bits"],
+            (false, false, false) => Self::kernels(),
         }
     }
     fn default_cfg() -> PskDemodConfig {

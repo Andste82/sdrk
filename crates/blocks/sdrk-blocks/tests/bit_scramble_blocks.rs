@@ -16,6 +16,9 @@
 //! - Quarter turns (seed 873, stream 1): for every square constellation, a rotation of the scrambled
 //!   symbols by 90 degrees (Gray code per axis, `sdrk_proto::frame::rotate_group`) descrambles to
 //!   the same rotation of the plain symbols, after the register has filled.
+//! - Construction (review of M44.2, D1536): both blocks build in an arena of exactly
+//!   `storage_bytes` for every polynomial and constellation (and fail with one byte less), and
+//!   the public types are `Send` and `Sync` (R4.6).
 //! - The model: the output equals a one-bit-at-a-time model of the register (soft bits: the sign
 //!   flips where the parity of the register is 1), including 0 and NaN inputs (seed 838). The
 //!   golden cases of the Python model are `blocks/bit_scramble_*` (seeds 870 and 871,
@@ -33,10 +36,10 @@
 
 mod common;
 
-use common::{check_block, rate, run_block, same_bits};
+use common::{check_block, check_exact_storage, rate, run_block, same_bits};
 use sdrk_blocks::{
-    BitDescrambleBlock, BitPolynomial, BitScrambleBlock, BitScrambleConfig, Block, ParamValue,
-    SymbolMapConstellation,
+    ArenaStorage, BitDescrambleBlock, BitPolynomial, BitScrambleBlock, BitScrambleConfig, Block,
+    ParamValue, Scrambler, SymbolMapConstellation,
 };
 use sdrk_proto::frame::rotate_group;
 use sdrk_testkit::{Pcg32, VecStorage};
@@ -382,4 +385,34 @@ fn the_parameters_are_build_parameters() {
     assert_eq!(c.polynomial, BitPolynomial::X23X5);
     assert_eq!(s.config(), cfg);
     assert_eq!(d.config(), cfg);
+}
+
+#[test]
+fn both_blocks_take_exactly_their_storage() {
+    for cfg in configs() {
+        let r = rate(9600);
+        let bytes = BitScrambleBlock::<ArenaStorage<'_>>::storage_bytes(&cfg, r).unwrap();
+        // The ring of `A = a m` soft bits (at most 580: x58_x39 over 1024-QAM).
+        assert!(cfg.delays().0 <= 580, "{cfg:?}");
+        assert_eq!(bytes, cfg.delays().0 * 4, "{cfg:?}");
+        check_exact_storage(bytes, |a| BitScrambleBlock::new(&cfg, r, a).map(|_| ()));
+        assert_eq!(
+            BitDescrambleBlock::<ArenaStorage<'_>>::storage_bytes(&cfg, r).unwrap(),
+            bytes,
+            "{cfg:?}"
+        );
+        check_exact_storage(bytes, |a| BitDescrambleBlock::new(&cfg, r, a).map(|_| ()));
+    }
+}
+
+#[test]
+fn the_public_types_are_send_and_sync() {
+    fn assert_send_sync<T: Send + Sync>() {}
+    assert_send_sync::<BitScrambleBlock<ArenaStorage<'static>>>();
+    assert_send_sync::<BitScrambleBlock<VecStorage>>();
+    assert_send_sync::<BitDescrambleBlock<ArenaStorage<'static>>>();
+    assert_send_sync::<BitDescrambleBlock<VecStorage>>();
+    assert_send_sync::<BitScrambleConfig>();
+    assert_send_sync::<BitPolynomial>();
+    assert_send_sync::<Scrambler>();
 }

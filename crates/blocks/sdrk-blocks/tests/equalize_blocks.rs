@@ -91,9 +91,9 @@ fn kernel_state(cfg: &EqualizeConfig) -> EqualizeState<Vec<C32>, Vec<C32>> {
         EqParams {
             constellation: cfg.constellation,
             feedback_taps: cfg.feedback_taps,
-            mu_cma: cfg.mu_cma as f32,
+            mu_cma: cfg.mu_cma() as f32,
             mu_dd: cfg.mu_dd as f32,
-            cma_symbols: cfg.cma_symbols,
+            cma_symbols: cfg.cma_symbols(),
             phase_bw: cfg.phase_bw,
         },
     )
@@ -111,20 +111,20 @@ fn configs() -> [EqualizeConfig; 4] {
             taps: 9,
             feedback_taps: 2,
             constellation: EqConstellation::Bpsk,
-            mu_cma: 0.02,
+            mu_cma: Some(0.02),
             mu_dd: 0.01,
-            cma_symbols: 500,
+            cma_symbols: Some(500),
             phase_bw: 0.01,
         },
         EqualizeConfig {
             constellation: EqConstellation::Psk8,
             feedback_taps: 3,
-            cma_symbols: 0,
+            cma_symbols: Some(0),
             ..d
         },
         EqualizeConfig {
             taps: 21,
-            cma_symbols: u32::MAX,
+            cma_symbols: Some(u32::MAX),
             phase_bw: 0.0,
             ..d
         },
@@ -136,7 +136,7 @@ fn equalize_block_equals_the_kernel_whole_and_in_twenty_plans() {
     for (i, cfg) in configs().into_iter().enumerate() {
         // CMA is phase-blind; the decision mode needs the phase tracker, which follows a
         // constant phase within the decision region of 8PSK from the start
-        let phase = if cfg.cma_symbols == u32::MAX {
+        let phase = if cfg.cma_symbols() == u32::MAX {
             0.9
         } else {
             0.25
@@ -167,7 +167,7 @@ fn equalize_block_equals_the_kernel_whole_and_in_twenty_plans() {
         assert_eq!(block.mse().to_bits(), st.mse().to_bits(), "{what}");
         assert_eq!(block.mode(), st.mode(), "{what}");
         assert_eq!(block.state().phase(), st.phase(), "{what}");
-        let mode = if cfg.cma_symbols == u32::MAX {
+        let mode = if cfg.cma_symbols() == u32::MAX {
             EqMode::Cma
         } else {
             EqMode::Decision
@@ -294,10 +294,13 @@ fn equalize_parameters() {
         EqualizeConfig { taps: 10, ..ok },
         EqualizeConfig { taps: 65, ..ok },
         EqualizeConfig {
-            mu_cma: 0.000_009,
+            mu_cma: Some(0.000_009),
             ..ok
         },
-        EqualizeConfig { mu_cma: 1.1, ..ok },
+        EqualizeConfig {
+            mu_cma: Some(1.1),
+            ..ok
+        },
         EqualizeConfig {
             feedback_taps: 64,
             ..ok
@@ -391,7 +394,7 @@ fn equalize_parameters() {
 #[test]
 fn equalize_runtime_parameters_apply_from_the_next_symbol() {
     let cfg = EqualizeConfig {
-        cma_symbols: 1000,
+        cma_symbols: Some(1000),
         ..EqualizeConfig::default()
     };
     let input = channel_symbols(EqConstellation::Qpsk, 3000, 0.4, 0.03, 20);

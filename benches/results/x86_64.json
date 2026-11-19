@@ -705,6 +705,29 @@
           "status": "release",
           "verdict": "pass"
         },
+        "bit_descramble_in_place_block": {
+          "compared_with": "GNU Radio descrambler_bb(0x21, 0, 22): gr::digital::lfsr, one __builtin_parityl per unpacked bit (generic compiler flags)",
+          "goal": true,
+          "informational": [
+            {
+              "compared_with": "sdrk fallback",
+              "label": "information: fallback",
+              "other_instr_per_sample": 6.61,
+              "other_snr_db": 999.0,
+              "ours_instr_per_sample": 6.61,
+              "ratio": 1.0
+            }
+          ],
+          "other_instr_per_sample": 28.01,
+          "ours_instr_per_sample": 6.61,
+          "ratio": 0.24,
+          "snr_db": {
+            "other": 999.0,
+            "ours": 999.0
+          },
+          "status": "release",
+          "verdict": "pass"
+        },
         "bit_scramble_block": {
           "compared_with": "GNU Radio scrambler_bb(0x21, 0, 22): gr::digital::lfsr, one __builtin_parityl per unpacked bit (generic compiler flags)",
           "goal": true,
@@ -721,6 +744,29 @@
           "other_instr_per_sample": 26.01,
           "ours_instr_per_sample": 4.67,
           "ratio": 0.18,
+          "snr_db": {
+            "other": 999.0,
+            "ours": 999.0
+          },
+          "status": "release",
+          "verdict": "pass"
+        },
+        "bit_scramble_in_place_block": {
+          "compared_with": "GNU Radio scrambler_bb(0x21, 0, 22): gr::digital::lfsr, one __builtin_parityl per unpacked bit (generic compiler flags)",
+          "goal": true,
+          "informational": [
+            {
+              "compared_with": "sdrk fallback",
+              "label": "information: fallback",
+              "other_instr_per_sample": 5.26,
+              "other_snr_db": 999.0,
+              "ours_instr_per_sample": 5.26,
+              "ratio": 1.0
+            }
+          ],
+          "other_instr_per_sample": 26.01,
+          "ours_instr_per_sample": 5.26,
+          "ratio": 0.2,
           "snr_db": {
             "other": 999.0,
             "ours": 999.0
@@ -4863,8 +4909,8 @@
         "qam_demod_block": {
           "compared_with": "sdrk fallback",
           "goal": true,
-          "other_instr_per_sample": 164.65,
-          "ours_instr_per_sample": 164.65,
+          "other_instr_per_sample": 164.64,
+          "ours_instr_per_sample": 164.64,
           "ratio": 1.0,
           "snr_db": {
             "other": 999.0,
@@ -4889,8 +4935,8 @@
         "qam_demod_search_block": {
           "compared_with": "sdrk fallback",
           "goal": true,
-          "other_instr_per_sample": 180.92,
-          "ours_instr_per_sample": 180.92,
+          "other_instr_per_sample": 180.91,
+          "ours_instr_per_sample": 180.91,
           "ratio": 1.0,
           "snr_db": {
             "other": 999.0,
@@ -4915,8 +4961,8 @@
         "qam_frame_encode_block": {
           "compared_with": "sdrk fallback",
           "goal": true,
-          "other_instr_per_sample": 25.71,
-          "ours_instr_per_sample": 25.71,
+          "other_instr_per_sample": 25.7,
+          "ours_instr_per_sample": 25.7,
           "ratio": 1.0,
           "snr_db": {
             "other": 143.96,
@@ -6714,12 +6760,38 @@
           "status": "info",
           "verdict": "info"
         },
+        "bit_descramble_in_place_block": {
+          "compared_with": "ours at avx2",
+          "goal": false,
+          "other_instr_per_sample": 6.61,
+          "ours_instr_per_sample": 8.48,
+          "ratio": 1.28,
+          "snr_db": {
+            "other": 999.0,
+            "ours": 999.0
+          },
+          "status": "info",
+          "verdict": "info"
+        },
         "bit_scramble_block": {
           "compared_with": "ours at avx2",
           "goal": false,
           "other_instr_per_sample": 4.67,
           "ours_instr_per_sample": 6.72,
           "ratio": 1.44,
+          "snr_db": {
+            "other": 999.0,
+            "ours": 999.0
+          },
+          "status": "info",
+          "verdict": "info"
+        },
+        "bit_scramble_in_place_block": {
+          "compared_with": "ours at avx2",
+          "goal": false,
+          "other_instr_per_sample": 5.26,
+          "ours_instr_per_sample": 7.31,
+          "ratio": 1.39,
           "snr_db": {
             "other": 999.0,
             "ours": 999.0
@@ -8017,7 +8089,7 @@
         "qam_demod_block": {
           "compared_with": "ours at avx2",
           "goal": false,
-          "other_instr_per_sample": 164.65,
+          "other_instr_per_sample": 164.64,
           "ours_instr_per_sample": 171.25,
           "ratio": 1.04,
           "snr_db": {
@@ -8043,7 +8115,7 @@
         "qam_demod_search_block": {
           "compared_with": "ours at avx2",
           "goal": false,
-          "other_instr_per_sample": 180.92,
+          "other_instr_per_sample": 180.91,
           "ours_instr_per_sample": 189.37,
           "ratio": 1.05,
           "snr_db": {
@@ -8069,7 +8141,7 @@
         "qam_frame_encode_block": {
           "compared_with": "ours at avx2",
           "goal": false,
-          "other_instr_per_sample": 25.71,
+          "other_instr_per_sample": 25.7,
           "ours_instr_per_sample": 26.43,
           "ratio": 1.03,
           "snr_db": {
@@ -9368,6 +9440,29 @@
           "status": "release",
           "verdict": "pass"
         },
+        "bit_descramble_in_place_block": {
+          "compared_with": "GNU Radio descrambler_bb(0x21, 0, 22): gr::digital::lfsr, one __builtin_parityl per unpacked bit (generic compiler flags)",
+          "goal": true,
+          "informational": [
+            {
+              "compared_with": "sdrk fallback",
+              "label": "information: fallback",
+              "other_instr_per_sample": 8.87,
+              "other_snr_db": 999.0,
+              "ours_instr_per_sample": 8.87,
+              "ratio": 1.0
+            }
+          ],
+          "other_instr_per_sample": 28.01,
+          "ours_instr_per_sample": 8.87,
+          "ratio": 0.32,
+          "snr_db": {
+            "other": 999.0,
+            "ours": 999.0
+          },
+          "status": "release",
+          "verdict": "pass"
+        },
         "bit_scramble_block": {
           "compared_with": "GNU Radio scrambler_bb(0x21, 0, 22): gr::digital::lfsr, one __builtin_parityl per unpacked bit (generic compiler flags)",
           "goal": true,
@@ -9384,6 +9479,29 @@
           "other_instr_per_sample": 26.01,
           "ours_instr_per_sample": 6.72,
           "ratio": 0.26,
+          "snr_db": {
+            "other": 999.0,
+            "ours": 999.0
+          },
+          "status": "release",
+          "verdict": "pass"
+        },
+        "bit_scramble_in_place_block": {
+          "compared_with": "GNU Radio scrambler_bb(0x21, 0, 22): gr::digital::lfsr, one __builtin_parityl per unpacked bit (generic compiler flags)",
+          "goal": true,
+          "informational": [
+            {
+              "compared_with": "sdrk fallback",
+              "label": "information: fallback",
+              "other_instr_per_sample": 7.31,
+              "other_snr_db": 999.0,
+              "ours_instr_per_sample": 7.31,
+              "ratio": 1.0
+            }
+          ],
+          "other_instr_per_sample": 26.01,
+          "ours_instr_per_sample": 7.31,
+          "ratio": 0.28,
           "snr_db": {
             "other": 999.0,
             "ours": 999.0
@@ -13590,8 +13708,8 @@
         "qam_demod_search_block": {
           "compared_with": "sdrk fallback",
           "goal": true,
-          "other_instr_per_sample": 317.85,
-          "ours_instr_per_sample": 317.85,
+          "other_instr_per_sample": 317.84,
+          "ours_instr_per_sample": 317.84,
           "ratio": 1.0,
           "snr_db": {
             "other": 999.0,
@@ -13616,8 +13734,8 @@
         "qam_frame_encode_block": {
           "compared_with": "sdrk fallback",
           "goal": true,
-          "other_instr_per_sample": 45.95,
-          "ours_instr_per_sample": 45.95,
+          "other_instr_per_sample": 45.94,
+          "ours_instr_per_sample": 45.94,
           "ratio": 1.0,
           "snr_db": {
             "other": 143.79,
@@ -15935,6 +16053,29 @@
           "status": "release",
           "verdict": "pass"
         },
+        "bit_descramble_in_place_block": {
+          "compared_with": "GNU Radio descrambler_bb(0x21, 0, 22): gr::digital::lfsr, one __builtin_parityl per unpacked bit (generic compiler flags)",
+          "goal": true,
+          "informational": [
+            {
+              "compared_with": "sdrk fallback",
+              "label": "information: fallback",
+              "other_instr_per_sample": 8.87,
+              "other_snr_db": 999.0,
+              "ours_instr_per_sample": 8.87,
+              "ratio": 1.0
+            }
+          ],
+          "other_instr_per_sample": 28.01,
+          "ours_instr_per_sample": 8.87,
+          "ratio": 0.32,
+          "snr_db": {
+            "other": 999.0,
+            "ours": 999.0
+          },
+          "status": "release",
+          "verdict": "pass"
+        },
         "bit_scramble_block": {
           "compared_with": "GNU Radio scrambler_bb(0x21, 0, 22): gr::digital::lfsr, one __builtin_parityl per unpacked bit (generic compiler flags)",
           "goal": true,
@@ -15951,6 +16092,29 @@
           "other_instr_per_sample": 26.01,
           "ours_instr_per_sample": 6.72,
           "ratio": 0.26,
+          "snr_db": {
+            "other": 999.0,
+            "ours": 999.0
+          },
+          "status": "release",
+          "verdict": "pass"
+        },
+        "bit_scramble_in_place_block": {
+          "compared_with": "GNU Radio scrambler_bb(0x21, 0, 22): gr::digital::lfsr, one __builtin_parityl per unpacked bit (generic compiler flags)",
+          "goal": true,
+          "informational": [
+            {
+              "compared_with": "sdrk fallback",
+              "label": "information: fallback",
+              "other_instr_per_sample": 7.31,
+              "other_snr_db": 999.0,
+              "ours_instr_per_sample": 7.31,
+              "ratio": 1.0
+            }
+          ],
+          "other_instr_per_sample": 26.01,
+          "ours_instr_per_sample": 7.31,
+          "ratio": 0.28,
           "snr_db": {
             "other": 999.0,
             "ours": 999.0
@@ -20077,8 +20241,8 @@
         "qam_demod_block": {
           "compared_with": "sdrk fallback",
           "goal": true,
-          "other_instr_per_sample": 292.38,
-          "ours_instr_per_sample": 292.38,
+          "other_instr_per_sample": 292.37,
+          "ours_instr_per_sample": 292.37,
           "ratio": 1.0,
           "snr_db": {
             "other": 999.0,
@@ -20090,8 +20254,8 @@
         "qam_demod_qam256_block": {
           "compared_with": "sdrk fallback",
           "goal": true,
-          "other_instr_per_sample": 293.16,
-          "ours_instr_per_sample": 293.16,
+          "other_instr_per_sample": 293.15,
+          "ours_instr_per_sample": 293.15,
           "ratio": 1.0,
           "snr_db": {
             "other": 999.0,
@@ -20103,8 +20267,8 @@
         "qam_demod_search_block": {
           "compared_with": "sdrk fallback",
           "goal": true,
-          "other_instr_per_sample": 313.81,
-          "ours_instr_per_sample": 313.81,
+          "other_instr_per_sample": 313.8,
+          "ours_instr_per_sample": 313.8,
           "ratio": 1.0,
           "snr_db": {
             "other": 999.0,

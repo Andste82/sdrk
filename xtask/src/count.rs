@@ -939,7 +939,11 @@ const fn spec_own(name: &'static str, family: Family, own: &'static str) -> Kern
 /// `frame_decode_four_block` (one soft bit, `frame_decode` with `rotations` `four`), and the
 /// noise source of M48 `noise_block` (one output sample, the block around the kernel entries
 /// `gauss_noise_c32` and `gauss_noise_f32`), and the scrambler of M49 `scramble_block` (one
-/// sample, the PRBS indices and the kernel entry `scramble_c32_b8`).
+/// sample, the PRBS indices and the kernel entry `scramble_c32_b8`). The bit scramblers of M44.2
+/// (`bit_scramble_block`, `bit_descramble_block`, and their in-place forms
+/// `bit_scramble_in_place_block`, `bit_descramble_in_place_block`, one soft bit each) are
+/// [`Family::GnuRadio`]: GNU Radio's `scrambler_bb` and `descrambler_bb` with the same polynomial
+/// are the scalar reference.
 const fn proto(name: &'static str, family: Family) -> KernelSpec {
     KernelSpec {
         name,
@@ -963,7 +967,7 @@ const fn fft(name: &'static str, family: Family, samples: u64) -> KernelSpec {
 }
 
 /// The kernels of the benchmark table, in report order.
-pub static KERNELS: [KernelSpec; 273] = [
+pub static KERNELS: [KernelSpec; 275] = [
     spec("convert_cs8", Family::Volk, true),
     spec("convert_cs16", Family::Volk, true),
     spec("convert_cu8", Family::VolkAndOwn, true),
@@ -1255,6 +1259,8 @@ pub static KERNELS: [KernelSpec; 273] = [
     spec("equalize_qam1024", Family::Own, false),
     proto("bit_scramble_block", Family::GnuRadio),
     proto("bit_descramble_block", Family::GnuRadio),
+    proto("bit_scramble_in_place_block", Family::GnuRadio),
+    proto("bit_descramble_in_place_block", Family::GnuRadio),
     proto("symbol_demap_qam16_block", Family::Own),
     proto("symbol_demap_qam64_block", Family::Own),
     proto("symbol_demap_qam256_block", Family::Own),
@@ -4925,6 +4931,8 @@ mod tests {
             "crc24_adsb",
             "bit_scramble_block",
             "bit_descramble_block",
+            "bit_scramble_in_place_block",
+            "bit_descramble_in_place_block",
         ];
         let framing = [
             "frame_decode",

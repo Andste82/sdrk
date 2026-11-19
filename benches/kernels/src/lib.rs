@@ -366,7 +366,7 @@ pub trait Kernel {
 /// are appended; a `<kernel>_fallback`, `<kernel>_airspy`, `<kernel>_fastnoise` or
 /// `<kernel>_ziggurat` entry takes the seed of `<kernel>`, so that both entries filter the same
 /// input.
-pub const KERNELS: [&str; 273] = [
+pub const KERNELS: [&str; 275] = [
     "convert_cs8",
     "convert_cs16",
     "convert_out_cs16",
@@ -642,6 +642,8 @@ pub const KERNELS: [&str; 273] = [
     "equalize_qam256_fallback",
     "qam_mod_qam256_block",
     "qam_demod_qam256_block",
+    "bit_scramble_in_place_block",
+    "bit_descramble_in_place_block",
 ];
 
 /// Prepares the measurement `name` with `layout` (the FFT sizes are fixed by the name).
@@ -966,6 +968,12 @@ pub fn prepare(name: &str, layout: Layout) -> Option<Box<dyn Kernel>> {
         "scramble_block" => Box::new(scramble_family::ScrambleBlockK::new(rng, layout)),
         "bit_scramble_block" => Box::new(bit_scramble_family::ScrambleBlockK::new(rng, layout, false)),
         "bit_descramble_block" => Box::new(bit_scramble_family::ScrambleBlockK::new(rng, layout, true)),
+        "bit_scramble_in_place_block" => Box::new(
+            bit_scramble_family::ScrambleBlockK::new(rng, layout, false).in_place(),
+        ),
+        "bit_descramble_in_place_block" => Box::new(
+            bit_scramble_family::ScrambleBlockK::new(rng, layout, true).in_place(),
+        ),
         "qam_demod_block" => Box::new(qam_family::QamDemodBlockK::new(
             rng,
             layout,

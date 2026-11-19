@@ -5,6 +5,8 @@
 //! | --- | --- | --- | --- |
 //! | `bit_scramble_block` | `sdrk_blocks::BitScrambleBlock` | GNU Radio `scrambler_bb` | one bit |
 //! | `bit_descramble_block` | `sdrk_blocks::BitDescrambleBlock` | GNU Radio `descrambler_bb` | one bit |
+//! | `bit_scramble_in_place_block` | `BitScrambleBlock::process_in_place` | GNU Radio `scrambler_bb` | one bit |
+//! | `bit_descramble_in_place_block` | `BitDescrambleBlock::process_in_place` | GNU Radio `descrambler_bb` | one bit |
 //!
 //! Both blocks run the default configuration, the self-synchronizing scrambler
 //! `1 + x^-18 + x^-23` (ITU-T V.32 to V.34) over plain bits (`constellation` `bpsk`), on 4096 soft
@@ -14,7 +16,10 @@
 //! at bits 0 and 5 of a register of 23 bits) run on the hard bits of the same input, unpacked
 //! (one bit per byte), with GNU Radio's generic flags: the scalar reference of the work per bit.
 //! GNU Radio's descrambler gives our bits; its scrambler gives them 23 bits later (its output is
-//! the end of the register), the same work.
+//! the end of the register), the same work. The `_in_place` entries run `process_in_place`, the
+//! call of the composites `qam_frame_encode` and `qam_frame_decode` (the review of M44.2, D1538),
+//! on one buffer of the same 4096 bits, call after call (the work does not depend on the values;
+//! the accuracy runs one call on a copy of the input).
 
 use std::hint::black_box;
 
@@ -70,6 +75,16 @@ fn descramble_call(b: &mut BitDescrambleBlock<ArenaStorage<'static>>, x: &[f32],
 }
 
 #[inline(never)]
+fn scramble_in_place_call(b: &mut BitScrambleBlock<ArenaStorage<'static>>, x: &mut [f32]) {
+    b.process_in_place(black_box(x));
+}
+
+#[inline(never)]
+fn descramble_in_place_call(b: &mut BitDescrambleBlock<ArenaStorage<'static>>, x: &mut [f32]) {
+    b.process_in_place(black_box(x));
+}
+
+#[inline(never)]
 fn gr_call(gr: &mut GrScrambler, x: &[u8], y: &mut [u8]) {
     let _ = gr.work(black_box(x), y);
 }
@@ -77,6 +92,8 @@ fn gr_call(gr: &mut GrScrambler, x: &[u8], y: &mut [u8]) {
 /// `bit_scramble_block` (`descramble` false) or `bit_descramble_block` over `n` bits per call.
 pub(crate) struct ScrambleBlockK {
     descramble: bool,
+    /// `process_in_place` on `out` instead of `process` from `soft` into `out`.
+    in_place: bool,
     ours: Ours,
     gr: Option<GrScrambler>,
     soft: Vec<f32>,
@@ -96,6 +113,7 @@ impl ScrambleBlockK {
         let bits = soft.iter().map(|&v| u8::from(v > 0.0)).collect();
         ScrambleBlockK {
             descramble,
+            in_place: false,
             ours: Ours::new(descramble),
             gr: GrScrambler::new(GR_MASK, 0, GR_LEN, descramble),
             out: vec![0.0; layout.n],
@@ -103,6 +121,14 @@ impl ScrambleBlockK {
             soft,
             bits,
         }
+    }
+
+    /// The entry of `process_in_place` (`bit_scramble_in_place_block`,
+    /// `bit_descramble_in_place_block`).
+    pub(crate) fn in_place(mut self) -> Self {
+        self.in_place = true;
+        self.out.copy_from_slice(&self.soft);
+        self
     }
 
     /// The bits of the one-bit-at-a-time model of the register for one call from zero.
@@ -123,9 +149,11 @@ impl Kernel for ScrambleBlockK {
     fn run(&mut self, which: Impl, k: usize) {
         for _ in 0..k {
             match which {
-                Impl::Ours | Impl::Fallback => match &mut self.ours {
-                    Ours::Scramble(b) => scramble_call(b, &self.soft, &mut self.out),
-                    Ours::Descramble(b) => descramble_call(b, &self.soft, &mut self.out),
+                Impl::Ours | Impl::Fallback => match (&mut self.ours, self.in_place) {
+                    (Ours::Scramble(b), false) => scramble_call(b, &self.soft, &mut self.out),
+                    (Ours::Descramble(b), false) => descramble_call(b, &self.soft, &mut self.out),
+                    (Ours::Scramble(b), true) => scramble_in_place_call(b, &mut self.out),
+                    (Ours::Descramble(b), true) => descramble_in_place_call(b, &mut self.out),
                 },
                 Impl::GnuRadio => gr_call(
                     self.gr.as_mut().expect("gnuradio"),
@@ -155,6 +183,9 @@ impl Kernel for ScrambleBlockK {
             }
             _ => {
                 self.ours.reset();
+                if self.in_place {
+                    self.out.copy_from_slice(&self.soft);
+                }
                 self.run(which, 1);
                 self.out
                     .iter()

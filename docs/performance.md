@@ -927,10 +927,6 @@ Instructions per sample, ours / comparison (`avx2-runtime`: ours only, judged ag
 | `gauss_noise_c32_fastnoise` C32 (GNU Radio `fastnoise_source_c`, reference does less work) | 52.59 / 14.01 | 46.59 / 14.01 | 14.58 / 14.01 | - | 4.77 / 14.01 | 28.57 / 10.01 | 66.68 / 58.01 |
 | `gauss_noise_f32_fastnoise` f32 (GNU Radio `fastnoise_source_f`, reference does less work) | 26.33 / 14.01 | 23.34 / 14.01 | 7.33 / 14.01 | - | 2.42 / 14.01 | 14.32 / 10.01 | 33.42 / 39.02 |
 | `gauss_noise_f32_ziggurat` f32 (rand_distr `StandardNormal`, reference does different work) | 26.33 / 46.67 | 23.34 / 46.65 | 7.33 / 43.47 | - | 2.42 / 43.46 | 14.32 / 32.13 | 33.42 / 127.08 |
-| `qam_soft_bits_qam16` C32 (our fallback, per input symbol) | 5.91 / 9.52 | 5.91 / 9.52 | 2.47 / 2.46 | 2.48 | 1.13 / 1.71 | 3.52 / 3.52 | 14.79 / 15.54 |
-| `qam_soft_bits_qam64` C32 (our fallback, per input symbol) | 11.54 / 14.52 | 11.54 / 14.02 | 5.22 / 7.02 | 5.23 | 2.16 / 4.02 | 4.52 / 5.02 | 23.79 / 47.54 |
-| `symbol_demap_qam16_block` (our code, per input symbol) | 5.91 / 5.91 | 5.91 / 5.91 | 2.47 / 2.47 | 2.47 | 1.13 / 1.13 | 3.52 / 3.52 | 14.79 / 14.79 |
-| `symbol_demap_qam64_block` (our code, per input symbol) | 11.54 / 11.54 | 11.54 / 11.54 | 5.22 / 5.22 | 5.23 | 2.16 / 2.16 | 4.52 / 4.52 | 23.79 / 23.79 |
 | `bit_scramble_block` (GNU Radio `scrambler_bb`, per soft bit) | 6.72 / 26.01 | 6.72 / 26.01 | 4.67 / 26.01 | 6.72 | 4.66 / 26.01 | 5.23 / 18.01 | 14.63 / 42.02 |
 | `bit_descramble_block` (GNU Radio `descrambler_bb`, per soft bit) | 3.43 / 28.01 | 3.43 / 28.01 | 1.26 / 28.01 | 3.43 | 1.26 / 28.01 | 2.99 / 18.01 | 10.27 / 42.02 |
 | `bit_scramble_in_place_block` (GNU Radio `scrambler_bb`, per soft bit) | 7.31 / 26.01 | 7.31 / 26.01 | 5.26 / 26.01 | 7.31 | 5.32 / 26.01 | 5.59 / 18.01 | 15.63 / 42.02 |

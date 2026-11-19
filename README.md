@@ -84,6 +84,16 @@ A flow describes a signal graph: **inputs** (sample streams or packets), **nodes
 
 When a flow is built, SDRk checks every block, port type, sample rate and parameter. It inserts the format conversion of the input, computes the latency of every output, and refuses what cannot work: a wrong type on an edge, a rate a block cannot handle, a value out of range. The same model can be written in YAML. A flow runs in `f32` or, for small processors, in `q15` fixed point.
 
+### Sample formats
+
+Raw samples go straight into a flow, in the format the hardware delivers; the input names it, for example `"format": "cu8"`, and an exact, SIMD-accelerated conversion follows automatically:
+
+| | Formats |
+| --- | --- |
+| **In** | `cu8` (RTL-SDR), `cs8` (HackRF), `cs16`, `sc16_q11` (bladeRF), `cs12_lsb16`, `packed12`, `packed10`, `i2s32_msb` (I2S on microcontrollers), `cf32`; real `rs16` and `rf32` (Airspy R2 and Mini, direct sampling, sound cards); and custom formats described by container, bit width, alignment, byte order and scale |
+| **Processing** | `f32` / `c32` floating point, or `q15` / `cq15` fixed point for small processors |
+| **Out** | back to `cs16`, `cs8`, `cu8` and real `rs16`, `rs8`, `ru8` for transmitters and DACs |
+
 Running it in Rust:
 
 ```rust

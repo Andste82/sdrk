@@ -682,6 +682,52 @@
           "status": "release",
           "verdict": "pass"
         },
+        "bit_descramble_block": {
+          "compared_with": "GNU Radio descrambler_bb(0x21, 0, 22): gr::digital::lfsr, one __builtin_parityl per unpacked bit (generic compiler flags)",
+          "goal": true,
+          "informational": [
+            {
+              "compared_with": "sdrk fallback",
+              "label": "information: fallback",
+              "other_instr_per_sample": 10.27,
+              "other_snr_db": 999.0,
+              "ours_instr_per_sample": 10.27,
+              "ratio": 1.0
+            }
+          ],
+          "other_instr_per_sample": 42.02,
+          "ours_instr_per_sample": 10.27,
+          "ratio": 0.24,
+          "snr_db": {
+            "other": 999.0,
+            "ours": 999.0
+          },
+          "status": "release",
+          "verdict": "pass"
+        },
+        "bit_scramble_block": {
+          "compared_with": "GNU Radio scrambler_bb(0x21, 0, 22): gr::digital::lfsr, one __builtin_parityl per unpacked bit (generic compiler flags)",
+          "goal": true,
+          "informational": [
+            {
+              "compared_with": "sdrk fallback",
+              "label": "information: fallback",
+              "other_instr_per_sample": 14.63,
+              "other_snr_db": 999.0,
+              "ours_instr_per_sample": 14.63,
+              "ratio": 1.0
+            }
+          ],
+          "other_instr_per_sample": 42.02,
+          "ours_instr_per_sample": 14.63,
+          "ratio": 0.35,
+          "snr_db": {
+            "other": 999.0,
+            "ours": 999.0
+          },
+          "status": "release",
+          "verdict": "pass"
+        },
         "channel_bank_channelize": {
           "compared_with": "sdrk fallback",
           "goal": true,
@@ -1594,6 +1640,29 @@
           "status": "release",
           "verdict": "pass"
         },
+        "costas_qam1024": {
+          "compared_with": "sdrk fallback",
+          "goal": true,
+          "informational": [
+            {
+              "compared_with": "sdrk fallback",
+              "label": "misaligned by one sample",
+              "other_instr_per_sample": 289.73,
+              "other_snr_db": null,
+              "ours_instr_per_sample": 289.73,
+              "ratio": 1.0
+            }
+          ],
+          "other_instr_per_sample": 289.73,
+          "ours_instr_per_sample": 289.73,
+          "ratio": 1.0,
+          "snr_db": {
+            "other": 999.0,
+            "ours": 999.0
+          },
+          "status": "info",
+          "verdict": "info"
+        },
         "costas_qam16": {
           "compared_with": "sdrk fallback",
           "goal": true,
@@ -1624,15 +1693,61 @@
             {
               "compared_with": "GNU Radio constellation_receiver_cb with constellation_rect 16-QAM (constellation_receiver_cb_impl.cc and constellation.cc of gr-digital, generic compiler flags)",
               "label": "misaligned by one sample",
-              "other_instr_per_sample": 471.28,
+              "other_instr_per_sample": 471.32,
               "other_snr_db": null,
               "ours_instr_per_sample": 346.36,
               "ratio": 0.73
             }
           ],
-          "other_instr_per_sample": 471.28,
+          "other_instr_per_sample": 471.32,
           "ours_instr_per_sample": 346.36,
           "ratio": 0.73,
+          "snr_db": {
+            "other": 128.3,
+            "ours": 999.0
+          },
+          "status": "release",
+          "verdict": "pass"
+        },
+        "costas_qam256": {
+          "compared_with": "sdrk fallback",
+          "goal": true,
+          "informational": [
+            {
+              "compared_with": "sdrk fallback",
+              "label": "misaligned by one sample",
+              "other_instr_per_sample": 288.45,
+              "other_snr_db": null,
+              "ours_instr_per_sample": 288.45,
+              "ratio": 1.0
+            }
+          ],
+          "other_instr_per_sample": 288.45,
+          "ours_instr_per_sample": 288.45,
+          "ratio": 1.0,
+          "snr_db": {
+            "other": 999.0,
+            "ours": 999.0
+          },
+          "status": "info",
+          "verdict": "info"
+        },
+        "costas_qam256_fallback": {
+          "compared_with": "GNU Radio constellation_receiver_cb with constellation_rect 256-QAM (constellation_receiver_cb_impl.cc and constellation.cc of gr-digital, generic compiler flags)",
+          "goal": true,
+          "informational": [
+            {
+              "compared_with": "GNU Radio constellation_receiver_cb with constellation_rect 256-QAM (constellation_receiver_cb_impl.cc and constellation.cc of gr-digital, generic compiler flags)",
+              "label": "misaligned by one sample",
+              "other_instr_per_sample": 507.71,
+              "other_snr_db": null,
+              "ours_instr_per_sample": 288.45,
+              "ratio": 0.57
+            }
+          ],
+          "other_instr_per_sample": 507.71,
+          "ours_instr_per_sample": 288.45,
+          "ratio": 0.57,
           "snr_db": {
             "other": 128.3,
             "ours": 999.0
@@ -1670,13 +1785,13 @@
             {
               "compared_with": "GNU Radio constellation_receiver_cb with constellation_rect 64-QAM (constellation_receiver_cb_impl.cc and constellation.cc of gr-digital, generic compiler flags)",
               "label": "misaligned by one sample",
-              "other_instr_per_sample": 473.49,
+              "other_instr_per_sample": 473.53,
               "other_snr_db": null,
               "ours_instr_per_sample": 346.31,
               "ratio": 0.73
             }
           ],
-          "other_instr_per_sample": 473.49,
+          "other_instr_per_sample": 473.53,
           "ours_instr_per_sample": 346.31,
           "ratio": 0.73,
           "snr_db": {
@@ -2433,6 +2548,29 @@
           "status": "release",
           "verdict": "pass"
         },
+        "equalize_qam1024": {
+          "compared_with": "sdrk fallback",
+          "goal": true,
+          "informational": [
+            {
+              "compared_with": "sdrk fallback",
+              "label": "misaligned by one sample",
+              "other_instr_per_sample": 1017.47,
+              "other_snr_db": null,
+              "ours_instr_per_sample": 1017.47,
+              "ratio": 1.0
+            }
+          ],
+          "other_instr_per_sample": 1017.47,
+          "ours_instr_per_sample": 1017.47,
+          "ratio": 1.0,
+          "snr_db": {
+            "other": 999.0,
+            "ours": 999.0
+          },
+          "status": "info",
+          "verdict": "info"
+        },
         "equalize_qam16": {
           "compared_with": "sdrk fallback",
           "goal": true,
@@ -2440,14 +2578,14 @@
             {
               "compared_with": "sdrk fallback",
               "label": "misaligned by one sample",
-              "other_instr_per_sample": 1081.47,
+              "other_instr_per_sample": 1062.47,
               "other_snr_db": null,
-              "ours_instr_per_sample": 1081.47,
+              "ours_instr_per_sample": 1062.47,
               "ratio": 1.0
             }
           ],
-          "other_instr_per_sample": 1081.47,
-          "ours_instr_per_sample": 1081.47,
+          "other_instr_per_sample": 1062.47,
+          "ours_instr_per_sample": 1062.47,
           "ratio": 1.0,
           "snr_db": {
             "other": 999.0,
@@ -2465,15 +2603,61 @@
               "label": "misaligned by one sample",
               "other_instr_per_sample": 1952.06,
               "other_snr_db": null,
-              "ours_instr_per_sample": 1081.47,
-              "ratio": 0.55
+              "ours_instr_per_sample": 1062.47,
+              "ratio": 0.54
             }
           ],
           "other_instr_per_sample": 1952.06,
-          "ours_instr_per_sample": 1081.47,
-          "ratio": 0.55,
+          "ours_instr_per_sample": 1062.47,
+          "ratio": 0.54,
           "snr_db": {
             "other": 130.6,
+            "ours": 999.0
+          },
+          "status": "release",
+          "verdict": "pass"
+        },
+        "equalize_qam256": {
+          "compared_with": "sdrk fallback",
+          "goal": true,
+          "informational": [
+            {
+              "compared_with": "sdrk fallback",
+              "label": "misaligned by one sample",
+              "other_instr_per_sample": 1017.47,
+              "other_snr_db": null,
+              "ours_instr_per_sample": 1017.47,
+              "ratio": 1.0
+            }
+          ],
+          "other_instr_per_sample": 1017.47,
+          "ours_instr_per_sample": 1017.47,
+          "ratio": 1.0,
+          "snr_db": {
+            "other": 999.0,
+            "ours": 999.0
+          },
+          "status": "info",
+          "verdict": "info"
+        },
+        "equalize_qam256_fallback": {
+          "compared_with": "GNU Radio linear_equalizer with adaptive_algorithm_nlms on constellation_rect 256-QAM (linear_equalizer_impl.cc and constellation.cc of gr-digital, VOLK generic dot products, generic compiler flags)",
+          "goal": true,
+          "informational": [
+            {
+              "compared_with": "GNU Radio linear_equalizer with adaptive_algorithm_nlms on constellation_rect 256-QAM (linear_equalizer_impl.cc and constellation.cc of gr-digital, VOLK generic dot products, generic compiler flags)",
+              "label": "misaligned by one sample",
+              "other_instr_per_sample": 1952.06,
+              "other_snr_db": null,
+              "ours_instr_per_sample": 1017.47,
+              "ratio": 0.52
+            }
+          ],
+          "other_instr_per_sample": 1952.06,
+          "ours_instr_per_sample": 1017.47,
+          "ratio": 0.52,
+          "snr_db": {
+            "other": 133.12,
             "ours": 999.0
           },
           "status": "release",
@@ -2486,14 +2670,14 @@
             {
               "compared_with": "sdrk fallback",
               "label": "misaligned by one sample",
-              "other_instr_per_sample": 1081.47,
+              "other_instr_per_sample": 1061.47,
               "other_snr_db": null,
-              "ours_instr_per_sample": 1081.47,
+              "ours_instr_per_sample": 1061.47,
               "ratio": 1.0
             }
           ],
-          "other_instr_per_sample": 1081.47,
-          "ours_instr_per_sample": 1081.47,
+          "other_instr_per_sample": 1061.47,
+          "ours_instr_per_sample": 1061.47,
           "ratio": 1.0,
           "snr_db": {
             "other": 999.0,
@@ -2511,13 +2695,13 @@
               "label": "misaligned by one sample",
               "other_instr_per_sample": 1952.06,
               "other_snr_db": null,
-              "ours_instr_per_sample": 1081.47,
-              "ratio": 0.55
+              "ours_instr_per_sample": 1061.47,
+              "ratio": 0.54
             }
           ],
           "other_instr_per_sample": 1952.06,
-          "ours_instr_per_sample": 1081.47,
-          "ratio": 0.55,
+          "ours_instr_per_sample": 1061.47,
+          "ratio": 0.54,
           "snr_db": {
             "other": 127.18,
             "ours": 999.0
@@ -4663,8 +4847,21 @@
         "qam_demod_block": {
           "compared_with": "sdrk fallback",
           "goal": true,
-          "other_instr_per_sample": 560.89,
-          "ours_instr_per_sample": 560.89,
+          "other_instr_per_sample": 558.46,
+          "ours_instr_per_sample": 558.46,
+          "ratio": 1.0,
+          "snr_db": {
+            "other": 999.0,
+            "ours": 999.0
+          },
+          "status": "info",
+          "verdict": "info"
+        },
+        "qam_demod_qam256_block": {
+          "compared_with": "sdrk fallback",
+          "goal": true,
+          "other_instr_per_sample": 547.08,
+          "ours_instr_per_sample": 547.08,
           "ratio": 1.0,
           "snr_db": {
             "other": 999.0,
@@ -4676,8 +4873,8 @@
         "qam_demod_search_block": {
           "compared_with": "sdrk fallback",
           "goal": true,
-          "other_instr_per_sample": 607.85,
-          "ours_instr_per_sample": 607.85,
+          "other_instr_per_sample": 605.41,
+          "ours_instr_per_sample": 605.41,
           "ratio": 1.0,
           "snr_db": {
             "other": 999.0,
@@ -4689,8 +4886,8 @@
         "qam_frame_decode_block": {
           "compared_with": "sdrk fallback",
           "goal": true,
-          "other_instr_per_sample": 645.43,
-          "ours_instr_per_sample": 645.43,
+          "other_instr_per_sample": 643.03,
+          "ours_instr_per_sample": 643.03,
           "ratio": 1.0,
           "snr_db": {
             "other": 999.0,
@@ -4702,8 +4899,8 @@
         "qam_frame_encode_block": {
           "compared_with": "sdrk fallback",
           "goal": true,
-          "other_instr_per_sample": 97.8,
-          "ours_instr_per_sample": 97.8,
+          "other_instr_per_sample": 97.81,
+          "ours_instr_per_sample": 97.81,
           "ratio": 1.0,
           "snr_db": {
             "other": 143.79,
@@ -4725,6 +4922,42 @@
           "status": "info",
           "verdict": "info"
         },
+        "qam_mod_qam256_block": {
+          "compared_with": "sdrk fallback",
+          "goal": true,
+          "other_instr_per_sample": 95.8,
+          "ours_instr_per_sample": 95.8,
+          "ratio": 1.0,
+          "snr_db": {
+            "other": 143.99,
+            "ours": 143.99
+          },
+          "status": "info",
+          "verdict": "info"
+        },
+        "qam_soft_bits_qam1024": {
+          "compared_with": "sdrk fallback",
+          "goal": false,
+          "informational": [
+            {
+              "compared_with": "sdrk fallback",
+              "label": "misaligned by one sample",
+              "other_instr_per_sample": 39.04,
+              "other_snr_db": null,
+              "ours_instr_per_sample": 39.05,
+              "ratio": 1.0
+            }
+          ],
+          "other_instr_per_sample": 39.04,
+          "ours_instr_per_sample": 39.05,
+          "ratio": 1.0,
+          "snr_db": {
+            "other": 146.05,
+            "ours": 146.05
+          },
+          "status": "info",
+          "verdict": "info"
+        },
         "qam_soft_bits_qam16": {
           "compared_with": "sdrk fallback",
           "goal": true,
@@ -4734,16 +4967,39 @@
               "label": "misaligned by one sample",
               "other_instr_per_sample": 15.54,
               "other_snr_db": null,
-              "ours_instr_per_sample": 14.79,
+              "ours_instr_per_sample": 14.8,
               "ratio": 0.95
             }
           ],
           "other_instr_per_sample": 15.54,
-          "ours_instr_per_sample": 14.79,
+          "ours_instr_per_sample": 14.8,
           "ratio": 0.95,
           "snr_db": {
             "other": 149.04,
             "ours": 149.04
+          },
+          "status": "info",
+          "verdict": "info"
+        },
+        "qam_soft_bits_qam256": {
+          "compared_with": "sdrk fallback",
+          "goal": false,
+          "informational": [
+            {
+              "compared_with": "sdrk fallback",
+              "label": "misaligned by one sample",
+              "other_instr_per_sample": 32.54,
+              "other_snr_db": null,
+              "ours_instr_per_sample": 32.55,
+              "ratio": 1.0
+            }
+          ],
+          "other_instr_per_sample": 32.54,
+          "ours_instr_per_sample": 32.55,
+          "ratio": 1.0,
+          "snr_db": {
+            "other": 144.32,
+            "ours": 144.32
           },
           "status": "info",
           "verdict": "info"
@@ -4757,16 +5013,39 @@
               "label": "misaligned by one sample",
               "other_instr_per_sample": 47.54,
               "other_snr_db": null,
-              "ours_instr_per_sample": 23.79,
+              "ours_instr_per_sample": 23.8,
               "ratio": 0.5
             }
           ],
           "other_instr_per_sample": 47.54,
-          "ours_instr_per_sample": 23.79,
+          "ours_instr_per_sample": 23.8,
           "ratio": 0.5,
           "snr_db": {
             "other": 145.89,
             "ours": 145.89
+          },
+          "status": "info",
+          "verdict": "info"
+        },
+        "qam_soft_bits_qpsk": {
+          "compared_with": "sdrk fallback",
+          "goal": true,
+          "informational": [
+            {
+              "compared_with": "sdrk fallback",
+              "label": "misaligned by one sample",
+              "other_instr_per_sample": 9.54,
+              "other_snr_db": null,
+              "ours_instr_per_sample": 6.3,
+              "ratio": 0.66
+            }
+          ],
+          "other_instr_per_sample": 9.54,
+          "ours_instr_per_sample": 6.3,
+          "ratio": 0.66,
+          "snr_db": {
+            "other": 149.89,
+            "ours": 149.89
           },
           "status": "info",
           "verdict": "info"
@@ -5991,8 +6270,8 @@
         "symbol_demap_qam16_block": {
           "compared_with": "sdrk fallback",
           "goal": true,
-          "other_instr_per_sample": 14.79,
-          "ours_instr_per_sample": 14.79,
+          "other_instr_per_sample": 14.8,
+          "ours_instr_per_sample": 14.8,
           "ratio": 1.0,
           "snr_db": {
             "other": 149.16,
@@ -6001,11 +6280,24 @@
           "status": "info",
           "verdict": "info"
         },
+        "symbol_demap_qam256_block": {
+          "compared_with": "sdrk fallback",
+          "goal": true,
+          "other_instr_per_sample": 32.55,
+          "ours_instr_per_sample": 32.55,
+          "ratio": 1.0,
+          "snr_db": {
+            "other": 144.3,
+            "ours": 144.3
+          },
+          "status": "info",
+          "verdict": "info"
+        },
         "symbol_demap_qam64_block": {
           "compared_with": "sdrk fallback",
           "goal": true,
-          "other_instr_per_sample": 23.79,
-          "ours_instr_per_sample": 23.79,
+          "other_instr_per_sample": 23.8,
+          "ours_instr_per_sample": 23.8,
           "ratio": 1.0,
           "snr_db": {
             "other": 145.98,
@@ -6244,6 +6536,11 @@
       "gnuradio_pwr_squelch_cc": {
         "build": "-O3 -msimd128",
         "sha256": "ff8c9a04f5681c2b21d95465c0751e8decee193e0696290a4088d2993d939781",
+        "version": "main at ec1bf15"
+      },
+      "gnuradio_scrambler": {
+        "build": "gr-scrambler.c (gr::digital::scrambler_bb, descrambler_bb): -O3 -msimd128",
+        "sha256": "63647474273b96fddf6892b2a98cb19d831f3317f46f8f7f9e70c8406364dae1",
         "version": "main at ec1bf15"
       },
       "kfr": {

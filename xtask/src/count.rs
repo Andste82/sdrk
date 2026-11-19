@@ -925,10 +925,12 @@ const fn spec_own(name: &'static str, family: Family, own: &'static str) -> Kern
 /// blocks, and `channel_bank_ddc`, eight `ddc` blocks for the same eight channels, one input sample
 /// each; the comparison is between the two banks, D930) and the band pulse detector of M45.1
 /// (`band_pulse_detect_block`, one lane value; no non-GPL library has it, D962). The QAM slicer of
-/// M44 (`symbol_demap_qam16_block`, `symbol_demap_qam64_block`, one input symbol each) is the block
-/// around the kernel `qam_soft_bits`, whose soft bits no library computes the same way (D1201,
-/// D1412): information too, as are the QAM blocks `qam_mod_block` (one output sample) and
-/// `qam_demod_block` (one input sample), chains of kernels with entries of their own (D1216), the
+/// M44 (`symbol_demap_qam16_block`, `symbol_demap_qam64_block`, and of M44.2
+/// `symbol_demap_qam256_block`, one input symbol each) is the block around the kernel
+/// `qam_soft_bits`, whose soft bits no library computes the same way (D1201, D1412): information
+/// too, as are the QAM blocks `qam_mod_block` and `qam_mod_qam256_block` (one output sample) and
+/// `qam_demod_block` and `qam_demod_qam256_block` (one input sample), chains of kernels with
+/// entries of their own (D1216), the
 /// PSK modulator block `psk_mod_block` of M44.1 (one output sample), the building blocks and
 /// composites of M44.1 `symbol_map_block` (one output symbol), `iq_offset_block` (one sample),
 /// `qam_acquire_block` (one input symbol), `qam_frame_encode_block` (one output sample) and
@@ -961,7 +963,7 @@ const fn fft(name: &'static str, family: Family, samples: u64) -> KernelSpec {
 }
 
 /// The kernels of the benchmark table, in report order.
-pub static KERNELS: [KernelSpec; 268] = [
+pub static KERNELS: [KernelSpec; 273] = [
     spec("convert_cs8", Family::Volk, true),
     spec("convert_cs16", Family::Volk, true),
     spec("convert_cu8", Family::VolkAndOwn, true),
@@ -1242,15 +1244,24 @@ pub static KERNELS: [KernelSpec; 268] = [
     spec("qam_soft_bits_qam256", Family::Own, false),
     spec("qam_soft_bits_qam1024", Family::Own, false),
     spec("costas_qam256", Family::Own, false),
+    spec("costas_qam256_fallback", Family::FallbackVsGnuRadio, false),
     spec("costas_qam1024", Family::Own, false),
     spec("equalize_qam256", Family::Own, false),
+    spec(
+        "equalize_qam256_fallback",
+        Family::FallbackVsGnuRadio,
+        false,
+    ),
     spec("equalize_qam1024", Family::Own, false),
     proto("bit_scramble_block", Family::GnuRadio),
     proto("bit_descramble_block", Family::GnuRadio),
     proto("symbol_demap_qam16_block", Family::Own),
     proto("symbol_demap_qam64_block", Family::Own),
+    proto("symbol_demap_qam256_block", Family::Own),
     proto("qam_mod_block", Family::Own),
+    proto("qam_mod_qam256_block", Family::Own),
     proto("qam_demod_block", Family::Own),
+    proto("qam_demod_qam256_block", Family::Own),
     proto("qam_demod_search_block", Family::Own),
     proto("psk_mod_block", Family::Own),
     proto("symbol_map_block", Family::Own),
@@ -4930,8 +4941,11 @@ mod tests {
             "band_pulse_detect_block",
             "symbol_demap_qam16_block",
             "symbol_demap_qam64_block",
+            "symbol_demap_qam256_block",
             "qam_mod_block",
+            "qam_mod_qam256_block",
             "qam_demod_block",
+            "qam_demod_qam256_block",
             "qam_demod_search_block",
             "frame_decode_four_block",
             "psk_mod_block",
@@ -5031,13 +5045,18 @@ mod tests {
             assert!(kernel(k).misaligned && !kernel(k).small_n, "{k}");
         }
         // The block `symbol_demap` has entries only for its QAM constellations, which run the
-        // kernel `qam_soft_bits` with the block around it (M44, D1201, D1412).
+        // kernel `qam_soft_bits` with the block around it (M44, D1201, D1412; 256-QAM of M44.2,
+        // D1524).
         assert!(
             KERNELS
                 .iter()
                 .filter(|s| s.name.starts_with("symbol_demap"))
                 .map(|s| s.name)
-                .eq(["symbol_demap_qam16_block", "symbol_demap_qam64_block"])
+                .eq([
+                    "symbol_demap_qam16_block",
+                    "symbol_demap_qam64_block",
+                    "symbol_demap_qam256_block"
+                ])
         );
     }
 
@@ -5081,6 +5100,8 @@ mod tests {
             ("equalize_qam16", "equalize_qam16_fallback"),
             ("costas_qam64", "costas_qam64_fallback"),
             ("equalize_qam64", "equalize_qam64_fallback"),
+            ("costas_qam256", "costas_qam256_fallback"),
+            ("equalize_qam256", "equalize_qam256_fallback"),
         ] {
             for level in ["sse2", "sse4.2", "avx2", "avx512", "neon", "simd128"] {
                 assert_eq!(
@@ -5108,6 +5129,10 @@ mod tests {
             "costas_qam64_fallback",
             "equalize_qam64",
             "equalize_qam64_fallback",
+            "costas_qam256",
+            "costas_qam256_fallback",
+            "equalize_qam256",
+            "equalize_qam256_fallback",
         ] {
             for p in PLANS.iter().filter(|p| kernel(name).family.measured_at(p)) {
                 let Some(limit) = limits.get(name, p.level) else {

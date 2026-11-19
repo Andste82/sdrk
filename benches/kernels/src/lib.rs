@@ -366,7 +366,7 @@ pub trait Kernel {
 /// are appended; a `<kernel>_fallback`, `<kernel>_airspy`, `<kernel>_fastnoise` or
 /// `<kernel>_ziggurat` entry takes the seed of `<kernel>`, so that both entries filter the same
 /// input.
-pub const KERNELS: [&str; 268] = [
+pub const KERNELS: [&str; 273] = [
     "convert_cs8",
     "convert_cs16",
     "convert_out_cs16",
@@ -637,6 +637,11 @@ pub const KERNELS: [&str; 268] = [
     "equalize_qam1024",
     "bit_scramble_block",
     "bit_descramble_block",
+    "symbol_demap_qam256_block",
+    "costas_qam256_fallback",
+    "equalize_qam256_fallback",
+    "qam_mod_qam256_block",
+    "qam_demod_qam256_block",
 ];
 
 /// Prepares the measurement `name` with `layout` (the FFT sizes are fixed by the name).
@@ -858,6 +863,11 @@ pub fn prepare(name: &str, layout: Layout) -> Option<Box<dyn Kernel>> {
             layout,
             sdrk_core::kernels::constellation::Qam::Qam64,
         )),
+        "symbol_demap_qam256_block" => Box::new(qam_family::SymbolDemapQamBlockK::new(
+            rng,
+            layout,
+            sdrk_core::kernels::constellation::Qam::Qam256,
+        )),
         "qam_soft_bits_qam16" => Box::new(qam_family::QamSoftBitsK::new(
             rng,
             layout,
@@ -888,6 +898,7 @@ pub fn prepare(name: &str, layout: Layout) -> Option<Box<dyn Kernel>> {
         | "costas_qam64"
         | "costas_qam64_fallback"
         | "costas_qam256"
+        | "costas_qam256_fallback"
         | "costas_qam1024" => Box::new(qam_family::CostasQamK::new(
             rng,
             layout,
@@ -899,13 +910,23 @@ pub fn prepare(name: &str, layout: Layout) -> Option<Box<dyn Kernel>> {
         | "equalize_qam64"
         | "equalize_qam64_fallback"
         | "equalize_qam256"
+        | "equalize_qam256_fallback"
         | "equalize_qam1024" => Box::new(qam_family::EqualizeQamK::new(
             rng,
             layout,
             qam_of(seed_of),
             name.ends_with("_fallback"),
         )),
-        "qam_mod_block" => Box::new(qam_family::QamModBlockK::new(rng, layout)),
+        "qam_mod_block" => Box::new(qam_family::QamModBlockK::new(
+            rng,
+            layout,
+            sdrk_core::kernels::constellation::Qam::Qam16,
+        )),
+        "qam_mod_qam256_block" => Box::new(qam_family::QamModBlockK::new(
+            rng,
+            layout,
+            sdrk_core::kernels::constellation::Qam::Qam256,
+        )),
         "psk_mod_block" => Box::new(qam_family::PskModBlockK::new(rng, layout)),
         "symbol_map_block" => Box::new(qam_family::SymbolMapBlockK::new(rng, layout)),
         "iq_offset_block" => Box::new(qam_family::IqOffsetBlockK::new(rng, layout)),
@@ -942,10 +963,19 @@ pub fn prepare(name: &str, layout: Layout) -> Option<Box<dyn Kernel>> {
         "scramble_cq15_b8" | "scramble_cq15_b8_fallback" => {
             Box::new(scramble_family::ScrambleCq15K::new(rng, layout, 8, entry))
         }
-        "scramble_block" => Box::new(bit_scramble_family::ScrambleBlockK::new(rng, layout)),
+        "scramble_block" => Box::new(scramble_family::ScrambleBlockK::new(rng, layout)),
         "bit_scramble_block" => Box::new(bit_scramble_family::ScrambleBlockK::new(rng, layout, false)),
         "bit_descramble_block" => Box::new(bit_scramble_family::ScrambleBlockK::new(rng, layout, true)),
-        "qam_demod_block" => Box::new(qam_family::QamDemodBlockK::new(rng, layout)),
+        "qam_demod_block" => Box::new(qam_family::QamDemodBlockK::new(
+            rng,
+            layout,
+            sdrk_core::kernels::constellation::Qam::Qam16,
+        )),
+        "qam_demod_qam256_block" => Box::new(qam_family::QamDemodBlockK::new(
+            rng,
+            layout,
+            sdrk_core::kernels::constellation::Qam::Qam256,
+        )),
         "qam_demod_search_block" => Box::new(qam_family::QamDemodSearchK::new(rng, layout)),
         "frame_decode_four_block" => Box::new(qam_family::FrameDecodeFourBlockK::new(rng, layout)),
         "channel_select_block" => {

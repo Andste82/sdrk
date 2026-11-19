@@ -6,7 +6,9 @@
 //! `iq_offset_block`, `qam_acquire_block`, `qam_frame_encode_block` and `qam_frame_decode_block`,
 //! the entries of M44.1.1 `pulse_shape_block` and `pulse_match_block`, and the entries of M44.2
 //! `qam_soft_bits_qpsk`, `qam_soft_bits_qam256`, `qam_soft_bits_qam1024`, `costas_qam256`,
-//! `costas_qam1024`, `equalize_qam256` and `equalize_qam1024` (D1507).
+//! `costas_qam1024`, `equalize_qam256` and `equalize_qam1024` (D1507), and
+//! `symbol_demap_qam256_block`, `costas_qam256_fallback`, `equalize_qam256_fallback`,
+//! `qam_mod_qam256_block` and `qam_demod_qam256_block` (D1524).
 //!
 //! | entry | measured | gate | unit of a "sample" |
 //! | --- | --- | --- | --- |
@@ -36,6 +38,11 @@
 //! | `qam_soft_bits_qpsk`, `qam_soft_bits_qam256`, `qam_soft_bits_qam1024` | the kernel `qam_soft_bits` with `Qpsk`, `Qam256`, `Qam1024` through the facade | our fallback (`info`) | one input symbol (2, 8 or 10 soft bits) |
 //! | `costas_qam256`, `costas_qam1024` | facade (= the fallback), the noise and the start phase scaled by the level spacing | none (`info`) | one symbol |
 //! | `equalize_qam256`, `equalize_qam1024` | facade (= the fallback's loop), the noise scaled by the level spacing | none (`info`) | one symbol |
+//! | `symbol_demap_qam256_block` | `sdrk_blocks::SymbolDemapBlock` with `qam256` | none (`info`) | one input symbol (eight soft bits) |
+//! | `costas_qam256_fallback` | our fallback, 256-QAM | GNU Radio's `constellation_receiver_cb` on the 256-QAM `constellation_rect` | one symbol |
+//! | `equalize_qam256_fallback` | our fallback, 256-QAM | GNU Radio's `linear_equalizer` on the 256-QAM `constellation_rect` | one symbol |
+//! | `qam_mod_qam256_block` | `sdrk_blocks::QamModBlock`, 256-QAM | none (`info`) | one output sample |
+//! | `qam_demod_qam256_block` | `sdrk_blocks::QamDemodBlock`, 256-QAM, the steady state | none (`info`) | one input sample |
 //!
 //! The kernel `qam_soft_bits` (I44-1, D1412) puts both components of every symbol on the
 //! integer grid (`v = x √E`) and forms the piecewise-linear max-log soft bits of M44 §2 (`v`,
@@ -110,6 +117,19 @@
 //! `qam64` and 64-QAM points, against GNU Radio's `constellation_rect` with 8 by 8 sectors of the
 //! width `2 / sqrt(42)` (the same C translations); `costas` starts at the phase 0.05 rad instead
 //! of 0.3, at which the outer 64-QAM points are decided wrongly (D1425).
+//!
+//! The 256-QAM entries of M44.2 (D1524) are the same workloads with the constellation `qam256`:
+//! `costas_qam256_fallback` and `equalize_qam256_fallback` against GNU Radio's
+//! `constellation_rect` with 16 by 16 sectors of the width `2 / sqrt(170)`, the start phase
+//! (0.025 rad) and the noise (±0.012 for `costas`, ±0.005 for `equalize`) scaled by the level
+//! spacing as for `costas_qam256` and `equalize_qam256`. `symbol_demap_qam256_block` is the
+//! block `symbol_demap` with `qam256` on the workload of `qam_soft_bits_qam256`.
+//! `qam_mod_qam256_block` is `qam_mod_block` with `qam256` (8 bits per symbol, 512 symbols per
+//! call). `qam_demod_qam256_block` is `qam_demod_block` with `qam256` and the block defaults, the
+//! noise ±0.005 per component (the 16-QAM noise in units of the level spacing); its warm-up of 30
+//! calls covers the blind start of 256-QAM (8000 CMA symbols, D1517) and the first check of the
+//! carrier loop (12288 symbols, at symbol 13056), so its counted calls measure the steady state
+//! (`Track`, the equalizer in decision mode) rather than the mix of `qam_demod_block`.
 
 use std::hint::black_box;
 
@@ -120,9 +140,10 @@ use sdrk::{C32, Fallback, Rate, Sdrk};
 use sdrk_blocks::{
     ArenaStorage, Block, FrameDecodeBlock, FrameDecodeConfig, FrameEncodeConfig, FrameRotations,
     IqOffsetBlock, IqOffsetConfig, IqPart, Packet, PacketFlags, PskModBlock, PskModConfig,
-    PulseMatchBlock, PulseMatchConfig, PulseShapeBlock, QamAcquireBlock, QamAcquireConfig, QamDemodBlock, QamDemodConfig, QamFrameDecodeBlock,
-    QamFrameDecodeConfig, QamFrameEncodeBlock, QamFrameEncodeConfig, QamModBlock, QamModConfig, Scrambler,
-    SymbolDemapBlock, SymbolDemapConfig, SymbolDemapConstellation, SymbolMapBlock, SymbolMapConfig,
+    PulseMatchBlock, PulseMatchConfig, PulseShapeBlock, QamAcquireBlock, QamAcquireConfig,
+    QamDemodBlock, QamDemodConfig, QamFrameDecodeBlock, QamFrameDecodeConfig, QamFrameEncodeBlock,
+    QamFrameEncodeConfig, QamModBlock, QamModConfig, Scrambler, SymbolDemapBlock,
+    SymbolDemapConfig, SymbolDemapConstellation, SymbolMapBlock, SymbolMapConfig,
     SymbolMapConstellation,
 };
 use sdrk_core::Reference;
@@ -214,8 +235,12 @@ pub(crate) struct SymbolDemapQamBlockK {
 impl SymbolDemapQamBlockK {
     pub(crate) fn new(rng: &mut Pcg32, layout: Layout, qam: Qam) -> Self {
         let constellation = match qam {
+            Qam::Qpsk => SymbolDemapConstellation::Qpsk,
             Qam::Qam16 => SymbolDemapConstellation::Qam16,
-            _ => SymbolDemapConstellation::Qam64,
+            Qam::Qam64 => SymbolDemapConstellation::Qam64,
+            Qam::Qam256 => SymbolDemapConstellation::Qam256,
+            Qam::Qam1024 => SymbolDemapConstellation::Qam1024,
+            other => unreachable!("no symbol_demap constellation for {other:?}"),
         };
         let cfg = SymbolDemapConfig {
             constellation,
@@ -304,7 +329,7 @@ impl Kernel for SymbolDemapQamBlockK {
 }
 
 // ---------------------------------------------------------------------------------------------
-// GNU Radio's 16-QAM and 64-QAM constellation_rect
+// GNU Radio's 16-QAM, 64-QAM and 256-QAM constellation_rect
 
 /// The points of `qam` of ours in symbol order, as pairs.
 fn qam_points(qam: Qam) -> Vec<[f32; 2]> {
@@ -313,11 +338,11 @@ fn qam_points(qam: Qam) -> Vec<[f32; 2]> {
 
 /// GNU Radio's `constellation_rect` of our unit-power `qam`: `m` by `m` sectors (`m` the levels
 /// per axis) of the width of the level spacing `2 / sqrt(E)` (16-QAM `2 / sqrt(10)`, 64-QAM
-/// `2 / sqrt(42)`), no normalization.
+/// `2 / sqrt(42)`, 256-QAM `2 / sqrt(170)`), no normalization.
 fn gr_rect(qam: Qam, points: &[[f32; 2]]) -> GrRect<'_> {
     #[allow(clippy::cast_possible_truncation, reason = "the f32 width")]
     let width = (2.0 / qam.energy().sqrt()) as f32;
-    #[allow(clippy::cast_possible_truncation, reason = "4 or 8 levels")]
+    #[allow(clippy::cast_possible_truncation, reason = "at most 32 levels")]
     let m = qam.levels_per_axis() as u32;
     GrRect {
         points,
@@ -333,7 +358,7 @@ fn gr_rect(qam: Qam, points: &[[f32; 2]]) -> GrRect<'_> {
 /// grid that is the level of the sector.
 fn gr_decide_f64(qam: Qam, x: f64) -> f64 {
     let e = qam.energy().sqrt();
-    #[allow(clippy::cast_possible_wrap, reason = "4 or 8 levels")]
+    #[allow(clippy::cast_possible_wrap, reason = "at most 32 levels")]
     let m = qam.levels_per_axis() as i64;
     #[allow(clippy::cast_precision_loss, reason = "a small integer")]
     let half = (m / 2) as f64;
@@ -465,13 +490,13 @@ fn gr_receiver_model(qam: Qam, input: &[C32], alpha: f64, beta: f64) -> Vec<C32>
     out
 }
 
-/// `costas` with the constellation `qam16` or `qam64` over `n` symbols.
+/// `costas` with a QAM constellation over `n` symbols.
 pub(crate) struct CostasQamK {
     qam: Qam,
     input: Aligned<C32>,
     out: Aligned<C32>,
     points: Vec<[f32; 2]>,
-    /// The entry: `costas_qam16_fallback` or `costas_qam64_fallback`.
+    /// The entry: `costas_qam16_fallback`, `costas_qam64_fallback` or `costas_qam256_fallback`.
     fallback_entry: bool,
 }
 
@@ -550,6 +575,9 @@ impl Kernel for CostasQamK {
             Impl::GnuRadio => match self.qam {
                 Qam::Qam64 => {
                     "GNU Radio constellation_receiver_cb with constellation_rect 64-QAM (constellation_receiver_cb_impl.cc and constellation.cc of gr-digital, generic compiler flags)"
+                }
+                Qam::Qam256 => {
+                    "GNU Radio constellation_receiver_cb with constellation_rect 256-QAM (constellation_receiver_cb_impl.cc and constellation.cc of gr-digital, generic compiler flags)"
                 }
                 _ => {
                     "GNU Radio constellation_receiver_cb with constellation_rect 16-QAM (constellation_receiver_cb_impl.cc and constellation.cc of gr-digital, generic compiler flags)"
@@ -660,8 +688,7 @@ fn equalize<B: Equalize>(backend: &B, state: &mut EqState, input: &[C32], out: &
     let _ = black_box(backend.equalize(state, black_box(input), out));
 }
 
-/// `equalize` with the constellation `qam16` or `qam64` over `n` symbols (see the module
-/// documentation).
+/// `equalize` with a QAM constellation over `n` symbols (see the module documentation).
 pub(crate) struct EqualizeQamK {
     qam: Qam,
     input: Aligned<C32>,
@@ -671,7 +698,8 @@ pub(crate) struct EqualizeQamK {
     state: EqState,
     /// GNU Radio's equalizer of the counted calls (the fallback entry), carried across the runs.
     gr: Option<GrLinearEqualizerRect>,
-    /// The entry: `equalize_qam16_fallback` or `equalize_qam64_fallback`.
+    /// The entry: `equalize_qam16_fallback`, `equalize_qam64_fallback` or
+    /// `equalize_qam256_fallback`.
     fallback_entry: bool,
 }
 
@@ -754,6 +782,9 @@ impl Kernel for EqualizeQamK {
                 Qam::Qam64 => {
                     "GNU Radio linear_equalizer with adaptive_algorithm_nlms on constellation_rect 64-QAM (linear_equalizer_impl.cc and constellation.cc of gr-digital, VOLK generic dot products, generic compiler flags)"
                 }
+                Qam::Qam256 => {
+                    "GNU Radio linear_equalizer with adaptive_algorithm_nlms on constellation_rect 256-QAM (linear_equalizer_impl.cc and constellation.cc of gr-digital, VOLK generic dot products, generic compiler flags)"
+                }
                 _ => {
                     "GNU Radio linear_equalizer with adaptive_algorithm_nlms on constellation_rect 16-QAM (linear_equalizer_impl.cc and constellation.cc of gr-digital, VOLK generic dot products, generic compiler flags)"
                 }
@@ -763,8 +794,9 @@ impl Kernel for EqualizeQamK {
     }
 }
 
-/// The samples per symbol of the block entries `qam_mod_block` and `qam_demod_block`: the
-/// 16-QAM of the flows of M44 §5 (25 kBd at 200 kHz).
+/// The samples per symbol of the block entries `qam_mod_block`, `qam_demod_block`,
+/// `qam_mod_qam256_block` and `qam_demod_qam256_block`: the flows of M44 §5 and M44.2 §5 (25 kBd
+/// at 200 kHz).
 const BLOCK_SPS: usize = 8;
 
 fn block_rate(hz: u64) -> Rate {
@@ -777,41 +809,56 @@ fn leaked_arena(bytes: usize) -> ArenaStorage<'static> {
     ArenaStorage::new(mem)
 }
 
-fn qam_mod_config() -> QamModConfig {
+/// The constellation of the blocks for `qam`.
+fn block_constellation(qam: Qam) -> SymbolMapConstellation {
+    match qam {
+        Qam::Qpsk => SymbolMapConstellation::Qpsk,
+        Qam::Qam16 => SymbolMapConstellation::Qam16,
+        Qam::Qam64 => SymbolMapConstellation::Qam64,
+        Qam::Qam256 => SymbolMapConstellation::Qam256,
+        Qam::Qam1024 => SymbolMapConstellation::Qam1024,
+        other => unreachable!("no block constellation for {other:?}"),
+    }
+}
+
+fn qam_mod_config(qam: Qam) -> QamModConfig {
     QamModConfig {
-        constellation: SymbolMapConstellation::Qam16,
+        constellation: block_constellation(qam),
         samples_per_symbol: BLOCK_SPS,
         ..QamModConfig::default()
     }
 }
 
-fn qam_mod_block() -> QamModBlock<ArenaStorage<'static>> {
-    let cfg = qam_mod_config();
+fn qam_mod_block(qam: Qam) -> QamModBlock<ArenaStorage<'static>> {
+    let cfg = qam_mod_config(qam);
     let rate = block_rate(100_000);
     let bytes = QamModBlock::<ArenaStorage<'static>>::storage_bytes(&cfg, rate).expect("storage");
     QamModBlock::new(&cfg, rate, &mut leaked_arena(bytes)).expect("qam_mod block")
 }
 
-/// Random soft bits `+-1` of `n` 16-QAM symbols.
-fn qam16_bits(rng: &mut Pcg32, n: usize) -> Vec<f32> {
-    (0..4 * n)
+/// Random soft bits `+-1` of `n` symbols of `qam`.
+fn qam_bits(rng: &mut Pcg32, qam: Qam, n: usize) -> Vec<f32> {
+    (0..qam.bits_per_symbol() * n)
         .map(|_| if rng.next_u32() & 1 == 1 { 1.0 } else { -1.0 })
         .collect()
 }
 
-/// The block `qam_mod` (16-QAM, 8 samples per symbol, roll-off 0.35, span 10) writing `n` output
-/// samples (`n / 8` symbols of random bits) per call.
+/// The block `qam_mod` (16-QAM for `qam_mod_block`, 256-QAM for `qam_mod_qam256_block`; 8
+/// samples per symbol, roll-off 0.35, span 10) writing `n` output samples (`n / 8` symbols of
+/// random bits) per call.
 pub(crate) struct QamModBlockK {
+    qam: Qam,
     block: QamModBlock<ArenaStorage<'static>>,
     bits: Vec<f32>,
     out: Vec<C32>,
 }
 
 impl QamModBlockK {
-    pub(crate) fn new(rng: &mut Pcg32, layout: Layout) -> Self {
+    pub(crate) fn new(rng: &mut Pcg32, layout: Layout, qam: Qam) -> Self {
         QamModBlockK {
-            block: qam_mod_block(),
-            bits: qam16_bits(rng, layout.n / BLOCK_SPS),
+            qam,
+            block: qam_mod_block(qam),
+            bits: qam_bits(rng, qam, layout.n / BLOCK_SPS),
             out: vec![C32::default(); layout.n],
         }
     }
@@ -822,25 +869,30 @@ fn qam_mod_call(block: &mut QamModBlock<ArenaStorage<'static>>, bits: &[f32], ou
     let _ = block.process(black_box(bits), out);
 }
 
-/// `qam_mod` in `f64` from a zero history: the points of M44 §1 (`(2 i - 3) / sqrt(10)` per axis
-/// from the Gray code) at every `sps`-th sample, filtered with `rrc(0.35, sps, 10) sqrt(sps)`.
-fn qam_mod_f64(bits: &[f32]) -> Vec<(f64, f64)> {
-    let cfg = qam_mod_config();
+/// `qam_mod` in `f64` from a zero history: the points of M44.2 §1 (`(2 i - (m - 1)) / sqrt(E)`
+/// per axis, `i` the level of the Gray code of the `b` bits of the axis; 16-QAM `(2 i - 3) /
+/// sqrt(10)`) at every `sps`-th sample, filtered with `rrc(0.35, sps, 10) sqrt(sps)`.
+fn qam_mod_f64(qam: Qam, bits: &[f32]) -> Vec<(f64, f64)> {
+    let cfg = qam_mod_config(qam);
     let sps = cfg.samples_per_symbol;
     let mut taps = vec![0.0f64; sdrk_blocks::design::rrc_len(sps, cfg.span).expect("rrc")];
     sdrk_blocks::design::rrc(cfg.rolloff, sps, cfg.span, &mut taps).expect("rrc");
     #[allow(clippy::cast_precision_loss, reason = "a small integer")]
     let gain = (sps as f64).sqrt();
-    let level = |b: &[f32]| {
-        let g = usize::from(b[0] > 0.0) * 2 + usize::from(b[1] > 0.0);
-        let i = (0..4usize).find(|&i| i ^ (i >> 1) == g).unwrap_or(0);
+    let b = qam.bits_per_axis();
+    let m = qam.levels_per_axis();
+    let level = |bits: &[f32]| {
+        let g = bits
+            .iter()
+            .fold(0usize, |g, &x| (g << 1) | usize::from(x > 0.0));
+        let i = (0..m).find(|&i| i ^ (i >> 1) == g).unwrap_or(0);
         #[allow(clippy::cast_precision_loss, reason = "a small integer")]
-        let v = (2 * i) as f64 - 3.0;
-        v / 10f64.sqrt()
+        let v = (2 * i) as f64 - (m - 1) as f64;
+        v / qam.energy().sqrt()
     };
     let syms: Vec<(f64, f64)> = bits
-        .chunks_exact(4)
-        .map(|b| (level(&b[..2]), level(&b[2..])))
+        .chunks_exact(2 * b)
+        .map(|s| (level(&s[..b]), level(&s[b..])))
         .collect();
     let n = syms.len() * sps;
     (0..n)
@@ -879,7 +931,7 @@ impl Kernel for QamModBlockK {
         }
         self.block.reset();
         qam_mod_call(&mut self.block, &self.bits, &mut self.out);
-        let want: Vec<f64> = qam_mod_f64(&self.bits)
+        let want: Vec<f64> = qam_mod_f64(self.qam, &self.bits)
             .into_iter()
             .flat_map(|(re, im)| [re, im])
             .collect();
@@ -1017,9 +1069,9 @@ impl Kernel for PskModBlockK {
     }
 }
 
-fn qam_demod_block() -> QamDemodBlock<ArenaStorage<'static>> {
+fn qam_demod_block(qam: Qam) -> QamDemodBlock<ArenaStorage<'static>> {
     let cfg = QamDemodConfig {
-        constellation: SymbolMapConstellation::Qam16,
+        constellation: block_constellation(qam),
         symbol_rate_hz: 25_000.0,
         ..QamDemodConfig::default()
     };
@@ -1035,38 +1087,72 @@ fn qam_demod_block() -> QamDemodBlock<ArenaStorage<'static>> {
 /// workload of M44, kept so that the cycles before and after M44.1 compare).
 const DEMOD_WARMUP: usize = 6;
 
-/// The input of `qam_demod_block` (and `pulse_match_block`, with the seed of its own entry):
-/// the soft bits of `n / 8` random 16-QAM symbols and the output of `qam_mod` for them, turned by
-/// 0.3 rad with uniform noise of ±0.02 per component.
-fn qam_demod_input(rng: &mut Pcg32, n: usize) -> (Vec<f32>, Vec<C32>) {
-    let bits = qam16_bits(rng, n / BLOCK_SPS);
-    let mut tx = qam_mod_block();
+/// Calls of the warm-up of `qam_demod_qam256_block` (M44.2): 30 calls of 512 symbols (15360
+/// symbols) cover the blind start of the 256-QAM equalizer (8000 CMA symbols, D1517) and the
+/// first check of the carrier loop (12288 symbols after the estimate at symbol 768, at symbol
+/// 13056), so the receiver is in `Track` with the equalizer in decision mode; with the warm-up
+/// call of the count the counted calls take symbols 15872 to 24064, before the next check at
+/// 25344: the steady state of the receiver.
+const DEMOD_WARMUP_QAM256: usize = 30;
+
+/// The windows of `n` input samples in the input of `qam_demod_qam256_block` (M44.2, D1524): the
+/// signal is `8 n / 8` symbols long and every call reads the next window. The blind equalizer of
+/// 256-QAM does not converge on 512 symbols repeated every call (the match of the decisions stays
+/// at 5 to 46 % of the symbols over 34 calls, the MSE at 0.004, never locked; measured with the
+/// workload of the entry), as it does not on the framed data of I44.2-6; with 4096 symbols it
+/// locks within 16384 symbols and decides every symbol right.
+const DEMOD_WINDOWS_QAM256: usize = 8;
+
+/// The uniform noise per component of the input of the `qam_demod` entries: ±0.02 for 16-QAM,
+/// the same in units of the level spacing for 256-QAM (`0.02 sqrt(10 / 170)`, about 0.005).
+fn demod_noise(qam: Qam) -> f32 {
+    match qam {
+        Qam::Qam256 => 0.005,
+        _ => 0.02,
+    }
+}
+
+/// The input of `qam_demod_block` (and `pulse_match_block`, with the seed of its own entry; for
+/// `qam_demod_qam256_block` with 256-QAM and `n` the length of all its windows): the soft bits of
+/// `n / 8` random symbols of `qam` and the output of `qam_mod` for them, turned by 0.3 rad with
+/// uniform noise of [`demod_noise`] per component.
+fn qam_demod_input(rng: &mut Pcg32, qam: Qam, n: usize) -> (Vec<f32>, Vec<C32>) {
+    let bits = qam_bits(rng, qam, n / BLOCK_SPS);
+    let mut tx = qam_mod_block(qam);
     let mut sig = vec![C32::default(); n];
     // Two passes: the second starts with the pulse tails of the first, as the repeated input
     // does at every call.
     let _ = tx.process(&bits, &mut sig);
     let _ = tx.process(&bits, &mut sig);
     let (s, c) = 0.3f32.sin_cos();
+    let noise = demod_noise(qam);
     let input = sig
         .iter()
         .map(|x| {
             C32::new(
-                x.re * c - x.im * s + 0.02 * rng.unit(),
-                x.re * s + x.im * c + 0.02 * rng.unit(),
+                x.re * c - x.im * s + noise * rng.unit(),
+                x.re * s + x.im * c + noise * rng.unit(),
             )
         })
         .collect();
     (bits, input)
 }
 
-/// The block `qam_demod` (16-QAM at 25 kBd and 200 kHz, the block defaults: 11 equalizer taps,
-/// `carrier_bw` 0.0025, `sync_bw` 0.005) reading `n` input samples per call: the output of
-/// `qam_mod` for `n / 8` random symbols (repeated every call; `n / 8` is whole symbols, so the
-/// symbol clock stays on the grid), turned by 0.3 rad with uniform noise of ±0.02 per component.
-/// The state lives across the calls; the warm-up runs in `new`.
+/// The block `qam_demod` (16-QAM for `qam_demod_block`, 256-QAM for `qam_demod_qam256_block`,
+/// at 25 kBd and 200 kHz, the block defaults: 11 equalizer taps, `carrier_bw` 0.0025, `sync_bw`
+/// 0.005 for 16-QAM and 0.002 for 256-QAM, D1527) reading `n` input samples per call: the
+/// output of `qam_mod` for `n / 8` random symbols (repeated every call; `n / 8` is whole
+/// symbols, so the symbol clock stays on the grid; for 256-QAM `DEMOD_WINDOWS_QAM256` windows of
+/// `n` samples, one per call in turn), turned by 0.3 rad with uniform noise of [`demod_noise`]
+/// per component. The state lives across the calls; the warm-up runs in `new`.
 pub(crate) struct QamDemodBlockK {
+    qam: Qam,
     block: QamDemodBlock<ArenaStorage<'static>>,
     input: Vec<C32>,
+    /// The samples of a call.
+    n: usize,
+    /// The window of the next call.
+    window: usize,
     symbols: Vec<u32>,
     out: Vec<f32>,
     produced: usize,
@@ -1084,25 +1170,45 @@ fn qam_demod_call(
 }
 
 impl QamDemodBlockK {
-    pub(crate) fn new(rng: &mut Pcg32, layout: Layout) -> Self {
+    pub(crate) fn new(rng: &mut Pcg32, layout: Layout, qam: Qam) -> Self {
         let n = layout.n;
-        let (bits, input) = qam_demod_input(rng, n);
+        let bps = qam.bits_per_symbol();
+        let windows = match qam {
+            Qam::Qam256 => DEMOD_WINDOWS_QAM256,
+            _ => 1,
+        };
+        let (bits, input) = qam_demod_input(rng, qam, n * windows);
         let symbols = bits
-            .chunks_exact(4)
+            .chunks_exact(bps)
             .map(|b| b.iter().fold(0u32, |g, &x| (g << 1) | u32::from(x > 0.0)))
             .collect();
+        let warmup = match qam {
+            Qam::Qam256 => DEMOD_WARMUP_QAM256,
+            _ => DEMOD_WARMUP,
+        };
         let mut k = QamDemodBlockK {
-            block: qam_demod_block(),
+            qam,
+            block: qam_demod_block(qam),
             input,
+            n,
+            window: 0,
             symbols,
             // Room for every soft bit of a call (a call may give a symbol more than nominal).
-            out: vec![0.0; n / BLOCK_SPS * 4 + 64],
+            out: vec![0.0; (n / BLOCK_SPS + 16) * bps],
             produced: 0,
         };
-        for _ in 0..DEMOD_WARMUP {
-            k.produced = qam_demod_call(&mut k.block, &k.input, &mut k.out);
+        for _ in 0..warmup {
+            k.call();
         }
         k
+    }
+
+    /// One call on the next window.
+    fn call(&mut self) {
+        let at = self.window * self.n;
+        self.window = (self.window + 1) % (self.input.len() / self.n);
+        self.produced =
+            qam_demod_call(&mut self.block, &self.input[at..at + self.n], &mut self.out);
     }
 }
 
@@ -1110,9 +1216,7 @@ impl Kernel for QamDemodBlockK {
     fn run(&mut self, which: Impl, k: usize) {
         for _ in 0..k {
             match which {
-                Impl::Ours | Impl::Fallback => {
-                    self.produced = qam_demod_call(&mut self.block, &self.input, &mut self.out);
-                }
+                Impl::Ours | Impl::Fallback => self.call(),
                 other => unreachable!("qam_demod_block has no {other:?}"),
             }
             black_box(&self.out);
@@ -1120,23 +1224,25 @@ impl Kernel for QamDemodBlockK {
     }
 
     /// 999 when the symbols of one call after the warm-up equal the sent ones at one of the four
-    /// rotations and some lag (the input repeats, so the lag is taken modulo the call), 0
-    /// otherwise.
+    /// rotations and some lag (the input repeats, so the lag is taken modulo the symbols of the
+    /// input), 0 otherwise.
     fn accuracy(&mut self, which: Impl) -> f64 {
         if !self.supports(which) {
             return 0.0;
         }
         self.run(which, 1);
         let got: Vec<u32> = self.out[..self.produced]
-            .chunks_exact(4)
+            .chunks_exact(self.qam.bits_per_symbol())
             .map(|b| b.iter().fold(0u32, |g, &x| (g << 1) | u32::from(x > 0.0)))
             .collect();
+        #[allow(clippy::cast_possible_truncation, reason = "at most 5 bits per axis")]
+        let b = self.qam.bits_per_axis() as u32;
         let m = self.symbols.len();
-        let ok = got.len() + 2 >= m
+        let ok = got.len() + 2 >= self.n / BLOCK_SPS
             && (0..4u32).any(|r| {
                 (0..m).any(|lag| {
                     got.iter().enumerate().all(|(j, &s)| {
-                        let back = sdrk_core::kernels::constellation::rotate_symbol(s, 2, 4 - r);
+                        let back = sdrk_core::kernels::constellation::rotate_symbol(s, b, 4 - r);
                         back == self.symbols[(j + m - lag) % m]
                     })
                 })
@@ -1176,7 +1282,7 @@ impl QamDemodSearchK {
             .map(|_| C32::new(1.2247 * rng.unit(), 1.2247 * rng.unit()))
             .collect();
         let mut k = QamDemodSearchK {
-            block: qam_demod_block(),
+            block: qam_demod_block(Qam::Qam16),
             input,
             out: vec![0.0; n / BLOCK_SPS * 4 + 64],
         };
@@ -1356,7 +1462,7 @@ impl SymbolMapBlockK {
             .expect("symbol_map block");
         SymbolMapBlockK {
             block,
-            bits: qam16_bits(rng, layout.n),
+            bits: qam_bits(rng, Qam::Qam16, layout.n),
             out: vec![C32::default(); layout.n],
         }
     }
@@ -1631,7 +1737,7 @@ impl QamFrameEncodeBlockK {
                 preamble_bytes: QAM_FRAME_PREAMBLE,
                 ..FrameEncodeConfig::default()
             },
-            qam: qam_mod_config(),
+            qam: qam_mod_config(Qam::Qam16),
             // The workload of M44.1 (the flow `qam16_transmitter`); the scrambler of M44.2 has
             // its own entry, `bit_scramble_block`.
             scrambler: Scrambler::Off,
@@ -1697,7 +1803,7 @@ impl Kernel for QamFrameEncodeBlockK {
         self.run(which, 1);
         let mut bits: Vec<f32> = self.packets.iter().flat_map(qam_frame_soft).collect();
         bits.truncate(self.out.len() / BLOCK_SPS * 4);
-        let want: Vec<f64> = qam_mod_f64(&bits)
+        let want: Vec<f64> = qam_mod_f64(Qam::Qam16, &bits)
             .into_iter()
             .flat_map(|(re, im)| [re, im])
             .collect();
@@ -1749,7 +1855,7 @@ impl QamFrameDecodeBlockK {
         let packets: Vec<Packet> = (0..room / per).map(|_| qam_frame_packet(rng)).collect();
         let mut bits: Vec<f32> = packets.iter().flat_map(qam_frame_soft).collect();
         bits.resize(room, -1.0);
-        let mut tx = qam_mod_block();
+        let mut tx = qam_mod_block(Qam::Qam16);
         let mut sig = vec![C32::default(); n];
         // Two passes: the second starts with the pulse tails of the first, as the repeated
         // input does at every call.
@@ -1850,11 +1956,11 @@ pub(crate) struct PulseShapeBlockK {
 
 impl PulseShapeBlockK {
     pub(crate) fn new(rng: &mut Pcg32, layout: Layout) -> Self {
-        let cfg = qam_mod_config().pulse();
+        let cfg = qam_mod_config(Qam::Qam16).pulse();
         let rate = block_rate(25_000);
         let bytes =
             PulseShapeBlock::<ArenaStorage<'static>>::storage_bytes(&cfg, rate).expect("storage");
-        let bits = qam16_bits(rng, layout.n / BLOCK_SPS);
+        let bits = qam_bits(rng, Qam::Qam16, layout.n / BLOCK_SPS);
         let map = SymbolMapConfig {
             constellation: SymbolMapConstellation::Qam16,
             ..SymbolMapConfig::default()
@@ -1904,7 +2010,7 @@ impl Kernel for PulseShapeBlockK {
         }
         self.block.reset();
         pulse_shape_call(&mut self.block, &self.symbols, &mut self.out);
-        let want: Vec<f64> = qam_mod_f64(&self.bits)
+        let want: Vec<f64> = qam_mod_f64(Qam::Qam16, &self.bits)
             .into_iter()
             .flat_map(|(re, im)| [re, im])
             .collect();
@@ -1936,7 +2042,7 @@ pub(crate) struct PulseMatchBlockK {
 impl PulseMatchBlockK {
     pub(crate) fn new(rng: &mut Pcg32, layout: Layout) -> Self {
         let n = layout.n;
-        let (_, input) = qam_demod_input(rng, n);
+        let (_, input) = qam_demod_input(rng, Qam::Qam16, n);
         let cfg = pulse_match_config();
         let rate = block_rate(200_000);
         let bytes =

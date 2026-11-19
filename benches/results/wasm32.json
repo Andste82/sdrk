@@ -705,6 +705,29 @@
           "status": "release",
           "verdict": "pass"
         },
+        "bit_descramble_in_place_block": {
+          "compared_with": "GNU Radio descrambler_bb(0x21, 0, 22): gr::digital::lfsr, one __builtin_parityl per unpacked bit (generic compiler flags)",
+          "goal": true,
+          "informational": [
+            {
+              "compared_with": "sdrk fallback",
+              "label": "information: fallback",
+              "other_instr_per_sample": 22.16,
+              "other_snr_db": 999.0,
+              "ours_instr_per_sample": 22.16,
+              "ratio": 1.0
+            }
+          ],
+          "other_instr_per_sample": 42.02,
+          "ours_instr_per_sample": 22.16,
+          "ratio": 0.53,
+          "snr_db": {
+            "other": 999.0,
+            "ours": 999.0
+          },
+          "status": "release",
+          "verdict": "pass"
+        },
         "bit_scramble_block": {
           "compared_with": "GNU Radio scrambler_bb(0x21, 0, 22): gr::digital::lfsr, one __builtin_parityl per unpacked bit (generic compiler flags)",
           "goal": true,
@@ -721,6 +744,29 @@
           "other_instr_per_sample": 42.02,
           "ours_instr_per_sample": 14.63,
           "ratio": 0.35,
+          "snr_db": {
+            "other": 999.0,
+            "ours": 999.0
+          },
+          "status": "release",
+          "verdict": "pass"
+        },
+        "bit_scramble_in_place_block": {
+          "compared_with": "GNU Radio scrambler_bb(0x21, 0, 22): gr::digital::lfsr, one __builtin_parityl per unpacked bit (generic compiler flags)",
+          "goal": true,
+          "informational": [
+            {
+              "compared_with": "sdrk fallback",
+              "label": "information: fallback",
+              "other_instr_per_sample": 15.63,
+              "other_snr_db": 999.0,
+              "ours_instr_per_sample": 15.63,
+              "ratio": 1.0
+            }
+          ],
+          "other_instr_per_sample": 42.02,
+          "ours_instr_per_sample": 15.63,
+          "ratio": 0.37,
           "snr_db": {
             "other": 999.0,
             "ours": 999.0
@@ -4860,8 +4906,8 @@
         "qam_demod_qam256_block": {
           "compared_with": "sdrk fallback",
           "goal": true,
-          "other_instr_per_sample": 547.08,
-          "ours_instr_per_sample": 547.08,
+          "other_instr_per_sample": 547.21,
+          "ours_instr_per_sample": 547.21,
           "ratio": 1.0,
           "snr_db": {
             "other": 999.0,
@@ -4886,8 +4932,8 @@
         "qam_frame_decode_block": {
           "compared_with": "sdrk fallback",
           "goal": true,
-          "other_instr_per_sample": 643.03,
-          "ours_instr_per_sample": 643.03,
+          "other_instr_per_sample": 643.01,
+          "ours_instr_per_sample": 643.01,
           "ratio": 1.0,
           "snr_db": {
             "other": 999.0,
@@ -4944,12 +4990,12 @@
               "label": "misaligned by one sample",
               "other_instr_per_sample": 39.04,
               "other_snr_db": null,
-              "ours_instr_per_sample": 39.05,
+              "ours_instr_per_sample": 39.06,
               "ratio": 1.0
             }
           ],
           "other_instr_per_sample": 39.04,
-          "ours_instr_per_sample": 39.05,
+          "ours_instr_per_sample": 39.06,
           "ratio": 1.0,
           "snr_db": {
             "other": 146.05,
@@ -4990,12 +5036,12 @@
               "label": "misaligned by one sample",
               "other_instr_per_sample": 32.54,
               "other_snr_db": null,
-              "ours_instr_per_sample": 32.55,
+              "ours_instr_per_sample": 32.56,
               "ratio": 1.0
             }
           ],
           "other_instr_per_sample": 32.54,
-          "ours_instr_per_sample": 32.55,
+          "ours_instr_per_sample": 32.56,
           "ratio": 1.0,
           "snr_db": {
             "other": 144.32,
@@ -6283,8 +6329,8 @@
         "symbol_demap_qam256_block": {
           "compared_with": "sdrk fallback",
           "goal": true,
-          "other_instr_per_sample": 32.55,
-          "ours_instr_per_sample": 32.55,
+          "other_instr_per_sample": 32.56,
+          "ours_instr_per_sample": 32.56,
           "ratio": 1.0,
           "snr_db": {
             "other": 144.3,

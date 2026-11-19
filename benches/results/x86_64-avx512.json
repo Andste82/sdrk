@@ -705,6 +705,29 @@
           "status": "release",
           "verdict": "pass"
         },
+        "bit_descramble_in_place_block": {
+          "compared_with": "GNU Radio descrambler_bb(0x21, 0, 22): gr::digital::lfsr, one __builtin_parityl per unpacked bit (generic compiler flags)",
+          "goal": true,
+          "informational": [
+            {
+              "compared_with": "sdrk fallback",
+              "label": "information: fallback",
+              "other_instr_per_sample": 6.37,
+              "other_snr_db": 999.0,
+              "ours_instr_per_sample": 6.37,
+              "ratio": 1.0
+            }
+          ],
+          "other_instr_per_sample": 28.01,
+          "ours_instr_per_sample": 6.37,
+          "ratio": 0.23,
+          "snr_db": {
+            "other": 999.0,
+            "ours": 999.0
+          },
+          "status": "release",
+          "verdict": "pass"
+        },
         "bit_scramble_block": {
           "compared_with": "GNU Radio scrambler_bb(0x21, 0, 22): gr::digital::lfsr, one __builtin_parityl per unpacked bit (generic compiler flags)",
           "goal": true,
@@ -721,6 +744,29 @@
           "other_instr_per_sample": 26.01,
           "ours_instr_per_sample": 4.66,
           "ratio": 0.18,
+          "snr_db": {
+            "other": 999.0,
+            "ours": 999.0
+          },
+          "status": "release",
+          "verdict": "pass"
+        },
+        "bit_scramble_in_place_block": {
+          "compared_with": "GNU Radio scrambler_bb(0x21, 0, 22): gr::digital::lfsr, one __builtin_parityl per unpacked bit (generic compiler flags)",
+          "goal": true,
+          "informational": [
+            {
+              "compared_with": "sdrk fallback",
+              "label": "information: fallback",
+              "other_instr_per_sample": 5.32,
+              "other_snr_db": 999.0,
+              "ours_instr_per_sample": 5.32,
+              "ratio": 1.0
+            }
+          ],
+          "other_instr_per_sample": 26.01,
+          "ours_instr_per_sample": 5.32,
+          "ratio": 0.2,
           "snr_db": {
             "other": 999.0,
             "ours": 999.0

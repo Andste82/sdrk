@@ -6,6 +6,11 @@
 //! description rules of M09, validation at the parameter, exact storage (none), timing, size,
 //! `Send` and `Sync`. (The word-parallel PRBS step against `next_bit` over the full period is
 //! `sdrk-proto/tests/prbs_m49.rs`.)
+//!
+//! M49.1 test 4 (seed 870): the word-parallel index production of the block equals the
+//! per-bit specification (`next_bit`, MSB first) over the full period of every polynomial at
+//! every `bits` 1 to 8, on the whole buffer and in 20 chunk plans; the indices are read back
+//! from the block output for the probe input `1 + 0j`, whose output is the phasor of the index.
 #![allow(
     clippy::unwrap_used,
     clippy::indexing_slicing,
@@ -30,6 +35,8 @@ use sdrk_testkit::{Pcg32, VecStorage};
 
 /// Seed of the signals and of the chunk plans (M49 range 690 to 699; test 6 takes 696, 697).
 const SEED: u64 = 696;
+/// Seed of the M49.1 index production test (M49.1 range 870 to 879; test 4 takes 870).
+const SEED_M49_1: u64 = 870;
 /// Samples per test (more than one period of `prbs9` at `bits` 8, several calls of 256).
 const N: usize = 3000;
 
@@ -149,6 +156,54 @@ fn the_block_equals_the_kernel_with_the_prbs_indices() {
                 check_plans(&c, &x, &kernel(&c, &x), &format!("C32 {what}"));
                 let x = cq15_signal(N, SEED + u64::from(bits), true);
                 check_plans(&c, &x, &kernel(&c, &x), &format!("CQ15 {what}"));
+            }
+        }
+    }
+}
+
+/// The phase indices that the block used, read back from its output for the probe input
+/// `1 + 0j`: the output of each sample is the phasor of its index (the conjugate for
+/// `inverse`), whose angle gives the index (the nearest of the `2^bits` angles, which are
+/// 1.4 degrees apart at `bits = 8`; the phasor is within 1e-6 of the exact one, asserted).
+fn indices_of_the_block(c: &ScrambleConfig, out: &[C32]) -> Vec<u8> {
+    let m = 1u32 << c.bits;
+    let step = std::f64::consts::TAU / f64::from(m);
+    out.iter()
+        .map(|y| {
+            let (re, im) = (f64::from(y.re), f64::from(y.im));
+            let a = im.atan2(re);
+            let k = (a / step).round() as i64;
+            let err = (a - k as f64 * step).abs();
+            assert!(
+                err < 1e-6 && ((re * re + im * im).sqrt() - 1.0).abs() < 1e-6,
+                "{c:?}: {y:?} is no phasor"
+            );
+            let k = if c.inverse { -k } else { k };
+            k.rem_euclid(i64::from(m)) as u8
+        })
+        .collect()
+}
+
+#[test]
+fn the_index_production_equals_next_bit_over_the_full_period() {
+    // M49.1 test 4: every key, every bits, more than one full period of the key (the indices
+    // repeat after `period` samples at the latest), a random seed and both directions.
+    let mut rng = Pcg32::new(SEED_M49_1, 7);
+    let r = rate(48_000);
+    for key in KEYS {
+        let period = key.period() as usize;
+        let n = period + 64;
+        let probe = vec![C32::new(1.0, 0.0); n];
+        for bits in 1..=8 {
+            let key_seed = 1 + rng.below(key.period());
+            let c = cfg(bits, bits % 2 == 0, key, key_seed);
+            let want = indices(key, key_seed, bits, n);
+            let make = || ScrambleBlock::<C32, VecStorage>::new(&c, r, &mut VecStorage).unwrap();
+            let got = indices_of_the_block(&c, &run_block(&mut make(), &probe, None));
+            assert_eq!(got, want, "{c:?} whole");
+            for plan in twenty_plans(SEED_M49_1) {
+                let got = indices_of_the_block(&c, &run_block(&mut make(), &probe, Some(plan)));
+                assert_eq!(got, want, "{c:?} {plan:?}");
             }
         }
     }

@@ -1,16 +1,22 @@
-//! Keyed phase scrambling (`scramble`, M49): element-wise multiplication of a complex stream by
-//! unit phasors `exp(j 2π p[n] / 2^b)` from a caller-supplied index sequence, and the
-//! descrambler (the conjugate phasors).
+//! Keyed phase scrambling (`scramble`, M49, revised by M49.1): element-wise multiplication of a
+//! complex stream by unit phasors `exp(j 2π p[n] / 2^b)` from a caller-supplied index sequence,
+//! and the descrambler (the conjugate phasors).
 //!
-//! The index `k = p[n] & (2^b − 1)` (for `inverse` the index `(−k) & (2^b − 1)` of the conjugate
-//! phasor) is split into a quadrant `q` and a residue `r` (shared conventions §A.4 of M49 to
-//! M56): `q = k >> (b − 2)`, `r = k & (2^(b−2) − 1)` for `b ≥ 2`, and `q = 2k`, `r = 0` for
-//! `b = 1`. The output is the exact quadrant map ([`c32_quadrant`], [`cq15_quadrant`]: sign and
-//! swap, never a product) of `y`, where `y = x` for `r = 0` and otherwise the `rotate` product of
-//! `x` with the table phasor at the residual phase `r << (32 − b)`, read directly from
-//! [`COS_F32`] or [`COS_Q15`] at `i = r << (12 − b)` (cosine) and `i + 3072` (sine). For `b ≤ 8`
-//! the residual phase has zero low 20 bits, so the direct lookup gives the bits of the `rotate`
-//! interpolation. The kernel is stateless; the class is tolerance (`docs/kernels.md`).
+//! The index is `k = p[n] & (2^b − 1)` (for `inverse` the index `(−k) & (2^b − 1)` of the
+//! conjugate phasor).
+//!
+//! - `b ≤ 2`: the exact quadrant map ([`c32_quadrant`], [`cq15_quadrant`]: sign and swap, never a
+//!   product) with the quadrant `q = 2k` (`b = 1`) or `q = k` (`b = 2`); lossless (shared
+//!   conventions §A of M49 to M56).
+//! - `b ≥ 3`: one table phasor and one product per sample (M49.1): the `rotate` product of `x`
+//!   with the phasor at the full phase `k << (32 − b)`, read directly from [`COS_F32`] or
+//!   [`COS_Q15`] at `i = k << (12 − b)` (cosine) and `(i + 3072) & 4095` (sine). For `b ≤ 8` the
+//!   phase has zero low 20 bits, so the direct lookup gives the bits of the `rotate`
+//!   interpolation: the output equals one `rotate` step at that phase bit for bit. There is no
+//!   quadrant map and no exception for `k = 0` (which multiplies by `(32767, 0)` in `CQ15` and by
+//!   `(1, s₀)` with the tiny table sine in `C32`).
+//!
+//! The kernel is stateless; the class is tolerance (`docs/kernels.md`).
 //!
 //! [`c32_quadrant`]: crate::num::c32_quadrant
 //! [`cq15_quadrant`]: crate::num::cq15_quadrant
@@ -37,7 +43,9 @@ const SINE_OFFSET: usize = 3072;
 ///   out of the table and is not an error. `inverse = true` uses `(−k) & (2^b − 1)`, the index
 ///   of the conjugate phasor, with the same rule as the forward direction.
 /// - `b = 1` gives `±x`, `b = 2` the four quadrant maps (the DVB-S2 physical-layer scrambling
-///   pattern `j^{R_n}`), both without a multiplication; `k = 0` is the identity at every `b`.
+///   pattern `j^{R_n}`), both without a multiplication; `k = 0` is the identity there.
+/// - `b ≥ 3` multiplies every sample by the table phasor of `k` (the `rotate` product, also for
+///   `k = 0`).
 ///
 /// ```
 /// use sdrk_core::{kernels::scramble::Scramble, Fallback, C32};
@@ -51,8 +59,9 @@ const SINE_OFFSET: usize = 3072;
 /// # Ok::<(), sdrk_core::Error>(())
 /// ```
 pub trait Scramble<T: ComplexSample> {
-    /// `output[n] = input[n] · exp(± j 2π p[n] / 2^bits)` (`−` for `inverse`), with the exact
-    /// quadrant part and the residual `rotate` product described in the module documentation.
+    /// `output[n] = input[n] · exp(± j 2π p[n] / 2^bits)` (`−` for `inverse`): the exact
+    /// quadrant map for `bits ≤ 2`, the `rotate` product with the table phasor for `bits ≥ 3`, as
+    /// described in the module documentation.
     fn scramble(
         &self,
         input: &[T],
@@ -119,7 +128,8 @@ pub const fn phase_index(p: u8, bits: u32, inverse: bool) -> u32 {
 /// (masked to `bits` bits first): `q = k >> (bits − 2)`, `r = k & (2^(bits − 2) − 1)` for
 /// `bits ≥ 2`, `q = 2k`, `r = 0` for `bits = 1`. `bits` must be 1 to 8; for any other `bits`
 /// the result is unspecified, but the function never panics (the shifts wrap as in
-/// [`u32::wrapping_shl`]). For backend crates and tests.
+/// [`u32::wrapping_shl`]). The kernel uses the quadrant for `bits ≤ 2` only (where `r = 0`);
+/// since M49.1 `bits ≥ 3` takes the phasor of the whole index. For backend crates and tests.
 ///
 /// ```
 /// use sdrk_core::kernels::scramble::split_index;
@@ -147,19 +157,47 @@ const fn low_mask(bits: u32) -> u32 {
     1u32.wrapping_shl(bits).wrapping_sub(1)
 }
 
-/// The table index `i = r << (12 − bits)` of the cosine of the residue `r` (the sine is at
-/// `i + 3072`). `bits` must be 2 to 8 and `r` below `2^(bits − 2)`, so `i ≤ 1023`.
+/// The table index `i = k << (12 − bits)` of the cosine of the index `k` (masked to `bits`
+/// bits); the sine is at `(i + 3072) & 4095`. `bits` must be 1 to 8 (larger `bits` give an
+/// unspecified index below 4096, never a panic).
 #[inline]
-const fn table_index(r: u32, bits: u32) -> usize {
-    (r << (12 - bits)) as usize
+const fn table_index(k: u32, bits: u32) -> usize {
+    ((k & low_mask(bits)).wrapping_shl(12u32.wrapping_sub(bits)) & 4095) as usize
 }
 
-pub(crate) fn table_error() -> Error {
-    Error::Internal("scramble table index")
+/// The table index of the sine of the cosine index `i`: the cosine at the phase `− 2^30`, as
+/// `rotate` reads its sine.
+#[inline]
+const fn sine_index(i: usize) -> usize {
+    (i + SINE_OFFSET) & 4095
 }
 
-/// The `C32` residual phasor `(c, s)` of the residue `r ≠ 0` at `bits`: `COS_F32[i]`,
-/// `COS_F32[i + 3072]` with `i = r << (12 − bits)`. For backend crates and tests.
+/// The `C32` table phasor `(COS_F32[i], COS_F32[(i + 3072) & 4095])`, `i = k << (12 − bits)`,
+/// of the index `k` (masked to `bits` bits): the phasor of the kernel for `bits ≥ 3`.
+#[inline]
+pub(crate) fn phasor_c32(k: u32, bits: u32) -> (f32, f32) {
+    let i = table_index(k, bits);
+    (
+        COS_F32.get(i).copied().unwrap_or(0.0),
+        COS_F32.get(sine_index(i)).copied().unwrap_or(0.0),
+    )
+}
+
+/// The `CQ15` table phasor of the index `k`, as [`phasor_c32`] from `COS_Q15`.
+#[inline]
+pub(crate) fn phasor_q15(k: u32, bits: u32) -> (i16, i16) {
+    let i = table_index(k, bits);
+    (
+        COS_Q15.get(i).copied().unwrap_or(0),
+        COS_Q15.get(sine_index(i)).copied().unwrap_or(0),
+    )
+}
+
+/// The `C32` table phasor `(c, s)` of the residue `r ≠ 0` at `bits` (3 to 8): `COS_F32[i]`,
+/// `COS_F32[i + 3072]` with `i = r << (12 − bits)`, `r` below `2^(bits − 2)` (an angle in
+/// `(0, π/2)`); `None` otherwise. Since M49.1 the kernel uses the phasor of the whole index for
+/// `bits ≥ 3`, of which this is the first quadrant (the same entries for `k = r`). For backend
+/// crates and tests.
 ///
 /// ```
 /// use sdrk_core::{kernels::scramble::residual_c32, tables::COS_F32};
@@ -175,9 +213,9 @@ pub fn residual_c32(r: u32, bits: u32) -> Option<(f32, f32)> {
     Some((*COS_F32.get(i)?, *COS_F32.get(i + SINE_OFFSET)?))
 }
 
-/// The `CQ15` residual phasor `(c, s)` of the residue `r ≠ 0` at `bits`: `COS_Q15[i]`,
-/// `COS_Q15[i + 3072]` with `i = r << (12 − bits)`, both in `(0, 32767]`. For backend crates
-/// and tests.
+/// The `CQ15` table phasor `(c, s)` of the residue `r ≠ 0` at `bits`: `COS_Q15[i]`,
+/// `COS_Q15[i + 3072]` with `i = r << (12 − bits)`, both in `(0, 32767]`, as
+/// [`residual_c32`]. For backend crates and tests.
 ///
 /// ```
 /// use sdrk_core::{kernels::scramble::residual_q15, tables::COS_Q15};
@@ -198,8 +236,8 @@ pub(crate) fn product_c32(x: C32, c: f32, s: f32) -> C32 {
     C32::new(x.re * c - x.im * s, x.re * s + x.im * c)
 }
 
-/// The `rotate` `CQ15` product `cq15_mul(x, (c, s))` in `i32`: `|xr c − xi s| ≤ 2 · 32768 ·
-/// 32767 < 2^31 − 2^14`, so it is exact.
+/// The `rotate` `CQ15` product `cq15_mul(x, (c, s))` in `i32`, exact: a table phasor has
+/// `|c| + |s| ≤ 46341` (at most `32768 · √2`), so `|xr c − xi s| ≤ 32768 · 46341 < 2^31 − 2^14`.
 #[inline]
 pub(crate) fn product_cq15(x: CQ15, c: i16, s: i16) -> CQ15 {
     let (xr, xi) = (i32::from(x.re.0), i32::from(x.im.0));
@@ -211,94 +249,73 @@ pub(crate) fn product_cq15(x: CQ15, c: i16, s: i16) -> CQ15 {
     }
 }
 
-/// The largest number of residues `2^(b − 2)` (`b = 8`).
-pub(crate) const RESIDUES: usize = 64;
-
-/// The `C32` residual phasors of a call at `bits` (3 to 8), indexed by the residue; entry 0
-/// (`r = 0`, where the input is taken unchanged) and the entries above `2^(bits − 2) − 1` are
-/// `(0, 0)` and never used.
-pub(crate) fn residual_table_c32(bits: u32) -> Result<[(f32, f32); RESIDUES]> {
-    let mut t = [(0.0, 0.0); RESIDUES];
-    let n = 1usize << (bits - 2);
-    for (r, e) in t.iter_mut().enumerate().take(n).skip(1) {
-        *e = residual_c32(r as u32, bits).ok_or_else(table_error)?;
-    }
-    Ok(t)
-}
-
-/// The `CQ15` residual phasors of a call at `bits` (3 to 8), as [`residual_table_c32`].
-pub(crate) fn residual_table_q15(bits: u32) -> Result<[(i16, i16); RESIDUES]> {
-    let mut t = [(0, 0); RESIDUES];
-    let n = 1usize << (bits - 2);
-    for (r, e) in t.iter_mut().enumerate().take(n).skip(1) {
-        *e = residual_q15(r as u32, bits).ok_or_else(table_error)?;
-    }
-    Ok(t)
-}
-
 /// [`scramble_one_c32`] without the check of `bits` (1 to 8).
-// The names of the contract (milestone M49 §1).
-#[allow(clippy::many_single_char_names)]
 #[inline]
-pub(crate) fn one_c32(x: C32, k: u32, bits: u32) -> Result<C32> {
-    let (q, r) = split_index(k, bits);
-    let y = if r == 0 {
-        x
+fn one_c32(x: C32, k: u32, bits: u32) -> C32 {
+    if bits <= 2 {
+        let (q, _) = split_index(k, bits);
+        c32_quadrant(x, q)
     } else {
-        let (c, s) = residual_c32(r, bits).ok_or_else(table_error)?;
+        let (c, s) = phasor_c32(k, bits);
         product_c32(x, c, s)
-    };
-    Ok(c32_quadrant(y, q))
+    }
 }
 
 /// [`scramble_one_cq15`] without the check of `bits` (1 to 8).
-// The names of the contract (milestone M49 §1).
-#[allow(clippy::many_single_char_names)]
 #[inline]
-pub(crate) fn one_cq15(x: CQ15, k: u32, bits: u32) -> Result<CQ15> {
-    let (q, r) = split_index(k, bits);
-    let y = if r == 0 {
-        x
+fn one_cq15(x: CQ15, k: u32, bits: u32) -> CQ15 {
+    if bits <= 2 {
+        let (q, _) = split_index(k, bits);
+        cq15_quadrant(x, q)
     } else {
-        let (c, s) = residual_q15(r, bits).ok_or_else(table_error)?;
+        let (c, s) = phasor_q15(k, bits);
         product_cq15(x, c, s)
-    };
-    Ok(cq15_quadrant(y, q))
+    }
 }
 
 /// One `C32` sample of the kernel at the index `k` (already inverted for the descrambler, masked
-/// to `bits` bits inside): `c32_quadrant(y, q)` with `y = x` for `r = 0` and the `rotate`
-/// product with `(COS_F32[i], COS_F32[i + 3072])` otherwise. `bits` outside 1 to 8 is
-/// `InvalidParameter`. For backend crates (vector tails) and tests; the fallback computes every
-/// sample with the same formula (the phasor from a table of the call with the same entries).
+/// to `bits` bits inside): for `bits ≤ 2` the exact quadrant map `c32_quadrant(x, q)` (`q` of
+/// [`split_index`]); for `bits ≥ 3` the `rotate` product `(re c − im s, re s + im c)` in `f32`
+/// without FMA with `c = COS_F32[i]`, `s = COS_F32[(i + 3072) & 4095]`, `i = k << (12 − bits)`.
+/// `bits` outside 1 to 8 is `InvalidParameter`. For backend crates (vector tails) and tests;
+/// the fallback computes every sample with the same formula.
 ///
 /// ```
-/// use sdrk_core::{kernels::scramble::scramble_one_c32, C32};
+/// use sdrk_core::{kernels::scramble::scramble_one_c32, tables::COS_F32, C32};
 /// assert_eq!(scramble_one_c32(C32::new(1.0, 2.0), 1, 2)?, C32::new(-2.0, 1.0));
-/// assert_eq!(scramble_one_c32(C32::new(1.0, 2.0), 0, 8)?, C32::new(1.0, 2.0));
+/// // bits 8, k = 64 (a quarter turn): the product with the table phasor, not an exact swap.
+/// let (c, s) = (COS_F32[1024], COS_F32[0]);
+/// assert_eq!(
+///     scramble_one_c32(C32::new(1.0, 2.0), 64, 8)?,
+///     C32::new(1.0 * c - 2.0 * s, 1.0 * s + 2.0 * c)
+/// );
 /// assert!(scramble_one_c32(C32::new(1.0, 2.0), 0, 9).is_err());
 /// # Ok::<(), sdrk_core::Error>(())
 /// ```
 #[inline]
 pub fn scramble_one_c32(x: C32, k: u32, bits: u32) -> Result<C32> {
     check_bits(bits)?;
-    one_c32(x, k, bits)
+    Ok(one_c32(x, k, bits))
 }
 
 /// One `CQ15` sample of the kernel at the index `k` (already inverted for the descrambler,
-/// masked to `bits` bits inside): `cq15_quadrant(y, q)` with `y = x` for `r = 0` and
-/// `cq15_mul(x, (COS_Q15[i], COS_Q15[i + 3072]))` in `i32` otherwise. `bits` outside 1 to 8 is
+/// masked to `bits` bits inside): for `bits ≤ 2` the exact quadrant map `cq15_quadrant(x, q)`
+/// (saturating negation); for `bits ≥ 3` `cq15_mul(x, (COS_Q15[i], COS_Q15[(i + 3072) & 4095]))`
+/// in `i32`, `i = k << (12 − bits)` (the `rotate` product). `bits` outside 1 to 8 is
 /// `InvalidParameter`. For backend crates (vector tails) and tests; the fallback computes every
-/// sample with the same formula (the phasor from a table of the call with the same entries).
+/// sample with the same formula.
 ///
 /// ```
 /// use sdrk_core::{kernels::scramble::scramble_one_cq15, CQ15, Q15};
 /// let x = CQ15 { re: Q15(-32768), im: Q15(5) };
 /// assert_eq!(scramble_one_cq15(x, 1, 1)?, CQ15 { re: Q15(32767), im: Q15(-5) });
+/// // bits 3, k = 0: the product with (32767, 0) scales by 1 − 2^-15.
+/// let y = CQ15 { re: Q15(-32768), im: Q15(16384) };
+/// assert_eq!(scramble_one_cq15(y, 0, 3)?, CQ15 { re: Q15(-32767), im: Q15(16384) });
 /// # Ok::<(), sdrk_core::Error>(())
 /// ```
 #[inline]
 pub fn scramble_one_cq15(x: CQ15, k: u32, bits: u32) -> Result<CQ15> {
     check_bits(bits)?;
-    one_cq15(x, k, bits)
+    Ok(one_cq15(x, k, bits))
 }

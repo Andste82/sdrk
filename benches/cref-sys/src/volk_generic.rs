@@ -3,7 +3,8 @@
 //! `has_volkgeneric`), compiled with `-O3 -ffp-contract=off` and the instruction set of the
 //! level (`libvolkgeneric-<level>.a`): the scalar references of the `interleave` and
 //! `deinterleave` fallbacks, and with a phasor lookup the reference of the `C32` `scramble`
-//! fallback ([`multiply_32fc`], M49). VOLK has no 16-bit interleave; [`interleave_16ic`] is the
+//! fallback ([`multiply_32fc`], M49), and with a `±1.0` sequence that of the `C32` `scramble`
+//! fallback at `bits = 1` ([`multiply_32fc_32f`], M49.1). VOLK has no 16-bit interleave; [`interleave_16ic`] is the
 //! loop of `volk_32f_x2_interleave_32fc_generic` with 16-bit elements.
 
 #[cfg(has_volkgeneric)]
@@ -37,6 +38,12 @@ mod ffi {
             c: *mut [f32; 2],
             a: *const [f32; 2],
             b: *const [f32; 2],
+            n: core::ffi::c_uint,
+        );
+        pub fn sdrk_volk_generic_32fc_32f_multiply_32fc(
+            c: *mut [f32; 2],
+            a: *const [f32; 2],
+            b: *const f32,
             n: core::ffi::c_uint,
         );
     }
@@ -135,6 +142,21 @@ pub fn multiply_32fc(a: &[[f32; 2]], b: &[[f32; 2]], out: &mut [[f32; 2]]) -> bo
     // slice, so it aliases no input.
     unsafe {
         ffi::sdrk_volk_generic_32fc_x2_multiply_32fc(out.as_mut_ptr(), a.as_ptr(), b.as_ptr(), n);
+    }
+    #[cfg(not(has_volkgeneric))]
+    let _ = n;
+    AVAILABLE
+}
+
+/// `volk_32fc_32f_multiply_32fc_generic`: `out[i] = a[i] * b[i]` (a complex sample times a real
+/// value, two products) for the common length; `false` without the library.
+pub fn multiply_32fc_32f(a: &[[f32; 2]], b: &[f32], out: &mut [[f32; 2]]) -> bool {
+    let n = common(a.len(), b.len(), out.len());
+    #[cfg(has_volkgeneric)]
+    // SAFETY: every buffer holds at least `n` elements; the output is a separate mutable slice,
+    // so it aliases no input.
+    unsafe {
+        ffi::sdrk_volk_generic_32fc_32f_multiply_32fc(out.as_mut_ptr(), a.as_ptr(), b.as_ptr(), n);
     }
     #[cfg(not(has_volkgeneric))]
     let _ = n;

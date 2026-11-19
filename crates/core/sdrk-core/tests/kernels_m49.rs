@@ -1,10 +1,12 @@
-//! Tests of the M49 kernel `scramble` and the exact `±1`/`±j` helpers of `sdrk_core::num`
-//! (milestone M49, tests 2 to 4): parameters and the index mask, the helpers of §1.1 by brute
-//! force over every `Q15` value, `k = 0` as the identity, `bits` 1 and 2 as exact quadrant maps
-//! and their round trips, the direct table lookup against the `rotate` interpolation (through the
-//! public `Rotate` kernel), the residual `rotate` step plus the quadrant map, the `inverse` index
-//! and the round-trip bounds at `bits` 3 to 8, `Fallback` against `Reference` with special
-//! inputs, the per-sample helpers, block-size invariance (seed 695) and the extremes.
+//! Tests of the kernel `scramble` and the exact `±1`/`±j` helpers of `sdrk_core::num`
+//! (milestone M49, tests 2 to 4, revised by M49.1 test 2): parameters and the index mask, the
+//! helpers of §1.1 by brute force over every `Q15` value, `k = 0` (the identity for `bits ≤ 2`,
+//! the table phasor of angle 0 for `bits ≥ 3`), `bits` 1 and 2 as exact quadrant maps and their
+//! round trips (unchanged by M49.1), the direct table lookup against the `rotate` interpolation
+//! (through the public `Rotate` kernel) for every index, one `rotate` step at the full phase for
+//! every index at `bits` 3 to 8, the `inverse` index and the measured round-trip bounds at `bits`
+//! 3 to 8, `Fallback` against `Reference` with special inputs, the per-sample helpers,
+//! block-size invariance (seed 695) and the extremes.
 
 #![cfg(feature = "reference")]
 #![allow(
@@ -170,6 +172,12 @@ fn rotate_cq15(x: CQ15, phase: u32) -> CQ15 {
     let mut y = [CQ15::default()];
     Fallback.rotate(&mut nco, &[x], &mut y).unwrap();
     y[0]
+}
+
+/// The cosine-table index of the index `k` at `bits` and that of its sine (M49.1 §1).
+fn table_indices(k: u32, bits: u32) -> (usize, usize) {
+    let i = (k << (12 - bits)) as usize;
+    (i, (i + 3072) & 4095)
 }
 
 /// SNR in dB of `got` against `want`.
@@ -453,7 +461,7 @@ fn the_chips_are_the_identity_and_the_negation() {
 // k = 0, bits 1 and 2.
 
 #[test]
-fn index_0_is_the_identity_at_every_bits() {
+fn index_0_is_the_identity_at_bits_1_and_2_and_the_table_phasor_of_angle_0_above() {
     let mut rng = Rng::new(SEED + 3);
     let mut xq: Vec<CQ15> = (0..1000).map(|_| rng.cq15()).collect();
     xq.extend([
@@ -468,36 +476,65 @@ fn index_0_is_the_identity_at_every_bits() {
             x.push(C32::new(re, im));
         }
     }
+    // The table phasor of angle 0: (32767, 0) in Q15, (1.0, s0) with the tiny f32 sine.
+    assert_eq!((COS_Q15[0], COS_Q15[3072]), (32767, 0));
+    let s0 = COS_F32[3072];
+    assert_eq!(COS_F32[0], 1.0);
+    assert!(s0 != 0.0 && s0.abs() < 1e-7);
     for bits in 1..=8 {
         for inverse in [false, true] {
             // p = 0 and p = 2^bits (masked to 0, except at bits 8 where 256 is not a byte).
             for p in [0u8, (1u16 << bits) as u8] {
                 let y = run_c32(&Fallback, &x, &vec![p; x.len()], bits, inverse);
-                for (a, b) in x.iter().zip(&y) {
-                    assert_eq!(bits_of(*a), bits_of(*b), "bits {bits}");
-                }
+                let yq = run_cq15(&Fallback, &xq, &vec![p; xq.len()], bits, inverse);
                 let r = run_c32(&Reference, &x, &vec![p; x.len()], bits, inverse);
-                for (a, b) in x.iter().zip(&r) {
-                    if a.re.is_nan() || a.im.is_nan() {
-                        assert_eq!(
-                            (a.re.is_nan(), a.im.is_nan()),
-                            (b.re.is_nan(), b.im.is_nan())
-                        );
-                    } else {
-                        assert_eq!(bits_of(*a), bits_of(*b));
+                let rq = run_cq15(&Reference, &xq, &vec![p; xq.len()], bits, inverse);
+                if bits <= 2 {
+                    for (a, b) in x.iter().zip(&y) {
+                        assert_eq!(bits_of(*a), bits_of(*b), "bits {bits}");
                     }
+                    for (a, b) in x.iter().zip(&r) {
+                        if a.re.is_nan() || a.im.is_nan() {
+                            assert_eq!(
+                                (a.re.is_nan(), a.im.is_nan()),
+                                (b.re.is_nan(), b.im.is_nan())
+                            );
+                        } else {
+                            assert_eq!(bits_of(*a), bits_of(*b));
+                        }
+                    }
+                    assert_eq!(yq, xq);
+                    assert_eq!(rq, xq);
+                } else {
+                    // M49.1 §1: the product with the table phasor of angle 0, no exception.
+                    for (a, b) in x.iter().zip(&y) {
+                        let want = C32::new(a.re * 1.0 - a.im * s0, a.re * s0 + a.im * 1.0);
+                        assert_eq_nan_by_class(*b, want, bits, 0);
+                        assert_eq_nan_by_class(*b, rotate_c32(*a, 0), bits, 0);
+                    }
+                    for (a, b) in xq.iter().zip(&yq) {
+                        // Each component scaled by 1 − 2^-15 and rounded half up.
+                        let scale = |v: i16| ((i32::from(v) * 32767 + (1 << 14)) >> 15) as i16;
+                        assert_eq!(*b, cq(scale(a.re.0), scale(a.im.0)), "bits {bits}");
+                        assert_eq!(*b, rotate_cq15(*a, 0));
+                    }
+                    // The reference multiplies by exactly 1: the input value itself (finite
+                    // values; a signed zero may lose its sign in the sum).
+                    for (a, b) in x.iter().zip(&r) {
+                        if a.re.is_finite() && a.im.is_finite() {
+                            assert_eq!(*a, *b);
+                        }
+                    }
+                    assert_eq!(rq, xq);
                 }
-                assert_eq!(
-                    run_cq15(&Fallback, &xq, &vec![p; xq.len()], bits, inverse),
-                    xq
-                );
-                assert_eq!(
-                    run_cq15(&Reference, &xq, &vec![p; xq.len()], bits, inverse),
-                    xq
-                );
             }
         }
     }
+    // A full-scale component changes by one LSB at bits >= 3.
+    assert_eq!(
+        run_cq15(&Fallback, &[cq(-32768, 32767)], &[0], 3, false),
+        [cq(-32767, 32766)]
+    );
 }
 
 #[test]
@@ -595,24 +632,33 @@ fn no_entry_of_the_f32_cosine_table_is_zero() {
 }
 
 #[test]
-fn the_direct_lookup_equals_the_rotate_interpolation_for_every_residue() {
+fn the_direct_lookup_equals_the_rotate_interpolation_for_every_index() {
     for bits in 3..=8u32 {
-        for r in 1..(1u32 << (bits - 2)) {
-            let i = (r << (12 - bits)) as usize;
-            let phase = r << (32 - bits);
+        for k in 0..(1u32 << bits) {
+            let (i, j) = table_indices(k, bits);
+            let phase = k << (32 - bits);
             assert_eq!(phase & 0xF_FFFF, 0);
             let y = rotate_c32(C32::new(1.0, 0.0), phase);
             assert_eq!(
                 bits_of(y),
-                (COS_F32[i].to_bits(), COS_F32[i + 3072].to_bits()),
-                "bits {bits}, r {r}"
+                (COS_F32[i].to_bits(), COS_F32[j].to_bits()),
+                "bits {bits}, k {k}"
             );
-            assert_eq!(residual_c32(r, bits), Some((COS_F32[i], COS_F32[i + 3072])));
             let y = rotate_cq15(cq(-32768, 0), phase);
-            assert_eq!(y, cq(-COS_Q15[i], -COS_Q15[i + 3072]), "bits {bits}, r {r}");
-            assert_eq!(residual_q15(r, bits), Some((COS_Q15[i], COS_Q15[i + 3072])));
-            assert!(COS_Q15[i] > 0 && COS_Q15[i + 3072] > 0);
-            assert!(COS_F32[i] > 0.0 && COS_F32[i + 3072] > 0.0);
+            assert_eq!(
+                y,
+                cq(
+                    (-i32::from(COS_Q15[i])).clamp(-32768, 32767) as i16,
+                    (-i32::from(COS_Q15[j])).clamp(-32768, 32767) as i16
+                ),
+                "bits {bits}, k {k}"
+            );
+            // The first quadrant are the residual phasors of the public helpers.
+            let r = k & ((1 << (bits - 2)) - 1);
+            if r == k && r != 0 {
+                assert_eq!(residual_c32(r, bits), Some((COS_F32[i], COS_F32[j])));
+                assert_eq!(residual_q15(r, bits), Some((COS_Q15[i], COS_Q15[j])));
+            }
         }
         assert_eq!(residual_c32(0, bits), None);
         assert_eq!(residual_c32(1 << (bits - 2), bits), None);
@@ -621,33 +667,43 @@ fn the_direct_lookup_equals_the_rotate_interpolation_for_every_residue() {
     assert_eq!(residual_q15(1, 9), None);
 }
 
+/// M49.1 §1: for every `k` at `bits` 3 to 8 the output equals one `rotate` step at the constant
+/// phase `k << (32 − bits)` bit for bit (a zero-increment `Nco`), both types, the special
+/// `C32` values included (a NaN by class).
 #[test]
-fn a_residue_is_one_rotate_step_followed_by_the_quadrant_map() {
+fn every_index_at_bits_3_to_8_is_one_rotate_step_at_the_full_phase() {
     let mut rng = Rng::new(SEED + 6);
-    for bits in [3u32, 8] {
+    let mut xs: Vec<C32> = (0..24).map(|_| rng.c32()).collect();
+    for re in specials() {
+        for im in specials() {
+            xs.push(C32::new(re, im));
+        }
+    }
+    let mut xqs: Vec<CQ15> = (0..40).map(|_| rng.cq15()).collect();
+    xqs.extend([
+        cq(-32768, -32768),
+        cq(-32768, 32767),
+        cq(32767, -32768),
+        cq(32767, 32767),
+    ]);
+    for bits in 3..=8u32 {
         let n = 1usize << bits;
-        for _ in 0..40 {
-            let x: Vec<C32> = (0..n).map(|_| rng.c32()).collect();
-            let xq: Vec<CQ15> = (0..n).map(|_| rng.cq15()).collect();
-            let p: Vec<u8> = (0..n).map(|k| k as u8).collect();
-            let y = run_c32(&Fallback, &x, &p, bits, false);
-            let yq = run_cq15(&Fallback, &xq, &p, bits, false);
+        let p: Vec<u8> = (0..n).map(|k| k as u8).collect();
+        for &x in &xs {
+            let y = run_c32(&Fallback, &vec![x; n], &p, bits, false);
             for k in 0..n as u32 {
-                let (q, r) = split_index(k, bits);
-                let (want, wantq) = if r == 0 {
-                    (
-                        c32_quadrant(x[k as usize], q),
-                        cq15_quadrant(xq[k as usize], q),
-                    )
-                } else {
-                    let phase = r << (32 - bits);
-                    (
-                        c32_quadrant(rotate_c32(x[k as usize], phase), q),
-                        cq15_quadrant(rotate_cq15(xq[k as usize], phase), q),
-                    )
-                };
-                assert_eq!(bits_of(y[k as usize]), bits_of(want), "bits {bits}, k {k}");
-                assert_eq!(yq[k as usize], wantq, "bits {bits}, k {k}");
+                let want = rotate_c32(x, k << (32 - bits));
+                assert_eq_nan_by_class(y[k as usize], want, bits, k as usize);
+                if !(want.re.is_nan() || want.im.is_nan()) {
+                    assert_eq!(bits_of(y[k as usize]), bits_of(want), "bits {bits}, k {k}");
+                }
+            }
+        }
+        for &x in &xqs {
+            let y = run_cq15(&Fallback, &vec![x; n], &p, bits, false);
+            for k in 0..n as u32 {
+                let want = rotate_cq15(x, k << (32 - bits));
+                assert_eq!(y[k as usize], want, "bits {bits}, k {k}, x {x:?}");
             }
         }
     }
@@ -680,31 +736,64 @@ fn the_inverse_index_is_minus_k_mod_2_pow_bits() {
     }
 }
 
+/// The measured `CQ15` round-trip bound at `bits` 3 to 8 for `|x| ≤ 1` (M49.1 §2): the largest
+/// difference per component between the input and `scramble` then `scramble` with `inverse`,
+/// over every index `k` and the input patterns of the M49 unit tests (every `Q15` value in each
+/// component with the other component 0, −1, 777, −32768 or 32767, the `Q15` corners and random
+/// samples in the unit disk), restricted to `|x| ≤ 1`.
+const CQ15_ROUND_TRIP_LSB: i32 = 2;
+
 #[test]
-fn the_round_trip_at_bits_3_to_8_stays_within_2_lsb_and_120_db() {
+fn the_round_trip_at_bits_3_to_8_stays_within_the_measured_bound_and_120_db() {
     const N: usize = 200_000;
     let mut rng = Rng::new(SEED + 8);
+    let in_disk = |x: &CQ15| i64::from(x.re.0).pow(2) + i64::from(x.im.0).pow(2) <= 1 << 30;
+    let mut xq: Vec<CQ15> = Vec::new();
+    for w in [0i16, -1, 777, i16::MIN, i16::MAX] {
+        for v in i16::MIN..=i16::MAX {
+            xq.push(cq(v, w));
+            xq.push(cq(w, v));
+        }
+    }
+    xq.extend([
+        cq(-32768, -32768),
+        cq(-32768, 32767),
+        cq(32767, -32768),
+        cq(32767, 32767),
+        cq(-32768, 0),
+        cq(0, -32768),
+    ]);
+    xq.extend((0..20_000).map(|_| rng.cq15_disk()));
+    xq.retain(in_disk);
     let mut worst = 0i32;
     for bits in 3..=8u32 {
-        let xq: Vec<CQ15> = (0..N).map(|_| rng.cq15_disk()).collect();
-        let p: Vec<u8> = (0..N).map(|_| rng.byte()).collect();
-        let y = run_cq15(&Fallback, &xq, &p, bits, false);
-        let back = run_cq15(&Fallback, &y, &p, bits, true);
         let mut max = 0i32;
-        for (a, b) in xq.iter().zip(&back) {
-            let e = (i32::from(a.re.0) - i32::from(b.re.0))
-                .abs()
-                .max((i32::from(a.im.0) - i32::from(b.im.0)).abs());
-            max = max.max(e);
+        let mut backs = Vec::with_capacity(xq.len());
+        for k in 0..(1u32 << bits) {
+            let p = vec![k as u8; xq.len()];
+            let y = run_cq15(&Fallback, &xq, &p, bits, false);
+            let back = run_cq15(&Fallback, &y, &p, bits, true);
+            for (a, b) in xq.iter().zip(&back) {
+                let e = (i32::from(a.re.0) - i32::from(b.re.0))
+                    .abs()
+                    .max((i32::from(a.im.0) - i32::from(b.im.0)).abs());
+                max = max.max(e);
+            }
+            if k == 1 {
+                backs = back;
+            }
         }
         eprintln!(
-            "scramble CQ15 round trip, bits {bits}: max error {max} LSB, SNR {:.1} dB",
-            snr_db_q15(&xq, &back)
+            "scramble CQ15 round trip, bits {bits}: max error {max} LSB over every k \
+             ({} inputs with |x| <= 1), SNR at k = 1 {:.1} dB",
+            xq.len(),
+            snr_db_q15(&xq, &backs)
         );
-        assert!(max <= 2, "bits {bits}: {max} LSB");
+        assert!(max <= CQ15_ROUND_TRIP_LSB, "bits {bits}: {max} LSB");
         worst = worst.max(max);
 
         let x: Vec<C32> = (0..N).map(|_| rng.c32()).collect();
+        let p: Vec<u8> = (0..N).map(|_| rng.byte()).collect();
         let y = run_c32(&Fallback, &x, &p, bits, false);
         let back = run_c32(&Fallback, &y, &p, bits, true);
         let snr = snr_db(&x, &back);
@@ -729,8 +818,8 @@ fn assert_eq_nan_by_class(a: C32, b: C32, bits: u32, i: usize) {
     }
 }
 
-/// `Fallback` against `Reference`: bit for bit where `r = 0` (a `C32` NaN by class), within the
-/// contract SNR elsewhere (finite values).
+/// `Fallback` against `Reference`: bit for bit at `bits ≤ 2` (a `C32` NaN by class), within the
+/// contract SNR at `bits ≥ 3` (finite values), where a NaN of the product stays a NaN.
 fn fallback_vs_reference(x: &[C32], xq: &[CQ15], p: &[u8]) {
     for bits in 1..=8u32 {
         for inverse in [false, true] {
@@ -741,24 +830,27 @@ fn fallback_vs_reference(x: &[C32], xq: &[CQ15], p: &[u8]) {
             let (mut wf, mut wr, mut wfq, mut wrq) = (vec![], vec![], vec![], vec![]);
             for i in 0..x.len() {
                 let k = phase_index(p[i], bits, inverse);
-                let (_, res) = split_index(k, bits);
-                if res == 0 {
+                // Exact (no product) only for bits <= 2 since M49.1.
+                let exact = bits <= 2;
+                if exact {
                     assert_eq_nan_by_class(f[i], r[i], bits, i);
                     assert_eq!(fq[i], rq[i], "bits {bits}, sample {i}");
                 } else {
                     if x[i].re.is_finite() && x[i].im.is_finite() {
                         wf.push(f[i]);
                         wr.push(r[i]);
+                    } else if x[i].re.is_nan() || x[i].im.is_nan() {
+                        assert!(f[i].re.is_nan() && f[i].im.is_nan(), "bits {bits}, {i}");
                     }
                     wfq.push(fq[i]);
                     wrq.push(rq[i]);
                 }
-                // The per-sample helpers equal the kernel: by `to_bits()` where `r = 0` (pure sign
-                // and swap operations), with a NaN of the residual product compared by class
-                // where `r != 0` (D296: the compiler may order the loop's operations differently
+                // The per-sample helpers equal the kernel: by `to_bits()` at `bits <= 2` (pure sign
+                // and swap operations), with a NaN of the product compared by class at
+                // `bits >= 3` (D296: the compiler may order the loop's operations differently
                 // from the helper's, which changes the sign and payload of a NaN).
                 let one = scramble_one_c32(x[i], k, bits).unwrap();
-                if res == 0 {
+                if exact {
                     assert_eq!(bits_of(one), bits_of(f[i]), "bits {bits}, sample {i}");
                 } else {
                     assert_eq_nan_by_class(one, f[i], bits, i);
@@ -909,13 +1001,13 @@ fn full_scale_cq15_saturates_like_rotate_and_negates_saturating() {
     ];
     for bits in 1..=8u32 {
         for k in 0..(1u32 << bits) {
-            let (q, r) = split_index(k, bits);
+            let (q, _) = split_index(k, bits);
             for &x in &corners {
                 let y = run_cq15(&Fallback, &[x], &[k as u8], bits, false)[0];
-                let want = if r == 0 {
+                let want = if bits <= 2 {
                     cq15_quadrant(x, q)
                 } else {
-                    cq15_quadrant(rotate_cq15(x, r << (32 - bits)), q)
+                    rotate_cq15(x, k << (32 - bits))
                 };
                 assert_eq!(y, want, "bits {bits}, k {k}, x {x:?}");
             }
@@ -930,13 +1022,19 @@ fn full_scale_cq15_saturates_like_rotate_and_negates_saturating() {
         run_cq15(&Fallback, &[cq(-32768, -32768)], &[1], 2, false),
         [cq(32767, -32768)]
     );
-    // A residual product of a full-scale sample saturates: (1, 1) · e^{jπ/8} at bits 4.
+    // A product of a full-scale sample saturates: (1, 1) · e^{jπ/8} at bits 4.
     let y = run_cq15(&Fallback, &[cq(32767, 32767)], &[1], 4, false)[0];
     assert_eq!(y.im, Q15(32767));
+    // At bits >= 3 the half turn is the product with (−32768, 0): −(−1) saturates to 32767,
+    // as the saturating negation of bits 1 and 2.
+    assert_eq!(
+        run_cq15(&Fallback, &[cq(-32768, 5)], &[4], 3, false),
+        [cq(32767, -5)]
+    );
 }
 
 #[test]
-fn infinities_stay_infinite_where_the_residue_is_0() {
+fn infinities_stay_infinite_at_bits_1_and_2_and_follow_ieee_above() {
     let inf = f32::INFINITY;
     let x = [
         C32::new(inf, 1.0),
@@ -947,22 +1045,28 @@ fn infinities_stay_infinite_where_the_residue_is_0() {
     ];
     for bits in 1..=8u32 {
         for k in 0..(1u32 << bits) {
-            let (q, r) = split_index(k, bits);
+            let (q, _) = split_index(k, bits);
             let p = vec![k as u8; x.len()];
             let y = run_c32(&Fallback, &x, &p, bits, false);
             for (a, b) in x.iter().zip(&y) {
-                if r == 0 {
+                if bits <= 2 {
                     let (wr, wi) = quadrant_table(a.re, a.im, q, f32_neg);
                     assert_eq!(bits_of(*b), (wr.to_bits(), wi.to_bits()));
                     let infinite =
                         |v: C32| u32::from(v.re.is_infinite()) + u32::from(v.im.is_infinite());
                     assert_eq!(infinite(*a), infinite(*b));
-                } else if a.re.is_infinite() && a.im.is_finite() {
-                    // One infinite component gives infinite components (c, s > 0).
+                } else if (a.re.is_infinite() && a.im.is_finite())
+                    || (a.im.is_infinite() && a.re.is_finite())
+                {
+                    // One infinite component: no table entry is 0, so both components are
+                    // infinite.
                     assert!(
                         b.re.is_infinite() && b.im.is_infinite(),
                         "bits {bits}, k {k}"
                     );
+                } else if a.re.is_infinite() && a.im.is_infinite() {
+                    // Two infinite components may give NaN through ∞ − ∞ (M49.1 §1).
+                    assert!(!b.re.is_finite() && !b.im.is_finite(), "bits {bits}, k {k}");
                 } else if a.re.is_nan() {
                     assert!(b.re.is_nan() && b.im.is_nan());
                 }

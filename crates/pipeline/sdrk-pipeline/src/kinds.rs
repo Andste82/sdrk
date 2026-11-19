@@ -2787,12 +2787,13 @@ impl Kind for ScrambleKind {
         if !is_complex(input) {
             return Err(mismatch("scramble needs complex samples"));
         }
-        // Relative to `rotate` (6), from the simulated cycles per sample of M49 §5 on the levels
-        // with a core model: the kernel costs about 7 at `bits` 1 and 2 (the quadrant map) and
-        // 17 at `bits` 3 to 8 (the residual product as well), and the PRBS key about 7 per key
-        // bit (`scramble_block` at `bits` 8: 62 to 101).
-        let kernel = if cfg.bits <= 2 { 7.0 } else { 17.0 };
-        let cost = kernel + 7.0 * f64::from(cfg.bits);
+        // Relative to `rotate` (6), from the simulated cycles per sample of M49.1 §5 and §6 on
+        // the reference models of the levels with a core model: the kernel costs about 7 at
+        // `bits` 1 and 2 (the quadrant map) and 10 at `bits` 3 to 8 (one table phasor and one
+        // product), the word-parallel PRBS indices about 1.25 per key bit (`scramble_block` at
+        // `bits` 8: 17 to 31, 20 on average).
+        let kernel = if cfg.bits <= 2 { 7.0 } else { 10.0 };
+        let cost = kernel + 1.25 * f64::from(cfg.bits);
         with_complex!(
             p,
             T,
@@ -2814,14 +2815,26 @@ impl Kind for ScrambleKind {
         p: Precision,
         st: &mut VecStorage,
     ) -> BlockResult<Box<dyn Node>> {
-        with_complex!(
-            p,
-            T,
-            Ok(Box::new(StreamNode::new(ScrambleBlock::<T, _>::new(
-                cfg, rate, st
-            )?)))
-        )
+        with_complex!(p, T, scramble_node::<T>(cfg, rate, st))
     }
+}
+
+/// The node of `scramble` for the sample type `T` (one function per type keeps the frame of
+/// `build` below the stack limit since the block holds the word-parallel index state of M49.1).
+#[inline(never)]
+fn scramble_node<T>(
+    cfg: &ScrambleConfig,
+    rate: Rate,
+    st: &mut VecStorage,
+) -> BlockResult<Box<dyn Node>>
+where
+    ScrambleBlock<T, VecStorage>: Block + 'static,
+    T: BlockSample,
+    StreamNode<ScrambleBlock<T, VecStorage>>: Node,
+{
+    Ok(Box::new(StreamNode::new(ScrambleBlock::<T, _>::new(
+        cfg, rate, st,
+    )?)))
 }
 
 // ------------------------------------------------------------------------ add

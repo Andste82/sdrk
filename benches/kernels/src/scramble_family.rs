@@ -1,9 +1,12 @@
-//! The entries of the `scramble` kernel and the `scramble` block (milestone M49 §5): `n` samples
-//! per call, each multiplied by `exp(j 2π p / 2^bits)` for its phase byte `p` (the quadrant map
-//! for `bits = 2`, the residual `rotate` product and the quadrant map for `bits = 8`).
+//! The entries of the `scramble` kernel and the `scramble` block (milestones M49 §5 and M49.1
+//! §5): `n` samples per call, each multiplied by `exp(j 2π p / 2^bits)` for its phase byte `p`
+//! (the exact sign map for `bits = 1`, the quadrant map for `bits = 2`, one table phasor and one
+//! `rotate` product for `bits = 8`).
 //!
 //! | entry | measured | comparison | information |
 //! | --- | --- | --- | --- |
+//! | `scramble_c32_b1` | facade (the SIMD path of the level) | a `±1.0` `f32` sequence formed from the index bits into a buffer + VOLK `volk_32fc_32f_multiply_32fc` through VOLK's dispatcher (no FMA in it at any level; its `generic` protokernel at `simd128`, D12): the form of srsRAN's `srsran_scrambling_c` | |
+//! | `scramble_c32_b1_fallback` | our fallback | the same sequence + VOLK's `generic` protokernel (`volk-generic.c`) | |
 //! | `scramble_c32_b2`, `scramble_c32_b8` | facade (the SIMD path of the level) | the phasor looked up into a buffer + VOLK `volk_32fc_x2_multiply_32fc` without FMA (`volk-nofma.c`) at `avx2`, `avx512`, `neon`; VOLK's dispatcher elsewhere (no FMA there) | VOLK's dispatcher at the FMA levels |
 //! | `scramble_c32_b2_fallback`, `scramble_c32_b8_fallback` | our fallback | the same lookup + VOLK's `generic` protokernel (`volk-generic.c`) | |
 //! | `scramble_cq15_b2`, `scramble_cq15_b8` | facade | the same lookup + CMSIS-DSP `arm_cmplx_mult_cmplx_q15` (3.13 output) | our fallback |
@@ -16,7 +19,11 @@
 //! same cosine table `COS_F32` / `COS_Q15` as the kernel) into a buffer of [`RUN`] samples and
 //! multiplies the input by it with the library's complex product. At `bits = 2` our kernel does
 //! less work by design (the quadrant map has no multiplication); the gap shows the gain of the
-//! quadrant form. CMSIS-DSP's product writes Q3.13 (each partial product shifted by 17), a
+//! quadrant form. At `bits = 8` the kernel does the same work in one pass (M49.1: one table
+//! phasor and one product), so the `C32` rows are fair. At `bits = 1` (M49.1 §5) the
+//! composition is that of srsRAN's `srsran_scrambling_c` (which calls `srsran_vec_prod_cfc`
+//! with a real `±1` sequence): the sign `1 − 2 (p & 1)` of each sample looked up from a table
+//! of two `f32` into a buffer of [`RUN`] values, then VOLK's complex-by-real product. CMSIS-DSP's product writes Q3.13 (each partial product shifted by 17), a
 //! different output scaling: its accuracy is taken on the output times 4, and the row is marked
 //! "(3.13 output)".
 //!
@@ -64,6 +71,9 @@ fn phasors_q15(bits: u32) -> Vec<[i16; 2]> {
         })
         .collect()
 }
+
+/// The `±1.0` sequence of `bits = 1`: index 0 keeps the sample, index 1 negates it.
+const SIGNS: [f32; 2] = [1.0, -1.0];
 
 /// The exact rotation of `(re, im)` by `exp(j 2π p / 2^bits)` in `f64`.
 fn ideal(re: f64, im: f64, p: u8, bits: u32) -> [f64; 2] {
@@ -166,6 +176,42 @@ fn volk_scramble(
     }
 }
 
+/// The `bits = 1` composition (the form of srsRAN's `srsran_scrambling_c`): per run of [`RUN`]
+/// samples the `±1.0` sequence of the index bits formed into `buf`, then VOLK's
+/// `volk_32fc_32f_multiply_32fc` (`generic`: its portable protokernel).
+#[inline(never)]
+fn volk_sign_scramble(
+    generic: bool,
+    input: &[C32],
+    phase: &[u8],
+    buf: &mut [f32],
+    out: &mut [C32],
+) {
+    for ((x, p), y) in input
+        .chunks(RUN)
+        .zip(phase.chunks(RUN))
+        .zip(out.chunks_mut(RUN))
+    {
+        let b = &mut buf[..x.len()];
+        for (v, &k) in b.iter_mut().zip(p) {
+            *v = SIGNS[usize::from(k & 1)];
+        }
+        if generic {
+            volk_generic::multiply_32fc_32f(pairs(x), b, pairs_mut(y));
+        } else {
+            // SAFETY: the three buffers hold `x.len()` elements and the output aliases no input.
+            unsafe {
+                volk_sys::native::volk_32fc_32f_multiply_32fc(
+                    y.as_mut_ptr().cast::<lv_32fc_t>(),
+                    x.as_ptr().cast::<lv_32fc_t>(),
+                    b.as_ptr(),
+                    x.len() as u32,
+                );
+            }
+        }
+    }
+}
+
 /// The `CQ15` composition: per run of [`RUN`] samples the phasors looked up into `buf`, then
 /// `arm_cmplx_mult_cmplx_q15` (Q3.13 output).
 #[inline(never)]
@@ -193,7 +239,7 @@ fn cmsis_scramble(
 // ---------------------------------------------------------------------------------------------
 // C32
 
-/// `scramble` of `n` `C32` samples at `bits` (2 or 8); see the module documentation.
+/// `scramble` of `n` `C32` samples at `bits` (1, 2 or 8); see the module documentation.
 pub(crate) struct ScrambleC32K {
     bits: u32,
     entry: BiquadEntry,
@@ -202,6 +248,9 @@ pub(crate) struct ScrambleC32K {
     out: Aligned<C32>,
     table: Vec<[f32; 2]>,
     buf: Vec<[f32; 2]>,
+    /// The `±1.0` buffer of the `bits = 1` composition, on a 64-byte boundary so that VOLK's
+    /// dispatcher can take its aligned protokernel (`a_sse`, `a_avx`).
+    signs: Aligned<f32>,
     /// `R_n = p & 3` as the `int` sequence of GNU Radio (`scramble_c32_b2_dvbs2`).
     rn: Vec<core::ffi::c_int>,
 }
@@ -220,6 +269,7 @@ impl ScrambleC32K {
             out: Aligned::skewed(layout.n, skew),
             table: phasors_c32(bits),
             buf: vec![[0.0; 2]; RUN],
+            signs: Aligned::new(RUN),
             rn,
         }
     }
@@ -240,6 +290,13 @@ impl Kernel for ScrambleC32K {
                 Impl::Fallback => {
                     scramble_call(&Fallback, &self.input, &self.phase, self.bits, &mut self.out);
                 }
+                Impl::Volk | Impl::VolkGeneric if self.bits == 1 => volk_sign_scramble(
+                    which == Impl::VolkGeneric,
+                    &self.input,
+                    black_box(&self.phase),
+                    &mut self.signs,
+                    &mut self.out,
+                ),
                 Impl::Volk | Impl::VolkNoFma | Impl::VolkGeneric => {
                     let kind = match which {
                         Impl::Volk => VolkKind::Dispatch,
@@ -281,7 +338,7 @@ impl Kernel for ScrambleC32K {
         match (self.entry, which) {
             (BiquadEntry::Simd, Impl::Ours) | (_, Impl::Fallback) => true,
             (BiquadEntry::Simd, Impl::Volk) => volk_sys::FULL,
-            (BiquadEntry::Simd, Impl::VolkNoFma) => volk_nofma::AVAILABLE,
+            (BiquadEntry::Simd, Impl::VolkNoFma) => self.bits != 1 && volk_nofma::AVAILABLE,
             (BiquadEntry::Simd, Impl::GnuRadio) => self.bits == 2 && gr_dvbs2::AVAILABLE,
             (BiquadEntry::Fallback, Impl::VolkGeneric) => volk_generic::AVAILABLE,
             _ => false,
@@ -290,6 +347,12 @@ impl Kernel for ScrambleC32K {
 
     fn describe(&self, which: Impl) -> &'static str {
         match which {
+            Impl::Volk if self.bits == 1 => {
+                "+-1.0 sequence from the index bits into a buffer of 256 + volk_32fc_32f_multiply_32fc (VOLK 3.3.0 dispatcher; the form of srsRAN srsran_scrambling_c)"
+            }
+            Impl::VolkGeneric if self.bits == 1 => {
+                "+-1.0 sequence from the index bits into a buffer of 256 + VOLK 3.3.0 volk_32fc_32f_multiply_32fc_generic (benches/refs/volk-generic.c, -O3 -ffp-contract=off)"
+            }
             Impl::Volk => {
                 "phasor lookup into a buffer of 256 + volk_32fc_x2_multiply_32fc (VOLK 3.3.0 dispatcher)"
             }
@@ -316,7 +379,9 @@ impl Kernel for ScrambleC32K {
     }
 
     fn volk_functions(&self) -> &'static [&'static str] {
-        if self.entry == BiquadEntry::Simd && volk_sys::FULL {
+        if self.entry == BiquadEntry::Simd && volk_sys::FULL && self.bits == 1 {
+            &["volk_32fc_32f_multiply_32fc"]
+        } else if self.entry == BiquadEntry::Simd && volk_sys::FULL {
             &["volk_32fc_x2_multiply_32fc"]
         } else {
             &[]

@@ -53,7 +53,7 @@ A unit phasor or chip in `{+1, −1, +j, −j}` is applied by sign flips and re/
 - **Quadrant map** `c32_quadrant(x, q)`: the table of §A.1 with IEEE negation. A component that is only swapped keeps its bits.
 - **Chip:** `c32_chip(x, b)` gives `x` for `b = 0` and `(−x.re, −x.im)` for `b = 1`.
 - **Inside a sum:** `acc + (−x)` and `acc − x` give the same bits for every non-NaN result (IEEE 754 defines subtraction as addition of the negation). They differ for NaN: on x86 `a − NaN` returns the NaN unchanged, `a + (−NaN)` returns it with the sign flipped (measured with NumPy in the M51 revision check). A sum or product kernel therefore follows D296 (NaN sign and payload are not part of the contract, NaN lanes compared by class); only the pure sign and swap operations below are compared by `to_bits()` with NaN included.
-- **SIMD:** XOR with `0x8000_0000` (masked per lane for a conditional sign), and a 32-bit shuffle for the swap. Tests of the pure sign and swap operations compare `to_bits()`, NaN included. The operation is fully determined, so the D296 relaxation is not needed for them; it applies wherever a kernel adds or multiplies (sums of M52 and M54, products of `Code::Complex`, the residual product of M49 for `r ≠ 0`, `fwht` `C32`).
+- **SIMD:** XOR with `0x8000_0000` (masked per lane for a conditional sign), and a 32-bit shuffle for the swap. Tests of the pure sign and swap operations compare `to_bits()`, NaN included. The operation is fully determined, so the D296 relaxation is not needed for them; it applies wherever a kernel adds or multiplies (sums of M52 and M54, products of `Code::Complex`, the product of `scramble` at `b ≥ 3` (M49.1), `fwht` `C32`).
 - **Infinity behaviour, stated in every contract that uses §A:** a binary chip or quadrant phasor applied to `±∞` gives `±∞` (sign per the table), never NaN. The general complex-code path (§B.4) keeps the product behaviour (`∞ · 0 = NaN`). Its results for a code `(±1, 0)` can therefore differ from the binary path in non-finite inputs and signed zeros, and in `CQ15` in every value whose magnitude is above about 16384.
 
 ### A.3 Scalar API (introduced by M49, `pub`, documented "for backend crates and tests")
@@ -70,13 +70,10 @@ All of them are in `sdrk_core::num`. The vector helpers go into `sdrk-backend-si
 
 ### A.4 How M49 uses §A (for reference by the other specs)
 
-- Index `k` with `b` phase bits. `q = k >> (b − 2)` and `r = k & (2^(b−2) − 1)` for `b ≥ 2`; for `b = 1`, `q = 2k` and `r = 0`.
-- The output is `quadrant(y, q)`, where `y = x` for `r = 0` (exact identity: no product with the table value `32767` or with the `f32` table's tiny sine), and otherwise `y` is the `rotate` product of `x` with the table phasor at the phase `r << (32 − b)` (an angle in `(0, π/2)`).
-- `inverse` replaces `k` by `(−k) & (2^b − 1)` and applies the same rule.
-- Results:
-  - `b = 1` and `b = 2` are exact: the round trip is exact except for −32768 (§A.1). No multiplication is needed.
-  - `b ≥ 3` keeps the `rotate` accuracy for `r ≠ 0`.
-  - "Equal to one `rotate` step" no longer holds where `r = 0`. The specs state this.
+- Index `k` with `b` phase bits; `inverse` replaces `k` by `(−k) & (2^b − 1)` and applies the same rule.
+- **The quadrant split applies to `b ≤ 2` only** (revised by M49.1, maintainer decision 2026-11-18): `q = 2k` for `b = 1`, `q = k` for `b = 2`, and the output is `quadrant(x, q)`: exact, no multiplication; the round trip is exact except for −32768 (§A.1).
+- `b ≥ 3` (M49.1): one table phasor and one product per sample, no quadrant map: the `rotate` product of `x` with the table phasor at the full phase `k << (32 − b)` (`COS[k << (12 − b)]`, `COS[((k << (12 − b)) + 3072) & 4095]`); the output equals one `rotate` step at that phase bit for bit and keeps the `rotate` accuracy for every `k`, `k = 0` included (which multiplies by `(32767, 0)` in `CQ15`). The `CQ15` round trip is within 2 LSB per component for `|x| ≤ 1` (measured).
+- (M49 as first merged split every `b ≥ 2` into a quadrant and a residue and selected the input where the residue was 0; M49.1 dropped that for `b ≥ 3`.)
 
 **Canonical sentence:** "`±1` and `±j` are applied by the exact sign and swap operations of the shared conventions §A (`q15_neg_sat`, `cq15_quadrant`, `c32_quadrant`, introduced in M49), never by a product. In `CQ15` a stored negation saturates (`−(−32768) = 32767`); inside a wide accumulation it is plain integer negation."
 

@@ -21,8 +21,8 @@ use common::{check_block, check_exact_storage, rate, run_block, same_bits};
 use sdrk::{C32, Delay, Ratio, RatioKind, Sdrk};
 use sdrk_blocks::SymbolMapConstellation;
 use sdrk_blocks::{
-    ArenaStorage, Block, EqConstellation, EqMode, EqualizeBlock, EqualizeConfig, Error, ParamValue,
-    PskDemodBlock, PskDemodConfig, PskVariant,
+    ArenaStorage, Block, EqConstellation, EqMode, EqSwitch, EqualizeBlock, EqualizeConfig, Error,
+    ParamValue, PskDemodBlock, PskDemodConfig, PskVariant,
 };
 use sdrk_core::kernels::equalize::{EqParams, Equalize, EqualizeState};
 use sdrk_testkit::{Pcg32, VecStorage};
@@ -95,6 +95,7 @@ fn kernel_state(cfg: &EqualizeConfig) -> EqualizeState<Vec<C32>, Vec<C32>> {
             mu_dd: cfg.mu_dd as f32,
             cma_symbols: cfg.cma_symbols(),
             phase_bw: cfg.phase_bw,
+            ..EqParams::default()
         },
     )
     .unwrap()
@@ -115,6 +116,7 @@ fn configs() -> [EqualizeConfig; 4] {
             mu_dd: 0.01,
             cma_symbols: Some(500),
             phase_bw: 0.01,
+            blind_switch: EqSwitch::Count,
         },
         EqualizeConfig {
             constellation: EqConstellation::Psk8,

@@ -84,6 +84,40 @@ pub enum EqMode {
     Decision,
 }
 
+/// How the equalizer leaves the CMA mode for the decision mode (M44.3 §1).
+///
+/// ```
+/// use sdrk_core::kernels::equalize::{EqConstellation, EqSwitch};
+/// assert_eq!(EqSwitch::default(), EqSwitch::Count);
+/// let r = EqConstellation::Qam256.switch_rule();
+/// assert!(r.min_symbols < 8000 && r.threshold > 0.0);
+/// ```
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Hash, Default)]
+#[non_exhaustive]
+pub enum EqSwitch {
+    /// After `cma_symbols` symbols in CMA mode.
+    #[default]
+    Count,
+    /// When the smoothed decision error ([`EqualizeState::mse`]) relative to the squared half
+    /// level spacing of the constellation stays below the threshold of the constellation for its
+    /// hold time, not before its minimum count ([`EqConstellation::switch_rule`]); after
+    /// `cma_symbols` symbols at the latest.
+    Measured,
+}
+
+/// The rule of the measured switch of a constellation ([`EqConstellation::switch_rule`]).
+#[derive(Debug, Clone, Copy, PartialEq)]
+pub struct EqSwitchRule {
+    /// The CMA symbols before which the equalizer does not switch.
+    pub min_symbols: u32,
+    /// The symbols in a row (from the minimum count on) at which the decision error must stay
+    /// below the threshold.
+    pub hold_symbols: u32,
+    /// The threshold of the decision error power `mse` relative to the squared half level
+    /// spacing `h²` of the constellation (`mse / h²`).
+    pub threshold: f32,
+}
+
 /// The constellation the equalizer decides on; it also gives the CMA radius `R2`.
 ///
 /// ```
@@ -164,7 +198,58 @@ impl EqConstellation {
             Self::Qam1024 => QAM1024_R2,
         }
     }
+
+    /// The squared half distance `h²` between neighbouring points: 1 for BPSK, 1/2 for QPSK,
+    /// `sin²(pi / 8)` for 8PSK, `1 / E` for square QAM (`E` = 10, 42, 170 and 682 of
+    /// [`Qam::energy`]); each rounded once to `f32`.
+    ///
+    /// ```
+    /// use sdrk_core::kernels::equalize::EqConstellation;
+    /// assert_eq!(EqConstellation::Qpsk.half_spacing_sq(), 0.5);
+    /// assert_eq!(EqConstellation::Qam16.half_spacing_sq(), 0.1);
+    /// ```
+    pub const fn half_spacing_sq(self) -> f32 {
+        match self {
+            Self::Bpsk => 1.0,
+            Self::Qpsk => 0.5,
+            Self::Psk8 => PSK8_HALF_SQ as f32,
+            Self::Qam16 => (1.0 / Qam::Qam16.energy()) as f32,
+            Self::Qam64 => (1.0 / Qam::Qam64.energy()) as f32,
+            Self::Qam256 => (1.0 / Qam::Qam256.energy()) as f32,
+            Self::Qam1024 => (1.0 / Qam::Qam1024.energy()) as f32,
+        }
+    }
+
+    /// The rule of the measured switch ([`EqSwitch::Measured`]) of the constellation, derived in
+    /// the building block (M44.3 §1; measured, D2400 to D2404): the minimum count, the hold time and
+    /// the threshold of `mse / h²` ([`EqConstellation::half_spacing_sq`]).
+    ///
+    /// ```
+    /// use sdrk_core::kernels::equalize::EqConstellation;
+    /// // 256-QAM switches by the measure; the others never before `cma_symbols`.
+    /// assert!(EqConstellation::Qam256.switch_rule().min_symbols < 8000);
+    /// assert_eq!(EqConstellation::Qam1024.switch_rule().min_symbols, u32::MAX);
+    /// ```
+    pub const fn switch_rule(self) -> EqSwitchRule {
+        match self {
+            Self::Qam256 => EqSwitchRule {
+                min_symbols: 2000,
+                hold_symbols: 2048,
+                threshold: 0.8,
+            },
+            // The measure did not switch better than the count (D2402): it never switches
+            // before `cma_symbols`.
+            _ => EqSwitchRule {
+                min_symbols: u32::MAX,
+                hold_symbols: 1,
+                threshold: 0.0,
+            },
+        }
+    }
 }
+
+/// `sin²(pi / 8) = (1 - cos(pi / 4)) / 2`, the squared half distance of the 8PSK points.
+const PSK8_HALF_SQ: f64 = (1.0 - core::f64::consts::FRAC_1_SQRT_2) / 2.0;
 
 /// The parameters of [`EqualizeState::new`]; [`Default`] gives the defaults of the `equalize`
 /// block.
@@ -191,10 +276,14 @@ pub struct EqParams {
     /// Loop bandwidth of the phase tracker normalized to the symbol rate (0 = off, else 1e-4 to
     /// 0.2; damping 0.7071).
     pub phase_bw: f64,
+    /// The switch from CMA to the decision mode: after `cma_symbols` ([`EqSwitch::Count`]) or by
+    /// the measured decision error with `cma_symbols` as the latest ([`EqSwitch::Measured`]).
+    pub blind_switch: EqSwitch,
 }
 
 impl Default for EqParams {
-    /// QPSK, no feedback, `mu_cma` 0.05, `mu_dd` 0.02, 1000 CMA symbols, `phase_bw` 0.02.
+    /// QPSK, no feedback, `mu_cma` 0.05, `mu_dd` 0.02, 1000 CMA symbols, `phase_bw` 0.02, the
+    /// switch by the count.
     fn default() -> Self {
         Self {
             constellation: EqConstellation::Qpsk,
@@ -203,6 +292,7 @@ impl Default for EqParams {
             mu_dd: 0.02,
             cma_symbols: 1000,
             phase_bw: 0.02,
+            blind_switch: EqSwitch::Count,
         }
     }
 }
@@ -244,6 +334,8 @@ pub struct EqualizeState<W: AsRef<[C32]> + AsMut<[C32]>, H: AsRef<[C32]> + AsMut
     mode: EqMode,
     /// Symbols processed in CMA mode since construction or `reset`.
     count: u32,
+    /// The symbols in a row of the hold of the measured switch.
+    hold: u32,
     mse: f32,
     /// The tracker phase in units of `2^-32` turn.
     phase: u32,
@@ -261,13 +353,46 @@ pub(crate) struct EqualizeParts<'a> {
     pub(crate) mu_cma: f32,
     pub(crate) mu_dd: f32,
     pub(crate) cma_symbols: u32,
+    pub(crate) switch: SwitchAt,
     pub(crate) kp: f32,
     pub(crate) ki: f32,
     pub(crate) mode: &'a mut EqMode,
     pub(crate) count: &'a mut u32,
+    pub(crate) hold: &'a mut u32,
     pub(crate) mse: &'a mut f32,
     pub(crate) phase: &'a mut u32,
     pub(crate) freq: &'a mut f32,
+}
+
+/// The measured switch as the symbol loop compares it: the decision mode starts after a symbol at
+/// which the CMA count is at least `min`, `mse < below` held for `hold` symbols in a row (from
+/// the count `min` on). [`EqSwitch::Count`] has `below` 0, which no `mse` is below.
+#[derive(Debug, Clone, Copy, PartialEq)]
+pub(crate) struct SwitchAt {
+    pub(crate) min: u32,
+    pub(crate) hold: u32,
+    pub(crate) below: f32,
+}
+
+impl SwitchAt {
+    /// The rule of the parameters: `mse / h² < threshold` as `mse < threshold h²` (in `f32`).
+    fn of(p: &EqParams) -> Self {
+        match p.blind_switch {
+            EqSwitch::Count => Self {
+                min: 0,
+                hold: 1,
+                below: 0.0,
+            },
+            EqSwitch::Measured => {
+                let r = p.constellation.switch_rule();
+                Self {
+                    min: r.min_symbols,
+                    hold: r.hold_symbols.max(1),
+                    below: r.threshold * p.constellation.half_spacing_sq(),
+                }
+            }
+        }
+    }
 }
 
 fn check_mu(mu: f32, msg: &'static str) -> Result<()> {
@@ -345,6 +470,7 @@ impl<W: AsRef<[C32]> + AsMut<[C32]>, H: AsRef<[C32]> + AsMut<[C32]>> EqualizeSta
             ki,
             mode: start_mode(params.cma_symbols),
             count: 0,
+            hold: 0,
             mse: MSE_START,
             phase: 0,
             freq: 0.0,
@@ -387,6 +513,7 @@ impl<W: AsRef<[C32]> + AsMut<[C32]>, H: AsRef<[C32]> + AsMut<[C32]>> EqualizeSta
         self.hist.as_mut().fill(C32::new(0.0, 0.0));
         self.mode = start_mode(self.params.cma_symbols);
         self.count = 0;
+        self.hold = 0;
         self.mse = MSE_START;
         self.phase = 0;
         self.freq = 0.0;
@@ -501,6 +628,48 @@ impl<W: AsRef<[C32]> + AsMut<[C32]>, H: AsRef<[C32]> + AsMut<[C32]>> EqualizeSta
         self.params.cma_symbols
     }
 
+    /// The switch to the decision mode ([`EqSwitch`]).
+    pub fn blind_switch(&self) -> EqSwitch {
+        self.params.blind_switch
+    }
+
+    /// The symbols in a row of the hold of the measured switch (0 with [`EqSwitch::Count`]); it
+    /// keeps its value after the switch until `reset`, so a switch by the measure leaves it at
+    /// `hold_symbols` of the rule.
+    pub fn switch_hold(&self) -> u32 {
+        self.hold
+    }
+
+    /// The CMA symbols the equalizer processes at least before it can switch to the decision
+    /// mode: 0 in decision mode, `u32::MAX` when it never switches (`cma_symbols` `u32::MAX`);
+    /// with [`EqSwitch::Count`] the symbols left of `cma_symbols`; with [`EqSwitch::Measured`]
+    /// the fewer of those and the symbols left to the end of the hold, if the decision error
+    /// stays below the threshold from the next symbol on. A caller that runs the equalizer in
+    /// runs of at most this many symbols sees every switch at the end of a run.
+    ///
+    /// ```
+    /// use sdrk_core::{kernels::equalize::{EqConstellation, EqParams, EqSwitch, EqualizeState},
+    ///     C32};
+    /// let c = EqConstellation::Qam256;
+    /// let p = EqParams { constellation: c, cma_symbols: 8000, ..EqParams::default() };
+    /// let st = EqualizeState::new([C32::default(); 3], [C32::default(); 3], p)?;
+    /// assert_eq!(st.blind_left(), 8000);
+    /// let m = EqParams { blind_switch: EqSwitch::Measured, ..p };
+    /// let st = EqualizeState::new([C32::default(); 3], [C32::default(); 3], m)?;
+    /// let r = c.switch_rule();
+    /// assert_eq!(st.blind_left(), r.min_symbols + r.hold_symbols - 1);
+    /// # Ok::<(), sdrk_core::Error>(())
+    /// ```
+    pub fn blind_left(&self) -> u32 {
+        blind_left(
+            self.mode,
+            self.count,
+            self.hold,
+            self.params.cma_symbols,
+            SwitchAt::of(&self.params),
+        )
+    }
+
     /// The phase of the tracker in units of `2^-32` turn; the output is the filter output
     /// turned back by it.
     pub fn phase(&self) -> u32 {
@@ -566,10 +735,12 @@ impl<W: AsRef<[C32]> + AsMut<[C32]>, H: AsRef<[C32]> + AsMut<[C32]>> EqualizeSta
             mu_cma: self.params.mu_cma,
             mu_dd: self.params.mu_dd,
             cma_symbols: self.params.cma_symbols,
+            switch: SwitchAt::of(&self.params),
             kp: self.kp,
             ki: self.ki,
             mode: &mut self.mode,
             count: &mut self.count,
+            hold: &mut self.hold,
             mse: &mut self.mse,
             phase: &mut self.phase,
             freq: &mut self.freq,
@@ -629,13 +800,50 @@ pub(crate) fn update_weight(w: C32, g: C32, x: C32) -> C32 {
 }
 
 /// The mode switch after a symbol: in CMA mode the counter advances, and decision mode starts
-/// once it reaches `cma_symbols` (never for `u32::MAX`).
+/// once it reaches `cma_symbols` (never for `u32::MAX`), or, from the count `min` of the measured
+/// switch on, once `mse < below` held for `hold` symbols in a row (the hold restarts at a symbol
+/// with `mse` not below, NaN included). Returns whether the mode changed.
 #[inline]
-pub(crate) fn advance(mode: &mut EqMode, count: &mut u32, cma_symbols: u32) {
-    if *mode == EqMode::Cma && cma_symbols != u32::MAX {
-        *count = count.saturating_add(1);
-        if *count >= cma_symbols {
-            *mode = EqMode::Decision;
+pub(crate) fn advance(p: &mut EqualizeParts<'_>) -> bool {
+    if *p.mode == EqMode::Cma && p.cma_symbols != u32::MAX {
+        *p.count = p.count.saturating_add(1);
+        if *p.count >= p.cma_symbols {
+            *p.mode = EqMode::Decision;
+            return true;
+        }
+        if *p.count >= p.switch.min && *p.mse < p.switch.below {
+            *p.hold = p.hold.saturating_add(1);
+            if *p.hold >= p.switch.hold {
+                *p.mode = EqMode::Decision;
+                return true;
+            }
+        } else {
+            *p.hold = 0;
+        }
+    }
+    false
+}
+
+/// [`EqualizeState::blind_left`].
+pub(crate) fn blind_left(
+    mode: EqMode,
+    count: u32,
+    hold: u32,
+    cma_symbols: u32,
+    sw: SwitchAt,
+) -> u32 {
+    match mode {
+        EqMode::Decision => 0,
+        EqMode::Cma if cma_symbols == u32::MAX => u32::MAX,
+        EqMode::Cma => {
+            let by_count = cma_symbols.saturating_sub(count);
+            if sw.below > 0.0 {
+                // The hold counts from the count `min` on.
+                let to_min = sw.min.saturating_sub(count.saturating_add(1));
+                by_count.min(to_min.saturating_add(sw.hold.saturating_sub(hold)))
+            } else {
+                by_count
+            }
         }
     }
 }
@@ -1266,7 +1474,11 @@ fn linear_runs<K: Decide>(
             } else {
                 C32::new(0.0, 0.0)
             };
-            advance(p.mode, p.count, p.cma_symbols);
+            if advance(p) && at > first {
+                // A measured switch inside the run: the steps of the rest of the run in
+                // decision mode (out of line, once per start).
+                restep(p, l, first..at).ok_or_else(index)?;
+            }
         }
         // The window of the last symbol becomes the history before the next run.
         l.h.xr.copy_within(first..first + n, RUN);
@@ -1331,6 +1543,18 @@ fn prepare_run(p: &EqualizeParts<'_>, l: &mut Linear<'_>, xs: &[C32], first: usi
             p.mu_dd
         };
         *st = mu / (q + NLMS_EPS);
+    }
+    Some(())
+}
+
+/// The steps `mu_dd / (P + eps)` at the positions `at` of the run (the symbols after a switch
+/// to the decision mode inside the run; the window powers are those of [`prepare_run`]).
+#[inline(never)]
+#[cold]
+fn restep(p: &EqualizeParts<'_>, l: &mut Linear<'_>, at: core::ops::Range<usize>) -> Option<()> {
+    let pw = l.w.power.get(at.clone())?;
+    for (st, &q) in l.w.steps.get_mut(at)?.iter_mut().zip(pw) {
+        *st = p.mu_dd / (q + NLMS_EPS);
     }
     Some(())
 }
@@ -1410,7 +1634,7 @@ fn equalize_joint<D: DotComplex<C32>, K: Decide>(
                 *slot = feedback;
             }
         }
-        advance(p.mode, p.count, p.cma_symbols);
+        advance(p);
     }
     Ok(())
 }
@@ -1471,8 +1695,13 @@ pub trait Equalize {
     /// 8. The output is `z`; it is `0` and the weights, `mse` and the tracker stay when `x` or
     ///    `y` is not finite.
     /// 9. In CMA mode the symbol counter advances (for every symbol, also a non-finite one);
-    ///    decision mode starts after `cma_symbols` symbols (never for `u32::MAX`) and does not
-    ///    switch back; `reset` returns to the start.
+    ///    decision mode starts after `cma_symbols` symbols (never for `u32::MAX`). With
+    ///    [`EqSwitch::Measured`] it starts earlier, after a symbol at which the counter is at
+    ///    least `min_symbols` of [`EqConstellation::switch_rule`] and `mse < threshold h²`
+    ///    (`h²` of [`EqConstellation::half_spacing_sq`], the product in `f32`) held for
+    ///    `hold_symbols` symbols in a row counted from `min_symbols` on (a symbol with `mse` not
+    ///    below, NaN included, starts the hold again). The mode does not switch back; `reset`
+    ///    returns to the start.
     ///
     /// The lengths must be equal, otherwise `LengthMismatch` and nothing changes.
     fn equalize<W, H>(

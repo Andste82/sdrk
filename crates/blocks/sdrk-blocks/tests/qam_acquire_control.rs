@@ -394,6 +394,7 @@ fn eq_state(cfg: &EqualizeConfig) -> EqualizeState<Vec<C32>, Vec<C32>> {
             mu_dd: cfg.mu_dd as f32,
             cma_symbols: cfg.cma_symbols(),
             phase_bw: cfg.phase_bw,
+            ..EqParams::default()
         },
     )
     .unwrap()

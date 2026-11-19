@@ -6,7 +6,7 @@ use sdrk::{Delay, Progress, Rate, Ratio, RatioKind, Sdrk};
 use sdrk_core::C32;
 use sdrk_core::kernels::constellation::Qam;
 use sdrk_core::kernels::costas::{Costas, CostasGains, CostasState};
-use sdrk_core::kernels::equalize::{Equalize, EqualizeState};
+use sdrk_core::kernels::equalize::{EqSwitch, Equalize, EqualizeState};
 use sdrk_core::kernels::filter::{Fir, FirState};
 use sdrk_core::kernels::mix::{Nco, Rotate};
 use sdrk_core::kernels::symbol_sync::{SymbolSync, SymbolSyncState};
@@ -16,7 +16,10 @@ use super::costas::{
     DEFAULT_DAMPING, DEFAULT_LOOP_BW, DEFAULT_MAX_OFFSET, MAX_LOOP_BW, MAX_OFFSET_LIMIT,
     MIN_LOOP_BW, check_f64,
 };
-use super::equalize::{DEFAULT_MU_DD, EQ_FEEDBACK_MAX, EQ_TAPS, EqualizeConfig};
+use super::equalize::{
+    BLIND_SWITCH_PARAM, DEFAULT_BLIND_SWITCH, DEFAULT_MU_DD, EQ_FEEDBACK_MAX, EQ_TAPS,
+    EqualizeConfig, blind_switch_index, blind_switch_of,
+};
 use super::psk_mod::{
     PSK_CONSTELLATION_PARAM, PskVariant, VARIANT_PARAM, check_psk, check_variant,
     psk_constellation_of_value,
@@ -86,7 +89,7 @@ pub static DESCRIPTION: BlockDescription = BlockDescription {
         output rate is the symbol rate times the bits per symbol and follows the clock of the \
         signal (variable ratio). With equalizer_taps above 0 an equalize stage (taps \
         equalizer_taps, feedback_taps equalizer_feedback_taps, the constellation, \
-        mu_cma 0.05, mu_dd 0.02, 1000 CMA symbols, phase_bw carrier_bw) runs between \
+        mu_cma 0.05, mu_dd 0.02, 1000 CMA symbols, blind_switch, phase_bw carrier_bw) runs between \
         symbol_sync and costas and removes the inter-symbol interference of multipath and \
         filters; with differential it runs before the differential product in CMA only and \
         without its phase tracker, with offset after the carrier loop of offset; it adds \
@@ -213,6 +216,7 @@ pub static DESCRIPTION: BlockDescription = BlockDescription {
             description: "Feedback taps of the equalizer (a decision feedback equalizer, 0 to \
                 63); only with equalizer_taps above 0.",
         },
+        BLIND_SWITCH_PARAM,
     ],
     required: &["symbol_rate_hz"],
 };
@@ -257,6 +261,9 @@ pub struct PskDemodConfig {
     /// Feedback taps of the equalizer (0 to 63; 0 = linear); only with `equalizer_taps` above
     /// 0.
     pub equalizer_feedback_taps: usize,
+    /// The switch of the equalizer from CMA to the decision mode (`blind_switch` of `equalize`,
+    /// forwarded unchanged; M44.3 §1).
+    pub blind_switch: EqSwitch,
 }
 
 impl Default for PskDemodConfig {
@@ -276,6 +283,7 @@ impl Default for PskDemodConfig {
             variant: PskVariant::Plain,
             equalizer_taps: 0,
             equalizer_feedback_taps: 0,
+            blind_switch: DEFAULT_BLIND_SWITCH,
         }
     }
 }
@@ -342,6 +350,7 @@ impl PskDemodConfig {
             } else {
                 self.carrier_bw
             },
+            blind_switch: self.blind_switch,
         })
     }
 
@@ -440,6 +449,7 @@ impl PskDemodConfig {
                 self.equalizer_taps = t;
             }
             "equalizer_feedback_taps" => self.equalizer_feedback_taps = value.as_usize()?,
+            "blind_switch" => self.blind_switch = blind_switch_of(value.as_choice()?),
             _ => return unknown(),
         }
         Ok(())
@@ -462,6 +472,7 @@ impl PskDemodConfig {
             "variant" => Ok(ParamValue::Choice(self.variant.index())),
             "equalizer_taps" => Ok(ParamValue::I64(self.equalizer_taps as i64)),
             "equalizer_feedback_taps" => Ok(ParamValue::I64(self.equalizer_feedback_taps as i64)),
+            "blind_switch" => Ok(ParamValue::Choice(blind_switch_index(self.blind_switch))),
             _ => unknown(),
         }
     }

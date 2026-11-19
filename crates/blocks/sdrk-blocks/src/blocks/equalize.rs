@@ -3,7 +3,9 @@
 
 use sdrk::{Progress, Rate, Sdrk};
 use sdrk_core::C32;
-use sdrk_core::kernels::equalize::{EqConstellation, EqMode, EqParams, Equalize, EqualizeState};
+use sdrk_core::kernels::equalize::{
+    EqConstellation, EqMode, EqParams, EqSwitch, Equalize, EqualizeState,
+};
 use sdrk_core::timing::Timing;
 
 use super::{check_count, head, head_mut, unit_timing, unknown};
@@ -32,6 +34,10 @@ pub(crate) const DEFAULT_MU_DD: f64 = 0.02;
 pub(crate) const DEFAULT_CMA_SYMBOLS: u32 = 1000;
 /// Default bandwidth of the phase tracker (that of `costas`).
 pub(crate) const DEFAULT_PHASE_BW: f64 = 0.02;
+/// The names of the switches to the decision mode, in the order of the choice.
+pub(crate) const BLIND_SWITCHES: &[&str] = &["count", "measured"];
+/// The default switch to the decision mode (M44.3 §1, D2400).
+pub(crate) const DEFAULT_BLIND_SWITCH: EqSwitch = EqSwitch::Measured;
 /// The names of the constellations, in the order of the choice: those of `symbol_map` (M44.1.1).
 const CONSTELLATIONS: &[&str] = super::symbol_map::CONSTELLATION_OPTIONS;
 
@@ -49,7 +55,9 @@ pub static DESCRIPTION: BlockDescription = BlockDescription {
         blind with the constant-modulus algorithm (e = y (|y|^2 - R2) with R2 = 1 for PSK, \
         1.32 for qam16, 1.381 for qam64, 1.3953 for qam256 and 1.3988 for qam1024, each part \
         clipped to \
-        [-1, 1], step mu_cma) for the first cma_symbols symbols, then decision-directed \
+        [-1, 1], step mu_cma) for at most cma_symbols symbols (blind_switch measured: until \
+        the smoothed decision error says the output is good enough, for qam256), then \
+        decision-directed \
         (e = (z - d) e^(j theta), step mu_dd); w[i] = w[i] - mu e conj(x[i]). The decisions \
         are fed back (as d e^(j theta)) only in decision mode. Chain position: after \
         symbol_sync and before costas (as in GNU Radio's PSK receiver): CMA needs no carrier \
@@ -155,6 +163,7 @@ pub static DESCRIPTION: BlockDescription = BlockDescription {
                 mode from the start, 4294967295: never). The default depends on the \
                 constellation: 1000 for bpsk to qam64, 8000 for qam256, 16000 for qam1024.",
         },
+        BLIND_SWITCH_PARAM,
         ParamDesc {
             name: "phase_bw",
             unit: Unit::None,
@@ -171,6 +180,43 @@ pub static DESCRIPTION: BlockDescription = BlockDescription {
     ],
     required: &[],
 };
+
+/// The `blind_switch` parameter of `equalize`, `qam_demod`, `qam_frame_decode` and `psk_demod`
+/// (forwarded unchanged to `equalize`, M44.3 §1).
+pub(crate) const BLIND_SWITCH_PARAM: ParamDesc = ParamDesc {
+    name: "blind_switch",
+    unit: Unit::None,
+    kind: ParamKind::Choice {
+        options: BLIND_SWITCHES,
+        default: blind_switch_index(DEFAULT_BLIND_SWITCH),
+    },
+    typical: "measured; count for the fixed blind symbols",
+    mutability: Mutability::Build,
+    description: "The switch of the equalizer from CMA to the decision mode: count (after \
+        cma_symbols symbols) or measured (when the smoothed decision error mse, relative to the \
+        squared half distance of the constellation's points, stays below a threshold of the \
+        constellation for a hold time, not before a minimum count; after cma_symbols symbols at \
+        the latest). The rule of each constellation is fixed by measurement: qam256 from 2000 CMA \
+        symbols on, mse below 0.8 of the squared half distance for 2048 symbols in a row; the \
+        other constellations never switch before cma_symbols (measured gives the output of \
+        count).",
+};
+
+/// The switch of a choice index of `blind_switch` (0 `count`, 1 `measured`).
+pub(crate) const fn blind_switch_of(i: u16) -> EqSwitch {
+    match i {
+        0 => EqSwitch::Count,
+        _ => EqSwitch::Measured,
+    }
+}
+
+/// The choice index of a switch.
+pub(crate) const fn blind_switch_index(s: EqSwitch) -> u16 {
+    match s {
+        EqSwitch::Count => 0,
+        _ => 1,
+    }
+}
 
 /// The constellation of a choice index (0 `bpsk`, 1 `qpsk`, 2 `8psk`, 3 `qam16`, 4 `qam64`, 5
 /// `qam256`, 6 `qam1024`).
@@ -280,6 +326,8 @@ pub struct EqualizeConfig {
     pub cma_symbols: Option<u32>,
     /// Bandwidth of the phase tracker (0 = off, else 1e-4 to 0.2).
     pub phase_bw: f64,
+    /// The switch from CMA to the decision mode (M44.3 §1).
+    pub blind_switch: EqSwitch,
 }
 
 impl Default for EqualizeConfig {
@@ -294,6 +342,7 @@ impl Default for EqualizeConfig {
             mu_dd: DEFAULT_MU_DD,
             cma_symbols: None,
             phase_bw: DEFAULT_PHASE_BW,
+            blind_switch: DEFAULT_BLIND_SWITCH,
         }
     }
 }
@@ -337,6 +386,25 @@ impl EqualizeConfig {
         }
     }
 
+    /// The hold time of the measured switch ([`EqConstellation::switch_rule`]) with `blind_switch`
+    /// `measured`; 0 with `count` and when the rule cannot switch before `cma_symbols` (its
+    /// minimum count is not below them).
+    ///
+    /// ```
+    /// use sdrk_blocks::{EqConstellation, EqSwitch, EqualizeConfig};
+    /// let c = EqualizeConfig { constellation: EqConstellation::Qam256, ..EqualizeConfig::default() };
+    /// assert_eq!(c.switch_hold_symbols(), EqConstellation::Qam256.switch_rule().hold_symbols);
+    /// assert_eq!(EqualizeConfig { blind_switch: EqSwitch::Count, ..c }.switch_hold_symbols(), 0);
+    /// assert_eq!(EqualizeConfig::default().switch_hold_symbols(), 0); // qpsk keeps the count
+    /// ```
+    pub fn switch_hold_symbols(&self) -> u32 {
+        let r = self.constellation.switch_rule();
+        match self.blind_switch {
+            EqSwitch::Measured if r.min_symbols < self.cma_symbols() => r.hold_symbols.max(1),
+            _ => 0,
+        }
+    }
+
     /// Checks the ranges.
     ///
     /// # Errors
@@ -376,6 +444,7 @@ impl EqualizeConfig {
                 check_phase_bw(v)?;
                 self.phase_bw = v;
             }
+            "blind_switch" => self.blind_switch = blind_switch_of(value.as_choice()?),
             _ => return unknown(),
         }
         Ok(())
@@ -394,6 +463,7 @@ impl EqualizeConfig {
             "mu_dd" => Ok(ParamValue::F64(self.mu_dd)),
             "cma_symbols" => Ok(ParamValue::I64(i64::from(self.cma_symbols()))),
             "phase_bw" => Ok(ParamValue::F64(self.phase_bw)),
+            "blind_switch" => Ok(ParamValue::Choice(blind_switch_index(self.blind_switch))),
             _ => unknown(),
         }
     }
@@ -419,6 +489,7 @@ impl EqualizeConfig {
             mu_dd: self.mu_dd as f32,
             cma_symbols: self.cma_symbols(),
             phase_bw: self.phase_bw,
+            blind_switch: self.blind_switch,
         }
     }
 
@@ -550,6 +621,7 @@ impl<S: Storage> EqualizeBlock<S> {
             mu_dd: self.mu_dd,
             cma_symbols: (!self.cma_default).then_some(p.cma_symbols),
             phase_bw: p.phase_bw,
+            blind_switch: p.blind_switch,
         }
     }
 

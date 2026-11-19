@@ -164,11 +164,18 @@ impl Equalize for Reference {
                 }
                 *g.hist.get_mut(n).ok_or_else(internal)? = fed;
             }
-            // Step 9: the mode switch.
+            // Step 9: the mode switch, by the count or by the measured decision error.
             if *g.mode == EqMode::Cma && g.cma_symbols != u32::MAX {
                 *g.count = g.count.saturating_add(1);
                 if *g.count >= g.cma_symbols {
                     *g.mode = EqMode::Decision;
+                } else if *g.count >= g.switch.min && *g.mse < g.switch.below {
+                    *g.hold = g.hold.saturating_add(1);
+                    if *g.hold >= g.switch.hold {
+                        *g.mode = EqMode::Decision;
+                    }
+                } else {
+                    *g.hold = 0;
                 }
             }
         }

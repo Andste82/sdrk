@@ -11,6 +11,7 @@ use super::bit_descramble::BitDescrambleBlock;
 use super::bit_scramble::{
     BitPolynomial, BitScrambleConfig, POLYNOMIAL_PARAM, SCRAMBLER_PARAM, Scrambler,
 };
+use super::equalize::BLIND_SWITCH_PARAM;
 use super::frame_decode::{
     DECODE_WHITENING_PARAM, EMIT_BAD_PARAM, FrameDecodeBlock, FrameDecodeConfig, FrameRotations,
     MAX_SYNC_ERRORS_PARAM,
@@ -100,6 +101,7 @@ pub const QAM_FRAME_DECODE_PARAMS: ParamMap = ParamMap::new(&[
     ("rolloff", "0.rolloff"),
     ("span", "0.span"),
     ("equalizer_taps", "0.equalizer_taps"),
+    ("blind_switch", "0.blind_switch"),
     ("sync_bw", "0.sync_bw"),
     ("carrier_bw", "0.carrier_bw"),
     ("max_sync_errors", "1.max_sync_errors"),
@@ -152,6 +154,7 @@ pub static DESCRIPTION: BlockDescription = BlockDescription {
         MATCH_ROLLOFF_PARAM,
         MATCH_SPAN_PARAM,
         EQUALIZER_TAPS_PARAM,
+        BLIND_SWITCH_PARAM,
         SYNC_BW_PARAM,
         CARRIER_BW_PARAM,
         MAX_SYNC_ERRORS_PARAM,

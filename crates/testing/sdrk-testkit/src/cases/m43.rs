@@ -200,6 +200,7 @@ impl Config {
                 mu_dd: self.mu_dd,
                 cma_symbols: self.cma_symbols,
                 phase_bw: self.phase_bw,
+                ..EqParams::default()
             },
         )?)
     }
@@ -642,6 +643,7 @@ fn equalize_invalid(case: &'static str) -> Result<(), Failure> {
                 mu_dd,
                 cma_symbols: 100,
                 phase_bw,
+                ..EqParams::default()
             },
         );
         ensure(r.is_err(), || {

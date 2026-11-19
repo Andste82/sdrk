@@ -517,6 +517,37 @@ pub const QAM_WATCH_CHECKS: u8 = 2;
 /// had no clear peak before a clear one, at most 2 in a receiver that keeps one alignment (D1568).
 pub const QAM_WATCH_GAP_WINDOWS: u8 = 6;
 
+/// The restart of a false state of `qam_demod` (M44.3 §2): the checks in a row without lock at
+/// which the equalizer had not converged ([`qam_watch_converged_bound`]) after which a clear
+/// verify window within the tolerance starts the equalizer again (`LockTransition::Stall`). Two:
+/// the first check after an estimate falls while the decision mode of 256-QAM still settles, and
+/// every receiver measured was without lock there, also those that lock later (D2410).
+pub const QAM_WATCH_STALL_CHECKS: u8 = 2;
+
+/// The bound of the decision error of the equalizer of `qam_demod` relative to the squared half
+/// level spacing of the constellation (`mse / h²`, [`EqConstellation::half_spacing_sq`], the
+/// measure of the switch of M44.3 §1) at or above which a check counts the equalizer as not
+/// converged (M44.3 §2); `f32::INFINITY`: the composite does not judge it, and the restart of a
+/// false state is off for the constellation.
+///
+/// Off for every constellation (D2411, open item I44.3-1): the decision error of an equalizer in
+/// a false state (256-QAM through `Multipath::mild`, `mse / h²` 0.63 to 0.79 at the checks, about
+/// that of a uniform error, 2/3) is also that of a weak signal that the loops hold without lock
+/// (256-QAM at Eb/N0 14 and 15 dB, 0.50 to 0.77), so no bound restarts the one and not the other;
+/// 16-QAM and 64-QAM work at the levels of D1702 whose weak signals the restart must not touch,
+/// and a restart did not bring a 1024-QAM receiver through `mild` to lock.
+///
+/// ```
+/// use sdrk_blocks::qam_watch_converged_bound;
+/// use sdrk_core::kernels::costas::CostasConstellation;
+/// assert!(qam_watch_converged_bound(CostasConstellation::Qam256).is_infinite());
+/// ```
+pub const fn qam_watch_converged_bound(c: CostasConstellation) -> f32 {
+    // The same for every constellation until the decision on I44.3-1.
+    let _ = c;
+    f32::INFINITY
+}
+
 /// The thresholds and time limits of the controller of `qam_demod` ([`QamDemodBlock::watch`]).
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
 pub struct QamDemodLock;
@@ -526,6 +557,7 @@ impl LockPolicy for QamDemodLock {
     const TOLERANCE: f64 = QAM_ACQUISITION_VERIFY_TOLERANCE;
     const WEIGHT_CHECKS: u8 = QAM_WATCH_CHECKS;
     const GAP_WINDOWS: u8 = QAM_WATCH_GAP_WINDOWS;
+    const STALL_CHECKS: u8 = QAM_WATCH_STALL_CHECKS;
 }
 
 // The check fits the counter of `LockWatch`, and the switch of the equalizer to the decision
@@ -727,8 +759,11 @@ impl HandOver {
 /// in a row in `Track` starts the receiver again as a verify window away from the loops does) and
 /// the signal back after a gap (a clear verify window within the tolerance after at least
 /// [`QAM_WATCH_GAP_WINDOWS`] windows without a clear peak starts the equalizer again and hands it
-/// the new estimate). With the recovery off ([`set_recovery`](QamDemodBlock::set_recovery)) the
-/// output is bit for bit that of the block of M44 with the fix of I44-17 (M44.1 test 5). Soft bits that do not fit into the
+/// the new estimate); M44.3 §2 adds the restart of a false state (a clear verify window within the
+/// tolerance after [`QAM_WATCH_STALL_CHECKS`] checks in a row without lock at which the
+/// equalizer's decision error was at or above [`qam_watch_converged_bound`] starts the equalizer
+/// again with the estimate; off for every constellation, D2411). With the recovery off
+/// ([`set_recovery`](QamDemodBlock::set_recovery)) the output is bit for bit that of the block of M44 with the fix of I44-17 (M44.1 test 5). Soft bits that do not fit into the
 /// output wait in a buffer and are written first by the next call (which then consumes no input).
 /// Timing: variable ratio `symbol_rate bits / fs`, delay `(span + equalizer_taps - 1) n / 2 + 1`
 /// input samples. Storage: the taps, the filter history, one work buffer of `512 + 128 bits` `C32`
@@ -967,7 +1002,8 @@ impl<S: Storage> QamDemodBlock<S> {
 
     /// How often the controller restarted the receiver since its start or `reset` (a verify
     /// window after a check without lock that found the loops on a wrong frequency, D1421,
-    /// D1605, D1618; the weight watch and the signal back after a gap of M44.1 §6, D1569).
+    /// D1605, D1618; the weight watch and the signal back after a gap of M44.1 §6, D1569; the
+    /// restart of a false state of M44.3 §2, `LockTransition::Stall`).
     pub fn restarts(&self) -> u32 {
         self.rx.watch.restarts()
     }
@@ -1224,15 +1260,20 @@ impl<S: Storage> Loops<S> {
                 locked: false,
                 weight_energy: None,
                 weight_floor: 0.0,
+                converged: true,
             });
             Some(self.watch.window(w.estimate, loops))
         } else {
             let (costas, eq, reference) = (&self.costas, self.eq.as_ref(), self.reference);
-            let t = self.watch.advance(n, || LockCheck {
-                locked: costas.locked(),
-                // The energy at unit input power.
-                weight_energy: eq.map(|e| e.weight_energy() * reference),
-                weight_floor: qam_watch_weight_floor(costas.state().constellation()),
+            let t = self.watch.advance(n, || {
+                let c = costas.state().constellation();
+                LockCheck {
+                    locked: costas.locked(),
+                    // The energy at unit input power.
+                    weight_energy: eq.map(|e| e.weight_energy() * reference),
+                    weight_floor: qam_watch_weight_floor(c),
+                    converged: eq.is_none_or(|e| converged(e.state(), c)),
+                }
             });
             if matches!(
                 t,
@@ -1334,6 +1375,18 @@ impl<S: Storage> Loops<S> {
             let _ = eq.set_phase_bw(QAM_TRACKER_HOLD_BW);
         }
     }
+}
+
+/// Whether the equalizer `eq` of `qam_demod` with the carrier loop on the constellation `c`
+/// converged by its decision error (M44.3 §2): `mse` below [`qam_watch_converged_bound`] times
+/// the squared half level spacing (a NaN `mse` is not converged; an infinite bound always is).
+fn converged<W, H>(eq: &EqualizeState<W, H>, c: CostasConstellation) -> bool
+where
+    W: AsRef<[C32]> + AsMut<[C32]>,
+    H: AsRef<[C32]> + AsMut<[C32]>,
+{
+    let bound = qam_watch_converged_bound(c);
+    bound == f32::INFINITY || eq.mse() < bound * eq.constellation().half_spacing_sq()
 }
 
 /// The frequency of the loops in cycles per symbol: the carrier loop's plus that of the

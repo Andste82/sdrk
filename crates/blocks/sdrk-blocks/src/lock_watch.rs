@@ -22,6 +22,11 @@ pub trait LockPolicy {
     /// this many acquisition windows in a row without a clear peak starts the equalizer again
     /// with the new estimate (`Return`); 0 turns the condition off.
     const GAP_WINDOWS: u8;
+    /// The restart of a false state (M44.3 §2): a clear verify window within the tolerance after
+    /// at least this many checks in a row without lock at which the equalizer had not converged
+    /// ([`LockCheck::converged`]) starts the equalizer again with the estimate of the window
+    /// (`Stall`); 0 turns the condition off.
+    const STALL_CHECKS: u8;
 }
 
 /// The state of a [`LockWatch`] (M44.1 §5).
@@ -110,6 +115,15 @@ pub enum LockTransition {
         /// The estimate of the verify window in cycles per symbol.
         frequency: f64,
     },
+    /// `Verify` -> `PullIn`: the restart of a false state (M44.3 §2): a clear verify window
+    /// within the tolerance (the loops on the right frequency) after at least
+    /// [`LockPolicy::STALL_CHECKS`] checks in a row without lock at which the equalizer had not
+    /// converged ([`LockCheck::converged`]); the equalizer starts again and the estimate of the
+    /// window goes to the loops.
+    Stall {
+        /// The estimate of the verify window in cycles per symbol.
+        frequency: f64,
+    },
     /// Any state -> `Search`: a watch outside the controller found the receiver without output
     /// for too long (the frame watch of `qam_frame_decode`, M44.1 §7: no frame with `CRC_OK`
     /// within `frame_timeout` symbols while frames are expected, [`FrameWatch`]); the receiver
@@ -118,8 +132,8 @@ pub enum LockTransition {
 }
 
 impl LockTransition {
-    /// The action of the transition (M44.1 §2.3): `AcquireAfterMiss` and `Return` start the
-    /// equalizer again, `Restart`, `Shrink` and `Silence` the whole receiver, `SettleUnlocked`
+    /// The action of the transition (M44.1 §2.3): `AcquireAfterMiss`, `Return` and `Stall` start
+    /// the equalizer again, `Restart`, `Shrink` and `Silence` the whole receiver, `SettleUnlocked`
     /// and `Doubt` take a verify window, every other transition keeps the receiver running.
     ///
     /// ```
@@ -127,11 +141,14 @@ impl LockTransition {
     /// assert_eq!(LockTransition::Doubt.action(), LockAction::Verify);
     /// assert_eq!(LockTransition::Shrink.action(), LockAction::RestartAll);
     /// assert_eq!(LockTransition::Return { frequency: 0.001 }.action(), LockAction::RestartEqualizer);
+    /// assert_eq!(LockTransition::Stall { frequency: 0.001 }.action(), LockAction::RestartEqualizer);
     /// assert_eq!(LockTransition::Hold.action(), LockAction::Keep);
     /// ```
     pub fn action(&self) -> LockAction {
         match self {
-            Self::AcquireAfterMiss { .. } | Self::Return { .. } => LockAction::RestartEqualizer,
+            Self::AcquireAfterMiss { .. } | Self::Return { .. } | Self::Stall { .. } => {
+                LockAction::RestartEqualizer
+            }
             Self::Restart | Self::Shrink | Self::Silence => LockAction::RestartAll,
             Self::SettleUnlocked | Self::Doubt => LockAction::Verify,
             Self::Miss | Self::Acquire { .. } | Self::Settle | Self::Hold | Self::Confirm => {
@@ -141,7 +158,7 @@ impl LockTransition {
     }
 
     /// The estimate that goes to the loops with the transition (`Acquire`, `AcquireAfterMiss`,
-    /// `Return`), in cycles per symbol.
+    /// `Return`, `Stall`), in cycles per symbol.
     ///
     /// ```
     /// use sdrk_blocks::LockTransition;
@@ -152,16 +169,18 @@ impl LockTransition {
         match *self {
             Self::Acquire { frequency }
             | Self::AcquireAfterMiss { frequency }
-            | Self::Return { frequency } => Some(frequency),
+            | Self::Return { frequency }
+            | Self::Stall { frequency } => Some(frequency),
             _ => None,
         }
     }
 }
 
-/// The inputs of a check of a [`LockWatch`] (M44.1 §2.3): the lock of the carrier loop, and the
+/// The inputs of a check of a [`LockWatch`] (M44.1 §2.3): the lock of the carrier loop, the
 /// weight energy of the equalizer (`None` without one) with the floor below which it counts as
 /// low (fixed by the composite per constellation: the energy of correct weights falls with the
-/// signal-to-noise ratio, and each constellation has its own range).
+/// signal-to-noise ratio, and each constellation has its own range), and whether the equalizer
+/// converged (M44.3 §2).
 #[derive(Clone, Copy, Debug, PartialEq)]
 pub struct LockCheck {
     /// Whether the carrier loop reports lock.
@@ -170,6 +189,11 @@ pub struct LockCheck {
     pub weight_energy: Option<f32>,
     /// The weight energy below which (or NaN) the check counts as low for the weight watch.
     pub weight_floor: f32,
+    /// Whether the equalizer converged by the criterion of the composite (the decision error of
+    /// the equalizer below a bound of the constellation, M44.3 §2); `true` without an equalizer
+    /// or where the composite does not judge it. A check without lock at which it is `false`
+    /// counts for the restart of a false state (`Stall`).
+    pub converged: bool,
 }
 
 /// The largest [`LockPolicy::WEIGHT_CHECKS`].
@@ -183,7 +207,8 @@ const MAX_WEIGHT_CHECKS: u8 = 31;
 /// symbols to the next check itself; the composite ends its runs where
 /// [`remaining`](LockWatch::remaining) says. The transitions of §5 are the rules of `qam_demod`
 /// before M44.1, one transition per rule; the recovery conditions of §6 add `Shrink` (the weight
-/// watch) and `Return` (the signal back after a gap), with the thresholds of the [`LockPolicy`].
+/// watch) and `Return` (the signal back after a gap), and M44.3 §2 adds `Stall` (the restart of
+/// an equalizer in a false state), with the thresholds of the [`LockPolicy`].
 ///
 /// ```
 /// use sdrk_blocks::{LockCheck, LockPolicy, LockState, LockTransition, LockWatch};
@@ -193,11 +218,13 @@ const MAX_WEIGHT_CHECKS: u8 = 31;
 ///     const TOLERANCE: f64 = 2e-4;
 ///     const WEIGHT_CHECKS: u8 = 2;
 ///     const GAP_WINDOWS: u8 = 3;
+///     const STALL_CHECKS: u8 = 2;
 /// }
 /// let check = |locked, energy| move || LockCheck {
 ///     locked,
 ///     weight_energy: Some(energy),
 ///     weight_floor: 0.7,
+///     converged: true,
 /// };
 /// let mut w = LockWatch::<Policy>::new();
 /// assert_eq!(w.window(None, 0.0), LockTransition::Miss);
@@ -216,6 +243,16 @@ const MAX_WEIGHT_CHECKS: u8 = 31;
 /// assert_eq!(w.low_checks(), 1);
 /// assert_eq!(w.advance(4096, check(true, 0.5)), Some(LockTransition::Shrink));
 /// assert_eq!((w.state(), w.restarts()), (LockState::Search, 2));
+/// // the restart of a false state: two checks without lock, the equalizer not converged, then
+/// // a clear verify window on the frequency of the loops
+/// let stalled = || LockCheck { locked: false, weight_energy: Some(0.95), weight_floor: 0.7, converged: false };
+/// assert_eq!(w.window(Some(0.001), 0.0), LockTransition::Acquire { frequency: 0.001 });
+/// assert_eq!(w.advance(4096, stalled), Some(LockTransition::SettleUnlocked));
+/// assert_eq!(w.window(Some(0.00101), 0.001), LockTransition::Confirm);
+/// assert_eq!(w.advance(4096, stalled), Some(LockTransition::Doubt));
+/// assert_eq!(w.stall_checks(), 2);
+/// assert_eq!(w.window(Some(0.00101), 0.001), LockTransition::Stall { frequency: 0.00101 });
+/// assert_eq!((w.state(), w.restarts(), w.stall_checks()), (LockState::PullIn, 3, 0));
 /// ```
 pub struct LockWatch<P: LockPolicy> {
     /// The last estimate that went to the loops, NaN before the first.
@@ -233,6 +270,9 @@ pub struct LockWatch<P: LockPolicy> {
     check: u16,
     /// Acquisition windows in a row without a clear peak (saturating).
     misses: u8,
+    /// The checks in a row without lock at which the equalizer had not converged (the restart of
+    /// a false state, M44.3 §2; saturating).
+    stall_checks: u8,
     _policy: PhantomData<fn() -> P>,
 }
 
@@ -245,6 +285,7 @@ impl<P: LockPolicy> core::fmt::Debug for LockWatch<P> {
             .field("restarts", &self.restarts)
             .field("misses", &self.misses)
             .field("low_checks", &self.low_checks())
+            .field("stall_checks", &self.stall_checks())
             .field("recovery", &self.recovery())
             .field("check", &self.check)
             .finish_non_exhaustive()
@@ -275,6 +316,7 @@ impl<P: LockPolicy> LockWatch<P> {
     ///     const TOLERANCE: f64 = 2e-4;
     ///     const WEIGHT_CHECKS: u8 = 2;
     ///     const GAP_WINDOWS: u8 = 6;
+    ///     const STALL_CHECKS: u8 = 2;
     /// }
     /// let mut w = LockWatch::<Policy>::with_check(20_480);
     /// w.window(Some(0.001), 0.0);
@@ -289,6 +331,7 @@ impl<P: LockPolicy> LockWatch<P> {
             low_checks: 0,
             recovery: true,
             misses: 0,
+            stall_checks: 0,
             check: if check == 0 { 1 } else { check },
             _policy: PhantomData,
         }
@@ -313,10 +356,12 @@ impl<P: LockPolicy> LockWatch<P> {
         self.state
     }
 
-    /// Sets the state; the low checks are kept in `Track` and `Verify` and cleared otherwise.
+    /// Sets the state; the low checks and the stalled checks are kept in `Track` and `Verify` and
+    /// cleared otherwise.
     fn set_state(&mut self, state: LockState) {
         if !matches!(state, LockState::Track | LockState::Verify) {
             self.low_checks = 0;
+            self.stall_checks = 0;
         }
         self.state = state;
     }
@@ -326,14 +371,22 @@ impl<P: LockPolicy> LockWatch<P> {
         self.low_checks
     }
 
-    /// Whether the conditions of step 2 (M44.1 §6: `Shrink` and `Return`) are on (the default).
+    /// The checks in a row without lock at which the equalizer had not converged (the restart of
+    /// a false state, M44.3 §2; counted in `PullIn`, `Track` and over a verify window).
+    pub fn stall_checks(&self) -> u8 {
+        self.stall_checks
+    }
+
+    /// Whether the conditions of step 2 (M44.1 §6: `Shrink` and `Return`; M44.3 §2: `Stall`) are
+    /// on (the default).
     pub fn recovery(&self) -> bool {
         self.recovery
     }
 
-    /// Turns the conditions of step 2 (M44.1 §6) on or off; off, the watch takes the transitions
-    /// of step 1 only (§5), which compares a receiver with the one before the recovery. The
-    /// setting is kept over [`reset`](LockWatch::reset); the low checks are cleared.
+    /// Turns the conditions of step 2 (M44.1 §6, and the restart of a false state of M44.3 §2)
+    /// on or off; off, the watch takes the transitions of step 1 only (§5), which compares a
+    /// receiver with the one before the recovery. The setting is kept over
+    /// [`reset`](LockWatch::reset); the low checks and the stalled checks are cleared.
     ///
     /// ```
     /// use sdrk_blocks::{LockCheck, LockPolicy, LockTransition, LockWatch};
@@ -343,8 +396,14 @@ impl<P: LockPolicy> LockWatch<P> {
     ///     const TOLERANCE: f64 = 2e-4;
     ///     const WEIGHT_CHECKS: u8 = 1;
     ///     const GAP_WINDOWS: u8 = 1;
+    ///     const STALL_CHECKS: u8 = 2;
     /// }
-    /// let low = || LockCheck { locked: true, weight_energy: Some(0.1), weight_floor: 0.75 };
+    /// let low = || LockCheck {
+    ///     locked: true,
+    ///     weight_energy: Some(0.1),
+    ///     weight_floor: 0.75,
+    ///     converged: true,
+    /// };
     /// let mut w = LockWatch::<Policy>::new();
     /// w.set_recovery(false);
     /// w.window(Some(0.001), 0.0);
@@ -355,6 +414,7 @@ impl<P: LockPolicy> LockWatch<P> {
     /// ```
     pub fn set_recovery(&mut self, on: bool) {
         self.low_checks = 0;
+        self.stall_checks = 0;
         self.recovery = on;
     }
 
@@ -370,7 +430,8 @@ impl<P: LockPolicy> LockWatch<P> {
     }
 
     /// Restarts since the start or `reset`: `Restart`, `Shrink` and `Silence` (the whole
-    /// receiver) and `Return` (the equalizer after a gap).
+    /// receiver), `Return` (the equalizer after a gap) and `Stall` (the equalizer in a false
+    /// state).
     pub fn restarts(&self) -> u32 {
         self.restarts
     }
@@ -403,6 +464,7 @@ impl<P: LockPolicy> LockWatch<P> {
     ///     const TOLERANCE: f64 = 2e-4;
     ///     const WEIGHT_CHECKS: u8 = 2;
     ///     const GAP_WINDOWS: u8 = 6;
+    ///     const STALL_CHECKS: u8 = 2;
     /// }
     /// let mut w = LockWatch::<Policy>::new();
     /// w.window(Some(0.001), 0.0);
@@ -463,6 +525,16 @@ impl<P: LockPolicy> LockWatch<P> {
                 self.enter_pull_in(f);
                 LockTransition::Return { frequency: f }
             }
+            (LockState::Verify, Some(f))
+                if self.recovery()
+                    && P::STALL_CHECKS != 0
+                    && self.stall_checks >= P::STALL_CHECKS
+                    && f.is_finite() =>
+            {
+                self.restarts = self.restarts.saturating_add(1);
+                self.enter_pull_in(f);
+                LockTransition::Stall { frequency: f }
+            }
             (LockState::Verify, estimate) => {
                 if estimate.is_some() {
                     self.misses = 0;
@@ -495,6 +567,13 @@ impl<P: LockPolicy> LockWatch<P> {
         }
         self.since = 0;
         let input = probe();
+        // The restart of a false state counts the checks without lock at which the equalizer
+        // had not converged, in a row.
+        self.stall_checks = if self.recovery() && !input.locked && !input.converged {
+            self.stall_checks.saturating_add(1)
+        } else {
+            0
+        };
         if state == LockState::PullIn {
             return Some(if input.locked {
                 self.set_state(LockState::Track);

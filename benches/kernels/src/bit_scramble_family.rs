@@ -20,9 +20,7 @@ use std::hint::black_box;
 
 use cref_sys::GrScrambler;
 use sdrk::Rate;
-use sdrk_blocks::{
-    ArenaStorage, BitDescrambleBlock, BitScrambleBlock, BitScrambleConfig, Block,
-};
+use sdrk_blocks::{ArenaStorage, BitDescrambleBlock, BitScrambleBlock, BitScrambleConfig, Block};
 
 use super::{Impl, Kernel, Layout, Pcg32};
 

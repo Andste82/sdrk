@@ -456,6 +456,18 @@ fn map_axes<const B: usize>(levels: &[f32], bits: &[f32], out: &mut [C32]) {
     }
 }
 
+/// The points of 256-QAM and 1024-QAM ([`map_axes`]), a function of its own so that the loops of
+/// the other constellations in [`SymbolMapBlock::process`] keep the code of M44 (inlined there,
+/// the two loops made `psk_mod_block` 1 to 7 % slower, D1525).
+#[inline(never)]
+fn map_dense(c: SymbolMapConstellation, bits: &[f32], out: &mut [C32]) {
+    if c == SymbolMapConstellation::Qam256 {
+        map_axes::<4>(&QAM256_CODE_LEVELS, bits, out);
+    } else {
+        map_axes::<5>(&QAM1024_CODE_LEVELS, bits, out);
+    }
+}
+
 /// Soft bits to constellation points: `f32` soft bits in (one per sample), `C32` points out,
 /// one per symbol of `bits_per_symbol` bits.
 ///
@@ -565,11 +577,8 @@ impl<S: Storage> Block for SymbolMapBlock<S> {
             }
             // 256-QAM and 1024-QAM per axis: as fast as the point table or faster, without its
             // 2 KiB and 8 KiB (D1509).
-            SymbolMapConstellation::Qam256 => {
-                map_axes::<4>(&QAM256_CODE_LEVELS, input, output);
-            }
-            SymbolMapConstellation::Qam1024 => {
-                map_axes::<5>(&QAM1024_CODE_LEVELS, input, output);
+            c @ (SymbolMapConstellation::Qam256 | SymbolMapConstellation::Qam1024) => {
+                map_dense(c, input, output);
             }
             _ => {
                 let pi4 = self.config.variant == SymbolMapVariant::Pi4;

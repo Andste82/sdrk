@@ -242,20 +242,30 @@ impl Costas for Fallback {
             BPSK => run::<BPSK>(s, input, output),
             QPSK => run::<QPSK>(s, input, output),
             PSK8 => run::<PSK8>(s, input, output),
+            QAM256 => run_dense::<QAM256>(s, input, output),
+            QAM1024 => run_dense::<QAM1024>(s, input, output),
             code => run_qam(code, s, input, output),
         }
     }
 }
 
-/// The QAM loops, a function of their own, so that the PSK loops keep the code of M40.1.
+/// The loops of 16-QAM and 64-QAM, a function of their own, so that the PSK loops keep the code
+/// of M40.1.
 #[inline(never)]
 fn run_qam(code: u8, s: &mut CostasState, input: &[C32], output: &mut [C32]) -> Result<()> {
-    match code {
-        QAM16 => run::<QAM16>(s, input, output),
-        QAM256 => run::<QAM256>(s, input, output),
-        QAM1024 => run::<QAM1024>(s, input, output),
-        _ => run::<QAM64>(s, input, output),
+    if code == QAM16 {
+        run::<QAM16>(s, input, output)
+    } else {
+        run::<QAM64>(s, input, output)
     }
+}
+
+/// The loop of 256-QAM or 1024-QAM (M44.2), a function of its own, so that the loops of 16-QAM
+/// and 64-QAM in [`run_qam`] keep the code of M44 (with all four loops in [`run_qam`] the 64-QAM
+/// loop simulated 7.6 % slower on `cortex-a72`, D1525).
+#[inline(never)]
+fn run_dense<const CODE: u8>(s: &mut CostasState, input: &[C32], output: &mut [C32]) -> Result<()> {
+    run::<CODE>(s, input, output)
 }
 
 #[cfg(test)]

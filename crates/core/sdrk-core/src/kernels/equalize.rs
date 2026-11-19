@@ -23,7 +23,7 @@ use crate::fallback::costas::{integrate, not_finite, phase_step_f32};
 use crate::fallback::dot::dot_complex_tree;
 use crate::fallback::mix::interp_f32_pair;
 use crate::kernels::check_len;
-use crate::kernels::constellation::Qam;
+use crate::kernels::constellation::{Grid, Qam, select16, select64};
 use crate::kernels::costas::{derotate, loop_gains, octant_point};
 use crate::kernels::dot::{DOT_COMPLEX_PARTIALS, DotComplex};
 use crate::num::flush_denormal;
@@ -62,8 +62,6 @@ pub(crate) const QPSK_A: f32 = core::f32::consts::FRAC_1_SQRT_2;
 const QAM16_R2: f32 = Qam::Qam16.cma_r2() as f32;
 /// The CMA radius of 64-QAM, [`Qam::cma_r2`] rounded once to `f32`.
 const QAM64_R2: f32 = Qam::Qam64.cma_r2() as f32;
-/// The CMA radius of 4-QAM (QPSK), [`Qam::cma_r2`] (1) as `f32`.
-const QAM4_R2: f32 = Qam::Qpsk.cma_r2() as f32;
 /// The CMA radius of 256-QAM, [`Qam::cma_r2`] rounded once to `f32`.
 const QAM256_R2: f32 = Qam::Qam256.cma_r2() as f32;
 /// The CMA radius of 1024-QAM, [`Qam::cma_r2`] rounded once to `f32`.
@@ -756,15 +754,13 @@ where
     check_len(input.len(), output.len())?;
     let mut p = s.parts_mut();
     match p.constellation {
-        EqConstellation::Qam16 => equalize_qam(dot, &mut p, QamDecide(Qam::Qam16), input, output),
+        EqConstellation::Qam16 => equalize_qam(dot, &mut p, QamDecide::Qam16, input, output),
         EqConstellation::Qam64 if cfg!(target_arch = "aarch64") => {
             equalize_qam(dot, &mut p, Qam64Table, input, output)
         }
-        EqConstellation::Qam64 => equalize_qam(dot, &mut p, QamDecide(Qam::Qam64), input, output),
-        EqConstellation::Qam256 => equalize_qam(dot, &mut p, QamDecide(Qam::Qam256), input, output),
-        EqConstellation::Qam1024 => {
-            equalize_qam(dot, &mut p, QamDecide(Qam::Qam1024), input, output)
-        }
+        EqConstellation::Qam64 => equalize_qam(dot, &mut p, QamDecide::Qam64, input, output),
+        EqConstellation::Qam256 => equalize_qam(dot, &mut p, QamGrid::<4>, input, output),
+        EqConstellation::Qam1024 => equalize_qam(dot, &mut p, QamGrid::<5>, input, output),
         EqConstellation::Bpsk => equalize_paths(dot, &mut p, PskDecide::Bpsk, input, output),
         EqConstellation::Psk8 => equalize_paths(dot, &mut p, PskDecide::Psk8, input, output),
         _ => equalize_paths(dot, &mut p, PskDecide::Qpsk, input, output),
@@ -811,25 +807,68 @@ impl Decide for PskDecide {
     }
 }
 
-/// A square QAM constellation.
+/// 16-QAM and 64-QAM, one loop for both as in M44: a type with exactly these two variants, so
+/// that the loop keeps the code of M44 (with the five orders of [`Qam`] behind one value the
+/// loops of 16-QAM and 64-QAM were 40 to 46 % slower on `znver3` and `znver4` and 35 % on
+/// `cortex-a72`, D1525).
 #[derive(Clone, Copy)]
-struct QamDecide(Qam);
+enum QamDecide {
+    Qam16,
+    Qam64,
+}
+
+impl QamDecide {
+    /// The level value of one axis ([`Qam::decide`]).
+    #[inline]
+    fn value(self, v: f32) -> f32 {
+        if cfg!(target_arch = "aarch64") {
+            match self {
+                Self::Qam16 => Qam::Qam16.select_m44(v),
+                Self::Qam64 => Qam::Qam64.select_m44(v),
+            }
+        } else if cfg!(target_feature = "avx2") {
+            match self {
+                Self::Qam16 => select16(v),
+                Self::Qam64 => select64(v),
+            }
+        } else {
+            match self {
+                Self::Qam16 => Qam::Qam16.decide_m44(v),
+                Self::Qam64 => Qam::Qam64.decide_m44(v),
+            }
+        }
+    }
+}
 
 impl Decide for QamDecide {
     #[inline]
     fn decide(self, y: C32) -> C32 {
-        self.0.decide(y)
+        C32::new(self.value(y.re), self.value(y.im))
     }
 
     #[inline]
     fn cma_r2(self) -> f32 {
-        match self.0 {
-            Qam::Qpsk => QAM4_R2,
-            Qam::Qam16 => QAM16_R2,
-            Qam::Qam64 => QAM64_R2,
-            Qam::Qam256 => QAM256_R2,
-            Qam::Qam1024 => QAM1024_R2,
+        match self {
+            Self::Qam16 => QAM16_R2,
+            Self::Qam64 => QAM64_R2,
         }
+    }
+}
+
+/// 256-QAM (`B` = 4) and 1024-QAM (`B` = 5) (M44.2), a loop per order: [`Qam::decide`] of the
+/// grid with `B` bits per axis.
+#[derive(Clone, Copy)]
+struct QamGrid<const B: usize>;
+
+impl<const B: usize> Decide for QamGrid<B> {
+    #[inline]
+    fn decide(self, y: C32) -> C32 {
+        C32::new(Grid::<B>::value(y.re), Grid::<B>::value(y.im))
+    }
+
+    #[inline]
+    fn cma_r2(self) -> f32 {
+        if B == 4 { QAM256_R2 } else { QAM1024_R2 }
     }
 }
 

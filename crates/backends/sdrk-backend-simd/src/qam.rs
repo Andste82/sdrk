@@ -301,21 +301,33 @@ fn level_path<S: SimdToken>(
     0
 }
 
-#[inline(always)]
-fn soft_bits<S: SimdToken>(
-    simd: S,
-    b: usize,
-    x: &[f32],
-    out: &mut [f32],
-    s: f32,
-    c: f32,
-    done: &mut usize,
-) {
-    *done = level_path(simd, b, x, out, s, c);
+/// The level path of one order (`B` bits per axis), with the order a constant.
+macro_rules! order_entry {
+    ($inner:ident, $run:ident, $b:literal) => {
+        #[inline(always)]
+        fn $inner<S: SimdToken>(
+            simd: S,
+            x: &[f32],
+            out: &mut [f32],
+            s: f32,
+            c: f32,
+            done: &mut usize,
+        ) {
+            *done = level_path(simd, $b, x, out, s, c);
+        }
+        dispatch_fn!(fn $run(x: &[f32], out: &mut [f32], s: f32, c: f32, done: &mut usize) => $inner);
+    };
 }
 
-// The entry, one function per level (see `dispatch_fn!`).
-dispatch_fn!(fn run(b: usize, x: &[f32], out: &mut [f32], s: f32, c: f32, done: &mut usize) => soft_bits);
+// The entries, one function per order and level (see `dispatch_fn!`): an entry shared by the
+// orders, with the order as an argument, cost the 64-QAM path at AVX2 0.26 instructions per
+// symbol and 3 % of cycles on `alderlake` (D1525), so every order has its own as 16-QAM and
+// 64-QAM had in M44.
+order_entry!(soft_bits1, run1, 1);
+order_entry!(soft_bits2, run2, 2);
+order_entry!(soft_bits3, run3, 3);
+order_entry!(soft_bits4, run4, 4);
+order_entry!(soft_bits5, run5, 5);
 
 impl QamSoftBits<C32> for Simd {
     fn qam_soft_bits(&self, qam: Qam, input: &[C32], output: &mut [f32], scale: f32) -> Result<()> {
@@ -323,7 +335,13 @@ impl QamSoftBits<C32> for Simd {
         let x: &[f32] = bytemuck::cast_slice(input);
         let c = qam.sqrt_energy();
         let mut done = 0;
-        run(qam.bits_per_axis(), x, output, scale, c, &mut done);
+        match qam.bits_per_axis() {
+            1 => run1(x, output, scale, c, &mut done),
+            2 => run2(x, output, scale, c, &mut done),
+            3 => run3(x, output, scale, c, &mut done),
+            4 => run4(x, output, scale, c, &mut done),
+            _ => run5(x, output, scale, c, &mut done),
+        }
         // The rest (and everything on a level without a path): whole symbols.
         let n = done / 2;
         let bits = qam.bits_per_symbol();

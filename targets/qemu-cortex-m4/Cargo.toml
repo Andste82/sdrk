@@ -20,7 +20,7 @@ sdrk-device = { path = "../../crates/core/sdrk-device" }
 cortex-m = "0.7.7"
 cortex-m-rt = "0.7.5"
 cortex-m-semihosting = "0.5.0"
-heapless = "0.9.3"
+heapless = "0.9.4"
 
 [features]
 # Run every case (the default is the quick tier).

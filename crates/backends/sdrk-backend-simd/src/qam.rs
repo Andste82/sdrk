@@ -674,9 +674,12 @@ mod x86 {
     /// copied into the output layout of [`super::spread`] (a constant shuffle of one vector,
     /// which the compiler turns into `pshufd`, `shufps`, `vpermps` or the cheapest shuffle of
     /// the level), then the `$b - 1` steps of the recursion on every output vector with the
-    /// per-lane constants of [`super::ladder`], then the products with the scale.
+    /// per-lane constants of [`super::ladder`], then the products with the scale; the loop in
+    /// blocks of `$u` steps (8 for 4-QAM at AVX2: with 4 the build with run-time detection ran
+    /// 0.72 instructions per symbol against 0.66 of the AVX2 build, the loop overhead of short
+    /// steps, D1525; 4 elsewhere).
     macro_rules! generic {
-        ($name:ident, $token:ident, $b:literal, $w:literal, $fv:ident, $raw:ty, $set1:ident, $mul:ident, $or:ident, $add:ident) => {
+        ($name:ident, $token:ident, $b:literal, $w:literal, $u:literal, $fv:ident, $raw:ty, $set1:ident, $mul:ident, $or:ident, $add:ident) => {
             fearless_simd::kernel!(
                 pub(crate) fn $name(
                     t: $token,
@@ -694,7 +697,7 @@ mod x86 {
                         LADDER.map(|q| q.map(|[m, k]| (ld(&m), ld(&k))));
                     macro_rules! run {
                         ($unit:tt) => {
-                            steps!(x, out, $w, { $w * B }, 4, |i, o| {
+                            steps!(x, out, $w, { $w * B }, $u, |i, o| {
                                 let xv: $raw = $fv::from_slice(t, i).into();
                                 let v: [f32; $w] = $fv::simd_from(t, $mul(xv, cv)).into();
                                 let (os, _) = o.as_chunks_mut::<$w>();
@@ -791,6 +794,7 @@ mod x86 {
         Sse2,
         1,
         4,
+        4,
         f32x4,
         __m128,
         _mm_set1_ps,
@@ -801,6 +805,7 @@ mod x86 {
     generic!(
         g4_sse2,
         Sse2,
+        4,
         4,
         4,
         f32x4,
@@ -815,6 +820,7 @@ mod x86 {
         Sse4_2,
         1,
         4,
+        4,
         f32x4,
         __m128,
         _mm_set1_ps,
@@ -826,6 +832,7 @@ mod x86 {
         g1_avx2,
         Avx2,
         1,
+        8,
         8,
         f32x8,
         __m256,
@@ -839,6 +846,7 @@ mod x86 {
         Avx512,
         1,
         16,
+        4,
         f32x16,
         __m512,
         _mm512_set1_ps,

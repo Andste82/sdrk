@@ -366,7 +366,7 @@ pub trait Kernel {
 /// are appended; a `<kernel>_fallback`, `<kernel>_airspy`, `<kernel>_fastnoise` or
 /// `<kernel>_ziggurat` entry takes the seed of `<kernel>`, so that both entries filter the same
 /// input.
-pub const KERNELS: [&str; 275] = [
+pub const KERNELS: [&str; 277] = [
     "convert_cs8",
     "convert_cs16",
     "convert_out_cs16",

@@ -7,14 +7,18 @@
 //! [`recursion`]) and chosen per order and level by simulated cycles, against the fallback of
 //! the same order and, for 16-QAM and 64-QAM, against the hand-written paths of M44 below:
 //!
-//! - 4-QAM (QPSK, `B` = 1) on every level and 256-QAM at SSE2: the output layout of
+//! - 4-QAM (QPSK, `B` = 1) on x86 and wasm32 and 256-QAM at SSE2: the output layout of
 //!   [`spread`] and [`ladder`] (the recursion `y = (y | m) + k` per output lane on `v` copied
 //!   into the output order by a constant shuffle);
 //! - 256-QAM at SSE4.2: the component layout with a transpose of the first four streams
-//!   (`component!`); on NEON: the component layout and `st4`;
-//! - 256-QAM at AVX2 and AVX-512, 1024-QAM on every level: [`recursion`], the plain loop of the
-//!   recursion that the compiler vectorizes with the features of the level (its interleaved
-//!   stores of four or five streams were faster than every hand-written layout there);
+//!   (`component!`);
+//! - 256-QAM at AVX2 and AVX-512, 1024-QAM at SSE4.2, AVX2 and AVX-512: [`recursion`], the plain
+//!   loop of the recursion that the compiler vectorizes with the features of the level (its
+//!   interleaved stores of four or five streams were faster than every hand-written layout
+//!   there; in the build with run-time detection the features are more than the fallback has);
+//! - no path, the fallback: 4-QAM, 256-QAM and 1024-QAM on NEON, 1024-QAM at SSE2, 256-QAM and
+//!   1024-QAM on wasm32, where the instance had the features of the fallback and tied with it
+//!   (the review of M44.2, D1538);
 //! - 64-QAM on NEON: the component layout and `st3` of the generic macro, the code of M44;
 //! - 16-QAM on every level and 64-QAM on x86 and wasm32: the hand-written paths of M44, which
 //!   simulated faster than the instances of `B` = 2 and 3 on at least one model (D1503).
@@ -273,18 +277,20 @@ fn level_path<S: SimdToken>(
                 2 => x86::qam16_sse2(t, x, out, s, c),
                 3 => x86::qam64_sse2(t, x, out, s, c),
                 4 => x86::g4_sse2(t, x, out, s, c),
-                _ => x86::a5_sse2(t, x, out, s, c),
+                // 1024-QAM: the fallback (the recursion with the features of the baseline is
+                // the fallback, D1504, D1538).
+                _ => 0,
             };
         }
     }
     #[cfg(target_arch = "aarch64")]
     if let Some(t) = level.as_neon() {
         return match b {
-            1 => neon::g1(t, x, out, s, c),
             2 => neon::qam16(t, x, out, s, c),
             3 => neon::g3(t, x, out, s, c),
-            4 => neon::g4(t, x, out, s, c),
-            _ => neon::a5(t, x, out, s, c),
+            // 4-QAM, 256-QAM and 1024-QAM: the fallback, which NEON compiles with the same
+            // features (the instances tied with it, D1504, D1538).
+            _ => 0,
         };
     }
     #[cfg(all(target_arch = "wasm32", target_feature = "simd128"))]
@@ -293,8 +299,8 @@ fn level_path<S: SimdToken>(
             1 => wasm::g1(t, x, out, s, c),
             2 => wasm::qam16(t, x, out, s, c),
             3 => wasm::qam64(t, x, out, s, c),
-            4 => wasm::a4(t, x, out, s, c),
-            _ => wasm::a5(t, x, out, s, c),
+            // 256-QAM and 1024-QAM: the fallback, compiled with simd128 too (D1504, D1538).
+            _ => 0,
         };
     }
     let _ = (level, b, x, out, s, c);
@@ -783,7 +789,6 @@ mod x86 {
         _mm_castsi128_ps(_mm_set1_epi32(0x7fff_ffff))
     );
 
-    autovec!(a5_sse2, Sse2, 5);
     autovec!(a5_sse4_2, Sse4_2, 5);
     autovec!(a4_avx2, Avx2, 4);
     autovec!(a5_avx2, Avx2, 5);
@@ -868,8 +873,8 @@ mod neon {
     #![allow(unsafe_code)]
 
     use core::arch::aarch64::{
-        float32x4_t, float32x4x2_t, float32x4x3_t, float32x4x4_t, vabsq_f32, vdupq_n_f32,
-        vmulq_f32, vst2q_f32, vst3q_f32, vst4q_f32, vsubq_f32,
+        float32x4_t, float32x4x2_t, float32x4x3_t, vabsq_f32, vdupq_n_f32, vmulq_f32, vst2q_f32,
+        vst3q_f32, vsubq_f32,
     };
     use fearless_simd::f32x4;
     use fearless_simd::prelude::*;
@@ -918,22 +923,10 @@ mod neon {
         }
     );
 
-    /// Stores the four soft bits of four components interleaved into `o`.
-    #[inline(always)]
-    fn store4(o: &mut [f32; 16], a: float32x4_t, b: float32x4_t, c: float32x4_t, d: float32x4_t) {
-        // SAFETY: `vst4q_f32` writes 16 consecutive `f32` with no alignment requirement beyond
-        // that of `f32`, and `o` holds exactly 16 and is borrowed exclusively.
-        unsafe { vst4q_f32(o.as_mut_ptr(), float32x4x4_t(a, b, c, d)) }
-    }
-
     /// Stores the `B` soft-bit vectors `r` of four components interleaved into `o` (`4 B`
-    /// values): one store, `st2`, `st3` or `st4` for `B` up to 4 (NEON has no `st5`; 1024-QAM
-    /// takes the form of [`super::recursion`]).
+    /// values): `st2` or `st3` (the generic instance runs for 64-QAM only; 4-QAM, 256-QAM and
+    /// 1024-QAM take the fallback on NEON, D1538).
     macro_rules! store {
-        (1, $t:expr, $o:expr, $r:expr) => {{
-            let [a] = $r;
-            f32x4::simd_from($t, a).store_slice($o);
-        }};
         (2, $t:expr, $o:expr, $r:expr) => {{
             let [a, b] = $r;
             store2($o, a, b);
@@ -941,10 +934,6 @@ mod neon {
         (3, $t:expr, $o:expr, $r:expr) => {{
             let [a, b, c] = $r;
             store3($o, a, b, c);
-        }};
-        (4, $t:expr, $o:expr, $r:expr) => {{
-            let [a, b, c, d] = $r;
-            store4($o, a, b, c, d);
         }};
     }
 
@@ -980,10 +969,7 @@ mod neon {
             );
         };
     }
-    generic!(g1, 1);
     generic!(g3, 3);
-    generic!(g4, 4);
-    autovec!(a5, Neon, 5);
 }
 
 #[cfg(all(target_arch = "wasm32", target_feature = "simd128"))]
@@ -1103,6 +1089,4 @@ mod wasm {
         };
     }
     generic!(g1, 1);
-    autovec!(a4, WasmSimd128, 4);
-    autovec!(a5, WasmSimd128, 5);
 }

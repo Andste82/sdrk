@@ -19,7 +19,7 @@
   "case": "oct_c32_2048",
   "format_version": 1,
   "kernel": "scramble",
-  "notes": "C32, bits 3, inverse False: quadrant map j^q of x (r = 0) or of the f64 product with exp(j 2 pi r / 2^b) (r != 0)",
+  "notes": "C32, bits 3, inverse False: the f64 product with exp(j 2 pi k / 2^b) (M49.1)",
   "params": {
     "bits": 3,
     "inverse": false

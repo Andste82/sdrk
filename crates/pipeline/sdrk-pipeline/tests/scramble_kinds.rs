@@ -1,6 +1,6 @@
 //! The kind `scramble` (M49 §6, test 6): registration with the kernel `scramble`, the cost
-//! `7 + 7 bits` (`bits` 1 and 2) and `17 + 7 bits` (`bits` 3 to 8, measured in M49 §5), the
-//! rate and delay 0, complex input only, the errors at their parameter (`bits` 0 and 9,
+//! `7 + 1.25 bits` (`bits` 1 and 2) and `10 + 1.25 bits` (`bits` 3 to 8, measured again in
+//! M49.1 §6), the rate and delay 0, complex input only, the errors at their parameter (`bits` 0 and 9,
 //! `key_seed` 0, a seed that masks to 0 as `invalid_value`, a key that is not a choice), the
 //! schema, and push-mode flows `scramble` -> `scramble` (`inverse`) that equal the blocks bit for
 //! bit in pieces of 1 to 1000 samples (seeds 696, 697), `c32` and `cq15`.
@@ -88,13 +88,14 @@ fn the_kind_is_registered_with_its_kernel() {
 }
 
 #[test]
-fn the_cost_is_the_kernel_plus_seven_per_key_bit() {
+fn the_cost_is_the_kernel_plus_a_quarter_more_than_one_per_key_bit() {
     for (ty, precision) in [("c32", "f32"), ("cq15", "q15")] {
         for bits in 1..=8 {
             let report = validate(&single(ty, precision, 48_000, json!({ "bits": bits })));
             assert!(report.is_ok(), "{ty}: {}", report.to_json());
-            let kernel = if bits <= 2 { 7.0 } else { 17.0 };
-            let cost = kernel + 7.0 * f64::from(bits);
+            // M49.1 §6: the kernel 7 (`bits` ≤ 2) or 10 (one product), the key 1.25 per bit.
+            let kernel = if bits <= 2 { 7.0 } else { 10.0 };
+            let cost = kernel + 1.25 * f64::from(bits);
             assert_eq!(report.cost_per_input_sample, cost, "{ty} bits {bits}");
             let node = &report.nodes[0];
             assert_eq!(node.rate_out, Rate::hz(48_000).unwrap(), "{ty}");

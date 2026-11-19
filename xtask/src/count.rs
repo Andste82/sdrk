@@ -961,7 +961,7 @@ const fn fft(name: &'static str, family: Family, samples: u64) -> KernelSpec {
 }
 
 /// The kernels of the benchmark table, in report order.
-pub static KERNELS: [KernelSpec; 259] = [
+pub static KERNELS: [KernelSpec; 261] = [
     spec("convert_cs8", Family::Volk, true),
     spec("convert_cs16", Family::Volk, true),
     spec("convert_cu8", Family::VolkAndOwn, true),
@@ -1002,10 +1002,16 @@ pub static KERNELS: [KernelSpec; 259] = [
     spec("rotate_cq15", Family::Q15Own, false),
     spec("rotate_fallback", Family::FallbackVsGnuRadio, false),
     spec("rotate_cq15_fallback", Family::FallbackVsCmsis, false),
+    spec("scramble_c32_b1", Family::Volk, false),
     spec("scramble_c32_b2", Family::VolkNoFmaGate, false),
     spec("scramble_c32_b8", Family::VolkNoFmaGate, false),
     spec("scramble_cq15_b2", Family::ScrambleCmsis, false),
     spec("scramble_cq15_b8", Family::ScrambleCmsis, false),
+    spec(
+        "scramble_c32_b1_fallback",
+        Family::FallbackVsVolkGeneric,
+        false,
+    ),
     spec(
         "scramble_c32_b2_fallback",
         Family::FallbackVsVolkGeneric,
@@ -5306,10 +5312,12 @@ mod tests {
             );
         }
         for name in [
+            "scramble_c32_b1",
             "scramble_c32_b2",
             "scramble_c32_b8",
             "scramble_cq15_b2",
             "scramble_cq15_b8",
+            "scramble_c32_b1_fallback",
             "scramble_c32_b2_fallback",
             "scramble_c32_b8_fallback",
             "scramble_cq15_b2_fallback",
@@ -5322,6 +5330,68 @@ mod tests {
                     limits.get(name, p.level).is_some(),
                     "{name} at {}: no entry",
                     p.level
+                );
+            }
+        }
+    }
+
+    #[test]
+    fn scramble_m49_1_rows_are_fair_and_gated() {
+        let plan = |l: &str| PLANS.iter().find(|p| p.level == l).unwrap();
+        let kernel = |k: &str| KERNELS.iter().find(|s| s.name == k).unwrap();
+        let limits = Limits::parse(include_str!("../../benches/limits.json")).unwrap();
+        // `bits = 1` (M49.1 §5): the `±1.0` sequence plus VOLK's `volk_32fc_32f_multiply_32fc`
+        // through the dispatcher on every level (no FMA in it), the fallback against its generic
+        // protokernel. With `scramble_c32_b8` the rows are fair and gated at every level with a
+        // SIMD reference (D2092 revised); `sse2` (b8: no SSE2 product in VOLK) and `simd128`
+        // (D12) stay information.
+        let b1 = kernel("scramble_c32_b1");
+        for level in ["sse2", "sse4.2", "avx2", "avx512", "neon", "simd128"] {
+            assert_eq!(
+                comparisons(plan(level), b1).0,
+                Reference::Volk,
+                "b1 at {level}"
+            );
+            assert_eq!(
+                comparisons(plan(level), kernel("scramble_c32_b1_fallback")),
+                (Reference::VolkGeneric, Vec::new()),
+                "b1 fallback at {level}"
+            );
+        }
+        for (name, info) in [
+            ("scramble_c32_b1", &["simd128"][..]),
+            ("scramble_c32_b8", &["sse2", "simd128"][..]),
+            ("scramble_c32_b1_fallback", &[][..]),
+            ("scramble_c32_b8_fallback", &[][..]),
+        ] {
+            for level in ["sse2", "sse4.2", "avx2", "avx512", "neon", "simd128"] {
+                let limit = limits.get(name, level).unwrap();
+                let want = if info.contains(&level) {
+                    Status::Info
+                } else {
+                    Status::Release
+                };
+                assert_eq!(limit.status, want, "{name} at {level}");
+                assert!(
+                    !limit
+                        .waiver
+                        .as_deref()
+                        .is_some_and(|w| w.contains("reference does less work")),
+                    "{name} at {level}"
+                );
+            }
+        }
+        // `CQ15` at `bits = 8` stays information: CMSIS-DSP truncates to Q3.13 (D2092).
+        for name in ["scramble_cq15_b8", "scramble_cq15_b8_fallback"] {
+            for level in ["sse2", "sse4.2", "avx2", "avx512", "neon", "simd128"] {
+                let limit = limits.get(name, level).unwrap();
+                assert_eq!(limit.status, Status::Info, "{name} at {level}");
+                assert!(
+                    limit
+                        .waiver
+                        .as_deref()
+                        .is_some_and(|w| w.contains("reference does less work")),
+                    "{name} at {level}"
                 );
             }
         }

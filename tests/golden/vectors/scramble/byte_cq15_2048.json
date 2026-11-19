@@ -19,7 +19,7 @@
   "case": "byte_cq15_2048",
   "format_version": 1,
   "kernel": "scramble",
-  "notes": "CQ15, bits 8: f64 reference of the quantized input (noise sigma 0.3, the Q15 corners first), clipped to the Q15 range",
+  "notes": "CQ15, bits 8: f64 reference of the quantized input (noise sigma 0.3, the Q15 corners first; the product with exp(j 2 pi k / 2^b), M49.1), clipped to the Q15 range",
   "params": {
     "bits": 8,
     "inverse": false

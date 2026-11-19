@@ -13,6 +13,10 @@
  *   C99 complex arithmetic, not fused under `-ffp-contract=off`), the second half of the
  *   reference of the `C32` `scramble` fallback (M49 §5: the phasor looked up into a buffer, then
  *   this product).
+ * - `volk_32fc_32f_multiply_32fc_generic`: complex samples times a real sequence (`*c = *a *
+ *   *b`, two products per sample), the second half of the reference of the `C32` `scramble`
+ *   fallback at `bits = 1` (M49.1 §5: a `±1.0` sequence formed from the index bits into a
+ *   buffer, then this product, the form of srsRAN's `srsran_scrambling_c`).
  *
  * VOLK has no 16-bit interleave (the closest kernel, `volk_32f_x2_s32f_interleave_16ic`,
  * converts scaled floats to 16-bit integers, a conversion with a multiply and a rounding per
@@ -35,6 +39,7 @@
 #include <volk/volk_32fc_deinterleave_32f_x2.h>
 #include <volk/volk_16ic_deinterleave_16i_x2.h>
 #include <volk/volk_32fc_x2_multiply_32fc.h>
+#include <volk/volk_32fc_32f_multiply_32fc.h>
 
 /* `c[i] = (re[i], im[i])` for `n` samples. */
 void sdrk_volk_generic_32f_x2_interleave_32fc(lv_32fc_t* c,
@@ -70,6 +75,15 @@ void sdrk_volk_generic_32fc_x2_multiply_32fc(lv_32fc_t* c,
                                              unsigned int n)
 {
     volk_32fc_x2_multiply_32fc_generic(c, a, b, n);
+}
+
+/* `c[i] = a[i] * b[i]` (complex times real) for `n` samples. */
+void sdrk_volk_generic_32fc_32f_multiply_32fc(lv_32fc_t* c,
+                                              const lv_32fc_t* a,
+                                              const float* b,
+                                              unsigned int n)
+{
+    volk_32fc_32f_multiply_32fc_generic(c, a, b, n);
 }
 
 /*

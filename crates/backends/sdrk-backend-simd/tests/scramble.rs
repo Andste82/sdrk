@@ -1,10 +1,11 @@
-//! `scramble` (M49 test 7) against the fallback at the level of the running build: both types,
-//! every `bits` 1 to 8, both directions, every length from 0 to 67 and 4096, unaligned input and
-//! output slices, every phase byte 0 to 255, the special values (`CQ15` components −32768 and
-//! 32767; `C32` `±0`, `±∞`, subnormals and NaN payloads) and the golden cases of M49 §4.
+//! `scramble` (M49 test 7, revised by M49.1 test 3) against the fallback at the level of the
+//! running build: both types, every `bits` 1 to 8, both directions, every length from 0 to 67
+//! and 4096, unaligned input and output slices, every phase byte 0 to 255 at every lane
+//! position, the special values (`CQ15` components −32768 and 32767; `C32` `±0`, `±∞`,
+//! subnormals and NaN payloads) and the golden cases.
 //!
-//! A `C32` sample with residue `r = 0` (pure sign and swap operations) is compared by
-//! `to_bits()` with NaN payloads included; a sample with `r ≠ 0` (the residual product) by
+//! A `C32` sample at `bits` 1 and 2 (pure sign and swap operations) is compared by `to_bits()`
+//! with NaN payloads included; a sample at `bits ≥ 3` (the product with the table phasor) by
 //! `to_bits()` except that a NaN result is compared by class (D296). `CQ15` is compared bit for
 //! bit everywhere.
 #![allow(
@@ -21,16 +22,11 @@ use std::path::PathBuf;
 
 use common::{Rng, chunks};
 use sdrk_backend_simd::Simd;
-use sdrk_core::kernels::scramble::{Scramble, phase_index, split_index};
+use sdrk_core::kernels::scramble::{Scramble, phase_index, scramble_one_c32, split_index};
 use sdrk_core::{C32, CQ15, Error, Fallback, Q15};
 
 /// The seeds of the inputs (the golden seeds of M49 §4).
 const SEEDS: [u64; 7] = [690, 691, 692, 693, 694, 698, 699];
-
-/// The residue of the sample with phase byte `p`.
-fn residue(p: u8, bits: u32, inverse: bool) -> u32 {
-    split_index(phase_index(p, bits, inverse), bits).1
-}
 
 /// `C32` special values: signed zeros, infinities, subnormals, NaN payloads of both signs,
 /// the extremes of the finite range and ordinary values.
@@ -112,10 +108,11 @@ fn phases(seed: u64, n: usize) -> Vec<u8> {
 }
 
 /// `got` equals `want` under the rule of the module documentation.
-fn assert_c32(want: &[C32], got: &[C32], p: &[u8], bits: u32, inverse: bool, what: &str) {
+fn assert_c32(want: &[C32], got: &[C32], p: &[u8], bits: u32, what: &str) {
     assert_eq!(want.len(), got.len(), "{what}");
+    // Exact (no product) only at bits 1 and 2 since M49.1.
+    let exact = bits <= 2;
     for (n, ((w, g), &pv)) in want.iter().zip(got).zip(p).enumerate() {
-        let exact = residue(pv, bits, inverse) == 0;
         for (a, b) in [(w.re, g.re), (w.im, g.im)] {
             let same = if !exact && a.is_nan() {
                 b.is_nan()
@@ -146,7 +143,7 @@ fn same_c32(x: &[C32], p: &[u8], bits: u32, inverse: bool, out_off: usize, what:
     let mut buf = vec![C32::new(7.0, 7.0); n + out_off + 1];
     Simd.scramble(x, p, bits, inverse, &mut buf[out_off..out_off + n])
         .unwrap();
-    assert_c32(&want, &buf[out_off..out_off + n], p, bits, inverse, what);
+    assert_c32(&want, &buf[out_off..out_off + n], p, bits, what);
     assert_eq!(
         buf[out_off + n],
         C32::new(7.0, 7.0),
@@ -293,10 +290,11 @@ fn every_phase_byte_at_every_lane_position() {
     }
 }
 
-/// The samples with `r = 0` equal the scalar quadrant map exactly, NaN payloads included, and
-/// `±∞` stays `±∞` (shared conventions §A.2): checked on the SIMD output directly.
+/// At `bits` 1 and 2 every sample equals the scalar quadrant map exactly, NaN payloads included,
+/// and `±∞` stays `±∞` (shared conventions §A.2): checked on the SIMD output directly. At
+/// `bits ≥ 3` the samples equal `scramble_one_c32` (NaN by class).
 #[test]
-fn c32_samples_with_residue_zero_keep_every_bit_and_infinity() {
+fn c32_samples_keep_every_bit_and_infinity_at_bits_1_and_2() {
     use sdrk_core::num::c32_quadrant;
     let sp = c32_specials();
     let x: Vec<C32> = sp
@@ -309,8 +307,9 @@ fn c32_samples_with_residue_zero_keep_every_bit_and_infinity() {
             let mut y = vec![C32::default(); x.len()];
             Simd.scramble(&x, &p, bits, inverse, &mut y).unwrap();
             for ((&xv, &yv), &pv) in x.iter().zip(&y).zip(&p) {
-                let (q, r) = split_index(phase_index(pv, bits, inverse), bits);
-                if r == 0 {
+                let k = phase_index(pv, bits, inverse);
+                if bits <= 2 {
+                    let (q, _) = split_index(k, bits);
                     let w = c32_quadrant(xv, q);
                     assert_eq!(
                         (w.re.to_bits(), w.im.to_bits()),
@@ -319,6 +318,14 @@ fn c32_samples_with_residue_zero_keep_every_bit_and_infinity() {
                     );
                     let inf = |v: C32| u8::from(v.re.is_infinite()) + u8::from(v.im.is_infinite());
                     assert_eq!(inf(xv), inf(yv), "bits {bits} phase {pv} x {xv:?}");
+                } else {
+                    let w = scramble_one_c32(xv, k, bits).unwrap();
+                    for (a, b) in [(w.re, yv.re), (w.im, yv.im)] {
+                        assert!(
+                            (a.is_nan() && b.is_nan()) || a.to_bits() == b.to_bits(),
+                            "bits {bits} phase {pv} x {xv:?}"
+                        );
+                    }
                 }
             }
         }
@@ -356,7 +363,7 @@ fn chunked_calls_give_the_bits_of_one_call() {
                     .unwrap();
                 at += len;
             }
-            assert_c32(&whole, &parts, &p, bits, false, "chunks");
+            assert_c32(&whole, &parts, &p, bits, "chunks");
             assert_eq!(wq, pq);
         }
     }
@@ -532,7 +539,7 @@ fn run_c32(name: &str, input: &[u8], p: &[u8], bits: u32, inverse: bool) -> (Vec
     Simd.scramble(&x, p, bits, inverse, &mut y).unwrap();
     let mut f = vec![C32::default(); x.len()];
     Fallback.scramble(&x, p, bits, inverse, &mut f).unwrap();
-    assert_c32(&f, &y, p, bits, inverse, name);
+    assert_c32(&f, &y, p, bits, name);
     let bytes = y
         .iter()
         .flat_map(|v| [v.re.to_le_bytes(), v.im.to_le_bytes()].concat())

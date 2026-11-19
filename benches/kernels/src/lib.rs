@@ -365,7 +365,7 @@ pub trait Kernel {
 /// are appended; a `<kernel>_fallback`, `<kernel>_airspy`, `<kernel>_fastnoise` or
 /// `<kernel>_ziggurat` entry takes the seed of `<kernel>`, so that both entries filter the same
 /// input.
-pub const KERNELS: [&str; 259] = [
+pub const KERNELS: [&str; 261] = [
     "convert_cs8",
     "convert_cs16",
     "convert_out_cs16",
@@ -615,11 +615,13 @@ pub const KERNELS: [&str; 259] = [
     "gauss_noise_f32_fastnoise",
     "gauss_noise_f32_ziggurat",
     "gauss_noise_q15_fallback",
+    "scramble_c32_b1",
     "scramble_c32_b2",
     "scramble_c32_b8",
     "scramble_cq15_b2",
     "scramble_cq15_b8",
     "scramble_block",
+    "scramble_c32_b1_fallback",
     "scramble_c32_b2_fallback",
     "scramble_c32_b8_fallback",
     "scramble_cq15_b2_fallback",
@@ -895,6 +897,9 @@ pub fn prepare(name: &str, layout: Layout) -> Option<Box<dyn Kernel>> {
             Box::new(gauss_noise_family::GaussNoiseQ15K::new(rng, layout))
         }
         "noise_block" => Box::new(gauss_noise_family::NoiseBlockK::new(rng, layout)),
+        "scramble_c32_b1" | "scramble_c32_b1_fallback" => {
+            Box::new(scramble_family::ScrambleC32K::new(rng, layout, 1, entry))
+        }
         "scramble_c32_b2" | "scramble_c32_b2_fallback" | "scramble_c32_b2_dvbs2" => {
             Box::new(scramble_family::ScrambleC32K::new(rng, layout, 2, entry))
         }

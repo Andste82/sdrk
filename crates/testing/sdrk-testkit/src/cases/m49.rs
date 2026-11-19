@@ -1,16 +1,17 @@
 //! Suite cases of M49: the kernel `scramble` and its extremes (test 5 of the milestone).
 //!
 //! `scramble_c32` and `scramble_cq15` run every `bits` 1 to 8 in both directions on 1024 random
-//! samples with random phase bytes: `Fallback` against `Reference` (bit for bit where the residue
-//! is 0, within the contract SNR elsewhere: 120 dB `C32`, 80 dB `CQ15`), the facade against
+//! samples with random phase bytes: `Fallback` against `Reference` (bit for bit at `bits` 1 and
+//! 2, within the contract SNR at `bits` 3 to 8: 120 dB `C32`, 80 dB `CQ15`), the facade against
 //! `Fallback` bit for bit, the round trip (exact at `bits` 1 and 2 except the saturating `CQ15`
 //! negation of −32768; within 120 dB or 2 LSB at `bits` 3 to 8), and 20 chunk plans (seed 695,
 //! chunks of 1 to 300 samples) of `Fallback` and the facade (alternating) that must give the
 //! bits of the run in one call. `extremes_m49` (test 4) checks an empty input, every index 0 to
 //! 255 at `bits` 8 in both directions, the `CQ15` corners (the saturating negation of the
-//! quadrant map and the saturation of the residual product), NaN and the infinities in `C32`
-//! (`±∞` stays `±∞` where the residue is 0) and the parameter and length errors, which write
-//! nothing. No files are read.
+//! quadrant map and the saturation of the product of `bits ≥ 3`), NaN and the infinities in
+//! `C32` (`±∞` stays `±∞` at `bits` 1 and 2) and the parameter and length errors, which write
+//! nothing. No files are read. Revised by M49.1: `bits ≥ 3` is one table phasor and one product
+//! per sample, without the quadrant split.
 
 #![allow(
     clippy::cast_possible_truncation,
@@ -198,11 +199,10 @@ where
                     .detail(format_args!("bits {bits}, inverse {inverse}, sample {i}")));
             }
             let (mut sig, mut err) = (0.0f64, 0.0f64);
-            for (i, ((&a, &b), &v)) in f.iter().zip(r.iter()).zip(p.iter()).enumerate() {
-                let (_, res) = split_index(phase_index(v, bits, inverse), bits);
-                if res == 0 {
+            for (i, (&a, &b)) in f.iter().zip(r.iter()).enumerate() {
+                if bits <= 2 {
                     ensure(T::same(a, b), || {
-                        Failure::new(case, "fallback differs from the reference at r = 0")
+                        Failure::new(case, "fallback differs from the reference at bits <= 2")
                             .detail(format_args!("bits {bits}, inverse {inverse}, sample {i}"))
                     })?;
                 } else {
@@ -320,8 +320,8 @@ pub(super) fn extremes_m49(arena: &mut Arena<'_>) -> Result<(), Failure> {
         })?;
     }
 
-    // CQ15 corners: the saturating negation of the quadrant map, the saturation of the residual
-    // product (the fallback against the reference: bit for bit at r = 0).
+    // CQ15 corners: the saturating negation of the quadrant map, the saturation of the product
+    // (the facade against the reference: bit for bit at bits <= 2, within 1 LSB above).
     let corners = [
         (i16::MIN, i16::MIN),
         (i16::MIN, i16::MAX),
@@ -330,7 +330,7 @@ pub(super) fn extremes_m49(arena: &mut Arena<'_>) -> Result<(), Failure> {
     ];
     for bits in 1..=8u32 {
         for k in 0..(1u32 << bits) {
-            let (q, r) = split_index(k, bits);
+            let (q, _) = split_index(k, bits);
             for &(re, im) in &corners {
                 let x = [CQ15 {
                     re: Q15(re),
@@ -340,7 +340,7 @@ pub(super) fn extremes_m49(arena: &mut Arena<'_>) -> Result<(), Failure> {
                 let mut z = [CQ15::default()];
                 Sdrk.scramble(&x, &[k as u8], bits, false, &mut y)?;
                 Reference.scramble(&x, &[k as u8], bits, false, &mut z)?;
-                if r == 0 {
+                if bits <= 2 {
                     ensure(y[0] == cq15_quadrant(x[0], q) && y == z, || {
                         Failure::new(CASE, "a CQ15 corner is not the saturating quadrant map")
                             .detail(format_args!("bits {bits}, k {k}"))
@@ -356,7 +356,8 @@ pub(super) fn extremes_m49(arena: &mut Arena<'_>) -> Result<(), Failure> {
         }
     }
 
-    // NaN and infinities in C32: ±∞ stays ±∞ where r = 0 (the exact quadrant map).
+    // NaN and infinities in C32: ±∞ stays ±∞ at bits <= 2 (the exact quadrant map); at bits >= 3
+    // one infinite component gives two (no table entry is 0).
     let inf = f32::INFINITY;
     let specials = [
         C32::new(inf, 1.0),
@@ -368,11 +369,11 @@ pub(super) fn extremes_m49(arena: &mut Arena<'_>) -> Result<(), Failure> {
     ];
     for bits in 1..=8u32 {
         for k in 0..(1u32 << bits) {
-            let (q, r) = split_index(k, bits);
+            let (q, _) = split_index(k, bits);
             for &x in &specials {
                 let mut y = [C32::default()];
                 Sdrk.scramble(&[x], &[k as u8], bits, false, &mut y)?;
-                let ok = if r == 0 {
+                let ok = if bits <= 2 {
                     let w = c32_quadrant(x, q);
                     y[0].re.to_bits() == w.re.to_bits() && y[0].im.to_bits() == w.im.to_bits()
                 } else if x.re.is_infinite() && x.im.is_finite() {

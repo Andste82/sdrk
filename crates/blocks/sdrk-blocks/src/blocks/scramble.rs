@@ -235,10 +235,12 @@ impl ScrambleConfig {
 /// the same configuration (but `inverse`) agree when both start at the same sample; there is
 /// no key synchronisation.
 ///
-/// The key is drawn 32 bits at a time ([`Prbs::next_bits`], which steps the register up to `t`
-/// bits at a time, `t` the second tap of the polynomial, and gives the bits of
-/// [`Prbs::next_bit`]); the bits of a word that a call does not use are kept for the next call,
-/// so the indices do not depend on how the stream is cut.
+/// The indices are produced word-parallel (M49.1 §4): the key bits come up to 32 at a time from
+/// a 64-bit window of the key sequence with one shift and one XOR (the recurrence of the
+/// polynomial stretched by a power of two), and are split into the indices of four samples at a
+/// time with constant shifts; the bits and indices that a call does not use are kept for the
+/// next call, so the indices equal those of [`Prbs::next_bit`] and do not depend on how the
+/// stream is cut.
 ///
 /// ```
 /// use sdrk_blocks::{ArenaStorage, Block, ScrambleBlock, ScrambleConfig};
@@ -259,30 +261,144 @@ impl ScrambleConfig {
 #[derive(Debug)]
 pub struct ScrambleBlock<T: BlockSample, S: Storage> {
     config: ScrambleConfig,
-    /// The key at its start (for `reset`).
-    start: Prbs,
-    /// The key at the next sample.
-    prbs: Prbs,
-    /// Key bits drawn but not used yet: the low `have` bits of `acc`, the next one the highest.
-    acc: u64,
-    /// The number of valid bits in `acc` (below `bits` after a call).
-    have: u32,
+    /// The index production at the start of the key (for `reset`).
+    start: KeyIndices,
+    /// The index production at the next sample.
+    key: KeyIndices,
     /// The phase indices of the current call.
     phase: [u8; SCRAMBLE_CHUNK],
     _marker: PhantomData<fn() -> (T, S)>,
+}
+
+/// The samples of one index group: the indices are split from the key bits four at a time.
+const GROUP: usize = 4;
+
+/// Word-parallel production of the phase indices of a PRBS key (M49.1 §4).
+///
+/// The key sequence `s` of `x^n + x^t + 1` satisfies `s[i] = s[i − n] ^ s[i − t]` and therefore
+/// (squaring the polynomial over GF(2)) also `s[i] = s[i − L] ^ s[i − T]` with `L = 2^j n`,
+/// `T = 2^j t` for every `j`. With the last 64 key bits in a window (`L ≤ 64`), the next
+/// `m ≤ T` bits depend only on bits already in the window, so they come from two shifts and one
+/// XOR: `((win >> (L − m)) ^ (win >> (T − m))) & (2^m − 1)`, the first bit the most
+/// significant. The window starts from the register of [`Prbs`] (the last `n` bits) extended
+/// backwards with `s[i − n] = s[i] ^ s[i − t]`. The bits are buffered and split into the indices
+/// of [`GROUP`] samples at a time (`GROUP · bits ≤ 32` bits, constant shifts per `bits`); the
+/// indices of a group that a call does not use are kept for the next call.
+#[derive(Debug, Clone, Copy)]
+struct KeyIndices {
+    /// The last 64 key bits, the newest in bit 0 (bit `k` is the bit `k + 1` steps back).
+    win: u64,
+    /// `L − m` (the shift of the long lag).
+    shift_long: u32,
+    /// `T − m` (the shift of the short lag).
+    shift_short: u32,
+    /// `m`, the key bits per step (at most 32).
+    step: u32,
+    /// `2^m − 1`.
+    step_mask: u64,
+    /// Key bits drawn but not split yet: the low `have` bits, the next one the highest.
+    acc: u64,
+    /// The number of valid bits in `acc` (below `GROUP · bits` after a group).
+    have: u32,
+    /// The indices of the last group; the last `pending` of them are not used yet.
+    group: [u8; GROUP],
+    /// The number of unused indices in `group` (0 to `GROUP − 1`).
+    pending: usize,
+}
+
+impl KeyIndices {
+    /// The index production at the register of `prbs`.
+    fn new(prbs: &Prbs) -> Self {
+        let poly = prbs.poly();
+        let (n, t) = (poly.degree(), poly.second_tap());
+        // Backwards: bit k (k ≥ n) is s[c − 1 − k] = s[c − 1 − k + n] ^ s[c − 1 − k + n − t].
+        let mut win = u64::from(prbs.state());
+        for k in n..64 {
+            let bit = ((win >> (k - n)) ^ (win >> (k - n + t))) & 1;
+            win |= bit << k;
+        }
+        // The largest power of two with L = 2^j n ≤ 64 (n ≥ 5, so j ≥ 2).
+        let mut j = 0;
+        while (n << (j + 1)) <= 64 {
+            j += 1;
+        }
+        let (long, short) = (n << j, t << j);
+        let step = short.min(32);
+        Self {
+            win,
+            shift_long: long - step,
+            shift_short: short - step,
+            step,
+            step_mask: (1u64 << step) - 1,
+            acc: 0,
+            have: 0,
+            group: [0; GROUP],
+            pending: 0,
+        }
+    }
+
+    /// The next [`GROUP`] indices of `B` bits each.
+    #[inline]
+    fn next_group<const B: u32>(&mut self) -> [u8; GROUP] {
+        let need = B * GROUP as u32;
+        // Before a step `have < need ≤ 32` and `step ≤ 32`, so the bits fit the 64-bit buffer.
+        while self.have < need {
+            let new =
+                ((self.win >> self.shift_long) ^ (self.win >> self.shift_short)) & self.step_mask;
+            self.win = (self.win << self.step) | new;
+            self.acc = (self.acc << self.step) | new;
+            self.have += self.step;
+        }
+        self.have -= need;
+        let bits = self.acc >> self.have;
+        let mask = (1u64 << B) - 1;
+        // `B ≤ 8`, so every index fits a byte.
+        [
+            ((bits >> (3 * B)) & mask) as u8,
+            ((bits >> (2 * B)) & mask) as u8,
+            ((bits >> B) & mask) as u8,
+            (bits & mask) as u8,
+        ]
+    }
+
+    /// Writes the next `out.len()` indices of `B` bits each.
+    fn fill<const B: u32>(&mut self, out: &mut [u8]) {
+        // The state in a local (the stores to `out` would otherwise reload it every group).
+        let mut s = *self;
+        let used = GROUP - s.pending;
+        let mut taken = 0;
+        for (o, &p) in out.iter_mut().zip(s.group.iter().skip(used)) {
+            *o = p;
+            taken += 1;
+        }
+        s.pending -= taken;
+        if let Some(rest) = out.get_mut(taken..) {
+            let mut chunks = rest.chunks_exact_mut(GROUP);
+            for c in &mut chunks {
+                c.copy_from_slice(&s.next_group::<B>());
+            }
+            let tail = chunks.into_remainder();
+            if !tail.is_empty() {
+                s.group = s.next_group::<B>();
+                for (o, &p) in tail.iter_mut().zip(s.group.iter()) {
+                    *o = p;
+                }
+                s.pending = GROUP - tail.len();
+            }
+        }
+        *self = s;
+    }
 }
 
 impl<T: BlockSample, S: Storage> ScrambleBlock<T, S> {
     /// Creates the block; it needs no storage.
     pub fn new(config: &ScrambleConfig, rate_in: Rate, _storage: &mut S) -> Result<Self> {
         config.validate(rate_in)?;
-        let start = config.prbs()?;
+        let start = KeyIndices::new(&config.prbs()?);
         Ok(Self {
             config: *config,
-            prbs: start.clone(),
+            key: start,
             start,
-            acc: 0,
-            have: 0,
             phase: [0; SCRAMBLE_CHUNK],
             _marker: PhantomData,
         })
@@ -316,20 +432,17 @@ where
         let n = input.len().min(output.len()).min(SCRAMBLE_CHUNK);
         let bits = self.config.bits;
         let phase = head_mut(&mut self.phase, n)?;
-        let mask = (1u64 << bits) - 1;
-        // The buffer in locals (the stores to `phase` would otherwise reload it every sample).
-        let (mut acc, mut have) = (self.acc, self.have);
-        for p in phase.iter_mut() {
-            if have < bits {
-                // At most `bits − 1 ≤ 7` bits are left, so 32 more fit the 64-bit buffer.
-                acc = (acc << 32) | u64::from(self.prbs.next_bits(32));
-                have += 32;
-            }
-            have -= bits;
-            // `bits` is at most 8, so the index fits a byte.
-            *p = ((acc >> have) & mask) as u8;
+        match bits {
+            1 => self.key.fill::<1>(phase),
+            2 => self.key.fill::<2>(phase),
+            3 => self.key.fill::<3>(phase),
+            4 => self.key.fill::<4>(phase),
+            5 => self.key.fill::<5>(phase),
+            6 => self.key.fill::<6>(phase),
+            7 => self.key.fill::<7>(phase),
+            8 => self.key.fill::<8>(phase),
+            _ => return Err(Error::Core(sdrk_core::Error::Internal("scramble bits"))),
         }
-        (self.acc, self.have) = (acc, have);
         <Sdrk as Scramble<T>>::scramble(
             &Sdrk,
             head(input, n)?,
@@ -349,9 +462,7 @@ where
     }
 
     fn reset(&mut self) {
-        self.prbs = self.start.clone();
-        self.acc = 0;
-        self.have = 0;
+        self.key = self.start;
     }
 
     fn set_param(&mut self, name: &str, _value: ParamValue) -> Result<()> {

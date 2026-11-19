@@ -1,16 +1,16 @@
 //! Fallback implementation of the `scramble` kernel.
 //!
 //! The arguments are checked once per call; every sample is then the per-sample formula of the
-//! public helpers `scramble_one_c32`/`scramble_one_cq15`. For `bits ≤ 2` the residue is always
-//! 0, so that loop is the quadrant map alone (no table, no product). For `bits ≥ 3` the at most
-//! 64 residual phasors of the call are read from the cosine table once into a small table of
-//! pairs (the same entries, so the same bits), and the loop selects the input where `r = 0`.
+//! public helpers `scramble_one_c32`/`scramble_one_cq15`. For `bits ≤ 2` that is the quadrant
+//! map alone (no table, no product); `C32` at `bits = 1` writes it as one sign mask per sample. For `bits ≥ 3` (M49.1) every sample reads its phasor from
+//! the cosine table at `i = k << (12 − bits)` and `(i + 3072) & 4095` and runs the `rotate`
+//! product; there is no quadrant map and no selection.
 
 use crate::Fallback;
 use crate::error::Result;
 use crate::kernels::scramble::{
-    RESIDUES, Scramble, check_args, phase_index, product_c32, product_cq15, residual_table_c32,
-    residual_table_q15, split_index,
+    Scramble, check_args, phase_index, phasor_c32, phasor_q15, product_c32, product_cq15,
+    split_index,
 };
 use crate::num::{c32_quadrant, cq15_quadrant};
 use crate::types::{C32, CQ15};
@@ -26,28 +26,26 @@ impl Scramble<C32> for Fallback {
     ) -> Result<()> {
         check_args(bits, input.len(), phase.len(), output.len())?;
         let samples = output.iter_mut().zip(input).zip(phase);
-        if bits <= 2 {
+        if bits == 1 {
+            // The quadrant map with `q = 2 k` (`inverse` keeps `k`, since `−k ≡ k` mod 2): both
+            // sign bits flipped where `p & 1` is set, the bits of `c32_quadrant` as one XOR mask
+            // that the compiler vectorizes (M49.1 §5, the `scramble_c32_b1_fallback` row).
+            for ((o, &x), &p) in samples {
+                let m = (u32::from(p) & 1) << 31;
+                *o = C32::new(
+                    f32::from_bits(x.re.to_bits() ^ m),
+                    f32::from_bits(x.im.to_bits() ^ m),
+                );
+            }
+        } else if bits == 2 {
             for ((o, &x), &p) in samples {
                 let (q, _) = split_index(phase_index(p, bits, inverse), bits);
                 *o = c32_quadrant(x, q);
             }
         } else {
-            let table = residual_table_c32(bits)?;
-            let shift = bits - 2;
-            let rmask = (1u32 << shift) - 1;
             for ((o, &x), &p) in samples {
-                let index = phase_index(p, bits, inverse);
-                let residue = index & rmask;
-                let (cos, sin) = table
-                    .get(residue as usize & (RESIDUES - 1))
-                    .copied()
-                    .unwrap_or((0.0, 0.0));
-                let y = if residue == 0 {
-                    x
-                } else {
-                    product_c32(x, cos, sin)
-                };
-                *o = c32_quadrant(y, index >> shift);
+                let (c, s) = phasor_c32(phase_index(p, bits, inverse), bits);
+                *o = product_c32(x, c, s);
             }
         }
         Ok(())
@@ -71,22 +69,9 @@ impl Scramble<CQ15> for Fallback {
                 *o = cq15_quadrant(x, q);
             }
         } else {
-            let table = residual_table_q15(bits)?;
-            let shift = bits - 2;
-            let rmask = (1u32 << shift) - 1;
             for ((o, &x), &p) in samples {
-                let index = phase_index(p, bits, inverse);
-                let residue = index & rmask;
-                let (cos, sin) = table
-                    .get(residue as usize & (RESIDUES - 1))
-                    .copied()
-                    .unwrap_or((0, 0));
-                let y = if residue == 0 {
-                    x
-                } else {
-                    product_cq15(x, cos, sin)
-                };
-                *o = cq15_quadrant(y, index >> shift);
+                let (c, s) = phasor_q15(phase_index(p, bits, inverse), bits);
+                *o = product_cq15(x, c, s);
             }
         }
         Ok(())

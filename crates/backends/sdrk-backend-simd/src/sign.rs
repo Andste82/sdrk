@@ -205,6 +205,15 @@ fn c32_quadrant_run<S: SimdToken>(
     *done = n;
 }
 
+/// The `C32` binary chip of every sample at the level of `simd` (inlined into a level entry of
+/// another kernel, `scramble` at `bits = 1`); returns the number of leading samples done.
+#[inline(always)]
+pub(crate) fn c32_chip_level<S: SimdToken>(simd: S, x: &[u32], b: &[u8], y: &mut [u32]) -> usize {
+    let mut done = 0;
+    c32_quadrant_run(simd, x, b, y, true, &mut done);
+    done
+}
+
 // The entries, one function per level (see `dispatch_fn!`).
 dispatch_fn!(fn run_neg(x: &[i16], y: &mut [i16], done: &mut usize) => neg_sat_run);
 dispatch_fn!(

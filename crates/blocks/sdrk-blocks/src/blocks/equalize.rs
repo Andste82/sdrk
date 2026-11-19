@@ -118,12 +118,14 @@ pub static DESCRIPTION: BlockDescription = BlockDescription {
             kind: ParamKind::F64 {
                 min: MU.0,
                 max: MU.1,
-                default: Some(DEFAULT_MU_CMA),
+                default: None,
             },
-            typical: "0.05",
+            typical: "the default of the constellation",
             mutability: Mutability::Runtime,
             description: "Normalized step size of the CMA update (used as f32); a change \
-                applies from the next symbol.",
+                applies from the next symbol. The default depends on the constellation: 0.05 \
+                for bpsk to qam64, 0.02 for qam256, 0.005 for qam1024 (the denser grids need a \
+                smaller blind step).",
         },
         ParamDesc {
             name: "mu_dd",
@@ -144,12 +146,14 @@ pub static DESCRIPTION: BlockDescription = BlockDescription {
             kind: ParamKind::I64 {
                 min: 0,
                 max: u32::MAX as i64,
-                default: Some(DEFAULT_CMA_SYMBOLS as i64),
+                default: None,
             },
-            typical: "1000; 0 for decision mode only, 4294967295 for CMA only",
+            typical: "the default of the constellation; 0 for decision mode only, 4294967295 \
+                for CMA only",
             mutability: Mutability::Build,
             description: "Symbols in CMA mode before the switch to decision mode (0: decision \
-                mode from the start, 4294967295: never).",
+                mode from the start, 4294967295: never). The default depends on the \
+                constellation: 1000 for bpsk to qam64, 8000 for qam256, 16000 for qam1024.",
         },
         ParamDesc {
             name: "phase_bw",
@@ -247,10 +251,13 @@ fn check_mu(name: &'static str, mu: f64) -> Result<()> {
 /// use sdrk_blocks::{EqConstellation, EqualizeConfig};
 /// let cfg = EqualizeConfig::default();
 /// assert_eq!((cfg.taps, cfg.feedback_taps, cfg.constellation), (11, 0, EqConstellation::Qpsk));
-/// assert_eq!((cfg.mu_cma, cfg.mu_dd, cfg.cma_symbols, cfg.phase_bw), (0.05, 0.02, 1000, 0.02));
+/// assert_eq!((cfg.mu_cma(), cfg.mu_dd, cfg.cma_symbols(), cfg.phase_bw), (0.05, 0.02, 1000, 0.02));
+/// let dense = EqualizeConfig { constellation: EqConstellation::Qam1024, ..cfg };
+/// assert_eq!((dense.mu_cma(), dense.cma_symbols()), (0.005, 16_000));
 /// assert!(cfg.validate().is_ok());
 /// assert!(EqualizeConfig { taps: 12, ..cfg }.validate().is_err());
 /// assert!(EqualizeConfig { mu_dd: 1.5, ..cfg }.validate().is_err());
+/// assert!(EqualizeConfig { mu_cma: Some(0.0), ..cfg }.validate().is_err());
 /// assert!(EqualizeConfig { feedback_taps: 64, ..cfg }.validate().is_err());
 /// assert!(EqualizeConfig { phase_bw: 0.00005, ..cfg }.validate().is_err());
 /// ```
@@ -262,47 +269,48 @@ pub struct EqualizeConfig {
     pub feedback_taps: usize,
     /// The constellation of the decisions.
     pub constellation: EqConstellation,
-    /// Normalized step size of the CMA update (1e-5 to 1); the kernel uses it as `f32`.
-    pub mu_cma: f64,
+    /// Normalized step size of the CMA update (1e-5 to 1); the kernel uses it as `f32`. `None`
+    /// takes that of the constellation ([`EqualizeConfig::blind_start`], D1517, D1536).
+    pub mu_cma: Option<f64>,
     /// Normalized step size of the decision-directed update (1e-5 to 1); the kernel uses it
     /// as `f32`.
     pub mu_dd: f64,
     /// Symbols in CMA mode before decision mode (0: decision mode at once, `u32::MAX`:
-    /// never).
-    pub cma_symbols: u32,
+    /// never). `None` takes that of the constellation ([`EqualizeConfig::blind_start`]).
+    pub cma_symbols: Option<u32>,
     /// Bandwidth of the phase tracker (0 = off, else 1e-4 to 0.2).
     pub phase_bw: f64,
 }
 
 impl Default for EqualizeConfig {
-    /// 11 taps, no feedback, QPSK, `mu_cma` 0.05, `mu_dd` 0.02, 1000 CMA symbols, `phase_bw`
-    /// 0.02 (M43 §2 as amended, D828).
+    /// 11 taps, no feedback, QPSK, `mu_cma` and `cma_symbols` those of the constellation (0.05
+    /// and 1000 for QPSK), `mu_dd` 0.02, `phase_bw` 0.02 (M43 §2 as amended, D828; D1536).
     fn default() -> Self {
         Self {
             taps: DEFAULT_TAPS,
             feedback_taps: 0,
             constellation: EqConstellation::Qpsk,
-            mu_cma: DEFAULT_MU_CMA,
+            mu_cma: None,
             mu_dd: DEFAULT_MU_DD,
-            cma_symbols: DEFAULT_CMA_SYMBOLS,
+            cma_symbols: None,
             phase_bw: DEFAULT_PHASE_BW,
         }
     }
 }
 
 impl EqualizeConfig {
-    /// The blind start of the equalizer for a constellation, `(mu_cma, cma_symbols)` (the maintainer's
-    /// decision on I44.2-3, D1517): the denser grids need a smaller CMA step and more blind symbols
+    /// The blind start of the equalizer for a constellation, `(mu_cma, cma_symbols)`: the defaults
+    /// of the two parameters (the maintainer's decision on I44.2-3, D1517; derived in the block,
+    /// rule 4 of M44.1.1, D1536). The denser grids need a smaller CMA step and more blind symbols
     /// (D1511: at `mu_cma` 0.05 the CMA output stops improving near 18 dB SINR, below what 1024-QAM
-    /// needs for its decisions). BPSK to 64-QAM: 0.05 over 1000 symbols (the defaults of the
-    /// parameters, D828); 256-QAM: 0.02 over 8000 (4000 in D1511; in `qam_demod` through the
-    /// multipath of M44.2 test 4 too short, D1517); 1024-QAM: 0.005 over 16000. The composites that
-    /// hold an equalizer without exposing these parameters (`qam_demod`) take them from here
-    /// (rule 4 of M44.1.1); the parameters of the `equalize` block keep their one default.
+    /// needs for its decisions). BPSK to 64-QAM: 0.05 over 1000 symbols (D828); 256-QAM: 0.02 over
+    /// 8000 (4000 in D1511; in `qam_demod` through the multipath of M44.2 test 4 too short, D1517,
+    /// confirmed in D1526); 1024-QAM: 0.005 over 16000.
     ///
     /// ```
     /// use sdrk_blocks::{EqConstellation, EqualizeConfig};
     /// assert_eq!(EqualizeConfig::blind_start(EqConstellation::Qam64), (0.05, 1000));
+    /// assert_eq!(EqualizeConfig::blind_start(EqConstellation::Qam256), (0.02, 8000));
     /// assert_eq!(EqualizeConfig::blind_start(EqConstellation::Qam1024), (0.005, 16_000));
     /// ```
     pub const fn blind_start(c: EqConstellation) -> (f64, u32) {
@@ -313,24 +321,19 @@ impl EqualizeConfig {
         }
     }
 
-    /// The default configuration with the constellation `c` and its blind start
-    /// ([`EqualizeConfig::blind_start`]).
-    ///
-    /// ```
-    /// use sdrk_blocks::{EqConstellation, EqualizeConfig};
-    /// let cfg = EqualizeConfig::for_constellation(EqConstellation::Qam256);
-    /// assert_eq!((cfg.mu_cma, cfg.cma_symbols, cfg.taps), (0.02, 8000, 11));
-    /// ```
-    pub const fn for_constellation(c: EqConstellation) -> Self {
-        let (mu_cma, cma_symbols) = Self::blind_start(c);
-        Self {
-            taps: DEFAULT_TAPS,
-            feedback_taps: 0,
-            constellation: c,
-            mu_cma,
-            mu_dd: DEFAULT_MU_DD,
-            cma_symbols,
-            phase_bw: DEFAULT_PHASE_BW,
+    /// The CMA step size: `mu_cma`, or that of the constellation when it is not set.
+    pub const fn mu_cma(&self) -> f64 {
+        match self.mu_cma {
+            Some(v) => v,
+            None => Self::blind_start(self.constellation).0,
+        }
+    }
+
+    /// The symbols in CMA mode: `cma_symbols`, or those of the constellation when it is not set.
+    pub const fn cma_symbols(&self) -> u32 {
+        match self.cma_symbols {
+            Some(v) => v,
+            None => Self::blind_start(self.constellation).1,
         }
     }
 
@@ -342,7 +345,7 @@ impl EqualizeConfig {
     pub fn validate(&self) -> Result<()> {
         check_taps("taps", self.taps, EQ_TAPS.0)?;
         check_count("feedback_taps", self.feedback_taps, 0, EQ_FEEDBACK_MAX)?;
-        check_mu("mu_cma", self.mu_cma)?;
+        check_mu("mu_cma", self.mu_cma())?;
         check_mu("mu_dd", self.mu_dd)?;
         check_phase_bw(self.phase_bw)
     }
@@ -363,9 +366,11 @@ impl EqualizeConfig {
             }
             "feedback_taps" => self.feedback_taps = value.as_usize()?,
             "constellation" => self.constellation = constellation_of(value.as_choice()?),
-            "mu_cma" => self.mu_cma = value.as_f64()?,
+            "mu_cma" => self.mu_cma = Some(value.as_f64()?),
             "mu_dd" => self.mu_dd = value.as_f64()?,
-            "cma_symbols" => self.cma_symbols = u32::try_from(value.as_i64()?).unwrap_or(0),
+            "cma_symbols" => {
+                self.cma_symbols = Some(u32::try_from(value.as_i64()?).unwrap_or(0));
+            }
             "phase_bw" => {
                 let v = value.as_f64()?;
                 check_phase_bw(v)?;
@@ -385,9 +390,9 @@ impl EqualizeConfig {
             "taps" => Ok(ParamValue::I64(self.taps as i64)),
             "feedback_taps" => Ok(ParamValue::I64(self.feedback_taps as i64)),
             "constellation" => Ok(ParamValue::Choice(constellation_index(self.constellation))),
-            "mu_cma" => Ok(ParamValue::F64(self.mu_cma)),
+            "mu_cma" => Ok(ParamValue::F64(self.mu_cma())),
             "mu_dd" => Ok(ParamValue::F64(self.mu_dd)),
-            "cma_symbols" => Ok(ParamValue::I64(i64::from(self.cma_symbols))),
+            "cma_symbols" => Ok(ParamValue::I64(i64::from(self.cma_symbols()))),
             "phase_bw" => Ok(ParamValue::F64(self.phase_bw)),
             _ => unknown(),
         }
@@ -410,9 +415,9 @@ impl EqualizeConfig {
         EqParams {
             constellation: self.constellation,
             feedback_taps: self.feedback_taps,
-            mu_cma: self.mu_cma as f32,
+            mu_cma: self.mu_cma() as f32,
             mu_dd: self.mu_dd as f32,
-            cma_symbols: self.cma_symbols,
+            cma_symbols: self.cma_symbols(),
             phase_bw: self.phase_bw,
         }
     }
@@ -458,10 +463,13 @@ impl EqualizeConfig {
 /// # Ok::<(), Box<dyn std::error::Error>>(())
 /// ```
 pub struct EqualizeBlock<S: Storage> {
-    /// The step sizes as configured (the kernel holds them as `f32`); every other parameter is
-    /// read from the state, so that a composite of building blocks stays small (M44.1 §1).
-    mu_cma: f64,
+    /// The step sizes as configured (the kernel holds them as `f32`; `mu_cma` `None` while it is
+    /// the default of the constellation) and whether `cma_symbols` is that default; every other
+    /// parameter is read from the state, so that a composite of building blocks stays small
+    /// (M44.1 §1).
+    mu_cma: Option<f64>,
     mu_dd: f64,
+    cma_default: bool,
     state: EqualizeState<S::Buf<C32>, S::Buf<C32>>,
 }
 
@@ -482,6 +490,7 @@ impl<S: Storage> EqualizeBlock<S> {
         Ok(Self {
             mu_cma: config.mu_cma,
             mu_dd: config.mu_dd,
+            cma_default: config.cma_symbols.is_none(),
             state: config.state(storage)?,
         })
     }
@@ -539,7 +548,7 @@ impl<S: Storage> EqualizeBlock<S> {
             constellation: p.constellation,
             mu_cma: self.mu_cma,
             mu_dd: self.mu_dd,
-            cma_symbols: p.cma_symbols,
+            cma_symbols: (!self.cma_default).then_some(p.cma_symbols),
             phase_bw: p.phase_bw,
         }
     }
@@ -643,7 +652,7 @@ impl<S: Storage> Block for EqualizeBlock<S> {
             "mu_cma" => {
                 let v = value.as_f64()?;
                 self.state.set_mu_cma(v as f32)?;
-                self.mu_cma = v;
+                self.mu_cma = Some(v);
                 Ok(())
             }
             "mu_dd" => {

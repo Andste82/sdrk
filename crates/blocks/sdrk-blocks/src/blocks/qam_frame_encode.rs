@@ -8,7 +8,8 @@ use sdrk_proto::Packet;
 use sdrk_proto::frame::{MAX_PAYLOAD, frame_bits};
 
 use super::bit_scramble::{
-    BitScrambleBlock, BitScrambleConfig, POLYNOMIAL_PARAM, SCRAMBLER_PARAM, Scrambler,
+    BitPolynomial, BitScrambleBlock, BitScrambleConfig, POLYNOMIAL_PARAM, SCRAMBLER_PARAM,
+    Scrambler,
 };
 use super::frame_encode::{
     ENCODE_WHITENING_PARAM, FrameEncodeBlock, FrameEncodeConfig, IDLE_PARAM, PREAMBLE_BYTES_PARAM,
@@ -113,9 +114,9 @@ pub struct QamFrameEncodeConfig {
     pub qam: QamModConfig,
     /// Whether the stage `bit_scramble` is there (`scrambler`, default `multiplicative`).
     pub scrambler: Scrambler,
-    /// The scrambler: `polynomial` (its `constellation` is replaced by that of `qam`,
-    /// [`QamFrameEncodeConfig::scramble`]).
-    pub scramble: BitScrambleConfig,
+    /// The polynomial of the `bit_scramble` stage (`polynomial`, default `x23_x18`); its delays count
+    /// the symbols of the constellation of `qam` ([`QamFrameEncodeConfig::scramble`]).
+    pub polynomial: BitPolynomial,
 }
 
 impl Default for QamFrameEncodeConfig {
@@ -127,10 +128,7 @@ impl Default for QamFrameEncodeConfig {
             frame: FrameEncodeConfig::default(),
             qam,
             scrambler: Scrambler::default(),
-            scramble: BitScrambleConfig {
-                constellation: qam.constellation,
-                ..BitScrambleConfig::default()
-            },
+            polynomial: BitPolynomial::default(),
         }
     }
 }
@@ -141,7 +139,7 @@ impl QamFrameEncodeConfig {
     pub fn scramble(&self) -> BitScrambleConfig {
         BitScrambleConfig {
             constellation: self.qam.constellation,
-            ..self.scramble
+            polynomial: self.polynomial,
         }
     }
 
@@ -167,7 +165,11 @@ impl QamFrameEncodeConfig {
             match path.split_once('.') {
                 Some(("0", n)) => next.frame.set(n, value)?,
                 Some(("1", n)) => next.qam.set(n, value)?,
-                Some(("2", n)) => next.scramble.set(n, value)?,
+                Some(("2", n)) => {
+                    let mut stage = next.scramble();
+                    stage.set(n, value)?;
+                    next.polynomial = stage.polynomial;
+                }
                 Some(("3", _)) => {
                     SCRAMBLER_PARAM.check(&value)?;
                     next.scrambler = Scrambler::from_index(value.as_choice()?);
@@ -346,7 +348,7 @@ impl<S: Storage> QamFrameEncodeBlock<S> {
             } else {
                 Scrambler::Off
             },
-            scramble: self.scramble_cfg,
+            polynomial: self.scramble_cfg.polynomial,
         }
     }
 

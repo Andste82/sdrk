@@ -27,7 +27,6 @@
       "params": {
         "constellation": "qam256",
         "equalizer_taps": 15,
-        "frame_timeout": 16384,
         "max_sync_errors": 2,
         "scrambler": "multiplicative",
         "symbol_rate_hz": 25000

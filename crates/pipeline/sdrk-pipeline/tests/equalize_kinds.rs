@@ -192,7 +192,7 @@ fn equalize_kind_equals_the_block_and_takes_runtime_parameters() {
     let cfg = EqualizeConfig {
         taps: 15,
         constellation: EqConstellation::Qpsk,
-        cma_symbols: 1500,
+        cma_symbols: Some(1500),
         ..EqualizeConfig::default()
     };
     let input = symbols(6000, 1);
@@ -239,19 +239,19 @@ fn psk_demod_equalizer_taps_adds_equalize() {
     for (params, kernels) in [
         (
             json!({ "constellation": "qpsk", "symbol_rate_hz": 25_000, "equalizer_taps": 11 }),
-            &["fir", "symbol_sync", "equalize", "costas"][..],
+            &["fir", "symbol_sync", "equalize", "costas", "qam_soft_bits"][..],
         ),
         (
             json!({ "constellation": "qpsk", "symbol_rate_hz": 25_000, "equalizer_taps": 0 }),
-            &["fir", "symbol_sync", "costas"][..],
+            &["fir", "symbol_sync", "costas", "qam_soft_bits"][..],
         ),
         (
             json!({ "constellation": "qpsk", "symbol_rate_hz": 25_000, "variant": "offset", "equalizer_taps": 7 }),
-            &["fir", "symbol_sync", "rotate", "equalize"][..],
+            &["fir", "symbol_sync", "rotate", "equalize", "qam_soft_bits"][..],
         ),
         (
             json!({ "constellation": "qpsk", "symbol_rate_hz": 25_000, "variant": "offset" }),
-            &["fir", "symbol_sync", "rotate"][..],
+            &["fir", "symbol_sync", "rotate", "qam_soft_bits"][..],
         ),
     ] {
         assert_eq!(

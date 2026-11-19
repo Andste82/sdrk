@@ -349,9 +349,9 @@ fn equalize_block_with_qam_equals_the_kernel_whole_and_in_cut_plans() {
     {
         let cfg = EqualizeConfig {
             constellation: c,
-            mu_cma: 0.02,
+            mu_cma: Some(0.02),
             mu_dd: 0.01,
-            cma_symbols: 3000,
+            cma_symbols: Some(3000),
             ..EqualizeConfig::default()
         };
         let noise = if q == Qam::Qam16 { 0.01 } else { 0.003 };

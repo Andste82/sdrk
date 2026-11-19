@@ -135,7 +135,7 @@ pub use blocks::qam_demod::{
 };
 pub use blocks::qam_frame_decode::{
     QAM_FRAME_DECODE_PARAMS, QAM_FRAME_TIMEOUT, QAM_FRAME_WATCH_LAG, QamFrameDecodeBlock,
-    QamFrameDecodeConfig,
+    QamFrameDecodeConfig, qam_frame_timeout,
 };
 pub use blocks::qam_frame_encode::{
     QAM_FRAME_ENCODE_PARAMS, QamFrameEncodeBlock, QamFrameEncodeConfig,

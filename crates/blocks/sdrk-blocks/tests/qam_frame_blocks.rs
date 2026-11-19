@@ -386,3 +386,82 @@ fn c_of(order: u32) -> SymbolMapConstellation {
         other => unreachable!("no constellation of the order {other}"),
     }
 }
+
+/// D1537 (review of M44.2): the default `frame_timeout` is four checks of the demodulator of the
+/// constellation (`qam_frame_timeout`), derived in the block; a set value wins, and the
+/// configuration of the block keeps the default unset. The same for `sync_bw` (D1527) and the
+/// polynomial, the one field of the descrambler stage (its constellation is the demodulator's).
+#[test]
+fn frame_timeout_and_sync_bw_follow_the_constellation() {
+    let rate = Rate::hz(200_000).unwrap();
+    for (c, timeout) in [
+        (SymbolMapConstellation::Qpsk, 16_384),
+        (SymbolMapConstellation::Qam16, 16_384),
+        (SymbolMapConstellation::Qam64, 16_384),
+        (SymbolMapConstellation::Qam256, 49_152),
+        (SymbolMapConstellation::Qam1024, 81_920),
+    ] {
+        let mut cfg = QamFrameDecodeConfig::default();
+        cfg.demod.symbol_rate_hz = 25_000.0;
+        cfg.demod.constellation = c;
+        assert_eq!(cfg.frame_timeout(), timeout, "{c:?}");
+        assert_eq!(sdrk_blocks::qam_frame_timeout(c), timeout, "{c:?}");
+        assert_eq!(timeout, 4 * sdrk_blocks::qam_acquisition_check(c), "{c:?}");
+        let rx = QamFrameDecodeBlock::new(&cfg, rate, &mut VecStorage).unwrap();
+        // The configuration as built (the decoder's `rotations` are `four`, set by the composite).
+        let same = |a: &QamFrameDecodeConfig, b: &QamFrameDecodeConfig| {
+            (
+                a.demod,
+                a.decoder(),
+                a.frame_timeout,
+                a.scrambler,
+                a.polynomial,
+            ) == (
+                b.demod,
+                b.decoder(),
+                b.frame_timeout,
+                b.scrambler,
+                b.polynomial,
+            )
+        };
+        assert!(same(&rx.config(), &cfg), "{c:?}");
+        assert_eq!(rx.config().frame_timeout, None);
+        assert_eq!(rx.config().demod.sync_bw, None);
+        assert_eq!(
+            rx.param("frame_timeout"),
+            Ok(ParamValue::I64(timeout as i64)),
+            "{c:?}"
+        );
+        assert_eq!(
+            rx.param("sync_bw"),
+            Ok(ParamValue::F64(sdrk_blocks::qam_sync_bw(c))),
+            "{c:?}"
+        );
+        // A rebuild from the configuration with another constellation takes its defaults.
+        let mut next = rx.config();
+        next.demod.constellation = SymbolMapConstellation::Qam1024;
+        assert_eq!(next.frame_timeout(), 81_920);
+        assert_eq!(next.demod.sync_bw(), 0.002);
+        assert_eq!(
+            next.descramble().constellation,
+            SymbolMapConstellation::Qam1024
+        );
+        // Set values stay.
+        let set = QamFrameDecodeConfig {
+            frame_timeout: Some(0),
+            ..cfg
+        };
+        let mut set = set;
+        set.demod.sync_bw = Some(0.004);
+        let rx = QamFrameDecodeBlock::new(&set, rate, &mut VecStorage).unwrap();
+        assert!(same(&rx.config(), &set), "{c:?}");
+        assert_eq!(rx.param("frame_timeout"), Ok(ParamValue::I64(0)));
+    }
+    // The transmitter keeps only the polynomial; its constellation is the modulator's.
+    let mut tx = QamFrameEncodeConfig::default();
+    tx.qam.samples_per_symbol = 4;
+    tx.qam.constellation = SymbolMapConstellation::Qam256;
+    assert_eq!(tx.scramble().constellation, SymbolMapConstellation::Qam256);
+    let b = QamFrameEncodeBlock::new(&tx, Rate::hz(9600).unwrap(), &mut VecStorage).unwrap();
+    assert_eq!(b.config(), tx);
+}

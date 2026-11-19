@@ -5731,6 +5731,26 @@
       "waiver": "`costas_qam1024` is not accelerated: the run-time-detection build runs the fallback compiled for the baseline x86-64 target, the `avx2` build the same code compiled for AVX2 (VEX encoding, different register allocation), so their counts differ by code generation only; reported as information"
     }
   },
+  "costas_qam1024_fallback": {
+    "sse2": {
+      "status": "release"
+    },
+    "sse4.2": {
+      "status": "release"
+    },
+    "avx2": {
+      "status": "release"
+    },
+    "avx512": {
+      "status": "release"
+    },
+    "neon": {
+      "status": "release"
+    },
+    "simd128": {
+      "status": "release"
+    }
+  },
   "equalize_qam256": {
     "sse2": {
       "status": "info",
@@ -5809,6 +5829,26 @@
     "avx2-runtime": {
       "status": "info",
       "waiver": "`equalize_qam1024`: every backend runs the fallback's loop (D841); the run-time-detection build runs it compiled for the baseline x86-64 target, the `avx2` build the same code compiled for AVX2, so the counts differ by code generation only; reported as information (D823)"
+    }
+  },
+  "equalize_qam1024_fallback": {
+    "sse2": {
+      "status": "release"
+    },
+    "sse4.2": {
+      "status": "release"
+    },
+    "avx2": {
+      "status": "release"
+    },
+    "avx512": {
+      "status": "release"
+    },
+    "neon": {
+      "status": "release"
+    },
+    "simd128": {
+      "status": "release"
     }
   },
   "psk_mod_block": {

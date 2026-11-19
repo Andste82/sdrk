@@ -967,7 +967,7 @@ const fn fft(name: &'static str, family: Family, samples: u64) -> KernelSpec {
 }
 
 /// The kernels of the benchmark table, in report order.
-pub static KERNELS: [KernelSpec; 277] = [
+pub static KERNELS: [KernelSpec; 279] = [
     spec("convert_cs8", Family::Volk, true),
     spec("convert_cs16", Family::Volk, true),
     spec("convert_cu8", Family::VolkAndOwn, true),
@@ -1257,6 +1257,12 @@ pub static KERNELS: [KernelSpec; 277] = [
         false,
     ),
     spec("equalize_qam1024", Family::Own, false),
+    spec("costas_qam1024_fallback", Family::FallbackVsGnuRadio, false),
+    spec(
+        "equalize_qam1024_fallback",
+        Family::FallbackVsGnuRadio,
+        false,
+    ),
     proto("bit_scramble_block", Family::GnuRadio),
     proto("bit_descramble_block", Family::GnuRadio),
     proto("bit_scramble_in_place_block", Family::GnuRadio),
@@ -5110,6 +5116,8 @@ mod tests {
             ("equalize_qam64", "equalize_qam64_fallback"),
             ("costas_qam256", "costas_qam256_fallback"),
             ("equalize_qam256", "equalize_qam256_fallback"),
+            ("costas_qam1024", "costas_qam1024_fallback"),
+            ("equalize_qam1024", "equalize_qam1024_fallback"),
         ] {
             for level in ["sse2", "sse4.2", "avx2", "avx512", "neon", "simd128"] {
                 assert_eq!(
@@ -5141,6 +5149,10 @@ mod tests {
             "costas_qam256_fallback",
             "equalize_qam256",
             "equalize_qam256_fallback",
+            "costas_qam1024",
+            "costas_qam1024_fallback",
+            "equalize_qam1024",
+            "equalize_qam1024_fallback",
         ] {
             for p in PLANS.iter().filter(|p| kernel(name).family.measured_at(p)) {
                 let Some(limit) = limits.get(name, p.level) else {

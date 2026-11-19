@@ -1709,6 +1709,29 @@
           "status": "info",
           "verdict": "info"
         },
+        "costas_qam1024_fallback": {
+          "compared_with": "GNU Radio constellation_receiver_cb with constellation_rect 1024-QAM (constellation_receiver_cb_impl.cc and constellation.cc of gr-digital, generic compiler flags)",
+          "goal": true,
+          "informational": [
+            {
+              "compared_with": "GNU Radio constellation_receiver_cb with constellation_rect 1024-QAM (constellation_receiver_cb_impl.cc and constellation.cc of gr-digital, generic compiler flags)",
+              "label": "misaligned by one sample",
+              "other_instr_per_sample": 512.7,
+              "other_snr_db": null,
+              "ours_instr_per_sample": 153.08,
+              "ratio": 0.3
+            }
+          ],
+          "other_instr_per_sample": 512.7,
+          "ours_instr_per_sample": 153.08,
+          "ratio": 0.3,
+          "snr_db": {
+            "other": 128.65,
+            "ours": 999.0
+          },
+          "status": "release",
+          "verdict": "pass"
+        },
         "costas_qam16": {
           "compared_with": "sdrk fallback",
           "goal": true,
@@ -2624,6 +2647,29 @@
           },
           "status": "info",
           "verdict": "info"
+        },
+        "equalize_qam1024_fallback": {
+          "compared_with": "GNU Radio linear_equalizer with adaptive_algorithm_nlms on constellation_rect 1024-QAM (linear_equalizer_impl.cc and constellation.cc of gr-digital, VOLK generic dot products, generic compiler flags)",
+          "goal": true,
+          "informational": [
+            {
+              "compared_with": "GNU Radio linear_equalizer with adaptive_algorithm_nlms on constellation_rect 1024-QAM (linear_equalizer_impl.cc and constellation.cc of gr-digital, VOLK generic dot products, generic compiler flags)",
+              "label": "misaligned by one sample",
+              "other_instr_per_sample": 747.04,
+              "other_snr_db": null,
+              "ours_instr_per_sample": 503.45,
+              "ratio": 0.67
+            }
+          ],
+          "other_instr_per_sample": 747.03,
+          "ours_instr_per_sample": 503.45,
+          "ratio": 0.67,
+          "snr_db": {
+            "other": 129.59,
+            "ours": 999.0
+          },
+          "status": "release",
+          "verdict": "pass"
         },
         "equalize_qam16": {
           "compared_with": "sdrk fallback",

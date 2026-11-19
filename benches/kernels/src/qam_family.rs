@@ -8,7 +8,8 @@
 //! `qam_soft_bits_qpsk`, `qam_soft_bits_qam256`, `qam_soft_bits_qam1024`, `costas_qam256`,
 //! `costas_qam1024`, `equalize_qam256` and `equalize_qam1024` (D1507), and
 //! `symbol_demap_qam256_block`, `costas_qam256_fallback`, `equalize_qam256_fallback`,
-//! `qam_mod_qam256_block` and `qam_demod_qam256_block` (D1524).
+//! `qam_mod_qam256_block` and `qam_demod_qam256_block` (D1524), and `costas_qam1024_fallback` and
+//! `equalize_qam1024_fallback` (D1545).
 //!
 //! | entry | measured | gate | unit of a "sample" |
 //! | --- | --- | --- | --- |
@@ -41,6 +42,8 @@
 //! | `symbol_demap_qam256_block` | `sdrk_blocks::SymbolDemapBlock` with `qam256` | none (`info`) | one input symbol (eight soft bits) |
 //! | `costas_qam256_fallback` | our fallback, 256-QAM | GNU Radio's `constellation_receiver_cb` on the 256-QAM `constellation_rect` | one symbol |
 //! | `equalize_qam256_fallback` | our fallback, 256-QAM | GNU Radio's `linear_equalizer` on the 256-QAM `constellation_rect` | one symbol |
+//! | `costas_qam1024_fallback` | our fallback, 1024-QAM | GNU Radio's `constellation_receiver_cb` on the 1024-QAM `constellation_rect` | one symbol |
+//! | `equalize_qam1024_fallback` | our fallback, 1024-QAM | GNU Radio's `linear_equalizer` on the 1024-QAM `constellation_rect` | one symbol |
 //! | `qam_mod_qam256_block` | `sdrk_blocks::QamModBlock`, 256-QAM | none (`info`) | one output sample |
 //! | `qam_demod_qam256_block` | `sdrk_blocks::QamDemodBlock`, 256-QAM, the steady state | none (`info`) | one input sample |
 //!
@@ -130,6 +133,11 @@
 //! calls covers the blind start of 256-QAM (8000 CMA symbols, D1517) and the first check of the
 //! carrier loop (12288 symbols, at symbol 13056), so its counted calls measure the steady state
 //! (`Track`, the equalizer in decision mode) rather than the mix of `qam_demod_block`.
+//!
+//! The 1024-QAM references (D1545) are the workloads of `costas_qam1024` and `equalize_qam1024`
+//! on our fallback: `costas_qam1024_fallback` and `equalize_qam1024_fallback` against GNU Radio's
+//! `constellation_rect` with 32 by 32 sectors of the width `2 / sqrt(682)` (the C translations
+//! take up to 1024 points and sectors, `SDRK_GR_MAX_POINTS`).
 
 use std::hint::black_box;
 
@@ -496,7 +504,8 @@ pub(crate) struct CostasQamK {
     input: Aligned<C32>,
     out: Aligned<C32>,
     points: Vec<[f32; 2]>,
-    /// The entry: `costas_qam16_fallback`, `costas_qam64_fallback` or `costas_qam256_fallback`.
+    /// The entry: `costas_qam16_fallback`, `costas_qam64_fallback`, `costas_qam256_fallback` or
+    /// `costas_qam1024_fallback`.
     fallback_entry: bool,
 }
 
@@ -578,6 +587,9 @@ impl Kernel for CostasQamK {
                 }
                 Qam::Qam256 => {
                     "GNU Radio constellation_receiver_cb with constellation_rect 256-QAM (constellation_receiver_cb_impl.cc and constellation.cc of gr-digital, generic compiler flags)"
+                }
+                Qam::Qam1024 => {
+                    "GNU Radio constellation_receiver_cb with constellation_rect 1024-QAM (constellation_receiver_cb_impl.cc and constellation.cc of gr-digital, generic compiler flags)"
                 }
                 _ => {
                     "GNU Radio constellation_receiver_cb with constellation_rect 16-QAM (constellation_receiver_cb_impl.cc and constellation.cc of gr-digital, generic compiler flags)"
@@ -698,8 +710,8 @@ pub(crate) struct EqualizeQamK {
     state: EqState,
     /// GNU Radio's equalizer of the counted calls (the fallback entry), carried across the runs.
     gr: Option<GrLinearEqualizerRect>,
-    /// The entry: `equalize_qam16_fallback`, `equalize_qam64_fallback` or
-    /// `equalize_qam256_fallback`.
+    /// The entry: `equalize_qam16_fallback`, `equalize_qam64_fallback`,
+    /// `equalize_qam256_fallback` or `equalize_qam1024_fallback`.
     fallback_entry: bool,
 }
 
@@ -784,6 +796,9 @@ impl Kernel for EqualizeQamK {
                 }
                 Qam::Qam256 => {
                     "GNU Radio linear_equalizer with adaptive_algorithm_nlms on constellation_rect 256-QAM (linear_equalizer_impl.cc and constellation.cc of gr-digital, VOLK generic dot products, generic compiler flags)"
+                }
+                Qam::Qam1024 => {
+                    "GNU Radio linear_equalizer with adaptive_algorithm_nlms on constellation_rect 1024-QAM (linear_equalizer_impl.cc and constellation.cc of gr-digital, VOLK generic dot products, generic compiler flags)"
                 }
                 _ => {
                     "GNU Radio linear_equalizer with adaptive_algorithm_nlms on constellation_rect 16-QAM (linear_equalizer_impl.cc and constellation.cc of gr-digital, VOLK generic dot products, generic compiler flags)"

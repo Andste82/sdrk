@@ -346,7 +346,7 @@ pub enum ParamKind {
 ///
 /// ```
 /// let kinds: Vec<_> = sdrk_blocks::all_descriptions().iter().map(|d| d.kind).collect();
-/// assert_eq!(kinds.len(), 81);
+/// assert_eq!(kinds.len(), 83);
 /// assert!(kinds.contains(&"resample"));
 /// ```
 pub fn all_descriptions() -> &'static [&'static BlockDescription] {

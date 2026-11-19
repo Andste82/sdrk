@@ -59,7 +59,7 @@ fn the_kind_is_registered_with_its_kernel() {
     let f = registry.factory("noise").unwrap();
     assert_eq!(f.kernels(), ["gauss_noise"]);
     assert_eq!(f.description().kind, "noise");
-    assert_eq!(registry.descriptions().count(), 81);
+    assert_eq!(registry.descriptions().count(), 83);
     for kernel in f.kernels() {
         for ty in [
             sdrk::SampleType::C32,

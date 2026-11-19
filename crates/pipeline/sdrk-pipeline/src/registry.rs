@@ -256,7 +256,7 @@ pub struct BuildOptions {
 /// ```
 /// use sdrk_pipeline::Registry;
 /// let registry = Registry::standard();
-/// assert_eq!(registry.descriptions().count(), 81);
+/// assert_eq!(registry.descriptions().count(), 83);
 /// assert!(registry.factory("fm_demod").is_some());
 /// ```
 pub struct Registry {

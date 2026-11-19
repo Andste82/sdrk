@@ -36,7 +36,6 @@
         "preamble_bytes": 4,
         "rolloff": 0.35,
         "samples_per_symbol": 8,
-        "scrambler": "none",
         "span": 10
       }
     }

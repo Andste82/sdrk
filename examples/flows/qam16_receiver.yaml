@@ -23,9 +23,10 @@ nodes:
       attack_s: 0.02
       reference_db: 0
       release_s: 0.02
-  # Demodulator and decoder in one block (qam_frame_decode = qam_demod -> frame_decode,
-  # M44.1). Demodulator: root-raised-cosine matched filter (roll-off 0.35, span 10, as the
-  # transmitter), Gardner symbol timing, the frequency acquisition (a fourth-power estimate of
+  # Demodulator, descrambler and decoder in one block (qam_frame_decode = qam_demod ->
+  # bit_descramble -> frame_decode, M44.1, the descrambler since M44.2). Demodulator:
+  # root-raised-cosine matched filter (roll-off 0.35, span 10, as the transmitter), Gardner
+  # symbol timing, the frequency acquisition (a fourth-power estimate of
   # the carrier offset, up to +-0.125 cycles per symbol = +-3.1 kHz at 25 kBd), the blind
   # equalizer (1000 CMA symbols, then decision-directed with mu_dd 0.005 and a narrow phase
   # tracker) and the decision-directed carrier loop of 16-QAM with the default carrier_bw
@@ -33,8 +34,9 @@ nodes:
   # bandwidth for a carrier 1 kHz off. The values that differ from the defaults:
   # - equalizer_taps 15 (default 11): the multipath of the test channel reaches 2.7 symbols.
   # - sync_bw 0.002 (default 0.005 for 16-QAM): less timing jitter on 16-QAM.
-  # - scrambler none (default multiplicative): the bits on the air are those of M44.1, as
-  #   qam16_transmitter sends them (both ends of a link must agree).
+  # Descrambler (scrambler multiplicative, polynomial x23_x18, the defaults, as the
+  # transmitter): it locks by itself after 23 symbols; its delays count whole symbols, so the
+  # quarter turns of the carrier loop pass through it and the decoder resolves them.
   # Decoder: rotations four with the constellation of the node (4 bits per symbol for qam16)
   # tests the sync word in the four rotations of the 16-QAM symbols: the decision-directed carrier loop
   # may lock 0, 90, 180 or 270 degrees off, and the decoder undoes the rotation it found; the
@@ -52,7 +54,6 @@ nodes:
       equalizer_taps: 15
       frame_timeout: 16384
       max_sync_errors: 2
-      scrambler: none
       symbol_rate_hz: 25000
       sync_bw: 0.002
   # Down converter: /5 to 200 kHz (8 samples per symbol). The channel filter passes 20 kHz

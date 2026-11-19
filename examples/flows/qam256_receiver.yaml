@@ -45,16 +45,15 @@ nodes:
   # quarter turns are reported in bits 16 and 17 of the packet flags. max_sync_errors 2 accepts
   # a sync word with up to 2 wrong bits on a noisy link.
   # Frame watch: after a first packet with CRC_OK, no packet with CRC_OK for frame_timeout
-  # symbols (16384, the default, about 0.66 s at 25 kBd) starts the demodulator again; it takes
-  # a receiver out of a state in which it delivers nothing although the signal is there. A
-  # sender that pauses longer between packets (with the idle signal on the air) only costs a
-  # new acquisition; frame_timeout 0 turns the watch off.
+  # symbols (49152 for qam256, the default: four checks of the demodulator, about 2 s at 25 kBd)
+  # starts the demodulator again; it takes a receiver out of a state in which it delivers
+  # nothing although the signal is there. A sender that pauses longer between packets (with the
+  # idle signal on the air) only costs a new acquisition; frame_timeout 0 turns the watch off.
   rx:
     kind: qam_frame_decode
     params:
       constellation: qam256
       equalizer_taps: 15
-      frame_timeout: 16384
       max_sync_errors: 2
       scrambler: multiplicative
       symbol_rate_hz: 25000

@@ -288,7 +288,7 @@ impl QamDemodConfig {
 
     /// The configuration of the equalizer (`None` for `equalizer_taps` 0): the forward taps,
     /// no feedback, the constellation, `mu_cma` and the CMA symbols of the blind start of
-    /// `equalize` for the constellation ([`EqualizeConfig::blind_start`], D1517), `mu_dd` 0.005
+    /// `equalize` for the constellation (the defaults of [`EqualizeConfig`], [`EqualizeConfig::blind_start`], D1517, D1536), `mu_dd` 0.005
     /// (D1618) and the phase tracker at
     /// [`QAM_TRACKER_PULL_BW`] (the block narrows it to [`QAM_TRACKER_HOLD_BW`] at the first check
     /// after an estimate, D1622).
@@ -297,7 +297,8 @@ impl QamDemodConfig {
             taps: self.equalizer_taps,
             mu_dd: QAM_MU_DD,
             phase_bw: QAM_TRACKER_PULL_BW,
-            ..EqualizeConfig::for_constellation(self.constellation.into())
+            constellation: self.constellation.into(),
+            ..EqualizeConfig::default()
         })
     }
 
@@ -698,6 +699,9 @@ pub struct QamDemodBlock<S: Storage> {
     work: S::Buf<C32>,
     at: u16,
     len: u16,
+    /// Whether `sync_bw` was set (`false`: the default of the constellation, D1527), so that
+    /// [`QamDemodBlock::config`] gives back the configuration of the block.
+    sync_bw_set: bool,
 }
 
 impl<S: Storage> core::fmt::Debug for QamDemodBlock<S> {
@@ -751,7 +755,7 @@ impl<S: Storage> QamDemodBlock<S> {
         // The blind symbols of the equalizer (below the check, which fits `u16`).
         let blind = config
             .equalizer()
-            .map_or(0, |e| u16::try_from(e.cma_symbols).unwrap_or(u16::MAX));
+            .map_or(0, |e| u16::try_from(e.cma_symbols()).unwrap_or(u16::MAX));
         let hand = HandOver::start(blind);
         let check = u16::try_from(config.acquisition_check()).unwrap_or(u16::MAX);
         Ok(Self {
@@ -773,6 +777,7 @@ impl<S: Storage> QamDemodBlock<S> {
             work,
             at: 0,
             len: 0,
+            sync_bw_set: config.sync_bw.is_some(),
         })
     }
 
@@ -808,7 +813,8 @@ impl<S: Storage> QamDemodBlock<S> {
         Ok(sym.scale(Ratio::new(config.bits_per_symbol() as u64, 1)?)?)
     }
 
-    /// The configuration of the block, from its building blocks.
+    /// The configuration of the block, from its building blocks (`sync_bw` `None` when the
+    /// block was built with the default of its constellation).
     pub fn config(&self) -> QamDemodConfig {
         let sync = self.sync.config();
         let pulse = self.pulse.config();
@@ -818,7 +824,7 @@ impl<S: Storage> QamDemodBlock<S> {
             rolloff: pulse.rolloff,
             span: pulse.span,
             equalizer_taps: self.rx.eq.as_ref().map_or(0, |e| e.state().taps()),
-            sync_bw: Some(sync.loop_bw),
+            sync_bw: self.sync_bw_set.then_some(sync.loop_bw),
             carrier_bw: self.rx.costas.state().loop_bw(),
         }
     }

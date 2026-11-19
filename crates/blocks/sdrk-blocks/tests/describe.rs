@@ -1836,13 +1836,14 @@ fn the_equalizer_kind_describes_its_ports_and_parameters() {
             default: Some(0)
         }
     );
-    for (name, default) in [("mu_cma", 0.05), ("mu_dd", 0.02)] {
+    // `mu_cma` and `cma_symbols` take the blind start of the constellation (D1517, D1536).
+    for (name, default) in [("mu_cma", None), ("mu_dd", Some(0.02))] {
         assert_eq!(
             eq.param(name).unwrap().kind,
             ParamKind::F64 {
                 min: 1e-5,
                 max: 1.0,
-                default: Some(default)
+                default
             },
             "{name}"
         );
@@ -1852,7 +1853,7 @@ fn the_equalizer_kind_describes_its_ports_and_parameters() {
         ParamKind::I64 {
             min: 0,
             max: i64::from(u32::MAX),
-            default: Some(1000)
+            default: None
         }
     );
     assert_eq!(
@@ -1894,7 +1895,7 @@ fn the_equalizer_kind_describes_its_ports_and_parameters() {
     assert_eq!(cfg.taps, 11);
     cfg.set("cma_symbols", ParamValue::I64(i64::from(u32::MAX)))
         .unwrap();
-    assert_eq!(cfg.cma_symbols, u32::MAX);
+    assert_eq!(cfg.cma_symbols(), u32::MAX);
     let b = EqualizeBlock::new(&EqualizeConfig::default(), rate(1000), &mut VecStorage).unwrap();
     assert!(std::ptr::eq(b.description(), eq));
 

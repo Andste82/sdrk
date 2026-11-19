@@ -8,7 +8,9 @@ use sdrk_proto::frame::frame_bits;
 use sdrk_proto::{Packet, PacketFlags};
 
 use super::bit_descramble::BitDescrambleBlock;
-use super::bit_scramble::{BitScrambleConfig, POLYNOMIAL_PARAM, SCRAMBLER_PARAM, Scrambler};
+use super::bit_scramble::{
+    BitPolynomial, BitScrambleConfig, POLYNOMIAL_PARAM, SCRAMBLER_PARAM, Scrambler,
+};
 use super::frame_decode::{
     DECODE_WHITENING_PARAM, EMIT_BAD_PARAM, FrameDecodeBlock, FrameDecodeConfig, FrameRotations,
     MAX_SYNC_ERRORS_PARAM,
@@ -16,9 +18,10 @@ use super::frame_decode::{
 use super::pulse_match::{MATCH_ROLLOFF_PARAM, MATCH_SPAN_PARAM, SYMBOL_RATE_PARAM};
 use super::qam_demod::{
     CARRIER_BW_PARAM, EQUALIZER_TAPS_PARAM, QAM_DEMOD_CHUNK, QamDemodBlock, QamDemodConfig,
-    SYNC_BW_PARAM,
+    SYNC_BW_PARAM, qam_acquisition_check,
 };
 use super::qam_mod::QAM_CONSTELLATION_PARAM;
+use super::symbol_map::SymbolMapConstellation;
 use super::{check_count, head, head_mut, tail, tail_mut, unknown};
 use crate::block::{Block, BlockTiming, ParamValue, check_runtime};
 use crate::describe::{
@@ -32,9 +35,26 @@ use crate::param_map::{
 use crate::ports::Packets;
 use crate::storage::{Plan, Storage};
 
-/// The default `frame_timeout` of `qam_frame_decode` in symbols: four checks of `qam_demod`
-/// (D1575).
+/// The default `frame_timeout` of `qam_frame_decode` in symbols for `qpsk` to `qam64`: four
+/// checks of `qam_demod` (D1575; [`qam_frame_timeout`] for every constellation).
 pub const QAM_FRAME_TIMEOUT: usize = 16_384;
+
+/// The default `frame_timeout` of `qam_frame_decode` for a constellation: four checks of the
+/// controller of `qam_demod` ([`qam_acquisition_check`], D1575, D1517; derived in the building
+/// block, rule 4 of M44.1.1, D1537): 16384 symbols for `qpsk` to `qam64`, 49152 for `qam256`
+/// and 81920 for `qam1024`.
+///
+/// ```
+/// use sdrk_blocks::{SymbolMapConstellation, qam_frame_timeout};
+/// assert_eq!(qam_frame_timeout(SymbolMapConstellation::Qam64), 16_384);
+/// assert_eq!(qam_frame_timeout(SymbolMapConstellation::Qam256), 49_152);
+/// assert_eq!(qam_frame_timeout(SymbolMapConstellation::Qam1024), 81_920);
+/// ```
+pub const fn qam_frame_timeout(c: SymbolMapConstellation) -> usize {
+    4 * qam_acquisition_check(c)
+}
+
+const _: () = assert!(qam_frame_timeout(SymbolMapConstellation::Qam16) == QAM_FRAME_TIMEOUT);
 
 /// The largest `frame_timeout` in symbols.
 const MAX_FRAME_TIMEOUT: usize = 1 << 20;
@@ -53,14 +73,16 @@ pub(crate) const FRAME_TIMEOUT_PARAM: ParamDesc = ParamDesc {
     kind: ParamKind::I64 {
         min: 0,
         max: MAX_FRAME_TIMEOUT as i64,
-        default: Some(QAM_FRAME_TIMEOUT as i64),
+        default: None,
     },
-    typical: "16384 (four checks of the demodulator); above the longest pause of the sender \
-        between frames; 0 for off",
+    typical: "the default of the constellation (four checks of the demodulator); above the \
+        longest pause of the sender between frames; 0 for off",
     mutability: Mutability::Build,
     description: "Symbols without a frame with CRC_OK, after one since the start, a reset or the \
         last restart by the watch, after which the demodulator starts again (the equalizer, the \
-        loops at frequency 0 and a new search of the acquisition); 0 turns the watch off.",
+        loops at frequency 0 and a new search of the acquisition); 0 turns the watch off. The \
+        default depends on the constellation, four checks of the demodulator: 16384 for qpsk \
+        to qam64, 49152 for qam256, 81920 for qam1024.",
 };
 
 /// The flat parameter names of `qam_frame_decode` and the stages they stand for: `0` is
@@ -164,40 +186,56 @@ pub struct QamFrameDecodeConfig {
     /// `four` and `constellation` by the one field `demod.constellation`).
     pub frame: FrameDecodeConfig,
     /// Symbols without a frame with `CRC_OK` after which the demodulator starts again (0 to
-    /// 1048576; 0 = off).
-    pub frame_timeout: usize,
+    /// 1048576; 0 = off); `None` takes that of the constellation ([`qam_frame_timeout`], D1537).
+    pub frame_timeout: Option<usize>,
     /// Whether the stage `bit_descramble` is there (`scrambler`, default `multiplicative`).
     pub scrambler: Scrambler,
-    /// The descrambler: `polynomial` (its `constellation` is replaced by that of the
-    /// demodulator, [`QamFrameDecodeConfig::descramble`]).
-    pub scramble: BitScrambleConfig,
+    /// The polynomial of the `bit_descramble` stage (`polynomial`, default `x23_x18`); its delays count
+    /// the symbols of the constellation of `demod` ([`QamFrameDecodeConfig::descramble`]).
+    pub polynomial: BitPolynomial,
 }
 
 impl Default for QamFrameDecodeConfig {
-    /// The defaults of `qam_demod` and `frame_decode`, `frame_timeout` [`QAM_FRAME_TIMEOUT`], the
+    /// The defaults of `qam_demod` and `frame_decode`, `frame_timeout` that of the constellation, the
     /// descrambler on with its default polynomial over the constellation of `qam_demod`.
     fn default() -> Self {
         let demod = QamDemodConfig::default();
         Self {
             demod,
             frame: FrameDecodeConfig::default(),
-            frame_timeout: QAM_FRAME_TIMEOUT,
+            frame_timeout: None,
             scrambler: Scrambler::default(),
-            scramble: BitScrambleConfig {
-                constellation: demod.constellation,
-                ..BitScrambleConfig::default()
-            },
+            polynomial: BitPolynomial::default(),
         }
     }
 }
 
 impl QamFrameDecodeConfig {
+    /// The frame timeout in symbols: `frame_timeout`, or that of the constellation
+    /// ([`qam_frame_timeout`]) when it is not set.
+    ///
+    /// ```
+    /// use sdrk_blocks::{QamFrameDecodeConfig, SymbolMapConstellation};
+    /// let mut cfg = QamFrameDecodeConfig::default();
+    /// assert_eq!(cfg.frame_timeout(), 16_384);
+    /// cfg.demod.constellation = SymbolMapConstellation::Qam256;
+    /// assert_eq!(cfg.frame_timeout(), 49_152);
+    /// cfg.frame_timeout = Some(0);
+    /// assert_eq!(cfg.frame_timeout(), 0);
+    /// ```
+    pub const fn frame_timeout(&self) -> usize {
+        match self.frame_timeout {
+            Some(t) => t,
+            None => qam_frame_timeout(self.demod.constellation),
+        }
+    }
+
     /// The configuration of the descrambler: the `polynomial`, the constellation of the
     /// demodulator.
     pub fn descramble(&self) -> BitScrambleConfig {
         BitScrambleConfig {
             constellation: self.demod.constellation,
-            ..self.scramble
+            polynomial: self.polynomial,
         }
     }
 
@@ -219,7 +257,7 @@ impl QamFrameDecodeConfig {
     pub fn validate(&self, rate_in: Rate) -> Result<()> {
         self.demod.validate(rate_in)?;
         self.decoder().validate()?;
-        check_count("frame_timeout", self.frame_timeout, 0, MAX_FRAME_TIMEOUT)
+        check_count("frame_timeout", self.frame_timeout(), 0, MAX_FRAME_TIMEOUT)
     }
 
     /// Sets a parameter by its flat name ([`QAM_FRAME_DECODE_PARAMS`]);
@@ -238,9 +276,13 @@ impl QamFrameDecodeConfig {
                 Some(("1", n)) => next.frame.set(n, value)?,
                 Some(("2", _)) => {
                     FRAME_TIMEOUT_PARAM.check(&value)?;
-                    next.frame_timeout = value.as_usize()?;
+                    next.frame_timeout = Some(value.as_usize()?);
                 }
-                Some(("3", n)) => next.scramble.set(n, value)?,
+                Some(("3", n)) => {
+                    let mut stage = next.descramble();
+                    stage.set(n, value)?;
+                    next.polynomial = stage.polynomial;
+                }
                 Some(("4", _)) => {
                     SCRAMBLER_PARAM.check(&value)?;
                     next.scrambler = Scrambler::from_index(value.as_choice()?);
@@ -267,7 +309,7 @@ impl QamFrameDecodeConfig {
         {
             Some(("0", n)) => self.demod.get(n),
             Some(("1", n)) => self.frame.get(n),
-            Some(("2", _)) => Ok(ParamValue::I64(self.frame_timeout as i64)),
+            Some(("2", _)) => Ok(ParamValue::I64(self.frame_timeout() as i64)),
             Some(("3", n)) => self.descramble().get(n),
             Some(("4", _)) => Ok(ParamValue::Choice(self.scrambler.index())),
             _ => unknown(),
@@ -344,6 +386,8 @@ pub struct QamFrameDecodeBlock<S: Storage> {
     at: u16,
     len: u16,
     watch: FrameWatch,
+    /// Whether `frame_timeout` was set (`false`: the default of the constellation, D1537).
+    frame_timeout_set: bool,
     /// The exact input samples per symbol and the delay of the demodulator in input samples (the
     /// packet index).
     sps: f64,
@@ -387,7 +431,8 @@ impl<S: Storage> QamFrameDecodeBlock<S> {
             bits,
             at: 0,
             len: 0,
-            watch: FrameWatch::new(u32::try_from(config.frame_timeout).unwrap_or(u32::MAX)),
+            watch: FrameWatch::new(u32::try_from(config.frame_timeout()).unwrap_or(u32::MAX)),
+            frame_timeout_set: config.frame_timeout.is_some(),
         })
     }
 
@@ -413,13 +458,15 @@ impl<S: Storage> QamFrameDecodeBlock<S> {
         QamFrameDecodeConfig {
             demod: self.demod.config(),
             frame: self.decode.config(),
-            frame_timeout: self.watch.timeout() as usize,
+            frame_timeout: self
+                .frame_timeout_set
+                .then_some(self.watch.timeout() as usize),
             scrambler: if self.descramble.is_some() {
                 Scrambler::Multiplicative
             } else {
                 Scrambler::Off
             },
-            scramble: self.scramble_cfg,
+            polynomial: self.scramble_cfg.polynomial,
         }
     }
 

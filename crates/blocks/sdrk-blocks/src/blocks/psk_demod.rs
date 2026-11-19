@@ -16,9 +16,7 @@ use super::costas::{
     DEFAULT_DAMPING, DEFAULT_LOOP_BW, DEFAULT_MAX_OFFSET, MAX_LOOP_BW, MAX_OFFSET_LIMIT,
     MIN_LOOP_BW, check_f64,
 };
-use super::equalize::{
-    DEFAULT_CMA_SYMBOLS, DEFAULT_MU_CMA, DEFAULT_MU_DD, EQ_FEEDBACK_MAX, EQ_TAPS, EqualizeConfig,
-};
+use super::equalize::{DEFAULT_MU_DD, EQ_FEEDBACK_MAX, EQ_TAPS, EqualizeConfig};
 use super::psk_mod::{
     PSK_CONSTELLATION_PARAM, PskVariant, VARIANT_PARAM, check_psk, check_variant,
     psk_constellation_of_value,
@@ -336,13 +334,9 @@ impl PskDemodConfig {
             taps: self.equalizer_taps,
             feedback_taps: self.equalizer_feedback_taps,
             constellation: self.constellation.into(),
-            mu_cma: DEFAULT_MU_CMA,
+            mu_cma: None,
             mu_dd: DEFAULT_MU_DD,
-            cma_symbols: if self.differential {
-                u32::MAX
-            } else {
-                DEFAULT_CMA_SYMBOLS
-            },
+            cma_symbols: self.differential.then_some(u32::MAX),
             phase_bw: if self.differential {
                 0.0
             } else {

@@ -157,9 +157,9 @@ fn equalize_block_with_the_new_orders_equals_the_kernel() {
         let cfg = EqualizeConfig {
             taps: 11,
             constellation: e,
-            mu_cma: 0.02,
+            mu_cma: Some(0.02),
             mu_dd: 0.005,
-            cma_symbols: 2000,
+            cma_symbols: Some(2000),
             phase_bw: 0.005,
             ..EqualizeConfig::default()
         };
@@ -460,4 +460,60 @@ fn qam_mod_and_qam_demod_of_every_new_order_do_not_depend_on_the_cut_plan() {
             &format!("qam_demod {c:?} taps {taps}"),
         );
     }
+}
+
+/// D1536 (review of M44.2): the `equalize` block derives the blind start of its constellation
+/// when `mu_cma` and `cma_symbols` are not set (D1517), exactly as `qam_demod` does; a set
+/// value wins; the configuration of the block keeps the unset fields unset, so a rebuild with
+/// another constellation takes the blind start of that one.
+#[test]
+fn equalize_block_derives_the_blind_start_of_its_constellation() {
+    for (c, mu, n) in [
+        (EqConstellation::Bpsk, 0.05, 1000),
+        (EqConstellation::Qpsk, 0.05, 1000),
+        (EqConstellation::Psk8, 0.05, 1000),
+        (EqConstellation::Qam16, 0.05, 1000),
+        (EqConstellation::Qam64, 0.05, 1000),
+        (EqConstellation::Qam256, 0.02, 8000),
+        (EqConstellation::Qam1024, 0.005, 16_000),
+    ] {
+        let cfg = EqualizeConfig {
+            constellation: c,
+            ..EqualizeConfig::default()
+        };
+        assert_eq!((cfg.mu_cma(), cfg.cma_symbols()), (mu, n), "{c:?}");
+        assert_eq!(EqualizeConfig::blind_start(c), (mu, n), "{c:?}");
+        let block = EqualizeBlock::<VecStorage>::new(&cfg, rate(25_000), &mut VecStorage).unwrap();
+        assert_eq!(block.config(), cfg, "{c:?}");
+        assert_eq!(block.state().mu_cma(), mu as f32, "{c:?}");
+        assert_eq!(block.state().cma_symbols(), n, "{c:?}");
+        assert_eq!(block.param("mu_cma"), Ok(ParamValue::F64(mu)), "{c:?}");
+        assert_eq!(
+            block.param("cma_symbols"),
+            Ok(ParamValue::I64(i64::from(n))),
+            "{c:?}"
+        );
+        let set = EqualizeConfig {
+            mu_cma: Some(0.01),
+            cma_symbols: Some(500),
+            ..cfg
+        };
+        let block = EqualizeBlock::<VecStorage>::new(&set, rate(25_000), &mut VecStorage).unwrap();
+        assert_eq!(block.config(), set, "{c:?}");
+        assert_eq!(
+            (block.state().mu_cma(), block.state().cma_symbols()),
+            (0.01, 500),
+            "{c:?}"
+        );
+    }
+    // Through the parameters: the constellation alone gives its blind start.
+    let mut cfg = EqualizeConfig::default();
+    cfg.set("constellation", ParamValue::Choice(6)).unwrap();
+    assert_eq!(cfg.get("mu_cma"), Ok(ParamValue::F64(0.005)));
+    assert_eq!(cfg.get("cma_symbols"), Ok(ParamValue::I64(16_000)));
+    // A runtime change of `mu_cma` is configured from then on.
+    let mut block = EqualizeBlock::<VecStorage>::new(&cfg, rate(25_000), &mut VecStorage).unwrap();
+    block.set_param("mu_cma", ParamValue::F64(0.004)).unwrap();
+    assert_eq!(block.config().mu_cma, Some(0.004));
+    assert_eq!(block.config().cma_symbols, None);
 }

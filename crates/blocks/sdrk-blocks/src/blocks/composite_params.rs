@@ -34,7 +34,7 @@ use std::vec::Vec;
 
 use sdrk::Rate;
 
-use super::bit_scramble::{BitPolynomial, BitScrambleConfig, SCRAMBLER_PARAM, Scrambler};
+use super::bit_scramble::{BitPolynomial, SCRAMBLER_PARAM, Scrambler};
 use super::frame_decode::FrameRotations;
 use super::psk_mod::{PskModBlock, PskModConfig, PskVariant};
 use super::qam_demod::{QamDemodBlock, QamDemodConfig};
@@ -405,10 +405,7 @@ fn the_parameters_of_every_composite_follow_the_naming_rule() {
     enc.frame.preamble_bytes = 6;
     let without = QamFrameEncodeConfig {
         scrambler: Scrambler::Off,
-        scramble: BitScrambleConfig {
-            polynomial: BitPolynomial::X58X39,
-            ..BitScrambleConfig::default()
-        },
+        polynomial: BitPolynomial::X58X39,
         ..enc
     };
     for enc in [enc, without] {
@@ -419,6 +416,7 @@ fn the_parameters_of_every_composite_follow_the_naming_rule() {
             (b.config().scrambler, b.config().scramble()),
             (enc.scrambler, enc.scramble())
         );
+        assert_eq!(b.config(), enc);
         assert_eq!(
             b.scrambler().is_some(),
             enc.scrambler == Scrambler::Multiplicative
@@ -431,10 +429,7 @@ fn the_parameters_of_every_composite_follow_the_naming_rule() {
         values.extend(mod_values(&enc.qam));
         values.extend([
             ("scrambler", ParamValue::Choice(enc.scrambler.index())),
-            (
-                "polynomial",
-                ParamValue::Choice(enc.scramble.polynomial.index()),
-            ),
+            ("polynomial", ParamValue::Choice(enc.polynomial.index())),
         ]);
         check(
             "qam_frame_encode",
@@ -447,7 +442,7 @@ fn the_parameters_of_every_composite_follow_the_naming_rule() {
     }
     // qam_frame_decode
     let mut dec = QamFrameDecodeConfig {
-        frame_timeout: 8192,
+        frame_timeout: Some(8192),
         ..QamFrameDecodeConfig::default()
     };
     dec.demod.symbol_rate_hz = 25_000.0;
@@ -456,10 +451,7 @@ fn the_parameters_of_every_composite_follow_the_naming_rule() {
     dec.frame.emit_bad = true;
     let without = QamFrameDecodeConfig {
         scrambler: Scrambler::Off,
-        scramble: BitScrambleConfig {
-            polynomial: BitPolynomial::X17X12,
-            ..BitScrambleConfig::default()
-        },
+        polynomial: BitPolynomial::X17X12,
         ..dec
     };
     for dec in [dec, without] {
@@ -467,6 +459,10 @@ fn the_parameters_of_every_composite_follow_the_naming_rule() {
         let mut st = ArenaStorage::new(&mut mem);
         let mut b = QamFrameDecodeBlock::new(&dec, rate(200_000), &mut st).unwrap();
         assert_eq!(b.config().decoder().rotations, FrameRotations::Four);
+        // The default `sync_bw` of the constellation stays unset, the polynomial is the one field
+        // of the stage (review of M44.2, D1536).
+        assert_eq!(b.config().demod, dec.demod);
+        assert_eq!(b.config().polynomial, dec.polynomial);
         assert_eq!(
             b.descrambler().is_some(),
             dec.scrambler == Scrambler::Multiplicative
@@ -478,10 +474,7 @@ fn the_parameters_of_every_composite_follow_the_naming_rule() {
             ("whitening", ParamValue::Choice(0)),
             ("frame_timeout", ParamValue::I64(8192)),
             ("scrambler", ParamValue::Choice(dec.scrambler.index())),
-            (
-                "polynomial",
-                ParamValue::Choice(dec.scramble.polynomial.index()),
-            ),
+            ("polynomial", ParamValue::Choice(dec.polynomial.index())),
         ]);
         check(
             "qam_frame_decode",

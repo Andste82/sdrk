@@ -103,7 +103,8 @@ fn backend_messages(doc: &Value) -> Vec<String> {
 }
 
 /// D689: the backend check of `psk_demod` `offset` looks at the kernels it runs (`rotate`
-/// instead of `costas`, D686); the other variants keep the list of the kind.
+/// instead of `costas`, D686); the other variants keep the list of the kind. `qpsk` with every
+/// variant but `pi4` adds `qam_soft_bits` (M44.2, D1515, D1536).
 #[test]
 fn psk_demod_offset_backend_check_uses_rotate_not_costas() {
     let registry = Registry::standard();
@@ -113,18 +114,37 @@ fn psk_demod_offset_backend_check_uses_rotate_not_costas() {
         raw(json!({ "constellation": "qpsk", "symbol_rate_hz": 25_000, "variant": "offset" }));
     assert_eq!(
         factory.kernels_for(&offset),
-        ["fir", "symbol_sync", "rotate"]
+        ["fir", "symbol_sync", "rotate", "qam_soft_bits"]
     );
-    for params in [
-        json!({ "constellation": "qpsk", "symbol_rate_hz": 25_000 }),
-        json!({ "constellation": "qpsk", "symbol_rate_hz": 25_000, "variant": "plain" }),
-        json!({ "constellation": "qpsk", "symbol_rate_hz": 25_000, "variant": "pi4", "differential": true }),
-        json!({ "constellation": "8psk", "symbol_rate_hz": 25_000 }),
-        json!({ "constellation": "qpsk", "symbol_rate_hz": 25_000, "variant": 3 }),
+    for (params, kernels) in [
+        (
+            json!({ "constellation": "qpsk", "symbol_rate_hz": 25_000 }),
+            &["fir", "symbol_sync", "costas", "qam_soft_bits"][..],
+        ),
+        (
+            json!({ "constellation": "qpsk", "symbol_rate_hz": 25_000, "variant": "plain" }),
+            &["fir", "symbol_sync", "costas", "qam_soft_bits"][..],
+        ),
+        (
+            json!({ "constellation": "qpsk", "symbol_rate_hz": 25_000, "variant": "pi4", "differential": true }),
+            &["fir", "symbol_sync", "costas"][..],
+        ),
+        (
+            json!({ "constellation": "8psk", "symbol_rate_hz": 25_000 }),
+            &["fir", "symbol_sync", "costas"][..],
+        ),
+        (
+            json!({ "constellation": "bpsk", "symbol_rate_hz": 25_000, "variant": "offset" }),
+            &["fir", "symbol_sync", "rotate"][..],
+        ),
+        (
+            json!({ "constellation": "qpsk", "symbol_rate_hz": 25_000, "variant": 3 }),
+            &["fir", "symbol_sync", "costas", "qam_soft_bits"][..],
+        ),
     ] {
         assert_eq!(
             factory.kernels_for(&raw(params.clone())),
-            ["fir", "symbol_sync", "costas"],
+            kernels,
             "{params}"
         );
     }

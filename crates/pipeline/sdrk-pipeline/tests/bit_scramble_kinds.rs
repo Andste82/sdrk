@@ -91,7 +91,7 @@ fn a_flow_of_both_gives_its_input_back() {
         ]),
     );
     let mut p = build(&doc.to_string());
-    let mut rng = Pcg32::new(872, 3);
+    let mut rng = Pcg32::new(882, 3);
     let x: Vec<f32> = (0..20_000)
         .map(|_| (rng.next_f64() as f32 + 0.01) * if rng.below(2) == 1 { 1.0 } else { -1.0 })
         .collect();

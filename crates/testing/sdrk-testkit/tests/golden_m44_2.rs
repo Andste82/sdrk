@@ -1,7 +1,7 @@
 //! Golden tests of the blocks `bit_scramble` and `bit_descramble` of M44.2 (the maintainer's
-//! decision on I44.2-6): `blocks/bit_scramble_x23_x18_bpsk_f32` (seed 870, the plain bit
+//! decision on I44.2-6): `blocks/bit_scramble_x23_x18_bpsk_f32` (seed 880, the plain bit
 //! scrambler `1 + x^-18 + x^-23` of ITU-T V.32 to V.34) and `blocks/bit_scramble_x23_x18_qam256_f32`
-//! (seed 871, the same polynomial over symbols of 8 bits), against the one-bit-at-a-time model of
+//! (seed 881, the same polynomial over symbols of 8 bits), against the one-bit-at-a-time model of
 //! the register of the Python generator, bit for bit, in one call, one bit per call and in place.
 #![cfg(feature = "std")]
 #![allow(clippy::unwrap_used, clippy::panic, clippy::cast_possible_truncation)]

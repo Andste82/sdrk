@@ -8,12 +8,12 @@
 //!   from its zero register, gives the input from `A = a m` bits after its start on (`a` the
 //!   degree of the polynomial, `m` the bits per symbol), and its first output bits are not all
 //!   right (it needs the register).
-//! - Error propagation (seed 873, stream 2): one wrong bit on the air gives exactly 3 wrong bits out, at
+//! - Error propagation (seed 883, stream 2): one wrong bit on the air gives exactly 3 wrong bits out, at
 //!   the bit and `B = b m` and `A` bits later, as the polynomial `1 + x^-b + x^-a` predicts; the
 //!   magnitudes stay.
-//! - Chunk invariance (seed 872): both blocks give the bits of one call in 20 cut plans, and
+//! - Chunk invariance (seed 882): both blocks give the bits of one call in 20 cut plans, and
 //!   `process_in_place` the bits of `process`.
-//! - Quarter turns (seed 873, stream 1): for every square constellation, a rotation of the scrambled
+//! - Quarter turns (seed 883, stream 1): for every square constellation, a rotation of the scrambled
 //!   symbols by 90 degrees (Gray code per axis, `sdrk_proto::frame::rotate_group`) descrambles to
 //!   the same rotation of the plain symbols, after the register has filled.
 //! - Construction (review of M44.2, D1536): both blocks build in an arena of exactly
@@ -21,7 +21,7 @@
 //!   the public types are `Send` and `Sync` (R4.6).
 //! - The model: the output equals a one-bit-at-a-time model of the register (soft bits: the sign
 //!   flips where the parity of the register is 1), including 0 and NaN inputs (seed 838). The
-//!   golden cases of the Python model are `blocks/bit_scramble_*` (seeds 870 and 871,
+//!   golden cases of the Python model are `blocks/bit_scramble_*` (seeds 880 and 881,
 //!   `sdrk-testkit` `golden_m44_2`).
 #![allow(
     clippy::unwrap_used,
@@ -226,7 +226,7 @@ fn the_descrambler_locks_after_the_register_length_from_any_start() {
 
 #[test]
 fn one_wrong_bit_on_the_air_gives_three_wrong_bits() {
-    let mut rng = Pcg32::new(873, 2);
+    let mut rng = Pcg32::new(883, 2);
     for cfg in configs() {
         let (a, b) = cfg.delays();
         let x = soft_bits(&mut rng, 2000 + a);
@@ -246,11 +246,11 @@ fn one_wrong_bit_on_the_air_gives_three_wrong_bits() {
 
 #[test]
 fn both_blocks_do_not_depend_on_the_cut_plan() {
-    let mut rng = Pcg32::new(872, 1);
+    let mut rng = Pcg32::new(882, 1);
     for (k, cfg) in configs().into_iter().enumerate() {
         let x = soft_bits(&mut rng, 6000);
         let want = scramble(&cfg, &x);
-        let seed = 872 * 100 + k as u64;
+        let seed = 882 * 100 + k as u64;
         check_block(
             &want,
             &x,
@@ -286,7 +286,7 @@ fn both_blocks_do_not_depend_on_the_cut_plan() {
 
 #[test]
 fn a_reset_starts_from_the_zero_register() {
-    let mut rng = Pcg32::new(872, 2);
+    let mut rng = Pcg32::new(882, 2);
     let cfg = BitScrambleConfig {
         constellation: SymbolMapConstellation::Qam256,
         ..BitScrambleConfig::default()
@@ -336,7 +336,7 @@ fn rotate(x: &[f32], m: usize, q: u32) -> Vec<f32> {
 
 #[test]
 fn a_quarter_turn_commutes_with_the_descrambler() {
-    let mut rng = Pcg32::new(873, 1);
+    let mut rng = Pcg32::new(883, 1);
     for cfg in configs() {
         let m = cfg.constellation.bits_per_symbol();
         if m % 2 == 1 {

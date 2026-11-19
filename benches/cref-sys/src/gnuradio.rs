@@ -859,7 +859,7 @@ mod constellation_ffi {
 /// order, the sectors per axis and their widths, without normalization.
 #[derive(Clone, Copy, Debug)]
 pub struct GrRect<'a> {
-    /// The points in symbol order (at most 256).
+    /// The points in symbol order (at most 1024).
     pub points: &'a [[f32; 2]],
     /// The sectors of the real axis.
     pub real_sectors: u32,

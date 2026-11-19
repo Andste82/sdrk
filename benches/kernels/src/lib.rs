@@ -366,7 +366,7 @@ pub trait Kernel {
 /// are appended; a `<kernel>_fallback`, `<kernel>_airspy`, `<kernel>_fastnoise` or
 /// `<kernel>_ziggurat` entry takes the seed of `<kernel>`, so that both entries filter the same
 /// input.
-pub const KERNELS: [&str; 277] = [
+pub const KERNELS: [&str; 279] = [
     "convert_cs8",
     "convert_cs16",
     "convert_out_cs16",
@@ -644,6 +644,8 @@ pub const KERNELS: [&str; 277] = [
     "qam_demod_qam256_block",
     "bit_scramble_in_place_block",
     "bit_descramble_in_place_block",
+    "costas_qam1024_fallback",
+    "equalize_qam1024_fallback",
 ];
 
 /// Prepares the measurement `name` with `layout` (the FFT sizes are fixed by the name).
@@ -901,7 +903,8 @@ pub fn prepare(name: &str, layout: Layout) -> Option<Box<dyn Kernel>> {
         | "costas_qam64_fallback"
         | "costas_qam256"
         | "costas_qam256_fallback"
-        | "costas_qam1024" => Box::new(qam_family::CostasQamK::new(
+        | "costas_qam1024"
+        | "costas_qam1024_fallback" => Box::new(qam_family::CostasQamK::new(
             rng,
             layout,
             qam_of(seed_of),
@@ -913,7 +916,8 @@ pub fn prepare(name: &str, layout: Layout) -> Option<Box<dyn Kernel>> {
         | "equalize_qam64_fallback"
         | "equalize_qam256"
         | "equalize_qam256_fallback"
-        | "equalize_qam1024" => Box::new(qam_family::EqualizeQamK::new(
+        | "equalize_qam1024"
+        | "equalize_qam1024_fallback" => Box::new(qam_family::EqualizeQamK::new(
             rng,
             layout,
             qam_of(seed_of),

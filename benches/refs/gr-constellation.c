@@ -10,8 +10,8 @@
  *   from `find_sector_values` (`calc_sector_center`, `get_closest_point`, `get_distance`), computed
  *   once at construction. The points are given by the caller (in symbol order, with the sectors
  *   per axis and their widths) and taken without normalization (`NO_NORMALIZATION`, scale factor
- *   1), so the decisions are those of SDRk's unit-power `qam16`, `qam64` or `qam256` grid (at
- *   most 256 points and sectors); GNU Radio's own `qam_constellation()` builds the same
+ *   1), so the decisions are those of SDRk's unit-power `qam16`, `qam64`, `qam256` or `qam1024`
+ *   grid (at most 1024 points and sectors); GNU Radio's own `qam_constellation()` builds the same
  *   `constellation_rect` with `AMPLITUDE_NORMALIZATION`.
  * - `gr::digital::constellation_receiver_cb_impl::general_work` and `phase_error_tracking`
  *   (gr-digital/lib/constellation_receiver_cb_impl.cc) without tags, with one complex output: the
@@ -55,7 +55,7 @@
 #endif
 
 #define SDRK_GR_M_PI 3.14159265358979323846 /* GR_M_PI of gnuradio/math.h */
-#define SDRK_GR_MAX_POINTS 256 /* 256-QAM (M44.2); 64 before */
+#define SDRK_GR_MAX_POINTS 1024 /* 1024-QAM (M44.2); 64 before M44.2 */
 
 /* ------------------------------------------------------------------------------------------ */
 /* constellation_rect                                                                          */

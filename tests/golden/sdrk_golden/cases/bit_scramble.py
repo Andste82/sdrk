@@ -84,11 +84,11 @@ def make(rng, polynomial, taps, constellation, bits_per_symbol, n):
     )
 
 
-@case(kernel="blocks", name="bit_scramble_x23_x18_bpsk_f32", seed=870)
+@case(kernel="blocks", name="bit_scramble_x23_x18_bpsk_f32", seed=880)
 def bit_scramble_x23_x18_bpsk_f32(rng):
     return make(rng, "x23_x18", (23, 18), "bpsk", 1, 4096)
 
 
-@case(kernel="blocks", name="bit_scramble_x23_x18_qam256_f32", seed=871)
+@case(kernel="blocks", name="bit_scramble_x23_x18_qam256_f32", seed=881)
 def bit_scramble_x23_x18_qam256_f32(rng):
     return make(rng, "x23_x18", (23, 18), "qam256", 8, 8192)

@@ -277,15 +277,6 @@ impl<const B: usize> Grid<B> {
     /// (D1611, D1614). AArch64 compiles the plain selects without a jump.
     #[inline]
     fn by_select(v: f32) -> f32 {
-        let pick = |c: bool, a: f32, b: f32| {
-            if cfg!(any(target_arch = "x86", target_arch = "x86_64")) {
-                core::hint::select_unpredictable(c, a, b)
-            } else if c {
-                a
-            } else {
-                b
-            }
-        };
         let t = Self::arg(v);
         // The groups of the current level of the tree, `n` of them, each of `span` levels.
         let mut w = [0.0f32; 32];
@@ -310,12 +301,17 @@ impl<const B: usize> Grid<B> {
     /// The level value of one axis, the same bits in every form, chosen per order and level by
     /// cycles plus mispredictions (D1611): for 256-QAM and 1024-QAM [`Grid::by_index`] on every
     /// target (its tree of 15 or 31 selects per axis and the level table, whose bound check
-    /// stays a jump, simulated slower, D1505); for 4-QAM to 64-QAM [`Grid::by_select`] on
-    /// AArch64 and AVX2 (D1417), [`Grid::by_index`] on x86 without AVX2 (D1602),
-    /// [`Grid::by_table`] elsewhere (Cortex-M4 and `wasm32` are counted in instructions).
+    /// stays a jump, simulated slower, D1505); for 16-QAM and 64-QAM [`Qam::decide_m44`] (the
+    /// forms of M44, D1525); for 4-QAM [`Grid::by_select`] on AArch64 and
+    /// AVX2 (D1417), [`Grid::by_index`] on x86 without AVX2 (D1602), [`Grid::by_table`]
+    /// elsewhere (Cortex-M4 and `wasm32` are counted in instructions).
     #[inline]
-    fn value(v: f32) -> f32 {
-        if B >= 4 {
+    pub(crate) fn value(v: f32) -> f32 {
+        if B == 2 {
+            Qam::Qam16.decide_m44(v)
+        } else if B == 3 {
+            Qam::Qam64.decide_m44(v)
+        } else if B >= 4 {
             Self::by_index(v)
         } else if cfg!(any(target_arch = "aarch64", target_feature = "avx2")) {
             Self::by_select(v)
@@ -325,6 +321,47 @@ impl<const B: usize> Grid<B> {
             Self::by_table(v)
         }
     }
+}
+
+/// One select of the decision trees ([`Grid::by_select`], [`select16`], [`select64`]):
+/// [`core::hint::select_unpredictable`] on x86 (as plain selects LLVM compiled some of them at
+/// AVX2 and AVX-512 as jumps on the decided symbol, D1611, D1614), a plain select elsewhere
+/// (AArch64 compiles it without a jump).
+#[inline]
+fn pick(c: bool, a: f32, b: f32) -> f32 {
+    if cfg!(any(target_arch = "x86", target_arch = "x86_64")) {
+        core::hint::select_unpredictable(c, a, b)
+    } else if c {
+        a
+    } else {
+        b
+    }
+}
+
+/// The select tree of 16-QAM ([`Grid::by_select`] for `B` = 2 written out as in M44, the same
+/// selects, D1417), see [`Qam::decide_m44`].
+#[inline]
+pub(crate) fn select16(v: f32) -> f32 {
+    let [l0, l1, l2, l3] = QAM16_LEVELS;
+    let t = v * Grid::<2>::HALF_SQRT_E + 2.0;
+    let lo = pick(t >= 1.0, l1, l0);
+    let hi = pick(t >= 3.0, l3, l2);
+    pick(t >= 2.0, hi, lo)
+}
+
+/// The select tree of 64-QAM ([`Grid::by_select`] for `B` = 3 written out as in M44, the same
+/// selects, D1417), see [`Qam::decide_m44`].
+#[inline]
+pub(crate) fn select64(v: f32) -> f32 {
+    let [l0, l1, l2, l3, l4, l5, l6, l7] = QAM64_LEVELS;
+    let t = v * Grid::<3>::HALF_SQRT_E + 4.0;
+    let q0 = pick(t >= 1.0, l1, l0);
+    let q1 = pick(t >= 3.0, l3, l2);
+    let q2 = pick(t >= 5.0, l5, l4);
+    let q3 = pick(t >= 7.0, l7, l6);
+    let lo = pick(t >= 2.0, q1, q0);
+    let hi = pick(t >= 6.0, q3, q2);
+    pick(t >= 4.0, hi, lo)
 }
 
 /// `$body` with the grid `$g` of the bits per axis of `$q` (a [`Qam`]): one instance per order.
@@ -530,7 +567,75 @@ impl Qam {
     /// ```
     #[inline]
     pub fn decide(self, y: C32) -> C32 {
-        with_grid!(self, G => C32::new(G::value(y.re), G::value(y.im)))
+        // 16-QAM and 64-QAM in the form of M44 (see [`Qam::decide_m44`]).
+        match self {
+            Self::Qam16 | Self::Qam64 => C32::new(self.decide_m44(y.re), self.decide_m44(y.im)),
+            q => with_grid!(q, G => C32::new(G::value(y.re), G::value(y.im))),
+        }
+    }
+
+    /// The level value of one axis of 16-QAM or 64-QAM ([`Grid::value`] for `B` = 2 and 3, the
+    /// same bits), written as in M44: [`Qam::select_m44`] on AArch64 and AVX2 (D1417),
+    /// [`Grid::by_index`] on x86 without AVX2 (D1602), [`Grid::by_table`] elsewhere. A method of
+    /// [`Qam`] with both trees behind one `match`, as in M44, not the generic [`Grid`]: through
+    /// the generic functions the same selects made LLVM compile the loops of `equalize` and
+    /// `costas` around them differently (up to 46 % slower), and as two separate functions still
+    /// 3 to 8 % slower on `znver3`, `znver4` and `cortex-a72` (the 64-QAM loop of `costas` and the
+    /// 16-QAM loop of `equalize` vectorized the two axes on AArch64); in this form the loops
+    /// compile to the code of M44 (the measure step of M44.2, D1525). Any other order gives its
+    /// [`Grid::value`].
+    #[inline]
+    pub(crate) fn decide_m44(self, v: f32) -> f32 {
+        if cfg!(any(target_arch = "aarch64", target_feature = "avx2")) {
+            self.select_m44(v)
+        } else if cfg!(any(target_arch = "x86", target_arch = "x86_64")) {
+            match self {
+                Self::Qam16 => Grid::<2>::by_index(v),
+                Self::Qam64 => Grid::<3>::by_index(v),
+                q => with_grid!(q, G => G::value(v)),
+            }
+        } else {
+            match self {
+                Self::Qam16 => Grid::<2>::by_table(v),
+                Self::Qam64 => Grid::<3>::by_table(v),
+                q => with_grid!(q, G => G::value(v)),
+            }
+        }
+    }
+
+    /// [`Grid::by_select`] of 16-QAM (64-QAM for every other order) written out as in M44 (the
+    /// same selects, D1417).
+    #[inline]
+    pub(crate) fn select_m44(self, v: f32) -> f32 {
+        // The trees of [`select16`] and [`select64`] written out here once more: calling them
+        // made LLVM pair the two axes of the 64-QAM loop of `costas` into vectors on AArch64
+        // (+7.6 % on `cortex-a72`, D1525).
+        let pick = |c: bool, a: f32, b: f32| {
+            if cfg!(any(target_arch = "x86", target_arch = "x86_64")) {
+                core::hint::select_unpredictable(c, a, b)
+            } else if c {
+                a
+            } else {
+                b
+            }
+        };
+        if self == Self::Qam16 {
+            let [l0, l1, l2, l3] = QAM16_LEVELS;
+            let t = v * Grid::<2>::HALF_SQRT_E + 2.0;
+            let lo = pick(t >= 1.0, l1, l0);
+            let hi = pick(t >= 3.0, l3, l2);
+            pick(t >= 2.0, hi, lo)
+        } else {
+            let [l0, l1, l2, l3, l4, l5, l6, l7] = QAM64_LEVELS;
+            let t = v * Grid::<3>::HALF_SQRT_E + 4.0;
+            let q0 = pick(t >= 1.0, l1, l0);
+            let q1 = pick(t >= 3.0, l3, l2);
+            let q2 = pick(t >= 5.0, l5, l4);
+            let q3 = pick(t >= 7.0, l7, l6);
+            let lo = pick(t >= 2.0, q1, q0);
+            let hi = pick(t >= 6.0, q3, q2);
+            pick(t >= 4.0, hi, lo)
+        }
     }
 
     /// The point nearest to `y` by the level table on both axes: the bits of [`Qam::decide`],

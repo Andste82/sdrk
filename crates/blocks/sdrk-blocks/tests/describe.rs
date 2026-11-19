@@ -82,8 +82,8 @@ fn text_ok(what: &str, s: &str) {
 #[test]
 fn there_are_sixty_one_unique_kinds() {
     let kinds: BTreeSet<_> = all_descriptions().iter().map(|d| d.kind).collect();
-    assert_eq!(kinds.len(), 81);
-    assert_eq!(all_descriptions().len(), 81);
+    assert_eq!(kinds.len(), 83);
+    assert_eq!(all_descriptions().len(), 83);
     for kind in [
         "convert",
         "convert_out",

@@ -6,13 +6,16 @@
 use sdrk::{Delay, Progress, Rate, Ratio, RatioKind};
 use sdrk_core::C32;
 use sdrk_core::kernels::costas::CostasConstellation;
-use sdrk_core::kernels::equalize::{EqConstellation, EqualizeState};
+use sdrk_core::kernels::equalize::{EqConstellation, EqMode, EqSwitch, EqualizeState};
 
 use super::costas::{
     CostasBlock, CostasConfig, DEFAULT_DAMPING, DEFAULT_MAX_OFFSET, MAX_LOOP_BW, MIN_LOOP_BW,
     check_f64,
 };
-use super::equalize::{DEFAULT_TAPS, EQ_TAPS, EqualizeBlock, EqualizeConfig};
+use super::equalize::{
+    BLIND_SWITCH_PARAM, DEFAULT_BLIND_SWITCH, DEFAULT_TAPS, EQ_TAPS, EqualizeBlock, EqualizeConfig,
+    blind_switch_index, blind_switch_of,
+};
 use super::psk_demod::{SYNC_MAX_DEVIATION, check_equalizer_taps, split_work, work_len};
 use super::pulse_match::{
     MATCH_ROLLOFF_PARAM, MATCH_SPAN_PARAM, PulseMatchBlock, PulseMatchConfig, SYMBOL_RATE_PARAM,
@@ -168,11 +171,13 @@ pub static DESCRIPTION: BlockDescription = BlockDescription {
         equalize (the constellation, equalizer_taps taps, no feedback \
         taps, the blind start of the constellation: mu_cma 0.05 over 1000 CMA symbols for qpsk \
         to qam64, 0.02 over 8000 for qam256, 0.005 over 16000 for qam1024, then \
-        decision-directed with mu_dd 0.005; its phase \
+        decision-directed with mu_dd 0.005; blind_switch measured, the default, switches \
+        qam256 earlier when its smoothed decision error stays low, blind_switch count after the \
+        CMA symbols; its phase \
         tracker at 0.005 until the first check after the estimate, then at 0.0015, a narrow \
         frequency tracker; at the switch to the decision mode the tracker turns by the phase \
         of the fourth power of the equalizer's output over its last 256 blind symbols after the \
-        estimate; equalizer_taps 0 leaves it out), the decision-directed carrier \
+        estimate (of its hold with the measured switch); equalizer_taps 0 leaves it out), the decision-directed carrier \
         loop costas, which tracks the phase (the constellation, carrier_bw, \
         damping 0.7071, max_offset 0.05 cycles per symbol) and the soft bits of symbol_demap \
         (the constellation, scale 1): above 0 is a 1. This is the order of psk_demod (equalizer before the \
@@ -197,6 +202,7 @@ pub static DESCRIPTION: BlockDescription = BlockDescription {
         MATCH_ROLLOFF_PARAM,
         MATCH_SPAN_PARAM,
         EQUALIZER_TAPS_PARAM,
+        BLIND_SWITCH_PARAM,
         SYNC_BW_PARAM,
         CARRIER_BW_PARAM,
     ],
@@ -226,6 +232,9 @@ pub struct QamDemodConfig {
     pub span: usize,
     /// Forward taps of the equalizer: 0 (off) or odd from 3 to 63.
     pub equalizer_taps: usize,
+    /// The switch of the equalizer from CMA to the decision mode (`blind_switch` of `equalize`,
+    /// forwarded unchanged; M44.3 §1).
+    pub blind_switch: EqSwitch,
     /// Loop bandwidth of the symbol timing (0.0001 to 0.1); `None` for the default of the
     /// constellation ([`qam_sync_bw`], [`QamDemodConfig::sync_bw`]).
     pub sync_bw: Option<f64>,
@@ -244,6 +253,7 @@ impl Default for QamDemodConfig {
             rolloff: 0.35,
             span: 10,
             equalizer_taps: DEFAULT_TAPS,
+            blind_switch: DEFAULT_BLIND_SWITCH,
             sync_bw: None,
             carrier_bw: DEFAULT_CARRIER_BW,
         }
@@ -298,6 +308,7 @@ impl QamDemodConfig {
             mu_dd: QAM_MU_DD,
             phase_bw: QAM_TRACKER_PULL_BW,
             constellation: self.constellation.into(),
+            blind_switch: self.blind_switch,
             ..EqualizeConfig::default()
         })
     }
@@ -379,6 +390,7 @@ impl QamDemodConfig {
                 check_equalizer_taps(t)?;
                 self.equalizer_taps = t;
             }
+            "blind_switch" => self.blind_switch = blind_switch_of(value.as_choice()?),
             "sync_bw" => self.sync_bw = Some(value.as_f64()?),
             "carrier_bw" => self.carrier_bw = value.as_f64()?,
             _ => return unknown(),
@@ -397,6 +409,7 @@ impl QamDemodConfig {
             "rolloff" => Ok(ParamValue::F64(self.rolloff)),
             "span" => Ok(ParamValue::I64(self.span as i64)),
             "equalizer_taps" => Ok(ParamValue::I64(self.equalizer_taps as i64)),
+            "blind_switch" => Ok(ParamValue::Choice(blind_switch_index(self.blind_switch))),
             "sync_bw" => Ok(ParamValue::F64(self.sync_bw())),
             "carrier_bw" => Ok(ParamValue::F64(self.carrier_bw)),
             _ => unknown(),
@@ -547,65 +560,103 @@ const _: () = assert!(blind_fits(
 /// power of the output, the feed-forward estimate of the carrier phase of square QAM modulo the
 /// quarter turn (`E[s^4]` is real and negative: the mean of `z^4` is `E[s^4] e^(j 4 phi)` for an
 /// output `z = s e^(j phi)`), over the last [`QAM_HANDOVER_SYMBOLS`] blind symbols after an
-/// estimate (before it the tracker turns at frequency 0 and the phase of the output runs).
+/// estimate (before it the tracker turns at frequency 0 and the phase of the output runs). With
+/// the measured switch of the equalizer (`blind_switch` `measured`, M44.3 §1) the switch can come
+/// before its CMA symbols: the runs end at the earliest symbol at which it can come
+/// (`EqualizeState::blind_left`), and when it comes by the measure the sum is that of the last
+/// blind symbols of its hold (the last [`QAM_HANDOVER_SYMBOLS`] symbols before the switch, as the
+/// hold is longer).
 #[derive(Clone, Copy, Debug)]
 struct HandOver {
-    /// The sum of the fourth powers of the output.
+    /// The sum of the fourth powers of the output over the last blind symbols by the count.
     sum: C32,
-    /// The blind symbols of the equalizer left before its switch to the decision mode; 0 when it
-    /// is past (the steady state) or without the equalizer (at most the CMA symbols of the blind
-    /// start, D1517).
+    /// The sum of the fourth powers of the output over the last blind symbols of the hold of the
+    /// measured switch.
+    sum_hold: C32,
+    /// The blind symbols of the equalizer left by the count before its switch to the decision
+    /// mode (at most the CMA symbols of the blind start, D1517).
     blind_left: u16,
+    /// The hold of the measured switch of the equalizer after the last run (0 with the count).
+    hold: u32,
+    /// The hold time of the measured switch (0 with the count).
+    hold_symbols: u32,
+    /// Whether the equalizer is in its blind symbols (false in the steady state and without the
+    /// equalizer).
+    active: bool,
     /// Whether an estimate went to the equalizer's tracker since its start (only then the phase of
     /// its output stands still and is measured).
     armed: bool,
 }
 
+/// The fourth power `(z^2)^2` of an output, `None` when it is not finite.
+#[inline]
+fn fourth(v: C32) -> Option<C32> {
+    let a = C32::new(v.re * v.re - v.im * v.im, 2.0 * v.re * v.im);
+    let q = C32::new(a.re * a.re - a.im * a.im, 2.0 * a.re * a.im);
+    (q.re.is_finite() && q.im.is_finite()).then_some(q)
+}
+
 impl HandOver {
     /// The equalizer starts (again) from its start weights and its `blind` symbols (0 without
-    /// the equalizer): the hand-over waits for its blind symbols and an estimate.
-    fn start(blind: u16) -> Self {
+    /// the equalizer) with the hold time `hold_symbols` of its measured switch (0 with the
+    /// count): the hand-over waits for the switch and an estimate.
+    fn start(blind: u16, hold_symbols: u32) -> Self {
         Self {
             sum: C32::new(0.0, 0.0),
+            sum_hold: C32::new(0.0, 0.0),
             blind_left: blind,
+            hold: 0,
+            hold_symbols,
+            active: blind != 0,
             armed: false,
         }
     }
 
-    /// An estimate went to the equalizer's tracker: the sum starts at 0.
+    /// An estimate went to the equalizer's tracker: the sums start at 0.
     fn arm(&mut self) {
         self.armed = true;
         self.sum = C32::new(0.0, 0.0);
+        self.sum_hold = C32::new(0.0, 0.0);
     }
 
-    /// The hand-over after a run `z` of outputs of the equalizer `eq` (at most `blind_left`
-    /// symbols, the runs end at the switch): when armed, the fourth powers `(z^2)^2` of those
-    /// among the last [`QAM_HANDOVER_SYMBOLS`] blind symbols into the sum (in `f32`, in their
-    /// order, finite ones only), and at the switch, when the sum is not 0, the tracker's phase
-    /// grows by `round(atan2(-sum.im, -sum.re) / (8 pi) 2^32)` units of `2^-32` turn: the mean of
-    /// `z^4` is `E[s^4] e^(j 4 phi)` with `E[s^4]` real and negative, so `arg(-sum) / 4` is the
+    /// The hand-over after a run `z` of outputs of the equalizer `eq` (the runs end at the
+    /// earliest symbol of the switch): when armed, the fourth powers `(z^2)^2` of those among the
+    /// last [`QAM_HANDOVER_SYMBOLS`] blind symbols by the count into `sum`, and with the measured
+    /// switch those of the hold of the equalizer whose place in the hold is among its last
+    /// [`QAM_HANDOVER_SYMBOLS`] into `sum_hold` (which starts at 0 when the hold started again);
+    /// in `f32`, in their order, finite ones only. At the switch, when the sum of the switch
+    /// (`sum_hold` for a switch by the measure, `sum` by the count) is not 0, the tracker's phase
+    /// grows by `round(atan2(-s.im, -s.re) / (8 pi) 2^32)` units of `2^-32` turn: the mean of
+    /// `z^4` is `E[s^4] e^(j 4 phi)` with `E[s^4]` real and negative, so `arg(-s) / 4` is the
     /// phase `phi` of the output in `(-1/8, 1/8]` turn, which the tracker turns back by its phase
     /// (out of line: only the runs of the blind symbols get here).
     #[inline(never)]
     #[cold]
     fn run<S: Storage>(&mut self, eq: &mut EqualizeBlock<S>, z: &[C32]) {
         let left = usize::from(self.blind_left);
+        let n = z.len();
+        let hold = eq.state().switch_hold();
         if self.armed {
             for (i, v) in z.iter().enumerate() {
                 // The blind symbols left after this one.
-                if left.saturating_sub(i + 1) < QAM_HANDOVER_SYMBOLS {
-                    let a = C32::new(v.re * v.re - v.im * v.im, 2.0 * v.re * v.im);
-                    let q = C32::new(a.re * a.re - a.im * a.im, 2.0 * a.re * a.im);
-                    if q.re.is_finite() && q.im.is_finite() {
-                        self.sum = C32::new(self.sum.re + q.re, self.sum.im + q.im);
-                    }
+                if left.saturating_sub(i + 1) < QAM_HANDOVER_SYMBOLS
+                    && let Some(q) = fourth(*v)
+                {
+                    self.sum = C32::new(self.sum.re + q.re, self.sum.im + q.im);
                 }
             }
+            if self.hold_symbols != 0 {
+                self.add_hold(z, hold);
+            }
         }
-        // `z.len() <= left`.
-        self.blind_left = left.saturating_sub(z.len()) as u16;
-        if self.blind_left == 0 {
-            let sum = self.sum;
+        self.hold = hold;
+        self.blind_left = left.saturating_sub(n) as u16;
+        if eq.state().mode() == EqMode::Decision {
+            let sum = if self.hold_symbols != 0 && hold >= self.hold_symbols {
+                self.sum_hold
+            } else {
+                self.sum
+            };
             if self.armed && (sum.re != 0.0 || sum.im != 0.0) {
                 let phi = libm::atan2(-f64::from(sum.im), -f64::from(sum.re))
                     / (4.0 * core::f64::consts::TAU);
@@ -613,6 +664,29 @@ impl HandOver {
                 eq.set_phase(eq.state().phase().wrapping_add(step));
             }
             self.armed = false;
+            self.active = false;
+        }
+    }
+
+    /// The fourth powers of the run `z` that lie in the hold `hold` of the equalizer after it
+    /// among its last [`QAM_HANDOVER_SYMBOLS`] places into `sum_hold`: the hold counts the last
+    /// symbols of the run (`hold` of them at most), and when it did not go on from the hold
+    /// before the run, the sum starts at 0.
+    fn add_hold(&mut self, z: &[C32], hold: u32) {
+        let n = z.len();
+        let hold = hold as usize;
+        if hold != self.hold as usize + n {
+            self.sum_hold = C32::new(0.0, 0.0);
+        }
+        let from = (self.hold_symbols as usize).saturating_sub(QAM_HANDOVER_SYMBOLS);
+        for (i, v) in z.iter().enumerate() {
+            // The place of the symbol in the hold, 1 for its first symbol, 0 outside.
+            let place = hold.saturating_sub(n - 1 - i);
+            if place > from
+                && let Some(q) = fourth(*v)
+            {
+                self.sum_hold = C32::new(self.sum_hold.re + q.re, self.sum_hold.im + q.im);
+            }
         }
     }
 }
@@ -702,6 +776,9 @@ pub struct QamDemodBlock<S: Storage> {
     /// Whether `sync_bw` was set (`false`: the default of the constellation, D1527), so that
     /// [`QamDemodBlock::config`] gives back the configuration of the block.
     sync_bw_set: bool,
+    /// The switch of the equalizer (held for [`QamDemodBlock::config`] also without the
+    /// equalizer).
+    blind_switch: EqSwitch,
 }
 
 impl<S: Storage> core::fmt::Debug for QamDemodBlock<S> {
@@ -756,7 +833,8 @@ impl<S: Storage> QamDemodBlock<S> {
         let blind = config
             .equalizer()
             .map_or(0, |e| u16::try_from(e.cma_symbols()).unwrap_or(u16::MAX));
-        let hand = HandOver::start(blind);
+        let hold = config.equalizer().map_or(0, |e| e.switch_hold_symbols());
+        let hand = HandOver::start(blind, hold);
         let check = u16::try_from(config.acquisition_check()).unwrap_or(u16::MAX);
         Ok(Self {
             pulse,
@@ -767,6 +845,7 @@ impl<S: Storage> QamDemodBlock<S> {
                 costas,
                 watch: LockWatch::with_check(check),
                 blind,
+                hold_symbols: hold,
                 hand,
                 level: Level::default(),
                 reference: 1.0,
@@ -778,6 +857,7 @@ impl<S: Storage> QamDemodBlock<S> {
             at: 0,
             len: 0,
             sync_bw_set: config.sync_bw.is_some(),
+            blind_switch: config.blind_switch,
         })
     }
 
@@ -824,6 +904,7 @@ impl<S: Storage> QamDemodBlock<S> {
             rolloff: pulse.rolloff,
             span: pulse.span,
             equalizer_taps: self.rx.eq.as_ref().map_or(0, |e| e.state().taps()),
+            blind_switch: self.blind_switch,
             sync_bw: self.sync_bw_set.then_some(sync.loop_bw),
             carrier_bw: self.rx.costas.state().loop_bw(),
         }
@@ -1028,6 +1109,8 @@ struct Loops<S: Storage> {
     watch: LockWatch<QamDemodLock>,
     /// The blind (CMA) symbols of the equalizer after a start (0 without it, D1517).
     blind: u16,
+    /// The hold time of the measured switch of the equalizer (0 with the count or without it).
+    hold_symbols: u32,
     hand: HandOver,
     /// The power of the symbols into the equalizer over the pull-in (from the estimate to the
     /// first check after it).
@@ -1098,9 +1181,11 @@ impl<S: Storage> Loops<S> {
             .remaining()
             .min(self.watch.remaining())
             .min(to_restart);
-        match self.hand.blind_left {
-            0 => r,
-            b => r.min(usize::from(b)),
+        match self.eq.as_ref() {
+            Some(eq) if self.hand.active => {
+                r.min(usize::try_from(eq.state().blind_left()).unwrap_or(usize::MAX))
+            }
+            _ => r,
         }
     }
 
@@ -1116,7 +1201,7 @@ impl<S: Storage> Loops<S> {
                     self.level.add(src);
                 }
                 eq.process(src, dst)?;
-                if self.hand.blind_left != 0 {
+                if self.hand.active {
                     self.hand.run(eq, dst);
                 }
             }
@@ -1220,7 +1305,7 @@ impl<S: Storage> Loops<S> {
             // A valid bandwidth: the call cannot fail.
             let _ = eq.set_phase_bw(QAM_TRACKER_PULL_BW);
         }
-        self.hand = HandOver::start(self.blind);
+        self.hand = HandOver::start(self.blind, self.hold_symbols);
     }
 
     /// Hands the acquired frequency `f` (cycles per symbol) to the loops: with the equalizer the
@@ -1321,7 +1406,7 @@ impl<S: Storage> Block for QamDemodBlock<S> {
         }
         self.rx.acquire.reset();
         self.rx.watch.reset();
-        self.rx.hand = HandOver::start(self.rx.blind);
+        self.rx.hand = HandOver::start(self.rx.blind, self.rx.hold_symbols);
         self.rx.level = Level::default();
         self.rx.reference = 1.0;
         self.rx.symbols = 0;
@@ -1361,6 +1446,7 @@ pub const QAM_DEMOD_PARAMS: ParamMap = ParamMap::new(&[
     ("rolloff", "pulse.rolloff"),
     ("span", "pulse.span"),
     ("equalizer_taps", "eq.taps"),
+    ("blind_switch", "eq.blind_switch"),
     ("sync_bw", "sync.loop_bw"),
     ("carrier_bw", "costas.loop_bw"),
 ]);
@@ -1375,6 +1461,9 @@ impl<S: Storage> Stages for QamDemodBlock<S> {
             ("eq", n) => match (self.rx.eq.as_ref(), n) {
                 (Some(eq), n) => eq.param(n),
                 (None, "taps") => Ok(ParamValue::I64(0)),
+                (None, "blind_switch") => {
+                    Ok(ParamValue::Choice(blind_switch_index(self.blind_switch)))
+                }
                 (None, _) => unknown(),
             },
             ("costas", n) => self.rx.costas.param(n),

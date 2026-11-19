@@ -1,7 +1,8 @@
 //! M44 test 7 and M44.1 test 9: the example flows `qam16_transmitter` -> channel ->
 //! `qam16_receiver`, since M44.1 on the composites `qam_frame_encode` and `qam_frame_decode`
-//! (the transmitter's bytes and the receiver's soft bits keep the baseline of the pairs they
-//! replace).
+//! (the transmitter's bytes and the receiver's soft bits keep their baseline), since M44.2 with
+//! the scrambler of the composites (`scrambler` `multiplicative`, the default; the maintainer's
+//! decision on I44.2-7, D1540).
 //!
 //! The transmitter runs in pull mode: the packet source is idle for the first
 //! [`LEAD_SYMBOLS`] symbols (the encoder sends its idle signal, the PN9 sequence, while the
@@ -27,11 +28,12 @@
 //! test does not assert it, because a decision exactly on a boundary takes the upper level,
 //! D1202, which breaks the symmetry in rare cases).
 //!
-//! The baseline of M44.1 (spec §5, test 5; `sdrk_testkit::baseline`, table `qam_loop` of
-//! `tests/baseline/m44_1`): the `cs16` bytes of the transmitter and the soft bits of the
-//! `qam_demod` node of the receiver flow (the flow up to `demod`, its output read as a stream) at
-//! the four rotations keep their bits, per SIMD level; the shipped transmitter flow on
-//! `qam_frame_encode` and the flow with the pair give the same bytes.
+//! The baseline (M44.1 spec §5, test 5; `sdrk_testkit::baseline`, table `qam_loop` of
+//! `tests/baseline/m44_1`, recorded again in M44.2 from the flows with the scrambler, D1540): the
+//! `cs16` bytes of the transmitter and the soft bits of the `qam_demod` node of the receiver flow
+//! (the flow up to `demod`, its output read as a stream) at the four rotations keep their bits,
+//! per SIMD level; the shipped transmitter flow on `qam_frame_encode` and the flow with the chain
+//! of its building blocks `frame_encode` -> `bit_scramble` -> `qam_mod` give the same bytes.
 #![allow(
     clippy::unwrap_used,
     clippy::indexing_slicing,
@@ -365,18 +367,24 @@ fn qam16_flows_carry_1000_packets_through_multipath_noise_and_a_carrier_offset()
     }
 }
 
-/// The transmitter flow before M44.1: the pair `frame_encode` -> `qam_mod` with the parameters of
-/// the `qam_frame_encode` node (whose `scrambler` is `none`, so the pair is the whole chain).
-fn pair_transmitter() -> String {
+/// The transmitter flow on the building blocks of its `qam_frame_encode` node: the chain
+/// `frame_encode` -> `bit_scramble` -> `qam_mod` with the parameters of the node (whose
+/// `scrambler` is the default `multiplicative` with the default `polynomial`, D1540).
+fn chain_transmitter() -> String {
     let mut spec: serde_json::Value = serde_json::from_str(&flow("qam16_transmitter")).unwrap();
     let nodes = spec["nodes"].as_object_mut().unwrap();
     let tx = nodes.remove("tx").unwrap();
     let p = &tx["params"];
-    assert_eq!(p["scrambler"], serde_json::json!("none"));
+    assert!(p.get("scrambler").is_none() && p.get("polynomial").is_none());
     nodes.insert(
         "enc".to_string(),
         serde_json::json!({ "kind": "frame_encode", "params": {
             "idle": p["idle"], "preamble_bytes": p["preamble_bytes"] } }),
+    );
+    nodes.insert(
+        "scr".to_string(),
+        serde_json::json!({ "kind": "bit_scramble", "params": {
+            "constellation": p["constellation"] } }),
     );
     nodes.insert(
         "mod".to_string(),
@@ -386,7 +394,8 @@ fn pair_transmitter() -> String {
     );
     spec["edges"] = serde_json::json!([
         { "from": "msg", "to": "enc" },
-        { "from": "enc", "to": "mod" },
+        { "from": "enc", "to": "scr" },
+        { "from": "scr", "to": "mod" },
         { "from": "mod", "to": "level" },
         { "from": "level", "to": "duc" },
         { "from": "duc", "to": "rf" }
@@ -443,7 +452,7 @@ fn soft_digest(bytes: &[u8]) -> Digest {
 }
 
 #[test]
-fn the_qam16_flows_keep_the_baseline_of_m44_1() {
+fn the_qam16_flows_keep_their_baseline() {
     let table = Baseline::load(
         "m44_1",
         "qam_loop",
@@ -452,13 +461,13 @@ fn the_qam16_flows_keep_the_baseline_of_m44_1() {
     .unwrap();
     let packets = random_packets();
     // the `cs16` bytes of the shipped transmitter flow on `qam_frame_encode` and of the flow with
-    // the pair `frame_encode` -> `qam_mod` it replaces (built from the parameters of the `tx`
-    // node) are the same, and equal the baseline of the pair before M44.1 (§7, D1582)
-    let pair = transmit_with(&pair_transmitter(), &packets);
+    // the chain `frame_encode` -> `bit_scramble` -> `qam_mod` (built from the parameters of the
+    // `tx` node) are the same (M44.1 §7, D1582), and equal the baseline (D1540)
+    let chain = transmit_with(&chain_transmitter(), &packets);
     let composite = transmit(&packets);
     assert!(
-        composite == pair,
-        "the flow on qam_frame_encode differs from the flow with the pair"
+        composite == chain,
+        "the flow on qam_frame_encode differs from the flow with the chain"
     );
     let mut digest = Digest::new();
     for v in &composite {
@@ -466,8 +475,10 @@ fn the_qam16_flows_keep_the_baseline_of_m44_1() {
             digest.bytes(&((x * 32768.0) as i16).to_le_bytes());
         }
     }
-    table.check("tx_cs16", &digest).unwrap();
-    let iq = channel(&pair);
+    // every case is checked before the test fails, so that a failure names the output of each
+    let mut errors = Vec::new();
+    errors.extend(table.check("tx_cs16", &digest).err());
+    let iq = channel(&chain);
     let digests: Vec<Digest> = std::thread::scope(|s| {
         let handles: Vec<_> = (0..4)
             .map(|q| {
@@ -478,19 +489,20 @@ fn the_qam16_flows_keep_the_baseline_of_m44_1() {
         handles.into_iter().map(|h| h.join().unwrap()).collect()
     });
     for (q, d) in digests.iter().enumerate() {
-        table.check(&format!("soft_turn{q}"), d).unwrap();
+        errors.extend(table.check(&format!("soft_turn{q}"), d).err());
     }
+    assert!(errors.is_empty(), "{errors:?}");
 }
 
 /// M44.1 §7: the shipped transmitter flow on `qam_frame_encode` gives the bytes of the flow with
-/// the pair `frame_encode` -> `qam_mod` at any room of the pull (one sample, an odd number of
+/// the chain `frame_encode` -> `bit_scramble` -> `qam_mod` at any room of the pull (one sample, an odd number of
 /// samples, more than a frame; D1582).
 #[test]
-fn the_transmitter_flow_equals_the_pair_at_any_pull_size() {
+fn the_transmitter_flow_equals_the_chain_at_any_pull_size() {
     let packets: Vec<Packet> = random_packets().into_iter().take(100).collect();
     for pull in [4, 1000, 65_536] {
         let composite = transmit_pull(&flow("qam16_transmitter"), &packets, pull);
-        let pair = transmit_pull(&pair_transmitter(), &packets, pull);
-        assert!(composite == pair, "pull {pull}: the flows differ");
+        let chain = transmit_pull(&chain_transmitter(), &packets, pull);
+        assert!(composite == chain, "pull {pull}: the flows differ");
     }
 }

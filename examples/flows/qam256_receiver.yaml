@@ -12,17 +12,22 @@ inputs:
     rate_hz: 1000000
     description: "IQ at 1 MS/s with the signal at 0 Hz"
 nodes:
-  # Automatic gain control to amplitude 1 (reference 0 dB) with equal attack and release time
-  # constants of 20 ms (500 symbols): the amplitude of 256-QAM changes from symbol to symbol,
+  # Automatic gain control to the unit average power that qam_demod expects (reference -3 dB:
+  # the AGC settles the amplitude of the samples, and the pulse-shaped 256-QAM signal at
+  # amplitude 1 has an average power of about 1.95) with equal attack and release time
+  # constants of 100 ms (2500 symbols): the amplitude of 256-QAM changes from symbol to symbol,
   # and an AGC that followed it (the default attack of 5 ms against a release of 200 ms pulls
-  # the level down on every outer point) would distort the constellation. The equalizer of
-  # the demodulator sets the exact scale.
+  # the level down on every outer point) would distort the constellation. The gain of an AGC
+  # with 20 ms wanders by about 1.8 % (up to 5 %) over a few hundred symbols, faster than the
+  # decision-directed equalizer follows, which costs packets of the dense grid (M44.3, D2413);
+  # with 100 ms (2500 symbols) the first packet after the 30000 idle symbols of test 7 still
+  # decodes. The equalizer of the demodulator sets the exact scale.
   agc:
     kind: agc
     params:
-      attack_s: 0.02
-      reference_db: 0
-      release_s: 0.02
+      attack_s: 0.1
+      reference_db: -3
+      release_s: 0.1
   # Demodulator, descrambler and decoder in one block (qam_frame_decode = qam_demod ->
   # bit_descramble -> frame_decode, M44.1, the descrambler since M44.2). Demodulator:
   # root-raised-cosine matched filter (roll-off 0.35, span 10, as the transmitter), Gardner

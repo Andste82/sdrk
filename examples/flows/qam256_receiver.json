@@ -17,9 +17,9 @@
     "agc": {
       "kind": "agc",
       "params": {
-        "attack_s": 0.02,
-        "reference_db": 0,
-        "release_s": 0.02
+        "attack_s": 0.1,
+        "reference_db": -3,
+        "release_s": 0.1
       }
     },
     "rx": {

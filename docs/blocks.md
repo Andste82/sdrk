@@ -712,6 +712,7 @@ The kinds that later milestones add have their names reserved here, so that ever
 | `bit_scramble`/`bit_descramble` | the self-synchronizing (multiplicative) scrambler of a soft-bit stream and its descrambler; useful for any bit stream, planned for the energy dispersal of DVB | M44.2 (delivered) |
 | `qam_acquire` | QAM frequency acquisition by the fourth power | M44.1 (delivered) |
 | `qam_frame_encode`/`qam_frame_decode` | packets to QAM samples and back, with a frame-level lock watch (composite blocks) | M44.1 (delivered) |
+| `snr_estimate` | blind estimate of the signal-to-noise ratio of received symbols (a quality meter; decides the restart of a false equalizer state) | M44.4 |
 | `pulse_shape`/`pulse_match` | the root-raised-cosine pulse filter of a linear modulation: interpolation by the samples per symbol (transmit) and the matched filter (receive) | M44.1.1 (delivered) |
 | `channelize`, `channel_select` | polyphase channelizer to a lane stream (M channels through one output); one lane to a stream | M45 (delivered) |
 | `band_pulse_detect` | pulse detection in every lane of a channelizer, merged across channels | M45.1 (delivered) |

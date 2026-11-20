@@ -1450,40 +1450,110 @@ fn linear_runs<K: Decide>(
     input: &[C32],
     output: &mut [C32],
 ) -> Result<()> {
+    // The scalar state of the loops in locals for the call (written back also after an
+    // internal error): the tracker phase and frequency and `mse` are carried from symbol to
+    // symbol, and through the state's references every symbol would store and load them again.
+    let (mut mode, mut count, mut hold) = (*p.mode, *p.count, *p.hold);
+    let (mut mse, mut phase, mut freq) = (*p.mse, *p.phase, *p.freq);
+    let mut q = EqualizeParts {
+        weights: &mut *p.weights,
+        hist: &mut *p.hist,
+        taps: p.taps,
+        constellation: p.constellation,
+        mu_cma: p.mu_cma,
+        mu_dd: p.mu_dd,
+        cma_symbols: p.cma_symbols,
+        switch: p.switch,
+        kp: p.kp,
+        ki: p.ki,
+        mode: &mut mode,
+        count: &mut count,
+        hold: &mut hold,
+        mse: &mut mse,
+        phase: &mut phase,
+        freq: &mut freq,
+    };
+    let result = symbol_runs(&mut q, dec, l, input, output);
+    (*p.mode, *p.count, *p.hold) = (mode, count, hold);
+    (*p.mse, *p.phase, *p.freq) = (mse, phase, freq);
+    result
+}
+
+/// The runs of [`linear_runs`] on its copy of the state.
+#[allow(
+    clippy::inline_always,
+    reason = "the body of linear_runs: its locals stay in registers only if it is inlined"
+)]
+#[inline(always)]
+fn symbol_runs<K: Decide>(
+    p: &mut EqualizeParts<'_>,
+    dec: K,
+    l: &mut Linear<'_>,
+    input: &[C32],
+    output: &mut [C32],
+) -> Result<()> {
     let index = || Error::Internal("equalizer index");
     let n = p.taps;
-    let lanes = n.next_multiple_of(QUAD);
-    let padded = lanes;
     for (xs, ys) in input.chunks(RUN).zip(output.chunks_mut(RUN)) {
         let first = RUN - xs.len();
         prepare_run(p, l, xs, first).ok_or_else(index)?;
-        for (k, (o, &raw)) in ys.iter_mut().zip(xs).enumerate() {
-            let at = RUN - 1 - k;
-            let y = dot_window(l, at, padded).ok_or_else(index)?;
-            let finite = raw.re.is_finite() && raw.im.is_finite();
-            *o = if finite && y.re.is_finite() && y.im.is_finite() {
-                let (&pq, &m) = l.w.power.get(at).zip(l.w.steps.get(at)).ok_or_else(index)?;
-                let mode = *p.mode;
-                let st = step(p, dec, mode, y, pq, m)?;
-                if let Some(g) = st.g
-                    && update_split(l, at, lanes, g).ok_or_else(index)?
-                {
-                    start_split(l, n);
-                }
-                st.z
-            } else {
-                C32::new(0.0, 0.0)
-            };
-            if advance(p) && at > first {
-                // A measured switch inside the run: the steps of the rest of the run in
-                // decision mode (out of line, once per start).
-                restep(p, l, first..at).ok_or_else(index)?;
-            }
+        // A run that starts in decision mode stays in it: its loop has no mode switch (the
+        // steady state); a run in CMA mode advances the count after every symbol.
+        if *p.mode == EqMode::Decision {
+            run_symbols::<K, false>(p, dec, l, xs, ys, first)?;
+        } else {
+            run_symbols::<K, true>(p, dec, l, xs, ys, first)?;
         }
         // The window of the last symbol becomes the history before the next run.
         l.h.xr.copy_within(first..first + n, RUN);
         l.h.xi.copy_within(first..first + n, RUN);
         l.h.xn.copy_within(first..first + n, RUN);
+    }
+    Ok(())
+}
+
+/// The symbols of one run of [`linear_runs`]; `BLIND` is the loop of a run that starts in CMA
+/// mode (the mode read per symbol, the count advanced after every symbol), the other the loop
+/// of the decision mode, which `advance` leaves as it is.
+#[allow(
+    clippy::inline_always,
+    reason = "the symbol loop of the linear path: two instances per decision, each must keep its helpers inlined"
+)]
+#[inline(always)]
+fn run_symbols<K: Decide, const BLIND: bool>(
+    p: &mut EqualizeParts<'_>,
+    dec: K,
+    l: &mut Linear<'_>,
+    xs: &[C32],
+    ys: &mut [C32],
+    first: usize,
+) -> Result<()> {
+    let index = || Error::Internal("equalizer index");
+    let n = p.taps;
+    let lanes = n.next_multiple_of(QUAD);
+    let padded = lanes;
+    for (k, (o, &raw)) in ys.iter_mut().zip(xs).enumerate() {
+        let at = RUN - 1 - k;
+        let y = dot_window(l, at, padded).ok_or_else(index)?;
+        let finite = raw.re.is_finite() && raw.im.is_finite();
+        *o = if finite && y.re.is_finite() && y.im.is_finite() {
+            let (&pq, &m) = l.w.power.get(at).zip(l.w.steps.get(at)).ok_or_else(index)?;
+            let mode = if BLIND { *p.mode } else { EqMode::Decision };
+            let st = step(p, dec, mode, y, pq, m)?;
+            if let Some(g) = st.g
+                && update_split(l, at, lanes, g).ok_or_else(index)?
+            {
+                start_split(l, n);
+            }
+            st.z
+        } else {
+            C32::new(0.0, 0.0)
+        };
+        if BLIND && advance(p) && at > first {
+            // A measured switch inside the run: the steps of the rest of the run in
+            // decision mode (out of line, once per start).
+            restep(p, l, first..at).ok_or_else(index)?;
+        }
     }
     Ok(())
 }

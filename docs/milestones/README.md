@@ -65,6 +65,7 @@ Up to M25.1 the milestones are strictly sequential: each depends on all previous
 | M44.1.1 | [M44.1.1-parameter-names.md](M44.1.1-parameter-names.md) | 10 | **Implemented** (2026-11-17, branch `m44-1-1-parameter-names`; I44.1.1-1 to I44.1.1-3 and I44.1-5 decided, D1823 to D1826; open item I44.1.1-4 for the maintainer). One name per parameter: `constellation` instead of `order` in the QAM and PSK blocks, the pulse filter as the building blocks `pulse_shape` / `pulse_match`, every QAM and PSK composite forwards through `ParamMap` with no conversion |
 | M44.2 | [M44.2-qam-any-order.md](M44.2-qam-any-order.md) | 10 | Implemented (2026-11-19, branch `m44-2-qam-any-order-r`; I44.2-7 to I44.2-11 decided, D1540 to D1544; test 7 is the acceptance test of the optimization round after M44.2; I44.2-12 accepted, D1547). QAM of any square order (4, 16, 64, 256, 1024): general constellation tables, soft bits (`qam_soft_bits` with a general SIMD path), `costas`/`equalize` decisions and lock metric, frequency acquisition and `frame_decode` rotations per order; 16/64 fast paths kept; flows `qam256_transmitter`/`qam256_receiver`; generalises the building blocks of M44.1 |
 | M44.3 | [M44.3-equalizer-switch.md](M44.3-equalizer-switch.md) | 10 | Done (2026-11-21, branch `m44-3-equalizer-switch`; the maintainer's decisions D2421 to D2424 on I44.3-1 to I44.3-4: the measured switch of §1 taken back out and deferred to M44.4, the restart of a false state off and decided in M44.4 by an SNR estimate, `qam16_receiver` at the unit input power; test 7 passes at 999 / 1000 / 999; the cycles equal M44.2). The equalizer switches to decision mode on a measured criterion of the constellation instead of a count, a false state without lock is restarted; acceptance: the 256-QAM flow loop at 990 of 1000 packets |
+| M44.4 | [M44.4-snr-restart-dense-blind-start.md](M44.4-snr-restart-dense-blind-start.md) | 10 | Draft. The building block `snr_estimate` (blind SNR estimate, a quality meter), the restart of a false equalizer state decided by the SNR, and the blind start of 256-QAM and 1024-QAM through multipath (concurrent or stop-and-go CMA/DD, or MMA) |
 | M45 | [M45-channelizer.md](M45-channelizer.md) | 10 | **Delivered** (2026-11-08, branch `m45-channelizer`). Channelizer: kernel `channelize` (polyphase filter bank, prototype with passband and stopband edges), port type `Lanes<T>` (M channels through one output), kinds `channelize` and `channel_select`, flow `pmr446_monitor` (eight PMR446 channels at once) |
 | M45.1 | [M45.1-ism-band-receiver.md](M45.1-ism-band-receiver.md) | 10 | **Delivered** (2026-11-08; open items I45.1-1 to I45.1-3 and I45.1-8 wait for maintainer decisions; I45.1-4 to I45.1-7 closed on 2026-11-09). ISM band receiver: `band_pulse_detect` on the lanes of `channelize` (pulse detection in every channel, OOK and FSK, merged across channels), pulse trains as packets, flows `ism433_pulses`, `ism868_pulses` |
 | M46 | [M46-ism-sensors.md](M46-ism-sensors.md) | 10 | Sensor decoders: slicers (PWM, PPM, Manchester, NRZ), `sensor_decode` with readings as JSON, at least four 433 MHz and two 868 MHz devices (clean-room, no GPL code), flows `ism433_sensors`, `ism868_sensors` |
@@ -120,6 +121,7 @@ From M26 on, the dependencies (the *Depends on* line of each file; dependencies 
 | M44.1.1 One name per parameter | M44.1 | M46, M48–M56 |
 | M44.2 QAM of any square order | M44.1.1 | M46, M48–M56 |
 | M44.3 Equalizer switch and restart | M44.2 | M50–M56 |
+| M44.4 SNR estimate, restart, dense blind start | M44.3 | M50–M56 |
 | M45 Channelizer, lane streams | M34 | M35–M44, M47 |
 | M45.1 ISM band receiver | M45, M39.1 | M42, M43, M44 |
 | M46 ISM sensor decoders | M45.1 | M42, M43, M44 |
@@ -222,7 +224,8 @@ Every golden case has a fixed seed; ranges keep cases independent so that adding
 | 870–879 | M49.1 (`scramble` for `bits ≥ 3`) |
 | 880–889 | M44.2: the bit scramblers `bit_scramble` / `bit_descramble` (the maintainer's decision on I44.2-6; moved from 870–873 by the decision on I44.2-11, D1544: 880 and 881 the golden cases, 882 the cut plans, 883 the error propagation and the quarter turns; their round trip and self-synchronization use 838 and 839 of the range of M44.2) |
 | 890–899 | M44.3 (the equalizer switch) |
-| 900–999 | free, for backlog milestones |
+| 900–909 | M44.4 (SNR estimate, restart, dense blind start) |
+| 910–999 | free, for backlog milestones |
 | 1000+ | benchmark inputs (M13, M16) — not golden vectors |
 
 ## Files in this directory

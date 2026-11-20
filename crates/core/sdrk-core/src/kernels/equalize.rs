@@ -252,7 +252,8 @@ impl EqConstellation {
 const PSK8_HALF_SQ: f64 = (1.0 - core::f64::consts::FRAC_1_SQRT_2) / 2.0;
 
 /// The parameters of [`EqualizeState::new`]; [`Default`] gives the defaults of the `equalize`
-/// block.
+/// block except `blind_switch`, which is [`EqSwitch::Count`] here and `measured` in the block
+/// (D2400).
 ///
 /// ```
 /// use sdrk_core::kernels::equalize::{EqConstellation, EqParams};
@@ -1550,8 +1551,10 @@ fn run_symbols<K: Decide, const BLIND: bool>(
             C32::new(0.0, 0.0)
         };
         if BLIND && advance(p) && at > first {
-            // A measured switch inside the run: the steps of the rest of the run in
-            // decision mode (out of line, once per start).
+            // A switch inside the run: the steps of the rest of the run in decision mode
+            // (out of line, once per start). Needed for a switch by the measure; after a
+            // switch by the count `prepare_run` already gave these places `mu_dd` (from the
+            // counter), and `restep` writes the same values again.
             restep(p, l, first..at).ok_or_else(index)?;
         }
     }

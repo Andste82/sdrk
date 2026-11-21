@@ -29,7 +29,8 @@
 //! D1202, which breaks the symmetry in rare cases).
 //!
 //! The baseline (M44.1 spec §5, test 5; `sdrk_testkit::baseline`, table `qam_loop` of
-//! `tests/baseline/m44_1`, recorded again in M44.2 from the flows with the scrambler, D1540): the
+//! `tests/baseline/m44_1`, recorded again in M44.2 from the flows with the scrambler, D1540, and
+//! the soft bits in M44.3 from the receiver flow with the `agc` at `reference_db` -3, D2423): the
 //! `cs16` bytes of the transmitter and the soft bits of the `qam_demod` node of the receiver flow
 //! (the flow up to `demod`, its output read as a stream) at the four rotations keep their bits,
 //! per SIMD level; the shipped transmitter flow on `qam_frame_encode` and the flow with the chain

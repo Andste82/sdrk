@@ -97,7 +97,6 @@ fn state_with(
             mu_dd: mu,
             cma_symbols: cma,
             phase_bw,
-            ..EqParams::default()
         },
     )
     .unwrap()
@@ -236,7 +235,6 @@ fn construction_rules() {
         mu_dd,
         cma_symbols: 10,
         phase_bw,
-        ..EqParams::default()
     };
     let new = |n: usize, m: usize, p: EqParams| {
         EqualizeState::new(vec![C32::default(); n], vec![C32::default(); m], p)
@@ -889,7 +887,6 @@ mod against_the_reference {
                     mu_dd: 0.02,
                     cma_symbols: 150,
                     phase_bw: 0.05,
-                    ..EqParams::default()
                 },
             )
             .unwrap();

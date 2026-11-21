@@ -1,6 +1,7 @@
-//! M44.3 §3, information: 1024-QAM through `Multipath::mild` (open item I44.3-2). `qam_mod` (4
-//! samples per symbol) -> `Multipath::mild(4.0)` -> Gaussian noise at Eb/N0 27 and 29 dB (the
-//! points of test 3 of M44.2) -> `qam_demod` with `equalizer_taps` 15, 80000 symbols, seed 894.
+//! M44.3 §3, information: 1024-QAM through `Multipath::mild` (I44.3-2, moved to M44.4 by
+//! D2422). `qam_mod` (4 samples per symbol) -> `Multipath::mild(4.0)` -> Gaussian noise at
+//! Eb/N0 27 and 29 dB (the points of test 3 of M44.2) -> `qam_demod` with `equalizer_taps` 15,
+//! 80000 symbols, seed 894.
 //! With the blind start of D1517 (16000 CMA symbols with `mu_cma` 0.005) these receivers stay in
 //! a false state without lock (the steps of M44.3 found none of 16 receivers at lock, D2411); the
 //! test prints what each receiver does (the symbol of its first lock, its restarts, the decision
@@ -23,8 +24,7 @@ use sdrk_blocks::{
     Block, QamDemodBlock, QamDemodConfig, QamModBlock, QamModConfig, SymbolMapConstellation,
 };
 use sdrk_core::C32;
-use sdrk_core::kernels::constellation::rotate_symbol;
-use sdrk_core::kernels::equalize::EqConstellation;
+use sdrk_core::kernels::constellation::{Qam, rotate_symbol};
 use sdrk_testkit::channel::{Awgn, Impairment, Multipath};
 use sdrk_testkit::{Pcg32, VecStorage};
 
@@ -91,7 +91,8 @@ fn qam1024_through_mild_multipath_is_never_reported_locked_in_a_false_state() {
         .process(&wide, &mut faded);
     let power =
         faded[1000..].iter().map(Complex64::norm_sqr).sum::<f64>() / (faded.len() - 1000) as f64;
-    let h2 = EqConstellation::Qam1024.half_spacing_sq();
+    // The squared half level spacing `1 / E` of 1024-QAM at unit power.
+    let h2 = (1.0 / Qam::Qam1024.energy()) as f32;
     for ebn0 in [27.0, 29.0] {
         let mut noisy = Vec::new();
         Awgn::from_ebn0(ebn0, BITS as u32, SPS as f64, power, SEED)

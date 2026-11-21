@@ -273,7 +273,6 @@ fn eq_kernel(cfg: &PskDemodConfig, x: Vec<C32>) -> Vec<C32> {
             mu_dd: 0.02,
             cma_symbols: cma,
             phase_bw,
-            ..EqParams::default()
         },
     )
     .unwrap();

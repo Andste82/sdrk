@@ -95,7 +95,6 @@ fn state_of(case: &GoldenCase) -> State {
             mu_dd: case.param_f64("mu_dd").unwrap() as f32,
             cma_symbols: u32::try_from(case.param_u64("cma_symbols").unwrap()).unwrap(),
             phase_bw: case.param_f64("phase_bw").unwrap(),
-            ..EqParams::default()
         },
     )
     .unwrap()

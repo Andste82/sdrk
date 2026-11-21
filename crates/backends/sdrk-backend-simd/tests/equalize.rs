@@ -168,7 +168,6 @@ fn equalize_is_bit_exact_with_the_fallback() {
                     mu_dd,
                     cma_symbols: cma,
                     phase_bw,
-                    ..EqParams::default()
                 },
             )
             .unwrap();
@@ -226,7 +225,6 @@ fn equalize_is_bit_exact_with_special_inputs() {
                 mu_dd: 0.1,
                 cma_symbols: 100,
                 phase_bw: 0.05,
-                ..EqParams::default()
             },
         )
         .unwrap();

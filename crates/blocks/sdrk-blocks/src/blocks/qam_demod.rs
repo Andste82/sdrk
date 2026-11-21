@@ -167,8 +167,9 @@ pub static DESCRIPTION: BlockDescription = BlockDescription {
         without a clear peak, a signal back after a gap, starts the equalizer again with the \
         new estimate), the adaptive equalizer \
         equalize (the constellation, equalizer_taps taps, no feedback \
-        taps, the blind start of the constellation: mu_cma 0.05 over 1000 CMA symbols for qpsk \
-        to qam64, 0.02 over 8000 for qam256, 0.005 over 16000 for qam1024, then \
+        taps, the blind start of the constellation: CMA with mu_cma 0.05 over 1000 symbols for \
+        qpsk to qam64, the multi-modulus algorithm with 0.015 over 8000 for qam256 and 0.01 \
+        over 16000 for qam1024, then \
         decision-directed with mu_dd 0.005; its phase \
         tracker at 0.005 until the first check after the estimate, then at 0.0015, a narrow \
         frequency tracker; at the switch to the decision mode the tracker turns by the phase \
@@ -447,7 +448,7 @@ pub const fn qam_acquisition_check(c: SymbolMapConstellation) -> usize {
 /// loops of D1622 that hold a signal stay within 1.1e-4 of the carrier, the estimate within
 /// 7e-5 of it, while loops that did not converge wander up to 3e-4 and more).
 pub const QAM_ACQUISITION_VERIFY_TOLERANCE: f64 = 2e-4;
-/// The blind (CMA) symbols of the equalizer, at most, before its switch to the decision mode over
+/// The blind symbols of the equalizer, at most, before its switch to the decision mode over
 /// which the hand-over measures the phase of its output (I44-17, [`QamDemodBlock`]).
 pub const QAM_HANDOVER_SYMBOLS: usize = 256;
 
@@ -566,7 +567,7 @@ const _: () = assert!(blind_fits(
     EqConstellation::Qam1024
 ));
 
-/// The hand-over of the equalizer from its blind (CMA) symbols to the decision mode (I44-17,
+/// The hand-over of the equalizer from its blind symbols to the decision mode (I44-17,
 /// D1700): the action of the state `PullIn` at the switch.
 ///
 /// The CMA is blind to the phase, and the decision-directed phase tracker that runs during it, at
@@ -581,6 +582,8 @@ const _: () = assert!(blind_fits(
 /// quarter turn (`E[s^4]` is real and negative: the mean of `z^4` is `E[s^4] e^(j 4 phi)` for an
 /// output `z = s e^(j phi)`), over the last [`QAM_HANDOVER_SYMBOLS`] blind symbols after an
 /// estimate (before it the tracker turns at frequency 0 and the phase of the output runs).
+/// The multi-modulus start of 256-QAM and 1024-QAM (M44.4 §3) turns the output onto the axes of
+/// the grid itself, so there the turn at the switch is small; it stays the same for every order.
 #[derive(Clone, Copy, Debug)]
 struct HandOver {
     /// The sum of the fourth powers of the output.
@@ -1063,7 +1066,7 @@ struct Loops<S: Storage> {
     eq: Option<EqualizeBlock<S>>,
     costas: CostasBlock<S>,
     watch: LockWatch<QamDemodLock>,
-    /// The blind (CMA) symbols of the equalizer after a start (0 without it, D1517).
+    /// The blind symbols of the equalizer after a start (0 without it, D1517).
     blind: u16,
     hand: HandOver,
     /// The power of the symbols into the equalizer over the pull-in (from the estimate to the

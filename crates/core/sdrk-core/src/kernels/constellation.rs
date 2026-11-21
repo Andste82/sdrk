@@ -534,6 +534,24 @@ impl Qam {
         r2_of(self.levels_per_axis() as i64)
     }
 
+    /// The radius `R = E[a⁴] / E[a²]` of one axis `a` (the real or the imaginary part) of the
+    /// unit-power constellation, the radius of the multi-modulus cost (M44.4 §3): the levels of
+    /// an axis are `(2 i - 1 - m) h` with `m` levels and `h² = 3 / (2 (m² - 1))`, so
+    /// `R = 3 (3 m² - 7) / (10 (m² - 1))`, one division of two exact integers (4-QAM `1 / 2`,
+    /// 16-QAM `41 / 50`, 64-QAM `37 / 42`, 256-QAM `761 / 850 ≈ 0.8953`, 1024-QAM
+    /// `613 / 682 ≈ 0.8988`).
+    ///
+    /// ```
+    /// use sdrk_core::kernels::constellation::Qam;
+    /// assert_eq!(Qam::Qpsk.mma_r2(), 0.5);
+    /// assert_eq!(Qam::Qam1024.mma_r2(), 613.0 / 682.0);
+    /// ```
+    #[inline]
+    pub const fn mma_r2(self) -> f64 {
+        let m = self.levels_per_axis() as i64;
+        (3 * (3 * m * m - 7)) as f64 / (10 * (m * m - 1)) as f64
+    }
+
     /// The level index of one axis value `v` of a unit-power sample: the nearest integer to
     /// `(v √E + (m - 1)) / 2` (computed as `floor(v (√E / 2) + m / 2)`, `√E / 2` rounded once to
     /// `f32`, so a sample exactly between two levels takes the upper one), clamped to

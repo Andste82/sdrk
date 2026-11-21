@@ -9,8 +9,10 @@
 //! the stored inputs (the regression guard of decision D111).
 //!
 //! The M44 case `dd_qam16_c32_16384` (seed 601, M44 test 2: the constellation `qam16`, CMA with
-//! its radius, then the grid decisions) and the M44.2 case `dd_qam256_c32_16384` (seed 824, M44.2
-//! test 2: the constellation `qam256`) run with the same machinery and checks.
+//! its radius, then the grid decisions), the M44.2 case `dd_qam256_c32_16384` (seed 824, M44.2
+//! test 2: the constellation `qam256`, since M44.4 with the multi-modulus start) and the M44.4
+//! case `mma_qam1024_c32_16384` (seed 906, M44.4 §3: the multi-modulus start of `qam1024`) run
+//! with the same machinery and checks.
 //!
 //! `dot_complex`: every window of every case must match the golden file bit for bit on every
 //! implementation, and the float64 sum of the products checks the stored `snr_db_guard`.
@@ -29,7 +31,9 @@
 use sdrk::Sdrk;
 use sdrk_core::kernels::constellation::Qam;
 use sdrk_core::kernels::dot::{DOT_COMPLEX_PARTIALS, DotComplex};
-use sdrk_core::kernels::equalize::{EqConstellation, EqMode, EqParams, Equalize, EqualizeState};
+use sdrk_core::kernels::equalize::{
+    EqBlind, EqConstellation, EqMode, EqParams, Equalize, EqualizeState,
+};
 use sdrk_core::{C32, Fallback, Reference};
 use sdrk_testkit::golden::{self, Array, GoldenCase};
 use sdrk_testkit::{ChunkPlan, bit_exact};
@@ -41,11 +45,12 @@ const PLANS: u64 = 20;
 /// The largest chunk of the plans.
 const MAX_CHUNK: usize = 700;
 
-const EQ_CASES: [&str; 4] = [
+const EQ_CASES: [&str; 5] = [
     "cma_qpsk_c32_16384",
     "dd_8psk_c32_16384",
     "dd_qam16_c32_16384",
     "dd_qam256_c32_16384",
+    "mma_qam1024_c32_16384",
 ];
 const DOT_CASES: [&str; 2] = ["c32_1021", "c32_13"];
 
@@ -237,6 +242,10 @@ fn decide_f64(c: EqConstellation, yr: f64, yi: f64) -> (f64, f64) {
             qam_level_f64(Qam::Qam256, yr),
             qam_level_f64(Qam::Qam256, yi),
         ),
+        EqConstellation::Qam1024 => (
+            qam_level_f64(Qam::Qam1024, yr),
+            qam_level_f64(Qam::Qam1024, yi),
+        ),
         _ => panic!("no float64 guard for {c:?}"),
     }
 }
@@ -266,6 +275,18 @@ fn equalize_f64(x: &[C32], st: &State) -> Vec<(f64, f64)> {
     let cma_symbols = st.cma_symbols();
     // The CMA radius as the float64 value of its f32 (1 for PSK).
     let r2 = f64::from(st.constellation().cma_r2());
+    // The radius of one axis of the multi-modulus start as the float64 value of its f32 (M44.4
+    // §3), for the constellations that start with it.
+    let mma = match st.constellation() {
+        EqConstellation::Qam256 => Some(f64::from(Qam::Qam256.mma_r2() as f32)),
+        EqConstellation::Qam1024 => Some(f64::from(Qam::Qam1024.mma_r2() as f32)),
+        _ => None,
+    };
+    assert_eq!(
+        mma.is_some(),
+        st.constellation().blind() == EqBlind::Mma,
+        "the blind cost of the float64 loop"
+    );
     let mut w = vec![(0.0f64, 0.0f64); n];
     w[taps / 2].0 = 1.0;
     let mut h = vec![(0.0f64, 0.0f64); n];
@@ -287,7 +308,12 @@ fn equalize_f64(x: &[C32], st: &State) -> Vec<(f64, f64)> {
         let (dr, di) = decide_f64(st.constellation(), zr, zi);
         let (mut er, mut ei) = (zr - dr, zi - di);
         let mut fed = (0.0, 0.0);
-        let mu = if cma {
+        let mu = if let (true, Some(r)) = (cma, mma) {
+            let ur = (zr * (zr * zr - r)).clamp(-1.0, 1.0);
+            let ui = (zi * (zi * zi - r)).clamp(-1.0, 1.0);
+            (er, ei) = (ur * c - ui * s, ur * s + ui * c);
+            mu_c
+        } else if cma {
             let f = (yr * yr + yi * yi) - r2;
             er = (yr * f).clamp(-1.0, 1.0);
             ei = (yi * f).clamp(-1.0, 1.0);

@@ -3407,6 +3407,27 @@ The comparison of D1618 and D1702 repeated at 256-QAM with the code of the measu
 - **Without the equalizer:** SDRk 9.65 summed, mean BER 0.1670 (over AWGN 0.36 and 0.0554), GNU Radio 89.30 and 0.1959. Through `mild` no receiver reaches the genie (0.0458) without the equalizer.
 - **Below 24 dB through `mild`** both receivers slip with the equalizer; SDRk restarts 13 times over the 30 receivers (D1618), most at 21 to 23 dB. The receiver is information here; the tests of M44.2 (§6) are its bounds.
 
+## Equalizer switch (M44.3)
+
+M44.3 leaves the cycles of the equalizer and of the QAM receiver blocks at those of M44.2. The measured switch of §1 and its decision-mode loop (D2400 to D2408, D2417) cost 2 to 7 % of the cycles of `equalize` on the reference models of the x86 levels and were taken back out by the maintainer's decision on I44.3-4 (D2424), so the kernel and the block `equalize` are the code of M44.2; the restart of a false state of §2 (off) adds no cost beyond noise to `qam_demod` (D2425). Measured on 2026-11-21 with `cargo measure <equalize|qam_demod|qam_frame_decode> --platform x86_64 --platform x86_64-avx512 --platform aarch64 --no-golden --no-count` (whole-loop, the corrected `llvm-mca` of D942, which reproduces the `costas` row at `neon`, 86.13 / 54.09, first), against the baseline step of M44.3 on the code of main (71350e35). The `_fallback` entries run the same code as their entry (D841) and have the same rows.
+
+Simulated cycles per sample, reference model / counter model, M44.2 -> M44.3:
+
+| Entry | sse2 (skylake / znver2) | sse4.2 (skylake / znver2) | avx2 (znver3 / alderlake) | avx512 (znver4 / sapphirerapids) | neon (cortex-a72 / cortex-a76) |
+| --- | --- | --- | --- | --- | --- |
+| `equalize` | 138.53 / 145.19 -> 138.53 / 145.19 | 133.42 / 133.81 -> 133.42 / 133.81 | 107.88 / 112.97 -> 107.88 / 112.97 | 102.03 / 114.41 -> 102.03 / 114.41 | 216.24 / 184.03 -> 216.24 / 184.03 |
+| `equalize_qam16` | 161.72 / 158.34 -> 161.72 / 158.34 | 157.16 / 152.86 -> 157.16 / 152.86 | 116.91 / 128.30 -> 116.91 / 128.30 | 119.27 / 136.94 -> 119.27 / 136.94 | 229.25 / 190.00 -> 229.25 / 190.00 |
+| `equalize_qam64` | 161.71 / 158.34 -> 161.71 / 158.34 | 157.16 / 152.86 -> 157.16 / 152.86 | 120.91 / 138.30 -> 120.91 / 138.30 | 119.25 / 131.93 -> 119.25 / 131.93 | 243.42 / 188.08 -> 243.42 / 188.08 |
+| `equalize_qam256` | 162.66 / 164.32 -> 162.66 / 164.32 | 157.16 / 157.87 -> 157.16 / 157.87 | 140.00 / 146.30 -> 140.00 / 146.30 | 122.33 / 135.91 -> 122.33 / 135.91 | 250.53 / 185.15 -> 250.53 / 185.15 |
+| `equalize_qam1024` | 162.66 / 164.32 -> 162.66 / 164.32 | 157.16 / 157.87 -> 157.16 / 157.87 | 140.00 / 146.30 -> 140.00 / 146.30 | 122.33 / 135.91 -> 122.33 / 135.91 | 250.53 / 185.15 -> 250.53 / 185.15 |
+| `qam_demod_block` | 113.80 / 103.30 -> 113.80 / 103.30 | 113.53 / 101.96 -> 113.53 / 101.97 | 64.26 / 72.26 -> 64.26 / 72.26 | 62.36 / 67.10 -> 62.36 / 67.10 | 127.44 / 91.67 -> 127.44 / 91.67 |
+| `qam_demod_search_block` | 120.92 / 109.41 -> 120.98 / 109.46 | 119.49 / 106.98 -> 119.38 / 106.91 | 67.02 / 75.89 -> 67.02 / 75.89 | 65.68 / 70.88 -> 65.68 / 70.88 | 136.61 / 100.28 -> 136.61 / 100.28 |
+| `qam_demod_qam256_block` | 114.23 / 104.35 -> 114.23 / 104.35 | 113.80 / 102.87 -> 113.80 / 102.87 | 68.20 / 75.27 -> 68.20 / 75.27 | 63.72 / 68.32 -> 63.70 / 68.29 | 131.43 / 92.11 -> 131.43 / 92.11 |
+| `qam_frame_decode_block` | 131.77 / 120.62 -> 131.76 / 120.62 | 131.50 / 119.12 -> 131.51 / 119.12 | 76.33 / 83.09 -> 76.33 / 83.09 | 73.84 / 78.13 -> 73.84 / 78.13 | 152.13 / 115.19 -> 152.13 / 115.19 |
+
+- The equalizer entries are identical to the last digit on every level and model; the blocks are within 0.1 % (the noise of the whole-loop simulation of the controller's code, D2425).
+- The instructions per sample of these entries are those of M44.2 within 0.01, so the counts in `benches/results` are those of main and were not merged again; simd128 (instructions, not cycles) runs the code of M44.2 for `equalize` and was not measured again.
+
 ## Sensor decoder (M46)
 
 The block `sensor_decode` runs the device decoders once per pulse train, not per sample, and has no kernel. Its cost figure is the 50 of the spec (M46 §4) per pulse train; the report counts it at the nominal packet rate of the detector in front (`M / 16` per step), so `cost_per_input_sample` over-estimates it by the ratio of that rate to the real rate of trains (D1116). No `sensor_decode_block` entry is in the kernel cycle benchmarks and no cycle table has a row for it: a per-train figure measured on the golden trains would be an invented workload without a reference (D1117); a measured row can follow with the flows `ism433_sensors` and `ism868_sensors`.

@@ -181,7 +181,6 @@ fn equalize_block_with_the_new_orders_equals_the_kernel() {
             mu_dd: 0.005,
             cma_symbols: 2000,
             phase_bw: 0.005,
-            ..EqParams::default()
         };
         let mut st =
             EqualizeState::new(vec![C32::default(); 11], vec![C32::default(); 11], p).unwrap();

@@ -2067,15 +2067,6 @@
               "params": {
                 "additionalProperties": false,
                 "properties": {
-                  "blind_switch": {
-                    "default": "measured",
-                    "description": "The switch of the equalizer from CMA to the decision mode: count (after cma_symbols symbols) or measured (when the smoothed decision error mse, relative to the squared half distance of the constellation's points, stays below a threshold of the constellation for a hold time, not before a minimum count; after cma_symbols symbols at the latest). The rule of each constellation is fixed by measurement: qam256 from 2000 CMA symbols on, mse below 0.8 of the squared half distance for 2048 symbols in a row; the other constellations never switch before cma_symbols (measured gives the output of count). Typical: measured; count for the fixed blind symbols. Build-time.",
-                    "enum": [
-                      "count",
-                      "measured"
-                    ],
-                    "type": "string"
-                  },
                   "cma_symbols": {
                     "description": "Symbols in CMA mode before the switch to decision mode (0: decision mode from the start, 4294967295: never). The default depends on the constellation: 1000 for bpsk to qam64, 8000 for qam256, 16000 for qam1024. Typical: the default of the constellation; 0 for decision mode only, 4294967295 for CMA only. Build-time.",
                     "maximum": 4294967295,
@@ -3658,15 +3649,6 @@
               "params": {
                 "additionalProperties": false,
                 "properties": {
-                  "blind_switch": {
-                    "default": "measured",
-                    "description": "The switch of the equalizer from CMA to the decision mode: count (after cma_symbols symbols) or measured (when the smoothed decision error mse, relative to the squared half distance of the constellation's points, stays below a threshold of the constellation for a hold time, not before a minimum count; after cma_symbols symbols at the latest). The rule of each constellation is fixed by measurement: qam256 from 2000 CMA symbols on, mse below 0.8 of the squared half distance for 2048 symbols in a row; the other constellations never switch before cma_symbols (measured gives the output of count). Typical: measured; count for the fixed blind symbols. Build-time.",
-                    "enum": [
-                      "count",
-                      "measured"
-                    ],
-                    "type": "string"
-                  },
                   "carrier_bw": {
                     "default": 0.02,
                     "description": "Loop bandwidth of the carrier loop, normalized to the symbol rate. Typical: 0.02; wider for large frequency offsets. Build-time.",
@@ -4081,15 +4063,6 @@
               "params": {
                 "additionalProperties": false,
                 "properties": {
-                  "blind_switch": {
-                    "default": "measured",
-                    "description": "The switch of the equalizer from CMA to the decision mode: count (after cma_symbols symbols) or measured (when the smoothed decision error mse, relative to the squared half distance of the constellation's points, stays below a threshold of the constellation for a hold time, not before a minimum count; after cma_symbols symbols at the latest). The rule of each constellation is fixed by measurement: qam256 from 2000 CMA symbols on, mse below 0.8 of the squared half distance for 2048 symbols in a row; the other constellations never switch before cma_symbols (measured gives the output of count). Typical: measured; count for the fixed blind symbols. Build-time.",
-                    "enum": [
-                      "count",
-                      "measured"
-                    ],
-                    "type": "string"
-                  },
                   "carrier_bw": {
                     "default": 0.0025,
                     "description": "Loop bandwidth of the carrier loop, normalized to the symbol rate. Typical: 0.0025; wider for phase noise. Build-time.",
@@ -4182,15 +4155,6 @@
               "params": {
                 "additionalProperties": false,
                 "properties": {
-                  "blind_switch": {
-                    "default": "measured",
-                    "description": "The switch of the equalizer from CMA to the decision mode: count (after cma_symbols symbols) or measured (when the smoothed decision error mse, relative to the squared half distance of the constellation's points, stays below a threshold of the constellation for a hold time, not before a minimum count; after cma_symbols symbols at the latest). The rule of each constellation is fixed by measurement: qam256 from 2000 CMA symbols on, mse below 0.8 of the squared half distance for 2048 symbols in a row; the other constellations never switch before cma_symbols (measured gives the output of count). Typical: measured; count for the fixed blind symbols. Build-time.",
-                    "enum": [
-                      "count",
-                      "measured"
-                    ],
-                    "type": "string"
-                  },
                   "carrier_bw": {
                     "default": 0.0025,
                     "description": "Loop bandwidth of the carrier loop, normalized to the symbol rate. Typical: 0.0025; wider for phase noise. Build-time.",

@@ -1537,8 +1537,7 @@ fn the_psk_kinds_describe_their_ports_and_parameters() {
             "max_offset",
             "variant",
             "equalizer_taps",
-            "equalizer_feedback_taps",
-            "blind_switch"
+            "equalizer_feedback_taps"
         ]
     );
     for p in m.params.iter().chain(d.params).chain(costas.params) {
@@ -1809,7 +1808,6 @@ fn the_equalizer_kind_describes_its_ports_and_parameters() {
             ("mu_cma", Mutability::Runtime),
             ("mu_dd", Mutability::Runtime),
             ("cma_symbols", Mutability::Build),
-            ("blind_switch", Mutability::Build),
             ("phase_bw", Mutability::Build),
         ]
     );
@@ -1902,21 +1900,7 @@ fn the_equalizer_kind_describes_its_ports_and_parameters() {
     assert!(std::ptr::eq(b.description(), eq));
 
     let d = find("psk_demod");
-    // M44.3: `blind_switch` of `equalize`, forwarded unchanged.
     let last = d.params.last().unwrap();
-    assert_eq!(
-        (last.name, last.mutability, last.kind),
-        (
-            "blind_switch",
-            Mutability::Build,
-            ParamKind::Choice {
-                options: &["count", "measured"],
-                default: 1
-            }
-        )
-    );
-    assert_eq!(eq.param("blind_switch").unwrap().kind, last.kind);
-    let last = &d.params[d.params.len() - 2];
     assert_eq!(
         (last.name, last.mutability, last.kind),
         (

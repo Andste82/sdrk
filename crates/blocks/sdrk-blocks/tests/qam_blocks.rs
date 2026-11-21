@@ -729,7 +729,6 @@ fn demod_kernels(cfg: &QamDemodConfig, fs: sdrk::Rate, input: &[C32]) -> Vec<f32
                 mu_dd: 0.005,
                 cma_symbols: 1000,
                 phase_bw: 0.005,
-                ..EqParams::default()
             },
         )
         .unwrap()
@@ -953,7 +952,6 @@ fn qam_demod_timing_rates_and_parameters() {
             "rolloff",
             "span",
             "equalizer_taps",
-            "blind_switch",
             "sync_bw",
             "carrier_bw"
         ]

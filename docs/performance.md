@@ -3470,6 +3470,42 @@ Instructions per input symbol (counts; simd128 has no core model):
 - `avx2-runtime` (24.24 instructions against 8.55 at `avx2`) is the baseline code of the run-time-detection build: the block is not dispatched, information as for the other blocks without a kernel.
 - In `qam_demod` (§2, 4 samples per symbol) the estimate would add about 0.7 cycles per input sample at `avx2` (about 1 % of `qam_demod_block`), see the status of M44.4.
 
+## Blind start of the dense grids (M44.4)
+
+The multi-modulus start of 256-QAM and 1024-QAM (§3, D2507 to D2511) runs only over the blind symbols, in a loop of its own; the decision mode of these orders and every other constellation run the loops of main. Measured on 2026-11-21 with `cargo measure <equalize|qam_demod|qam_frame_decode> --platform x86_64 --platform x86_64-avx512 --platform aarch64 --platform wasm32 --no-golden --branches` (whole-loop, the corrected `llvm-mca` of D942, which reproduces the `costas` row at `neon`, 86.13 / 54.09, first), against the baseline step of M44.4 on the code of main (D2514). The `_fallback` entries run the same code as their entry (D841) and have the same rows.
+
+Simulated cycles per sample, reference model / counter model, main -> M44.4:
+
+| Entry | sse2 (skylake / znver2) | sse4.2 (skylake / znver2) | avx2 (znver3 / alderlake) | avx512 (znver4 / sapphirerapids) | neon (cortex-a72 / cortex-a76) |
+| --- | --- | --- | --- | --- | --- |
+| `equalize` | 138.53 / 145.19 -> 138.53 / 145.19 | 133.42 / 133.81 -> 133.42 / 133.81 | 107.88 / 112.97 -> 107.88 / 112.97 | 102.03 / 114.41 -> 102.03 / 114.41 | 216.24 / 184.03 -> 216.24 / 184.03 |
+| `equalize_qam16` | 161.72 / 158.34 -> 161.72 / 158.34 | 157.16 / 152.86 -> 157.16 / 152.86 | 116.91 / 128.30 -> 116.91 / 128.30 | 119.27 / 136.94 -> 119.27 / 136.94 | 229.25 / 190.00 -> 229.25 / 190.00 |
+| `equalize_qam64` | 161.71 / 158.34 -> 161.71 / 158.34 | 157.16 / 152.86 -> 157.16 / 152.86 | 120.91 / 138.30 -> 120.91 / 138.30 | 119.25 / 131.93 -> 119.25 / 131.93 | 243.42 / 188.08 -> 243.42 / 188.08 |
+| `equalize_qam256` | 162.66 / 164.32 -> 162.67 / 164.32 | 157.16 / 157.87 -> 157.16 / 157.87 | 140.00 / 146.30 -> 140.01 / 146.31 | 122.33 / 135.91 -> 122.33 / 135.91 | 250.53 / 185.15 -> 250.54 / 185.15 |
+| `equalize_qam1024` | 162.66 / 164.32 -> 162.67 / 164.32 | 157.16 / 157.87 -> 157.16 / 157.87 | 140.00 / 146.30 -> 140.01 / 146.31 | 122.33 / 135.91 -> 122.33 / 135.91 | 250.53 / 185.15 -> 250.54 / 185.15 |
+| `qam_demod_block` | 113.80 / 103.30 -> 113.80 / 103.30 | 113.53 / 101.97 -> 113.53 / 101.97 | 64.26 / 72.26 -> 64.26 / 72.25 | 62.36 / 67.10 -> 62.36 / 67.08 | 127.44 / 91.67 -> 127.44 / 91.67 |
+| `qam_demod_search_block` | 120.91 / 109.41 -> 120.88 / 109.41 | 119.38 / 106.91 -> 119.38 / 106.91 | 67.02 / 75.89 -> 67.02 / 75.89 | 65.68 / 70.88 -> 65.68 / 70.88 | 136.61 / 100.28 -> 136.61 / 100.28 |
+| `qam_demod_qam256_block` | 114.23 / 104.35 -> 114.28 / 104.38 | 113.80 / 102.87 -> 113.84 / 102.90 | 68.20 / 75.27 -> 68.21 / 75.20 | 63.72 / 68.32 -> 63.72 / 68.26 | 131.43 / 92.11 -> 131.47 / 92.21 |
+| `qam_frame_decode_block` | 131.76 / 120.62 -> 131.76 / 120.62 | 131.50 / 119.12 -> 131.50 / 119.12 | 76.33 / 83.09 -> 76.34 / 83.08 | 73.84 / 78.13 -> 73.84 / 78.11 | 152.13 / 115.19 -> 152.13 / 115.19 |
+
+simd128 (wasm32), instructions per sample (not cycles), main -> M44.4:
+
+| Entry | Instructions per sample |
+| --- | --- |
+| `equalize` | 1014.47 -> 1014.47 |
+| `equalize_qam16` | 1062.47 -> 1062.47 |
+| `equalize_qam64` | 1061.47 -> 1061.47 |
+| `equalize_qam256` | 1017.47 -> 1017.48 |
+| `equalize_qam1024` | 1017.47 -> 1017.48 |
+| `qam_demod_block` | 558.46 -> 558.46 |
+| `qam_demod_qam256_block` | 547.30 -> 547.51 |
+| `qam_demod_search_block` | 605.41 -> 605.41 |
+| `qam_frame_decode_block` | 643.01 -> 643.01 |
+
+- Every entry is within 0.11 % on every level and model; the equalizer entries within 0.01 cycles per sample.
+- Mispredictions (cachegrind, D1611): one per sample moves between entries whose code is unchanged (`equalize` at `avx2` 1.064 -> 2.064, `equalize_qam16` and `equalize_qam64` 2.079 -> 1.064; at `sse2` and `sse4.2` 0.251 and 0.423 swap), all in `equalize_linear` of the order with the same simulated cycles: the aliasing of cachegrind's counters after the code moved (D2420, D2514), not a branch of the data.
+- The counts in `benches/results` are those of main; the x86 instruction counts of `equalize` were not measured (the `sse4.2` build of the counts was killed for lack of memory, as in the baseline).
+
 ## Sensor decoder (M46)
 
 The block `sensor_decode` runs the device decoders once per pulse train, not per sample, and has no kernel. Its cost figure is the 50 of the spec (M46 §4) per pulse train; the report counts it at the nominal packet rate of the detector in front (`M / 16` per step), so `cost_per_input_sample` over-estimates it by the ratio of that rate to the real rate of trains (D1116). No `sensor_decode_block` entry is in the kernel cycle benchmarks and no cycle table has a row for it: a per-train figure measured on the golden trains would be an invented workload without a reference (D1117); a measured row can follow with the flows `ism433_sensors` and `ism868_sensors`.

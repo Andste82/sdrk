@@ -13,7 +13,8 @@ use crate::error::{Error, Result};
 use crate::kernels::check_len;
 use crate::kernels::dot::DotComplex;
 use crate::kernels::equalize::{
-    CMA_CLIP, EqMode, Equalize, EqualizeParts, EqualizeState, MSE_ALPHA, NLMS_EPS, PHASE_MAX_FREQ,
+    CMA_CLIP, EqBlind, EqMode, Equalize, EqualizeParts, EqualizeState, MSE_ALPHA, NLMS_EPS,
+    PHASE_MAX_FREQ,
 };
 use crate::num::flush_denormal;
 use crate::reference::costas::{QUARTER, correction, cos_f32, rotate_back};
@@ -61,7 +62,15 @@ fn adapt(g: &mut EqualizeParts<'_>, y: C32) -> Result<(C32, C32)> {
         *g.mse = flush_denormal(*g.mse + MSE_ALPHA * (p - *g.mse));
     }
     // Step 3: the error of the mode and the value to feed back.
-    let (e, mu) = if *g.mode == EqMode::Cma {
+    let (e, mu) = if *g.mode == EqMode::Cma && g.constellation.blind() == EqBlind::Mma {
+        // The multi-modulus cost per axis of the tracker output, turned back (M44.4 §3).
+        let r = g.constellation.mma_r2();
+        let qr = z.re * z.re;
+        let qi = z.im * z.im;
+        let ur = limit(z.re * (qr - r), CMA_CLIP);
+        let ui = limit(z.im * (qi - r), CMA_CLIP);
+        (turn(C32::new(ur, ui), c, sn), g.mu_cma)
+    } else if *g.mode == EqMode::Cma {
         let m = y.re * y.re + y.im * y.im;
         let f = m - g.constellation.cma_r2();
         let er = limit(y.re * f, CMA_CLIP);

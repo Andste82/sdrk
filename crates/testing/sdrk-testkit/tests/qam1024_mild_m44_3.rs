@@ -8,7 +8,9 @@
 //! error of its equalizer relative to the squared half level spacing and its symbol error rate
 //! over the last 10000 symbols) and guards only what must hold whatever the outcome: a receiver
 //! that reports lock at the end decides its last 10000 symbols correctly (symbol error rate below
-//! 1 %), so a false state is never reported as lock.
+//! 1 %), so a false state is never reported as lock. Since the multi-modulus start of M44.4 §3
+//! the receivers lock, and the one at Eb/N0 27 dB reads 1.65 % at the floor of the channel, above
+//! the bound: open item I44.4-2 (D2513).
 #![cfg(feature = "std")]
 #![allow(
     clippy::unwrap_used,

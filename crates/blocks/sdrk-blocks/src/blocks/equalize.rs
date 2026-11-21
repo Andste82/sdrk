@@ -46,14 +46,18 @@ pub static DESCRIPTION: BlockDescription = BlockDescription {
         phase tracker (bandwidth phase_bw, 0 = off) turns the output back, z = y e^(-j theta), \
         and the decision d is the nearest point of the constellation to z. The weights start \
         with the centre tap 1 and adapt with the normalized LMS step mu / (sum |x|^2 + 1e-6): \
-        blind with the constant-modulus algorithm (e = y (|y|^2 - R2) with R2 = 1 for PSK, \
-        1.32 for qam16, 1.381 for qam64, 1.3953 for qam256 and 1.3988 for qam1024, each part \
-        clipped to \
-        [-1, 1], step mu_cma) for the first cma_symbols symbols, then decision-directed \
+        blind for the first cma_symbols symbols, step mu_cma, with the constant-modulus \
+        algorithm (e = y (|y|^2 - R2) with R2 = 1 for PSK, 1.32 for qam16 and 1.381 for qam64, \
+        each part clipped to [-1, 1]) or, for qam256 and qam1024, the multi-modulus algorithm \
+        (per axis of z, e = (z.re (z.re^2 - R), z.im (z.im^2 - R)) e^(j theta) with R = \
+        E[a^4] / E[a^2] of one axis, 0.8953 for qam256 and 0.8988 for qam1024, each part \
+        clipped to [-1, 1]; it also turns the output onto the axes of the grid), then \
+        decision-directed \
         (e = (z - d) e^(j theta), step mu_dd); w[i] = w[i] - mu e conj(x[i]). The decisions \
         are fed back (as d e^(j theta)) only in decision mode. Chain position: after \
         symbol_sync and before costas (as in GNU Radio's PSK receiver): CMA needs no carrier \
-        phase, the tracker gives the decision mode its phase, and costas after it removes what \
+        phase (the multi-modulus algorithm works with the tracker), the tracker gives the \
+        decision mode its phase, and costas after it removes what \
         remains. The input amplitude should be about 1 (an agc before symbol_sync). \
         cma_symbols 0 starts in decision mode, 4294967295 never leaves CMA (for differential \
         detection). A larger mu adapts faster but leaves more noise in the weights. Weights \
@@ -109,8 +113,9 @@ pub static DESCRIPTION: BlockDescription = BlockDescription {
             mutability: Mutability::Build,
             description: "The constellation of the decisions: bpsk, qpsk or 8psk (the points \
                 of psk_mod; qpsk is also the 4-QAM grid), qam16, qam64, qam256 or qam1024 (the \
-                unit-power Gray points of symbol_map; the CMA radius R2 = E|s|^4 / E|s|^2 is \
-                1.32, 1.381, 1.3953 and 1.3988).",
+                unit-power Gray points of symbol_map; the CMA radius R2 = E|s|^4 / E|s|^2 of \
+                qam16 and qam64 is 1.32 and 1.381; qam256 and qam1024 start blind with the \
+                multi-modulus algorithm).",
         },
         ParamDesc {
             name: "mu_cma",
@@ -122,10 +127,11 @@ pub static DESCRIPTION: BlockDescription = BlockDescription {
             },
             typical: "the default of the constellation",
             mutability: Mutability::Runtime,
-            description: "Normalized step size of the CMA update (used as f32); a change \
-                applies from the next symbol. The default depends on the constellation: 0.05 \
-                for bpsk to qam64, 0.02 for qam256, 0.005 for qam1024 (the denser grids need a \
-                smaller blind step).",
+            description: "Normalized step size of the blind update (CMA, or the \
+                multi-modulus algorithm for qam256 and qam1024; used as f32); a change applies \
+                from the next symbol. The default depends on the constellation: 0.05 for bpsk \
+                to qam64, 0.015 for qam256, 0.01 for qam1024 (the denser grids need a smaller \
+                blind step).",
         },
         ParamDesc {
             name: "mu_dd",
@@ -151,8 +157,9 @@ pub static DESCRIPTION: BlockDescription = BlockDescription {
             typical: "the default of the constellation; 0 for decision mode only, 4294967295 \
                 for CMA only",
             mutability: Mutability::Build,
-            description: "Symbols in CMA mode before the switch to decision mode (0: decision \
-                mode from the start, 4294967295: never). The default depends on the \
+            description: "Symbols in the blind mode (CMA, or the multi-modulus algorithm for \
+                qam256 and qam1024) before the switch to decision mode (0: decision mode from \
+                the start, 4294967295: never). The default depends on the \
                 constellation: 1000 for bpsk to qam64, 8000 for qam256, 16000 for qam1024.",
         },
         ParamDesc {
@@ -253,7 +260,7 @@ fn check_mu(name: &'static str, mu: f64) -> Result<()> {
 /// assert_eq!((cfg.taps, cfg.feedback_taps, cfg.constellation), (11, 0, EqConstellation::Qpsk));
 /// assert_eq!((cfg.mu_cma(), cfg.mu_dd, cfg.cma_symbols(), cfg.phase_bw), (0.05, 0.02, 1000, 0.02));
 /// let dense = EqualizeConfig { constellation: EqConstellation::Qam1024, ..cfg };
-/// assert_eq!((dense.mu_cma(), dense.cma_symbols()), (0.005, 16_000));
+/// assert_eq!((dense.mu_cma(), dense.cma_symbols()), (0.01, 16_000));
 /// assert!(cfg.validate().is_ok());
 /// assert!(EqualizeConfig { taps: 12, ..cfg }.validate().is_err());
 /// assert!(EqualizeConfig { mu_dd: 1.5, ..cfg }.validate().is_err());
@@ -301,22 +308,23 @@ impl Default for EqualizeConfig {
 impl EqualizeConfig {
     /// The blind start of the equalizer for a constellation, `(mu_cma, cma_symbols)`: the defaults
     /// of the two parameters (the maintainer's decision on I44.2-3, D1517; derived in the block,
-    /// rule 4 of M44.1.1, D1536). The denser grids need a smaller CMA step and more blind symbols
-    /// (D1511: at `mu_cma` 0.05 the CMA output stops improving near 18 dB SINR, below what 1024-QAM
-    /// needs for its decisions). BPSK to 64-QAM: 0.05 over 1000 symbols (D828); 256-QAM: 0.02 over
-    /// 8000 (4000 in D1511; in `qam_demod` through the multipath of M44.2 test 4 too short, D1517,
-    /// confirmed in D1526); 1024-QAM: 0.005 over 16000.
+    /// rule 4 of M44.1.1, D1536). The denser grids need a smaller blind step and more blind
+    /// symbols (D1511: at `mu_cma` 0.05 the CMA output stops improving near 18 dB SINR, below what
+    /// 1024-QAM needs for its decisions). BPSK to 64-QAM: CMA, 0.05 over 1000 symbols (D828);
+    /// 256-QAM and 1024-QAM start with the multi-modulus algorithm of the kernel
+    /// ([`EqConstellation::blind`], M44.4 §3): 256-QAM 0.015 over 8000 symbols (the count of D1517
+    /// and D1526), 1024-QAM 0.01 over 16000 (D2508, D2509).
     ///
     /// ```
     /// use sdrk_blocks::{EqConstellation, EqualizeConfig};
     /// assert_eq!(EqualizeConfig::blind_start(EqConstellation::Qam64), (0.05, 1000));
-    /// assert_eq!(EqualizeConfig::blind_start(EqConstellation::Qam256), (0.02, 8000));
-    /// assert_eq!(EqualizeConfig::blind_start(EqConstellation::Qam1024), (0.005, 16_000));
+    /// assert_eq!(EqualizeConfig::blind_start(EqConstellation::Qam256), (0.015, 8000));
+    /// assert_eq!(EqualizeConfig::blind_start(EqConstellation::Qam1024), (0.01, 16_000));
     /// ```
     pub const fn blind_start(c: EqConstellation) -> (f64, u32) {
         match c {
-            EqConstellation::Qam256 => (0.02, 8000),
-            EqConstellation::Qam1024 => (0.005, 16_000),
+            EqConstellation::Qam256 => (0.015, 8000),
+            EqConstellation::Qam1024 => (0.01, 16_000),
             _ => (DEFAULT_MU_CMA, DEFAULT_CMA_SYMBOLS),
         }
     }

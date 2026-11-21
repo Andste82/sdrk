@@ -202,7 +202,7 @@ pub use ports::{
 };
 pub use sample::{BlockReal, BlockSample, TunedElem};
 pub use sdrk_core::kernels::costas::CostasConstellation;
-pub use sdrk_core::kernels::equalize::{EqConstellation, EqMode};
+pub use sdrk_core::kernels::equalize::{EqBlind, EqConstellation, EqMode};
 pub use sdrk_core::kernels::symbol_sync::Ted;
 pub use sdrk_proto::frame::Whitening;
 pub use sdrk_proto::{Packet, PacketFlags};

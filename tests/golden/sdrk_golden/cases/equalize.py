@@ -19,7 +19,11 @@ fed-back decisions ``h[N..N + M]``) and the weights ``w``:
    and, if ``p`` is finite, ``mse = flush(mse + 0.01 (p - mse))``;
 3. CMA ``f = (y.re y.re + y.im y.im) - R2`` (``R2`` 1 for PSK, the float32 of ``33 / 25`` for
    16-QAM and of ``29 / 21`` for 64-QAM) and ``e = (clip(y.re f), clip(y.im f))`` (clip to
-   ``[-1, 1]``) with ``mu_cma`` and the feedback value 0; decision mode ``e = (ed.re c - ed.im s,
+   ``[-1, 1]``) with ``mu_cma`` and the feedback value 0; for 256-QAM and 1024-QAM the blind mode
+   is the multi-modulus algorithm of M44.4 section 3 instead: ``u = (clip(z.re (z.re z.re - R)),
+   clip(z.im (z.im z.im - R)))`` with ``R`` the float32 of ``761 / 850`` and ``613 / 682`` and
+   ``e = (u.re c - u.im s, u.re s + u.im c)``, with ``mu_cma`` and the feedback value 0; decision
+   mode ``e = (ed.re c - ed.im s,
    ed.re s + ed.im c)`` with ``mu_dd`` and the feedback value ``(d.re c - d.im s, d.re s + d.im c)``;
 4. ``P`` = the sum of ``h.re h.re + h.im h.im`` over the ``N + M`` elements in ascending order from
    0 (``Pf`` its value after the ``N`` forward elements), ``m = mu / (P + 1e-6)``,
@@ -33,7 +37,7 @@ fed-back decisions ``h[N..N + M]``) and the weights ``w``:
 7. the fed-back decisions move by one and ``h[N]`` = the feedback value (0 for a non-finite ``x``
    or ``y`` and when ``Pf`` is 0);
 8. the output is ``z`` (0 for a non-finite ``x`` or ``y``);
-9. in CMA mode the counter advances and decision mode starts after ``cma_symbols`` symbols
+9. in the blind (CMA) mode the counter advances and decision mode starts after ``cma_symbols`` symbols
    (never for ``2^32 - 1``).
 
 The start state has the centre forward tap 1, the other weights 0, a zero history, ``mse`` 1 and
@@ -127,6 +131,14 @@ R2 = {
 }
 
 
+# The radius R = E[a^4] / E[a^2] of one axis of the multi-modulus cost (M44.4 section 3):
+# 3 (3 m^2 - 7) / (10 (m^2 - 1)) with m levels per axis; the blind cost of these constellations.
+MMA_R = {
+    "qam256": 761.0 / 850.0,
+    "qam1024": 613.0 / 682.0,
+}
+
+
 def decide_f32(constellation, yr, yi):
     if constellation in QAM:
         return qam_decide_f32(constellation, yr), qam_decide_f32(constellation, yi)
@@ -168,6 +180,7 @@ def equalize_f32(x, taps, feedback, constellation, mu_cma, mu_dd, cma_symbols, p
     phase and frequency."""
     mu_c, mu_d = F32(mu_cma), F32(mu_dd)
     r2 = F32(R2[constellation])
+    rm = F32(MMA_R[constellation]) if constellation in MMA_R else None
     kp, ki = tracker_gains(phase_bw)
     n = taps + feedback
     wr, wi = start_weights(n, taps)
@@ -200,7 +213,11 @@ def equalize_f32(x, taps, feedback, constellation, mu_cma, mu_dd, cma_symbols, p
                 p = er * er + ei * ei
                 if np.isfinite(p):
                     mse = fm.flush_denormal(mse + ALPHA * (p - mse))
-                if mode == "cma":
+                if mode == "cma" and rm is not None:
+                    ur = clip(zr * (zr * zr - rm), CMA_CLIP)
+                    ui = clip(zi * (zi * zi - rm), CMA_CLIP)
+                    er, ei, mu = ur * c - ui * s, ur * s + ui * c, mu_c
+                elif mode == "cma":
                     f = (yr * yr + yi * yi) - r2
                     er, ei, mu = clip(yr * f, CMA_CLIP), clip(yi * f, CMA_CLIP), mu_c
                 else:
@@ -270,6 +287,7 @@ def equalize_f64(x, taps, feedback, constellation, mu_cma, mu_dd, cma_symbols, p
     exact cosine and sine of the tracker phase)."""
     mu_c, mu_d = float(F32(mu_cma)), float(F32(mu_dd))
     r2 = float(F32(R2[constellation]))
+    rm = float(F32(MMA_R[constellation])) if constellation in MMA_R else None
     kp, ki = (float(v) for v in tracker_gains(phase_bw))
     n = taps + feedback
     w = [[0.0, 0.0] for _ in range(n)]
@@ -292,7 +310,11 @@ def equalize_f64(x, taps, feedback, constellation, mu_cma, mu_dd, cma_symbols, p
         er, ei = zr - dr, zi - di
         mse = flush_f64(mse + 0.01 * ((er * er + ei * ei) - mse))
         fed = [0.0, 0.0]
-        if mode == "cma":
+        if mode == "cma" and rm is not None:
+            ur = min(max(zr * (zr * zr - rm), -1.0), 1.0)
+            ui = min(max(zi * (zi * zi - rm), -1.0), 1.0)
+            er, ei, mu = ur * c - ui * s, ur * s + ui * c, mu_c
+        elif mode == "cma":
             f = (yr * yr + yi * yi) - r2
             er, ei, mu = min(max(yr * f, -1.0), 1.0), min(max(yi * f, -1.0), 1.0), mu_c
         else:
@@ -522,8 +544,8 @@ def dd_qam256(rng):
     args = (taps, feedback, "qam256", mu_cma, mu_dd, cma_symbols, phase_bw)
     out, w, mse, mode, ph, fr = equalize_f32(x, *args)
     guard = guard_db(out, equalize_f64(x, *args))
-    # CMA with the 256-QAM radius opens the eye, the decision mode and the tracker settle on the
-    # grid; the generator asserts that every decision of the last quarter is the transmitted
+    # The multi-modulus start of 256-QAM (M44.4 section 3) opens the eye, the decision mode and
+    # the tracker settle on the grid; the generator asserts that every decision of the last quarter is the transmitted
     # symbol delayed by (taps - 1) / 2, turned by the quarter turn the blind start settled on.
     delay = (taps - 1) // 2
     best = None
@@ -549,13 +571,64 @@ def dd_qam256(rng):
         "symbol, through the symbol-spaced channel 1 + 0.2 e^(j0.9) z^-1 + 0.08 e^(-j1.7) z^-2 "
         "(channel: [lag, magnitude, phase]), turned by the carrier phase 0.2 rad, plus complex noise "
         "for Eb/N0 24 dB per transmitted symbol energy; equalize with 11 taps, no feedback, the "
-        "constellation qam256 (CMA radius R2 = 593 / 425), mu_cma 0.02 for the first 4000 symbols, "
+        "constellation qam256 (blind with the multi-modulus algorithm of M44.4 section 3, the radius "
+        "of one axis R = 761 / 850), mu_cma 0.02 for the first 4000 symbols, "
         "then decision-directed with mu_dd 0.01, the phase tracker at phase_bw 0.02; exact "
         "float32 model over the whole input in one call; weights are the final weights, "
         "final_mse_bits, final_mode, final_phase and final_frequency_bits the final state; the "
         "generator asserts that every decision of the last quarter is the transmitted symbol "
         "delayed by 5 and turned by quarter_turns quarter turns (symbol_errors_last_quarter) and "
         "that mse ends below 0.002; snr_db_guard compares with the float64 loop (D111)",
+    )
+
+
+@case(kernel="equalize", name="mma_qam1024_c32_16384", seed=906)
+def mma_qam1024(rng):
+    n, taps, feedback, mu_cma, mu_dd, ebn0_db, phase_bw = 16384, 11, 0, 0.01, 0.01, 30.0, 0.005
+    cma_symbols, phase = 8000, 0.2
+    sym, bps = qam_symbols(rng, n, "qam1024")
+    chan = [(0, 1.0 + 0j), (1, polar(0.15, 0.9)), (2, polar(0.05, -1.7))]
+    sigma = math.sqrt(1.0 / (2.0 * bps * 10.0 ** (ebn0_db / 10.0)))
+    x = channel(sym, chan, phase, sigma, rng)
+    args = (taps, feedback, "qam1024", mu_cma, mu_dd, cma_symbols, phase_bw)
+    out, w, mse, mode, ph, fr = equalize_f32(x, *args)
+    guard = guard_db(out, equalize_f64(x, *args))
+    # The multi-modulus start of 1024-QAM (M44.4 section 3) opens the eye and turns the output
+    # onto the axes, the decision mode and the tracker settle on the grid; the generator asserts
+    # that every decision of the last quarter is the transmitted symbol delayed by (taps - 1) / 2,
+    # turned by the quarter turn the blind start settled on.
+    delay = (taps - 1) // 2
+    best = None
+    for quarter in range(4):
+        turn = 1j**quarter
+        errors = 0
+        for k in range(3 * n // 4, n):
+            d = decide_f64("qam1024", float(out[k].real), float(out[k].imag))
+            errors += abs(complex(*d) - turn * sym[k - delay]) > 1e-6
+        if best is None or errors < best[1]:
+            best = (quarter, errors)
+    assert mode == "decision" and float(mse) < 0.0002 and best[1] == 0, (float(mse), best)
+    return dict(
+        params=eq_params(
+            *args[:3], mu_cma, mu_dd, cma_symbols, phase_bw, (mse, mode, ph, fr), guard,
+            ebn0_db=ebn0_db, sigma=sigma, phase_rad=phase, channel=channel_param(chan), delay=delay,
+            quarter_turns=best[0], symbol_errors_last_quarter=best[1],
+        ),
+        arrays={"input": Array("cf32", x), "expected": Array("cf32", out), "weights": Array("cf32", w)},
+        tolerance={"class": "bit_exact"},
+        model="float32",
+        notes="1024-QAM with the Gray mapping of M44.2 section 1 (unit average power), one sample per "
+        "symbol, through the symbol-spaced channel 1 + 0.15 e^(j0.9) z^-1 + 0.05 e^(-j1.7) z^-2 "
+        "(channel: [lag, magnitude, phase]), turned by the carrier phase 0.2 rad, plus complex noise "
+        "for Eb/N0 30 dB per transmitted symbol energy; equalize with 11 taps, no feedback, the "
+        "constellation qam1024 (blind with the multi-modulus algorithm of M44.4 section 3, the radius "
+        "of one axis R = 613 / 682), mu_cma 0.01 for the first 8000 symbols, then decision-directed "
+        "with mu_dd 0.01, the phase tracker at phase_bw 0.005; exact float32 model over the whole "
+        "input in one call; weights are the final weights, final_mse_bits, final_mode, final_phase "
+        "and final_frequency_bits the final state; the generator asserts that every decision of the "
+        "last quarter is the transmitted symbol delayed by 5 and turned by quarter_turns quarter "
+        "turns (symbol_errors_last_quarter) and that mse ends below 0.0002; snr_db_guard compares "
+        "with the float64 loop (D111)",
     )
 
 

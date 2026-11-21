@@ -474,8 +474,9 @@ fn equalize_block_derives_the_blind_start_of_its_constellation() {
         (EqConstellation::Psk8, 0.05, 1000),
         (EqConstellation::Qam16, 0.05, 1000),
         (EqConstellation::Qam64, 0.05, 1000),
-        (EqConstellation::Qam256, 0.02, 8000),
-        (EqConstellation::Qam1024, 0.005, 16_000),
+        // The multi-modulus start of M44.4 §3 (D2508, D2509).
+        (EqConstellation::Qam256, 0.015, 8000),
+        (EqConstellation::Qam1024, 0.01, 16_000),
     ] {
         let cfg = EqualizeConfig {
             constellation: c,
@@ -509,7 +510,7 @@ fn equalize_block_derives_the_blind_start_of_its_constellation() {
     // Through the parameters: the constellation alone gives its blind start.
     let mut cfg = EqualizeConfig::default();
     cfg.set("constellation", ParamValue::Choice(6)).unwrap();
-    assert_eq!(cfg.get("mu_cma"), Ok(ParamValue::F64(0.005)));
+    assert_eq!(cfg.get("mu_cma"), Ok(ParamValue::F64(0.01)));
     assert_eq!(cfg.get("cma_symbols"), Ok(ParamValue::I64(16_000)));
     // A runtime change of `mu_cma` is configured from then on.
     let mut block = EqualizeBlock::<VecStorage>::new(&cfg, rate(25_000), &mut VecStorage).unwrap();

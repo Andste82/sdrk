@@ -66,6 +66,12 @@ const QAM64_R2: f32 = Qam::Qam64.cma_r2() as f32;
 const QAM256_R2: f32 = Qam::Qam256.cma_r2() as f32;
 /// The CMA radius of 1024-QAM, [`Qam::cma_r2`] rounded once to `f32`.
 const QAM1024_R2: f32 = Qam::Qam1024.cma_r2() as f32;
+/// The radius of the multi-modulus cost of one axis of 256-QAM, [`Qam::mma_r2`] rounded once to
+/// `f32` (M44.4 §3).
+const QAM256_MMA_R2: f32 = Qam::Qam256.mma_r2() as f32;
+/// The radius of the multi-modulus cost of one axis of 1024-QAM, [`Qam::mma_r2`] rounded once to
+/// `f32` (M44.4 §3).
+const QAM1024_MMA_R2: f32 = Qam::Qam1024.mma_r2() as f32;
 
 /// The adaptation mode of the equalizer.
 ///
@@ -78,10 +84,35 @@ const QAM1024_R2: f32 = Qam::Qam1024.cma_r2() as f32;
 /// ```
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]
 pub enum EqMode {
-    /// Blind adaptation with the constant-modulus algorithm.
+    /// Blind adaptation, with the cost of [`EqConstellation::blind`]: the constant-modulus
+    /// algorithm, or the multi-modulus algorithm for 256-QAM and 1024-QAM (M44.4 §3).
     Cma,
     /// Decision-directed adaptation against the nearest constellation point.
     Decision,
+}
+
+/// The cost of the blind start of the equalizer ([`EqMode::Cma`]), derived from the constellation
+/// ([`EqConstellation::blind`], M44.4 §3).
+///
+/// ```
+/// use sdrk_core::kernels::equalize::{EqBlind, EqConstellation};
+/// assert_eq!(EqConstellation::Qam64.blind(), EqBlind::Cma);
+/// assert_eq!(EqConstellation::Qam256.blind(), EqBlind::Mma);
+/// assert_eq!(EqConstellation::Qam1024.blind(), EqBlind::Mma);
+/// ```
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]
+#[non_exhaustive]
+pub enum EqBlind {
+    /// The constant-modulus algorithm (Godard 2-2) on the filter output `y`, blind to the carrier
+    /// phase: `e = (clip(y.re f), clip(y.im f))` with `f = |y|² - R2`
+    /// ([`EqConstellation::cma_r2`]).
+    Cma,
+    /// The multi-modulus algorithm (a constant modulus per axis) on the output `z` of the phase
+    /// tracker, turned back into the equalizer domain: `e = (clip(z.re (z.re² - R)),
+    /// clip(z.im (z.im² - R))) e^(j theta)` with `R = E[a⁴] / E[a²]` of one axis
+    /// ([`Qam::mma_r2`]). It also turns the output onto the axes of the grid (modulo a quarter
+    /// turn), which the decisions of a dense grid need.
+    Mma,
 }
 
 /// The constellation the equalizer decides on; it also gives the CMA radius `R2`.
@@ -162,6 +193,35 @@ impl EqConstellation {
             Self::Qam64 => QAM64_R2,
             Self::Qam256 => QAM256_R2,
             Self::Qam1024 => QAM1024_R2,
+        }
+    }
+
+    /// The cost of the blind start for the constellation, chosen by measurement (M44.4 §3,
+    /// D2507 to D2509): the multi-modulus algorithm ([`EqBlind::Mma`]) for 256-QAM and 1024-QAM,
+    /// whose decisions the constant-modulus algorithm through multipath reached late (256-QAM)
+    /// or not at all (1024-QAM); the constant-modulus algorithm ([`EqBlind::Cma`]) for the PSK
+    /// constellations, QPSK, 16-QAM and 64-QAM (unchanged).
+    ///
+    /// ```
+    /// use sdrk_core::kernels::equalize::{EqBlind, EqConstellation};
+    /// assert_eq!(EqConstellation::Psk8.blind(), EqBlind::Cma);
+    /// ```
+    #[inline]
+    pub fn blind(self) -> EqBlind {
+        match self {
+            Self::Qam256 | Self::Qam1024 => EqBlind::Mma,
+            _ => EqBlind::Cma,
+        }
+    }
+
+    /// The radius `R` of the multi-modulus cost of one axis ([`Qam::mma_r2`] rounded once to
+    /// `f32`) for the constellations of [`EqBlind::Mma`]; 0 for the others, which never use it.
+    #[inline]
+    pub(crate) fn mma_r2(self) -> f32 {
+        match self {
+            Self::Qam256 => QAM256_MMA_R2,
+            Self::Qam1024 => QAM1024_MMA_R2,
+            _ => 0.0,
         }
     }
 }
@@ -759,8 +819,8 @@ where
             equalize_qam(dot, &mut p, Qam64Table, input, output)
         }
         EqConstellation::Qam64 => equalize_qam(dot, &mut p, QamDecide::Qam64, input, output),
-        EqConstellation::Qam256 => equalize_qam(dot, &mut p, QamGrid::<4>, input, output),
-        EqConstellation::Qam1024 => equalize_qam(dot, &mut p, QamGrid::<5>, input, output),
+        EqConstellation::Qam256 => equalize_mma_start(dot, &mut p, QamGrid::<4>, input, output),
+        EqConstellation::Qam1024 => equalize_mma_start(dot, &mut p, QamGrid::<5>, input, output),
         EqConstellation::Bpsk => equalize_paths(dot, &mut p, PskDecide::Bpsk, input, output),
         EqConstellation::Psk8 => equalize_paths(dot, &mut p, PskDecide::Psk8, input, output),
         _ => equalize_paths(dot, &mut p, PskDecide::Qpsk, input, output),
@@ -1415,6 +1475,126 @@ fn equalize_joint<D: DotComplex<C32>, K: Decide>(
     Ok(())
 }
 
+/// The paths of [`equalize_with`] for the constellations whose blind start is the multi-modulus
+/// cost ([`EqBlind::Mma`], M44.4 §3): the blind symbols of the input in a loop of their own
+/// ([`equalize_mma`]), the rest in the decision mode of [`equalize_qam`] (the loop of the other
+/// QAM orders, unchanged). The split leaves the bits as they are: both loops do the arithmetic of
+/// [`Equalize::equalize`] symbol by symbol.
+#[inline(never)]
+fn equalize_mma_start<D: DotComplex<C32>, K: Decide>(
+    dot: &D,
+    p: &mut EqualizeParts<'_>,
+    k: K,
+    input: &[C32],
+    output: &mut [C32],
+) -> Result<()> {
+    // The symbols left in the blind mode (the rule of `advance`).
+    let blind = match *p.mode {
+        EqMode::Decision => 0,
+        EqMode::Cma if p.cma_symbols == u32::MAX => input.len(),
+        EqMode::Cma => {
+            usize::try_from(p.cma_symbols.saturating_sub(*p.count)).unwrap_or(usize::MAX)
+        }
+    };
+    let split = blind.min(input.len());
+    let (blind_in, rest_in) = input.split_at(split);
+    let (blind_out, rest_out) = output.split_at_mut(split);
+    if !blind_in.is_empty() {
+        equalize_mma(dot, p, k, blind_in, blind_out)?;
+    }
+    if rest_in.is_empty() {
+        Ok(())
+    } else {
+        equalize_qam(dot, p, k, rest_in, rest_out)
+    }
+}
+
+/// The blind symbols of the multi-modulus start: per symbol the joint vector moves by one, the
+/// filter part is computed by `dot` and [`step_mma`] adapts (the structure of [`equalize_joint`],
+/// for any number of feedback taps; the decisions are fed back only in decision mode, so the fed
+/// back values are 0 here). Out of line and per symbol: it runs only over the blind start.
+#[inline(never)]
+#[cold]
+fn equalize_mma<D: DotComplex<C32>, K: Decide>(
+    dot: &D,
+    p: &mut EqualizeParts<'_>,
+    k: K,
+    input: &[C32],
+    output: &mut [C32],
+) -> Result<()> {
+    let n = p.taps;
+    let len = p.hist.len();
+    let r = p.constellation.mma_r2();
+    for (o, &raw) in output.iter_mut().zip(input) {
+        let finite = raw.re.is_finite() && raw.im.is_finite();
+        p.hist.copy_within(..n.saturating_sub(1), 1);
+        if let Some(first) = p.hist.first_mut() {
+            *first = sanitize(raw);
+        }
+        let y = dot.dot_complex(p.hist, p.weights)?;
+        *o = if finite && y.re.is_finite() && y.im.is_finite() {
+            let (forward, power) = window_power(p.hist, n);
+            let (z, g) = step_mma(p, k, r, y, forward, p.mu_cma / (power + NLMS_EPS))?;
+            if let Some(g) = g {
+                update_weights(p.weights, p.hist, g, n);
+            }
+            z
+        } else {
+            C32::new(0.0, 0.0)
+        };
+        if len > n {
+            p.hist.copy_within(n..len - 1, n + 1);
+            if let Some(slot) = p.hist.get_mut(n) {
+                *slot = C32::new(0.0, 0.0);
+            }
+        }
+        advance(p.mode, p.count, p.cma_symbols);
+    }
+    Ok(())
+}
+
+/// One blind symbol of the multi-modulus start after the filter output `y` (finite), with `Pf`
+/// (`forward`), the step `m = mu_cma / (P + eps)` and the radius `r` of one axis: the tracker
+/// rotation, the decision and `mse` (as [`step`]), the error `e = (clip(z.re (z.re² - r)),
+/// clip(z.im (z.im² - r))) e^(j theta)`, the factor `g = m e` and the tracker on the decision.
+/// Returns the output `z` and `g` (`None` when it is not finite or the forward window is silent).
+#[inline]
+fn step_mma<K: Decide>(
+    p: &mut EqualizeParts<'_>,
+    k: K,
+    r: f32,
+    y: C32,
+    forward: f32,
+    m: f32,
+) -> Result<(C32, Option<C32>)> {
+    // Phase 0 is the identity (the table's sine at 0 is not exactly 0).
+    let (c, s) = if *p.phase == 0 {
+        (1.0, 0.0)
+    } else {
+        interp_f32_pair(*p.phase).ok_or(Error::Internal("cosine table index"))?
+    };
+    let z = derotate(y, c, s);
+    let d = k.decide(z);
+    let ed = C32::new(z.re - d.re, z.im - d.im);
+    let pe = ed.re * ed.re + ed.im * ed.im;
+    if pe.is_finite() {
+        *p.mse = flush_denormal(*p.mse + MSE_ALPHA * (pe - *p.mse));
+    }
+    let ez = C32::new(
+        clip(z.re * (z.re * z.re - r), CMA_CLIP),
+        clip(z.im * (z.im * z.im - r), CMA_CLIP),
+    );
+    let e = rotate(ez, c, s);
+    let g = C32::new(m * e.re, m * e.im);
+    track(p.phase, p.freq, p.kp, p.ki, z, d);
+    // A forward window of silence adapts nothing (D839).
+    let live = forward != 0.0;
+    Ok((
+        z,
+        (live && g.re.is_finite() && g.im.is_finite()).then_some(g),
+    ))
+}
+
 /// Adaptive equalizer on one sample per symbol (`C32`).
 ///
 /// ```
@@ -1454,7 +1634,11 @@ pub trait Equalize {
     /// 3. The error: CMA `f = (y.re y.re + y.im y.im) - R2` (`R2` = 1 for PSK, the `f32` of
     ///    `33 / 25` for 16-QAM and of `29 / 21` for 64-QAM, [`EqConstellation::cma_r2`]) and
     ///    `e = (clip(y.re f), clip(y.im f))` with `clip` to `[-1, 1]` (two selects; NaN stays),
-    ///    step `mu_cma`, feedback value 0; decision mode `e = (ed.re c - ed.im s,
+    ///    step `mu_cma`, feedback value 0; for the constellations whose blind cost is
+    ///    [`EqBlind::Mma`] ([`EqConstellation::blind`]) instead `u = (clip(z.re (z.re z.re - R)),
+    ///    clip(z.im (z.im z.im - R)))` with `R` the `f32` of [`Qam::mma_r2`] (`761 / 850` for
+    ///    256-QAM, `613 / 682` for 1024-QAM) and `e = (u.re c - u.im s, u.re s + u.im c)` (`u e^(j theta)`), step `mu_cma`,
+    ///    feedback value 0; decision mode `e = (ed.re c - ed.im s,
     ///    ed.re s + ed.im c)` (`ed e^(j theta)`), step `mu_dd`, feedback value
     ///    `(d.re c - d.im s, d.re s + d.im c)`.
     /// 4. The window power `P = Σ (h.re h.re + h.im h.im)` over the `N + M` elements in

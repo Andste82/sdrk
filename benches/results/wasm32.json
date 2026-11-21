@@ -6113,6 +6113,52 @@
           "status": "info",
           "verdict": "info"
         },
+        "snr_estimate_block": {
+          "compared_with": "GNU Radio mpsk_snr_est_cc(SNR_EST_M2M4, 4096, 0.001): the moments |x|^2 and |x|^4 averaged in double, six cabsf per symbol (reference does different work: no decisions, a PSK kurtosis; generic compiler flags)",
+          "goal": true,
+          "informational": [
+            {
+              "compared_with": "sdrk fallback",
+              "label": "information: fallback",
+              "other_instr_per_sample": 108.57,
+              "other_snr_db": 40.18,
+              "ours_instr_per_sample": 108.57,
+              "ratio": 1.0
+            }
+          ],
+          "other_instr_per_sample": 570.08,
+          "ours_instr_per_sample": 108.57,
+          "ratio": 0.19,
+          "snr_db": {
+            "other": 0.39,
+            "ours": 40.18
+          },
+          "status": "info",
+          "verdict": "info"
+        },
+        "snr_estimate_block_svr": {
+          "compared_with": "GNU Radio mpsk_snr_est_cc(SNR_EST_SVR, 4096, 0.001): |x|^4 and |x_n|^2 |x_(n-1)|^2 averaged in double, two cabsf per symbol (reference does different work: no decisions, a PSK constellation; generic compiler flags)",
+          "goal": true,
+          "informational": [
+            {
+              "compared_with": "sdrk fallback",
+              "label": "information: fallback",
+              "other_instr_per_sample": 108.57,
+              "other_snr_db": 40.18,
+              "ours_instr_per_sample": 108.57,
+              "ratio": 1.0
+            }
+          ],
+          "other_instr_per_sample": 215.08,
+          "ours_instr_per_sample": 108.57,
+          "ratio": 0.5,
+          "snr_db": {
+            "other": 0.4,
+            "ours": 40.18
+          },
+          "status": "info",
+          "verdict": "info"
+        },
         "squelch": {
           "compared_with": "GNU Radio pwr_squelch_cc (squelch_base_cc_impl.cc of gr-analog, generic compiler flags)",
           "goal": true,
@@ -6623,6 +6669,11 @@
       "gnuradio_linear_equalizer": {
         "build": "gr-equalizer.c (linear_equalizer with adaptive_algorithm_nlms, QPSK, decision-directed, VOLK 3.3.0 generic dot products): -O3 -msimd128",
         "sha256": "b28de16052b9478decba1db261bdc0a6e81b64ea8f3a9eb9d9427bb6f1aac312",
+        "version": "main at ec1bf15"
+      },
+      "gnuradio_mpsk_snr_est_cc": {
+        "build": "gr-snr-est.c (gr::digital::mpsk_snr_est_cc, SNR_EST_M2M4 and SNR_EST_SVR): -O3 -msimd128",
+        "sha256": "2fc721e42d97d59f24d245d7a43eb5e6cd3e275ef9c6620dfb63262c4a21c9ca",
         "version": "main at ec1bf15"
       },
       "gnuradio_pwr_squelch_cc": {

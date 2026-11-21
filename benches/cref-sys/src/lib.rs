@@ -24,7 +24,8 @@
 //!   [`GrFrequencyModulatorFc`], [`GrQuadratureDemodCf`], [`GrFmDeemph`]) and the generic CRC
 //!   of gr-digital ([`GrCrc`]), the reference of the CRCs of `sdrk-proto`, and its
 //!   multiplicative scrambler ([`GrScrambler`]), the reference of `bit_scramble` and
-//!   `bit_descramble`.
+//!   `bit_descramble`, and its SNR estimator block ([`GrMpskSnrEstCc`]), the reference of
+//!   `snr_estimate`.
 //! - [`liquid`]: liquid-dsp's DC blocker ([`LiquidDcBlocker`], [`LiquidDcBlockerCrcf`], MIT).
 //! - [`LiquidNcoPll`]: liquid-dsp's interpolated-table NCO (`nco_crcf`, `LIQUID_VCO_INTERP`) with the
 //!   pilot loop of `stereo_pll` around it (MIT).
@@ -73,8 +74,8 @@ pub use biquad::{BIQUAD_REF_LEVEL, CmsisBiquad, KfrBiquad};
 pub use channelizer::{Firpfbch2Build, LiquidFirpfbch2};
 pub use gnuradio::{
     CostasLoopState, GrConstellationReceiverCb, GrCostasLoopCc, GrCrc, GrFmDeemph,
-    GrFrequencyModulatorFc, GrLinearEqualizer, GrLinearEqualizerRect, GrQuadratureDemodCf, GrRect,
-    GrRotator, GrScrambler,
+    GrFrequencyModulatorFc, GrLinearEqualizer, GrLinearEqualizerRect, GrMpskSnrEstCc,
+    GrQuadratureDemodCf, GrRect, GrRotator, GrScrambler,
 };
 pub use gr_fastnoise::{GR_FASTNOISE_POOL, GrFastnoiseSourceC, GrFastnoiseSourceF};
 pub use halfband::{

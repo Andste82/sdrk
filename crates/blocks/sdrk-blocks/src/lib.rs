@@ -165,6 +165,10 @@ pub use blocks::sensor_decode::{
 pub use blocks::sensor_encode::{
     SENSOR_ENCODE_MAX_REPEATS, SENSOR_ENCODE_PACKETS, SensorEncodeBlock, SensorEncodeConfig,
 };
+pub use blocks::snr_estimate::{
+    SNR_ESTIMATE_FLOOR_DB, SNR_ESTIMATE_MAX_WINDOW, SNR_ESTIMATE_MIN_WINDOW, SnrEstimateBlock,
+    SnrEstimateConfig,
+};
 pub use blocks::spectrum::{SpectrumBlock, SpectrumConfig, SpectrumSample, SpectrumWindow};
 pub use blocks::squelch::{SquelchBlock, SquelchConfig};
 pub use blocks::ssb_demod::{SSB_DEMOD_CHUNK, SsbDemodBlock, SsbDemodConfig, SsbSideband};

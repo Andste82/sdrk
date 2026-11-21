@@ -59,6 +59,7 @@ mod qam_family;
 mod rds_family;
 mod rds_tx_family;
 mod scramble_family;
+mod snr_estimate_family;
 mod stereo_family;
 mod stereo_tx_family;
 mod symbol_family;
@@ -363,10 +364,10 @@ pub trait Kernel {
 }
 
 /// All kernel names. The position gives the seed of the input (`1000 + index`), so new kernels
-/// are appended; a `<kernel>_fallback`, `<kernel>_airspy`, `<kernel>_fastnoise` or
-/// `<kernel>_ziggurat` entry takes the seed of `<kernel>`, so that both entries filter the same
-/// input.
-pub const KERNELS: [&str; 279] = [
+/// are appended; a `<kernel>_fallback`, `<kernel>_airspy`, `<kernel>_fastnoise`,
+/// `<kernel>_ziggurat`, `<kernel>_dvbs2` or `<kernel>_svr` entry takes the seed of `<kernel>`, so
+/// that both entries filter the same input.
+pub const KERNELS: [&str; 281] = [
     "convert_cs8",
     "convert_cs16",
     "convert_out_cs16",
@@ -646,6 +647,8 @@ pub const KERNELS: [&str; 279] = [
     "bit_descramble_in_place_block",
     "costas_qam1024_fallback",
     "equalize_qam1024_fallback",
+    "snr_estimate_block",
+    "snr_estimate_block_svr",
 ];
 
 /// Prepares the measurement `name` with `layout` (the FFT sizes are fixed by the name).
@@ -657,6 +660,7 @@ pub fn prepare(name: &str, layout: Layout) -> Option<Box<dyn Kernel>> {
         .or_else(|| name.strip_suffix("_fastnoise"))
         .or_else(|| name.strip_suffix("_ziggurat"))
         .or_else(|| name.strip_suffix("_dvbs2"))
+        .or_else(|| name.strip_suffix("_svr"))
         .unwrap_or(name);
     // An entry without an entry of its base name (`stereo_pll_fallback`: `stereo_pll` has no SIMD
     // entry) takes the seed of its own position.
@@ -970,6 +974,8 @@ pub fn prepare(name: &str, layout: Layout) -> Option<Box<dyn Kernel>> {
             Box::new(scramble_family::ScrambleCq15K::new(rng, layout, 8, entry))
         }
         "scramble_block" => Box::new(scramble_family::ScrambleBlockK::new(rng, layout)),
+        "snr_estimate_block" => Box::new(snr_estimate_family::SnrEstimateBlockK::new(rng, layout, false)),
+        "snr_estimate_block_svr" => Box::new(snr_estimate_family::SnrEstimateBlockK::new(rng, layout, true)),
         "bit_scramble_block" => Box::new(bit_scramble_family::ScrambleBlockK::new(rng, layout, false)),
         "bit_descramble_block" => Box::new(bit_scramble_family::ScrambleBlockK::new(rng, layout, true)),
         "bit_scramble_in_place_block" => Box::new(

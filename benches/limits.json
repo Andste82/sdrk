@@ -6747,5 +6747,65 @@
       "status": "info",
       "waiver": "`bit_descramble_in_place_block` is not accelerated: the run-time-detection build runs the code compiled for the baseline x86-64 target, the `avx2` build the same code compiled for AVX2, so their counts differ by code generation only; reported as information"
     }
+  },
+  "snr_estimate_block": {
+    "sse2": {
+      "status": "info",
+      "waiver": "`snr_estimate_block` against GNU Radio's `mpsk_snr_est_cc` with `SNR_EST_M2M4`: reference does different work (moments of |x| averaged in double with a `cabsf` per `abs`, no decisions, a PSK constellation that reads 16-QAM 13.5 dB low; ours decides every symbol and inverts the reading of the decisions, D2504); reported as information"
+    },
+    "sse4.2": {
+      "status": "info",
+      "waiver": "`snr_estimate_block` against GNU Radio's `mpsk_snr_est_cc` with `SNR_EST_M2M4`: reference does different work (moments of |x| averaged in double with a `cabsf` per `abs`, no decisions, a PSK constellation that reads 16-QAM 13.5 dB low; ours decides every symbol and inverts the reading of the decisions, D2504); reported as information"
+    },
+    "avx2": {
+      "status": "info",
+      "waiver": "`snr_estimate_block` against GNU Radio's `mpsk_snr_est_cc` with `SNR_EST_M2M4`: reference does different work (moments of |x| averaged in double with a `cabsf` per `abs`, no decisions, a PSK constellation that reads 16-QAM 13.5 dB low; ours decides every symbol and inverts the reading of the decisions, D2504); reported as information"
+    },
+    "avx512": {
+      "status": "info",
+      "waiver": "`snr_estimate_block` against GNU Radio's `mpsk_snr_est_cc` with `SNR_EST_M2M4`: reference does different work (moments of |x| averaged in double with a `cabsf` per `abs`, no decisions, a PSK constellation that reads 16-QAM 13.5 dB low; ours decides every symbol and inverts the reading of the decisions, D2504); reported as information"
+    },
+    "neon": {
+      "status": "info",
+      "waiver": "`snr_estimate_block` against GNU Radio's `mpsk_snr_est_cc` with `SNR_EST_M2M4`: reference does different work (moments of |x| averaged in double with a `cabsf` per `abs`, no decisions, a PSK constellation that reads 16-QAM 13.5 dB low; ours decides every symbol and inverts the reading of the decisions, D2504); reported as information"
+    },
+    "simd128": {
+      "status": "info",
+      "waiver": "`snr_estimate_block` against GNU Radio's `mpsk_snr_est_cc` with `SNR_EST_M2M4`: reference does different work (moments of |x| averaged in double with a `cabsf` per `abs`, no decisions, a PSK constellation that reads 16-QAM 13.5 dB low; ours decides every symbol and inverts the reading of the decisions, D2504); reported as information"
+    },
+    "avx2-runtime": {
+      "status": "info",
+      "waiver": "`snr_estimate_block` is not accelerated: the run-time-detection build runs the code compiled for the baseline x86-64 target, the `avx2` build the same code compiled for AVX2, so their counts differ by code generation only; reported as information"
+    }
+  },
+  "snr_estimate_block_svr": {
+    "sse2": {
+      "status": "info",
+      "waiver": "`snr_estimate_block_svr` against GNU Radio's `mpsk_snr_est_cc` with `SNR_EST_SVR`: reference does different work (moments of |x| averaged in double with a `cabsf` per `abs`, no decisions, a PSK constellation that reads 16-QAM 13.5 dB low; ours decides every symbol and inverts the reading of the decisions, D2504); reported as information"
+    },
+    "sse4.2": {
+      "status": "info",
+      "waiver": "`snr_estimate_block_svr` against GNU Radio's `mpsk_snr_est_cc` with `SNR_EST_SVR`: reference does different work (moments of |x| averaged in double with a `cabsf` per `abs`, no decisions, a PSK constellation that reads 16-QAM 13.5 dB low; ours decides every symbol and inverts the reading of the decisions, D2504); reported as information"
+    },
+    "avx2": {
+      "status": "info",
+      "waiver": "`snr_estimate_block_svr` against GNU Radio's `mpsk_snr_est_cc` with `SNR_EST_SVR`: reference does different work (moments of |x| averaged in double with a `cabsf` per `abs`, no decisions, a PSK constellation that reads 16-QAM 13.5 dB low; ours decides every symbol and inverts the reading of the decisions, D2504); reported as information"
+    },
+    "avx512": {
+      "status": "info",
+      "waiver": "`snr_estimate_block_svr` against GNU Radio's `mpsk_snr_est_cc` with `SNR_EST_SVR`: reference does different work (moments of |x| averaged in double with a `cabsf` per `abs`, no decisions, a PSK constellation that reads 16-QAM 13.5 dB low; ours decides every symbol and inverts the reading of the decisions, D2504); reported as information"
+    },
+    "neon": {
+      "status": "info",
+      "waiver": "`snr_estimate_block_svr` against GNU Radio's `mpsk_snr_est_cc` with `SNR_EST_SVR`: reference does different work (moments of |x| averaged in double with a `cabsf` per `abs`, no decisions, a PSK constellation that reads 16-QAM 13.5 dB low; ours decides every symbol and inverts the reading of the decisions, D2504); reported as information"
+    },
+    "simd128": {
+      "status": "info",
+      "waiver": "`snr_estimate_block_svr` against GNU Radio's `mpsk_snr_est_cc` with `SNR_EST_SVR`: reference does different work (moments of |x| averaged in double with a `cabsf` per `abs`, no decisions, a PSK constellation that reads 16-QAM 13.5 dB low; ours decides every symbol and inverts the reading of the decisions, D2504); reported as information"
+    },
+    "avx2-runtime": {
+      "status": "info",
+      "waiver": "`snr_estimate_block_svr` is not accelerated: the run-time-detection build runs the code compiled for the baseline x86-64 target, the `avx2` build the same code compiled for AVX2, so their counts differ by code generation only; reported as information"
+    }
   }
 }

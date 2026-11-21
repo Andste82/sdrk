@@ -49,6 +49,7 @@ from . import (  # noqa: F401
     rotate,
     scramble,
     scale,
+    snr_estimate,
     squelch,
     ssb_mod,
     stereo,

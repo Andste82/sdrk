@@ -75,6 +75,7 @@ pub mod scale;
 pub mod scramble;
 pub mod sensor_decode;
 pub mod sensor_encode;
+pub mod snr_estimate;
 pub mod spectrum;
 pub mod squelch;
 pub mod ssb_demod;

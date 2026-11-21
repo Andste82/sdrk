@@ -319,6 +319,7 @@ What each kernel is compared with:
 | `qam_soft_bits_qpsk`, `qam_soft_bits_qam256`, `qam_soft_bits_qam1024` (the kernel `qam_soft_bits` with 4-QAM, the constellation `qpsk`, 256-QAM and 1024-QAM, M44.2 §2), 4096 symbols per call, scale 1, per input symbol; `symbol_demap_qam256_block` (the block `symbol_demap` with `qam256`) | our fallback or our own code as information (`info`, `Family::Own`, D1201, D1504, D1524), as the 16-QAM and 64-QAM entries; [QAM of any square order](#qam-of-any-square-order-m442) |
 | `qam_mod_qam256_block`, `qam_demod_qam256_block` (the blocks `qam_mod` and `qam_demod` with `qam256`, M44.2 §4, 8 samples per symbol, the block defaults; `qam_demod` in the steady state after a warm-up of 15360 symbols, reading the next of 8 windows of 4096 input samples per call), per output or input sample | our own code as information (`info`, `Family::Own`, D1216, D1524): chains of kernels whose library comparisons are their own entries (`costas_qam256_fallback`, `equalize_qam256_fallback`); [QAM of any square order](#qam-of-any-square-order-m442) |
 | `bit_scramble_block`, `bit_descramble_block` (the blocks `bit_scramble` and `bit_descramble` of M44.2, the default `x23_x18` over plain bits, 4096 bits per call, per soft bit), `bit_scramble_in_place_block`, `bit_descramble_in_place_block` (the same with `process_in_place`, the call of the QAM frame composites, D1538) | GNU Radio's `scrambler_bb(0x21, 0, 22)` and `descrambler_bb(0x21, 0, 22)` of gr-digital (`benches/refs/gr-scrambler.c`) on the hard bits of the same input (`Family::GnuRadio`, status `release` at every level as the CRCs of D527, D1533); no SIMD library has a self-synchronizing scrambler, so at the SIMD levels the verdict is the efficiency; [QAM of any square order](#qam-of-any-square-order-m442) |
+| `snr_estimate_block`, `snr_estimate_block_svr` (the block `snr_estimate` of M44.4 §1 through `observe`, `qam16` at Es/N0 20 dB, a window and a call of 4096 symbols, per input symbol) | GNU Radio `mpsk_snr_est_cc` with `SNR_EST_M2M4` and with `SNR_EST_SVR` (`tag_nsamples` 4096, `alpha` 0.001), both without the copy of the pass-through; information, reference does different work (D2504) |
 | `fft` C32, N = 64, 1024, 4096 | FFTW at `sse2`, rustfft (`FftPlanner`, forward, in place) elsewhere |
 | `fft` CQ15, N = 1024, block float and fixed scaling (noise of 8000 LSB, and of full scale for fixed scaling) | KissFFT `FIXED_POINT=16`; Ne10 int16 as information on `neon` |
 | `rfft` f32, N = 1024 | FFTW's real-input transform (`fftwf_plan_dft_r2c_1d`, out of place) at `sse2` and `sse4.2` (FFTW has no codelets above SSE2, so it is the stronger reference there too), rustfft's real-input planner (`realfft` 3.5, forward, out of place) elsewhere; the other of the two and our fallback as information (FFTW also on `neon`) |
@@ -664,6 +665,8 @@ Instructions per sample of our kernel divided by those of the comparison (lower 
 | `bit_descramble_block` (GNU Radio `descrambler_bb`, per soft bit) | 0.12 | 0.12 | 0.05 | 0.04 | 0.17 | 0.24 |
 | `bit_scramble_in_place_block` (GNU Radio `scrambler_bb`, per soft bit) | 0.28 | 0.28 | 0.20 | 0.20 | 0.31 | 0.37 |
 | `bit_descramble_in_place_block` (GNU Radio `descrambler_bb`, per soft bit) | 0.32 | 0.32 | 0.24 | 0.23 | 0.37 | 0.53 |
+| `snr_estimate_block` (GNU Radio `mpsk_snr_est_cc` M2M4, per input symbol) | 0.46 info | 0.45 info | 0.16 info | 0.13 info | 0.29 info | 0.19 info |
+| `snr_estimate_block_svr` (GNU Radio `mpsk_snr_est_cc` SVR, per input symbol) | 0.33 info | 0.32 info | 0.12 info | 0.09 info | 0.20 info | 0.50 info |
 
 Instructions per sample, ours / comparison (`avx2-runtime`: ours only, judged against ours at `avx2`):
 
@@ -936,6 +939,8 @@ Instructions per sample, ours / comparison (`avx2-runtime`: ours only, judged ag
 | `bit_descramble_block` (GNU Radio `descrambler_bb`, per soft bit) | 3.43 / 28.01 | 3.43 / 28.01 | 1.26 / 28.01 | 3.43 | 1.26 / 28.01 | 2.99 / 18.01 | 10.27 / 42.02 |
 | `bit_scramble_in_place_block` (GNU Radio `scrambler_bb`, per soft bit) | 7.31 / 26.01 | 7.31 / 26.01 | 5.26 / 26.01 | 7.31 | 5.32 / 26.01 | 5.59 / 18.01 | 15.63 / 42.02 |
 | `bit_descramble_in_place_block` (GNU Radio `descrambler_bb`, per soft bit) | 8.87 / 28.01 | 8.87 / 28.01 | 6.61 / 28.01 | 8.48 | 6.37 / 28.01 | 6.64 / 18.01 | 22.16 / 42.02 |
+| `snr_estimate_block` (GNU Radio `mpsk_snr_est_cc` M2M4, per input symbol) | 24.24 / 53.06 | 23.85 / 53.06 | 8.55 / 53.06 | 24.24 | 6.92 / 53.06 | 13.81 / 47.06 | 108.57 / 570.08 |
+| `snr_estimate_block_svr` (GNU Radio `mpsk_snr_est_cc` SVR, per input symbol) | 24.24 / 73.56 | 23.85 / 73.56 | 8.55 / 73.56 | 24.24 | 6.92 / 73.56 | 13.81 / 70.56 | 108.57 / 215.08 |
 | `qam_soft_bits_qam16` C32 (our fallback, per input symbol) | 5.91 / 9.52 | 5.91 / 9.52 | 2.47 / 2.46 | 2.48 | 1.13 / 1.71 | 3.52 / 3.52 | 14.80 / 15.54 |
 | `qam_soft_bits_qam64` C32 (our fallback, per input symbol) | 11.54 / 14.52 | 11.54 / 14.02 | 5.22 / 7.02 | 5.23 | 2.16 / 4.02 | 4.52 / 5.02 | 23.80 / 47.54 |
 | `qam_soft_bits_qpsk` C32 (our fallback, per input symbol) | 1.91 / 2.27 | 1.91 / 2.27 | 0.63 / 0.71 | 0.63 | 0.32 / 0.71 | 2.02 / 2.02 | 6.30 / 9.54 |
@@ -1224,6 +1229,8 @@ Accuracy (SNR in dB against the f64 reference), ours / comparison:
 | `bit_descramble_block` (GNU Radio `descrambler_bb`, per soft bit) | exact | exact | exact | exact | exact | exact |
 | `bit_scramble_in_place_block` (GNU Radio `scrambler_bb`, per soft bit) | exact | exact | exact | exact | exact | exact |
 | `bit_descramble_in_place_block` (GNU Radio `descrambler_bb`, per soft bit) | exact | exact | exact | exact | exact | exact |
+| `snr_estimate_block` (GNU Radio `mpsk_snr_est_cc` M2M4, per input symbol; the SNR of the estimate against the true Es/N0) | 40.2 / 0.4 | 40.2 / 0.4 | 40.2 / 0.4 | 40.2 / 0.4 | 40.2 / 0.4 | 40.2 / 0.4 |
+| `snr_estimate_block_svr` (GNU Radio `mpsk_snr_est_cc` SVR, per input symbol; the same) | 40.2 / 0.4 | 40.2 / 0.4 | 40.2 / 0.4 | 40.2 / 0.4 | 40.2 / 0.4 | 40.2 / 0.4 |
 
 Simulated cycles per sample on every level with a core model (`cargo measure <kernel> --no-count --no-golden`, llvm-mca 23.1.1, mode `whole-loop`; D33, D35, D68): the execution counts come from the counter of the level in the environment of its count (callgrind at `avx2`, Intel SDE at `sse2`, `sse4.2` and `avx512`, QEMU at `neon`), and ours and the comparison of an entry run in the same emulator on the same CPU. Only the ratio ours / comparison on one model means something; the cycles are shown so that the ratios can be checked and are no hardware figures. The ratios against the comparisons are not judged (the gate there stays the instruction ratio above); one rule is gated on these tables (D321): every entry `<k>` with a row `<k>_fallback` on the same level must have at most the cycles of that row in the column "ours" on both models, as published (two decimals); a level delegated to the fallback (comparison `sdrk fallback`, both ratios 1.00) passes, and an exception needs a `cycle_waiver` in `benches/limits.json` naming an open item. `cargo xtask check cycles` (part of `cargo xtask check`, so CI) reads the committed tables, so a merged row that breaks the rule fails CI without running `llvm-mca`; `cargo measure` prints the verdict (`SIMD vs fallback ...`) for every pair it simulates. The tables are written by `python3 -I benches/cycle_tables.py <the JSON files>` from the `cargo measure` documents (`target/measure/<kernel>.json`). The script **merges**: it replaces or inserts the rows of the entries in the given documents at their place in the order of the results tables and keeps every other row, note and level byte for byte, because `target/measure` is not committed and holds only what was measured in this checkout (a partial set never removes rows). `--rebuild` writes the block from the given documents alone and refuses to drop entries of the block unless `--force` is given (every kernel measured, or entries retired); `--doc FILE` writes another file. Its tests: `python3 -I benches/test_cycle_tables.py`. The `endbr64` of the references built with `-fcf-protection` is simulated as the `nop` it executes as (D64, [How the cycles are simulated](#how-the-cycles-are-simulated)). One artifact of the model remains at `avx2`: GNU Radio's `quadrature_demod_cf` zero-fills its temporary with a `rep stosb` that `znver3` rates at 100 and `alderlake` at 8 cycles per byte, so its 865.81 / 131.57 are about 62 / 65 without it; `znver4` rates the same instruction alike at `avx512` (868.77 there), so the ratios of `quad_demod_fallback` at `avx2` and `avx512` on the reference model are artifacts. The `C32` FFT fallbacks above 1.10 at `sse2` and `sse4.2` (radix-2 contract, 16 `xmm` registers; D170 fuses three stages per pass only off x86), the `CQ15` FIR family fallbacks above 1.10 at `sse2`, `sse4.2` and `neon` (`fir_decimate` `CQ15` on `neon` 1.80 / 1.63 after D172, against a CMSIS-DSP that GCC auto-vectorizes with NEON), and the `convert_out` fallbacks on every level, are above CMSIS-DSP in the instructions too.
 
@@ -1522,6 +1529,8 @@ Reference model `skylake`, counter-model `znver2`, mode `whole-loop`; execution 
 | `real_to_complex_cq15` | 8.98 | 15.69 | 0.57 | 8.96 | 17.83 | 0.50 | libairspy 1.0.10 iqconverter_int16 (truncating >> 15, 32-bit accumulator, the odd samples halved), conversion without remove_dc (-O3 -ffp-contract=off, sse2) |
 | `real_to_complex_cq15_fallback` | 29.09 | 15.69 | 1.85 | 34.91 | 17.83 | 1.96 | libairspy 1.0.10 iqconverter_int16 (truncating >> 15, 32-bit accumulator, the odd samples halved), conversion without remove_dc (-O3 -ffp-contract=off, sse2) |
 | `real_to_complex_fallback` | 17.76 | 70.40 | 0.25 | 20.65 | 57.25 | 0.36 | liquid-dsp 1.8.3 firhilbf_decim_execute_block (dotprod_rrrf) with its portable dot product (-O3 -ffp-contract=off, sse2) |
+| `snr_estimate_block` | 8.65 | 60.76 | 0.14 | 8.25 | 56.65 | 0.15 | GNU Radio mpsk_snr_est_cc(SNR_EST_M2M4, 4096, 0.001): the moments \|x\|^2 and \|x\|^4 averaged in double, six cabsf per symbol (reference does different work: no decisions, a PSK kurtosis; generic compiler flags) |
+| `snr_estimate_block_svr` | 8.65 | 88.58 | 0.10 | 8.25 | 80.92 | 0.10 | GNU Radio mpsk_snr_est_cc(SNR_EST_SVR, 4096, 0.001): \|x\|^4 and \|x_n\|^2 \|x_(n-1)\|^2 averaged in double, two cabsf per symbol (reference does different work: no decisions, a PSK constellation; generic compiler flags) |
 | `stereo_encode` | 10.15 | 10.15 | 1.00 | 10.88 | 10.88 | 1.00 | sdrk fallback |
 | `stereo_encode_rds` | 18.68 | 18.68 | 1.00 | 17.96 | 17.96 | 1.00 | sdrk fallback |
 | `stereo_matrix` | 1.02 | 2.10 | 0.49 | 0.99 | 2.48 | 0.40 | VOLK 3.3.0 composition: volk_32fc_deinterleave_32f_x2, volk_32f_x2_add_32f (d + d), volk_32f_x2_add_32f (s + d2), volk_32f_x2_subtract_32f (s - d2), volk_32f_x2_interleave_32fc (five passes over memory) |
@@ -1807,6 +1816,8 @@ Reference model `skylake`, counter-model `znver2`, mode `whole-loop`; execution 
 | `real_to_complex_cq15` | 7.55 | 10.87 | 0.69 | 6.96 | 13.90 | 0.50 | libairspy 1.0.10 iqconverter_int16 (truncating >> 15, 32-bit accumulator, the odd samples halved), conversion without remove_dc (-O3 -ffp-contract=off, sse4.2) |
 | `real_to_complex_cq15_fallback` | 22.69 | 10.87 | 2.09 | 23.68 | 13.90 | 1.70 | libairspy 1.0.10 iqconverter_int16 (truncating >> 15, 32-bit accumulator, the odd samples halved), conversion without remove_dc (-O3 -ffp-contract=off, sse4.2) |
 | `real_to_complex_fallback` | 17.36 | 70.45 | 0.25 | 19.91 | 57.08 | 0.35 | liquid-dsp 1.8.3 firhilbf_decim_execute_block (dotprod_rrrf) with its portable dot product (-O3 -ffp-contract=off, sse4.2) |
+| `snr_estimate_block` | 8.27 | 60.76 | 0.14 | 7.50 | 56.65 | 0.13 | GNU Radio mpsk_snr_est_cc(SNR_EST_M2M4, 4096, 0.001): the moments \|x\|^2 and \|x\|^4 averaged in double, six cabsf per symbol (reference does different work: no decisions, a PSK kurtosis; generic compiler flags) |
+| `snr_estimate_block_svr` | 8.27 | 88.58 | 0.09 | 7.50 | 80.92 | 0.09 | GNU Radio mpsk_snr_est_cc(SNR_EST_SVR, 4096, 0.001): \|x\|^4 and \|x_n\|^2 \|x_(n-1)\|^2 averaged in double, two cabsf per symbol (reference does different work: no decisions, a PSK constellation; generic compiler flags) |
 | `stereo_encode` | 10.15 | 10.15 | 1.00 | 10.88 | 10.88 | 1.00 | sdrk fallback |
 | `stereo_encode_rds` | 14.16 | 14.16 | 1.00 | 15.14 | 15.14 | 1.00 | sdrk fallback |
 | `stereo_matrix` | 1.02 | 2.10 | 0.48 | 0.99 | 2.48 | 0.40 | VOLK 3.3.0 composition: volk_32fc_deinterleave_32f_x2, volk_32f_x2_add_32f (d + d), volk_32f_x2_add_32f (s + d2), volk_32f_x2_subtract_32f (s - d2), volk_32f_x2_interleave_32fc (five passes over memory) |
@@ -2094,6 +2105,8 @@ Reference model `znver3`, counter-model `alderlake`, mode `whole-loop`; executio
 | `real_to_complex_cq15` | 3.60 | 7.27 | 0.50 | 4.87 | 8.83 | 0.55 | libairspy 1.0.10 iqconverter_int16 (truncating >> 15, 32-bit accumulator, the odd samples halved), conversion without remove_dc (-O3 -ffp-contract=off, avx2) |
 | `real_to_complex_cq15_fallback` | 14.91 | 7.27 | 2.05 | 14.50 | 8.83 | 1.64 | libairspy 1.0.10 iqconverter_int16 (truncating >> 15, 32-bit accumulator, the odd samples halved), conversion without remove_dc (-O3 -ffp-contract=off, avx2) |
 | `real_to_complex_fallback` | 12.67 | 106.72 | 0.12 | 12.75 | 53.64 | 0.24 | liquid-dsp 1.8.3 firhilbf_decim_execute_block (dotprod_rrrf) with its portable dot product (-O3 -ffp-contract=off, avx2) |
+| `snr_estimate_block` | 2.85 | 50.03 | 0.06 | 2.93 | 57.26 | 0.05 | GNU Radio mpsk_snr_est_cc(SNR_EST_M2M4, 4096, 0.001): the moments \|x\|^2 and \|x\|^4 averaged in double, six cabsf per symbol (reference does different work: no decisions, a PSK kurtosis; generic compiler flags) |
+| `snr_estimate_block_svr` | 2.85 | 71.84 | 0.04 | 2.93 | 78.62 | 0.04 | GNU Radio mpsk_snr_est_cc(SNR_EST_SVR, 4096, 0.001): \|x\|^4 and \|x_n\|^2 \|x_(n-1)\|^2 averaged in double, two cabsf per symbol (reference does different work: no decisions, a PSK constellation; generic compiler flags) |
 | `stereo_encode` | 4.47 | 4.47 | 1.00 | 5.92 | 5.92 | 1.00 | sdrk fallback |
 | `stereo_encode_rds` | 7.17 | 7.17 | 1.00 | 8.91 | 8.91 | 1.00 | sdrk fallback |
 | `stereo_matrix` | 0.32 | 1.26 | 0.26 | 0.45 | 1.45 | 0.31 | VOLK 3.3.0 composition: volk_32fc_deinterleave_32f_x2, volk_32f_x2_add_32f (d + d), volk_32f_x2_add_32f (s + d2), volk_32f_x2_subtract_32f (s - d2), volk_32f_x2_interleave_32fc (five passes over memory) |
@@ -2381,6 +2394,8 @@ Reference model `znver4`, counter-model `sapphirerapids`, mode `whole-loop`; exe
 | `real_to_complex_cq15` | 4.28 | 220.09 | 0.02 | 5.03 | 25.92 | 0.19 | libairspy 1.0.10 iqconverter_int16 (truncating >> 15, 32-bit accumulator, the odd samples halved), conversion without remove_dc (-O3 -ffp-contract=off, avx512) |
 | `real_to_complex_cq15_fallback` | 14.45 | 220.92 | 0.07 | 15.62 | 25.98 | 0.60 | libairspy 1.0.10 iqconverter_int16 (truncating >> 15, 32-bit accumulator, the odd samples halved), conversion without remove_dc (-O3 -ffp-contract=off, avx512) |
 | `real_to_complex_fallback` | 12.02 | 105.23 | 0.11 | 12.12 | 55.01 | 0.22 | liquid-dsp 1.8.3 firhilbf_decim_execute_block (dotprod_rrrf) with its portable dot product (-O3 -ffp-contract=off, avx512) |
+| `snr_estimate_block` | 2.64 | 48.13 | 0.05 | 2.38 | 56.75 | 0.04 | GNU Radio mpsk_snr_est_cc(SNR_EST_M2M4, 4096, 0.001): the moments \|x\|^2 and \|x\|^4 averaged in double, six cabsf per symbol (reference does different work: no decisions, a PSK kurtosis; generic compiler flags) |
+| `snr_estimate_block_svr` | 2.64 | 69.08 | 0.04 | 2.38 | 77.87 | 0.03 | GNU Radio mpsk_snr_est_cc(SNR_EST_SVR, 4096, 0.001): \|x\|^4 and \|x_n\|^2 \|x_(n-1)\|^2 averaged in double, two cabsf per symbol (reference does different work: no decisions, a PSK constellation; generic compiler flags) |
 | `stereo_encode` | 1.15 | 1.15 | 1.00 | 5.53 | 5.53 | 1.00 | sdrk fallback |
 | `stereo_encode_rds` | 1.59 | 1.59 | 1.00 | 5.54 | 5.54 | 1.00 | sdrk fallback |
 | `stereo_matrix` | 0.35 | 0.85 | 0.42 | 0.32 | 1.07 | 0.30 | VOLK 3.3.0 composition: volk_32fc_deinterleave_32f_x2, volk_32f_x2_add_32f (d + d), volk_32f_x2_add_32f (s + d2), volk_32f_x2_subtract_32f (s - d2), volk_32f_x2_interleave_32fc (five passes over memory) |
@@ -2668,6 +2683,8 @@ Reference model `cortex-a72`, counter-model `cortex-a76`, mode `whole-loop`; exe
 | `real_to_complex_cq15` | 10.69 | 17.90 | 0.60 | 8.74 | 17.14 | 0.51 | libairspy 1.0.10 iqconverter_int16 (truncating >> 15, 32-bit accumulator, the odd samples halved), conversion without remove_dc (-O3 -ffp-contract=off, neon) |
 | `real_to_complex_cq15_fallback` | 33.36 | 17.90 | 1.86 | 31.07 | 17.14 | 1.81 | libairspy 1.0.10 iqconverter_int16 (truncating >> 15, 32-bit accumulator, the odd samples halved), conversion without remove_dc (-O3 -ffp-contract=off, neon) |
 | `real_to_complex_fallback` | 31.17 | 80.68 | 0.39 | 30.71 | 60.25 | 0.51 | liquid-dsp 1.8.3 firhilbf_decim_execute_block (dotprod_rrrf) with its portable dot product (-O3 -ffp-contract=off, neon) |
+| `snr_estimate_block` | 12.81 | 71.51 | 0.18 | 6.58 | 49.49 | 0.13 | GNU Radio mpsk_snr_est_cc(SNR_EST_M2M4, 4096, 0.001): the moments \|x\|^2 and \|x\|^4 averaged in double, six cabsf per symbol (reference does different work: no decisions, a PSK kurtosis; generic compiler flags) |
+| `snr_estimate_block_svr` | 12.81 | 103.78 | 0.12 | 6.58 | 72.57 | 0.09 | GNU Radio mpsk_snr_est_cc(SNR_EST_SVR, 4096, 0.001): \|x\|^4 and \|x_n\|^2 \|x_(n-1)\|^2 averaged in double, two cabsf per symbol (reference does different work: no decisions, a PSK constellation; generic compiler flags) |
 | `stereo_encode` | 15.13 | 15.13 | 1.00 | 16.08 | 16.08 | 1.00 | sdrk fallback |
 | `stereo_encode_rds` | 21.13 | 21.13 | 1.00 | 22.07 | 22.07 | 1.00 | sdrk fallback |
 | `stereo_matrix` | 1.90 | 5.74 | 0.33 | 1.39 | 5.23 | 0.27 | VOLK 3.3.0 composition: volk_32fc_deinterleave_32f_x2, volk_32f_x2_add_32f (d + d), volk_32f_x2_add_32f (s + d2), volk_32f_x2_subtract_32f (s - d2), volk_32f_x2_interleave_32fc (five passes over memory) |
@@ -3427,6 +3444,31 @@ Simulated cycles per sample, reference model / counter model, M44.2 -> M44.3:
 
 - The equalizer entries are identical to the last digit on every level and model; the blocks are within 0.1 % (the noise of the whole-loop simulation of the controller's code, D2425).
 - The instructions per sample of these entries are those of M44.2 within 0.01, so the counts in `benches/results` are those of main and were not merged again; simd128 (instructions, not cycles) runs the code of M44.2 for `equalize` and was not measured again.
+
+## SNR estimate (M44.4)
+
+The count entries `snr_estimate_block` and `snr_estimate_block_svr` measure `SnrEstimateBlock::observe` (`qam16`, Es/N0 20 dB, a window of 4096 symbols, 4096 symbols per call; the call of a composite, without the copy of `process`) against GNU Radio's `mpsk_snr_est_cc` with `SNR_EST_M2M4` and `SNR_EST_SVR` (`tag_nsamples` 4096, `alpha` 0.001, without the copy of its pass-through; `benches/refs/gr-snr-est.c`). Both are `info`: the reference does different work (moments of `|x|` in double with a `cabsf` per `abs`, no decisions, a PSK constellation), D2504. The block has no kernel, so `ours` and the fallback run the same code; the sums run in 8 lanes of `f32` and vectorise.
+
+Simulated cycles per input symbol (whole-loop, the corrected `llvm-mca` of D942), reference model / counter model:
+
+| Entry | sse2 (skylake / znver2) | sse4.2 (skylake / znver2) | avx2 (znver3 / alderlake) | avx512 (znver4 / sapphirerapids) | neon (cortex-a72 / cortex-a76) |
+| --- | --- | --- | --- | --- | --- |
+| `snr_estimate_block` (ours) | 8.65 / 8.25 | 8.27 / 7.50 | 2.85 / 2.93 | 2.64 / 2.38 | 12.81 / 6.58 |
+| GNU Radio `mpsk_snr_est_cc` M2M4 | 60.76 / 56.65 | 60.76 / 56.65 | 50.03 / 57.26 | 48.13 / 56.75 | 71.51 / 49.49 |
+| GNU Radio `mpsk_snr_est_cc` SVR | 88.58 / 80.92 | 88.58 / 80.92 | 71.84 / 78.62 | 69.08 / 77.87 | 103.78 / 72.57 |
+
+Instructions per input symbol (counts; simd128 has no core model):
+
+| Entry | sse2 | sse4.2 | avx2 | avx512 | neon | simd128 |
+| --- | --- | --- | --- | --- | --- | --- |
+| `snr_estimate_block` (ours) | 24.24 | 23.85 | 8.55 | 6.92 | 13.81 | 108.57 |
+| GNU Radio M2M4 | 53.06 | 53.06 | 53.06 | 53.06 | 47.06 | 570.08 |
+| GNU Radio SVR | 73.56 | 73.56 | 73.56 | 73.56 | 70.56 | 215.08 |
+
+- The accuracy column of the counts is the SNR of the estimate as a power ratio against the true Es/N0: 40.2 dB for ours (0.04 dB off), 0.4 dB for both GNU Radio estimators (they read 16-QAM 13.5 dB low).
+- Data-dependent branches: 0.14 per symbol, 0.0015 mispredicted (D1611), so the cost with the penalty equals the cycles within 0.03.
+- `avx2-runtime` (24.24 instructions against 8.55 at `avx2`) is the baseline code of the run-time-detection build: the block is not dispatched, information as for the other blocks without a kernel.
+- In `qam_demod` (§2, 4 samples per symbol) the estimate would add about 0.7 cycles per input sample at `avx2` (about 1 % of `qam_demod_block`), see the status of M44.4.
 
 ## Sensor decoder (M46)
 

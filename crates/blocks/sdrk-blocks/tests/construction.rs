@@ -46,8 +46,8 @@ use sdrk_blocks::{
     PulseMatchBlock, PulseMatchConfig, PulseShapeBlock, PulseShapeConfig, QamAcquireBlock,
     QamAcquireConfig, QamDemodBlock, QamDemodConfig, QamFrameDecodeBlock, QamFrameDecodeConfig,
     QamFrameEncodeBlock, QamFrameEncodeConfig, QamModBlock, QamModConfig, RdsDecodeBlock,
-    RdsDecodeConfig, RdsDemodBlock, RdsDemodConfig, SymbolMapBlock, SymbolMapConfig,
-    SymbolMapConstellation, SymbolMapVariant,
+    RdsDecodeConfig, RdsDemodBlock, RdsDemodConfig, SnrEstimateBlock, SnrEstimateConfig,
+    SymbolMapBlock, SymbolMapConfig, SymbolMapConstellation, SymbolMapVariant,
 };
 use sdrk_device::{SdrkError, formats};
 
@@ -400,6 +400,15 @@ fn psk_blocks_storage_is_exact() {
         assert_eq!(bytes, 8 * (512 + 1024));
         check_exact_storage(bytes, |a| QamAcquireBlock::new(&cfg, r, a).map(|_| ()));
     }
+    for window in [64, 4096, 1 << 20] {
+        let cfg = SnrEstimateConfig {
+            window,
+            ..SnrEstimateConfig::default()
+        };
+        let bytes = SnrEstimateBlock::<A<'_>>::storage_bytes(&cfg, r).unwrap();
+        assert_eq!(bytes, 0);
+        check_exact_storage(bytes, |a| SnrEstimateBlock::new(&cfg, r, a).map(|_| ()));
+    }
     for (sps, span) in [(2, 4), (8, 10), (64, 32)] {
         let cfg = PulseShapeConfig {
             samples_per_symbol: sps,
@@ -644,6 +653,8 @@ fn no_block_is_larger_than_512_bytes() {
     check::<PulseMatchBlock<sdrk_testkit::VecStorage>>("PulseMatchBlock<Vec>");
     check::<QamAcquireBlock<A<'static>>>("QamAcquireBlock");
     check::<QamAcquireBlock<sdrk_testkit::VecStorage>>("QamAcquireBlock<Vec>");
+    check::<SnrEstimateBlock<A<'static>>>("SnrEstimateBlock");
+    check::<SnrEstimateBlock<sdrk_testkit::VecStorage>>("SnrEstimateBlock<Vec>");
     check::<DcBlockRealBlock<f32, A<'static>>>("DcBlockRealBlock<f32>");
     check::<DcBlockRealBlock<Q15, sdrk_testkit::VecStorage>>("DcBlockRealBlock<Q15, Vec>");
     check::<BiquadRealBlock<f32, A<'static>>>("BiquadRealBlock<f32>");
@@ -909,6 +920,11 @@ fn public_types_are_send() {
     assert_sync::<QamAcquireBlock<A<'static>>>();
     assert_send::<QamAcquireConfig>();
     assert_sync::<QamAcquireConfig>();
+    assert_send::<SnrEstimateBlock<A<'static>>>();
+    assert_send::<SnrEstimateBlock<sdrk_testkit::VecStorage>>();
+    assert_sync::<SnrEstimateBlock<A<'static>>>();
+    assert_send::<SnrEstimateConfig>();
+    assert_sync::<SnrEstimateConfig>();
     assert_send::<sdrk_blocks::LockWatch<Policy>>();
     assert_sync::<sdrk_blocks::LockWatch<Policy>>();
     assert_send::<sdrk_blocks::LockState>();

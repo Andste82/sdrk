@@ -79,7 +79,7 @@ fn the_kind_is_registered_with_its_kernel() {
     let f = registry.factory("scramble").unwrap();
     assert_eq!(f.kernels(), ["scramble"]);
     assert_eq!(f.description().kind, "scramble");
-    assert_eq!(registry.descriptions().count(), 83);
+    assert_eq!(registry.descriptions().count(), 84);
     // The level is pinned by the facade test; here it only has to be a real implementation,
     // the same for both types.
     let level = sdrk::backend_for("scramble", sdrk::SampleType::C32);

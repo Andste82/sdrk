@@ -5073,6 +5073,61 @@
           },
           {
             "additionalProperties": false,
+            "description": "Estimates Es/N0 of square QAM symbols (4-QAM to 1024-QAM) from the symbols alone; they pass unchanged.",
+            "properties": {
+              "align": {
+                "$ref": "#/$defs/AlignMode"
+              },
+              "backend": {
+                "$ref": "#/$defs/BackendSpec"
+              },
+              "description": {
+                "maxLength": 2000,
+                "type": "string"
+              },
+              "group": {
+                "description": "The group of the node (a key of `groups`); nodes without one are in `main`.",
+                "pattern": "^[a-z][a-z0-9_]{0,63}$",
+                "type": "string"
+              },
+              "kind": {
+                "const": "snr_estimate"
+              },
+              "params": {
+                "additionalProperties": false,
+                "properties": {
+                  "constellation": {
+                    "default": "qam16",
+                    "description": "The square constellation: qpsk (4-QAM, 2 bits per symbol), qam16 (4 bits), qam64 (6 bits), qam256 (8 bits) or qam1024 (10 bits); bpsk and 8psk are those of psk_mod and psk_demod. Typical: qam16; qam64 to qam1024 for a good SNR, qpsk for a weak one (bpsk and 8psk are refused: psk_mod). Build-time.",
+                    "enum": [
+                      "bpsk",
+                      "qpsk",
+                      "8psk",
+                      "qam16",
+                      "qam64",
+                      "qam256",
+                      "qam1024"
+                    ],
+                    "type": "string"
+                  },
+                  "window": {
+                    "default": 4096,
+                    "description": "Symbols per estimate (the spread falls with the square root of the window). Typical: 4096; more for a steadier estimate, fewer to follow a fading signal. Build-time.",
+                    "maximum": 1048576,
+                    "minimum": 64,
+                    "type": "integer"
+                  }
+                },
+                "type": "object"
+              }
+            },
+            "required": [
+              "kind"
+            ],
+            "type": "object"
+          },
+          {
+            "additionalProperties": false,
             "description": "Computes averaged power spectra in dB relative to full scale as frames.",
             "properties": {
               "align": {

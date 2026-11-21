@@ -1,0 +1,36 @@
+{
+  "arrays": {
+    "expected": {
+      "dtype": "f64",
+      "file": "snr_estimate_qam1024_c32.expected.bin",
+      "len": 17
+    },
+    "input": {
+      "dtype": "cf32",
+      "file": "snr_estimate_qam1024_c32.input.bin",
+      "len": 9216
+    }
+  },
+  "case": "snr_estimate_qam1024_c32",
+  "format_version": 1,
+  "kernel": "blocks",
+  "model": "float64",
+  "notes": "snr_estimate with qam1024 and a window of 512 symbols: input are 18 windows of random 1024-QAM symbols (unit-power grid, amplitude 0.6) with complex Gaussian noise at Es/N0 34 dB (windows 0 to 5), 20 dB (6 to 11) and 8 dB (12 to 17); expected is the estimate in dB after each window from window 1 on (window 0 only measures the amplitude), from the f64 model of the estimator: decisions at the amplitude of the previous window, the least-squares gain, the inverse of the reading table over white Gaussian noise (SciPy), the amplitude from the fitted gain from 30.5 dB on and from M2M4 (held between M2 / 11 and M2) below; within 0.01 dB (a float32 decision at a boundary)",
+  "params": {
+    "constellation": "qam1024",
+    "window": 512,
+    "windows": 18
+  },
+  "provenance": {
+    "generator": "tests/golden/generate.py",
+    "numpy": "2.5.4",
+    "python": "3.12",
+    "scipy": "1.18.1"
+  },
+  "seed": 901,
+  "tolerance": {
+    "class": "max_abs_err",
+    "max_abs_err": 0.01,
+    "skip": 0
+  }
+}

@@ -40,10 +40,11 @@ use sdrk_blocks::{
     RdsEncodeBlock, RdsEncodeConfig, RealPartBlock, RealToIqBlock, ResampleBlock, ResampleConfig,
     ResampleRealBlock, RotateBlock, RotateConfig, ScaleBlock, ScaleConfig, ScrambleBlock,
     ScrambleConfig, Scrambler, SensorDecodeBlock, SensorDecodeConfig, SensorEncodeBlock,
-    SensorEncodeConfig, SpectrumBlock, SpectrumConfig, SquelchBlock, SquelchConfig, SsbDemodBlock,
-    SsbDemodConfig, SsbModBlock, SsbModConfig, StereoMatrixBlock, StereoPllBlock, StereoPllConfig,
-    SymbolDemapBlock, SymbolDemapConfig, SymbolDemapConstellation, SymbolMapBlock, SymbolMapConfig,
-    SymbolMapConstellation, SymbolSyncBlock, SymbolSyncConfig, ToComplexBlock,
+    SensorEncodeConfig, SnrEstimateBlock, SnrEstimateConfig, SpectrumBlock, SpectrumConfig,
+    SquelchBlock, SquelchConfig, SsbDemodBlock, SsbDemodConfig, SsbModBlock, SsbModConfig,
+    StereoMatrixBlock, StereoPllBlock, StereoPllConfig, SymbolDemapBlock, SymbolDemapConfig,
+    SymbolDemapConstellation, SymbolMapBlock, SymbolMapConfig, SymbolMapConstellation,
+    SymbolSyncBlock, SymbolSyncConfig, ToComplexBlock,
 };
 use sdrk_device::Layout;
 use serde_json::{Map, Value};
@@ -4146,6 +4147,56 @@ impl Kind for QamAcquireKind {
         st: &mut VecStorage,
     ) -> BlockResult<Box<dyn Node>> {
         Ok(Box::new(StreamNode::new(QamAcquireBlock::new(
+            cfg, rate, st,
+        )?)))
+    }
+}
+
+// ----------------------------------------------------------------- snr_estimate
+
+pub(crate) struct SnrEstimateKind;
+
+impl Kind for SnrEstimateKind {
+    type Cfg = SnrEstimateConfig;
+
+    const KIND: &'static str = "snr_estimate";
+    fn kernels() -> &'static [&'static str] {
+        &[]
+    }
+    fn default_cfg() -> SnrEstimateConfig {
+        SnrEstimateConfig::default()
+    }
+    fn set(cfg: &mut SnrEstimateConfig, name: &str, value: ParamValue) -> BlockResult<()> {
+        cfg.set(name, value)
+    }
+    fn plan(
+        cfg: &SnrEstimateConfig,
+        input: PortType,
+        rate: Rate,
+        _p: Precision,
+    ) -> BlockResult<Figures> {
+        if input != PortType::C32 {
+            return Err(mismatch("snr_estimate needs c32 symbols"));
+        }
+        Ok(Figures {
+            rate_out: SnrEstimateBlock::<VecStorage>::rate_out(cfg, rate)?,
+            memory_bytes: SnrEstimateBlock::<VecStorage>::storage_bytes(cfg, rate)?,
+            // The copy, the decision of both axes, the error and five sums per symbol (D2504).
+            cost: 10.0,
+            taps: 0,
+            delay: Delay::ZERO,
+            min_input: 1,
+            output: stream(PortType::C32),
+        })
+    }
+    fn build(
+        cfg: &SnrEstimateConfig,
+        _input: PortType,
+        rate: Rate,
+        _p: Precision,
+        st: &mut VecStorage,
+    ) -> BlockResult<Box<dyn Node>> {
+        Ok(Box::new(StreamNode::new(SnrEstimateBlock::new(
             cfg, rate, st,
         )?)))
     }

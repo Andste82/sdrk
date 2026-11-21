@@ -943,7 +943,10 @@ const fn spec_own(name: &'static str, family: Family, own: &'static str) -> Kern
 /// (`bit_scramble_block`, `bit_descramble_block`, and their in-place forms
 /// `bit_scramble_in_place_block`, `bit_descramble_in_place_block`, one soft bit each) are
 /// [`Family::GnuRadio`]: GNU Radio's `scrambler_bb` and `descrambler_bb` with the same polynomial
-/// are the scalar reference.
+/// are the scalar reference. The SNR estimate of M44.4 (`snr_estimate_block` and
+/// `snr_estimate_block_svr`, one input symbol each) is [`Family::GnuRadio`] too: GNU Radio's
+/// `mpsk_snr_est_cc` with its estimators M2M4 and SVR, as information in `limits.json`
+/// (reference does different work, D2504).
 const fn proto(name: &'static str, family: Family) -> KernelSpec {
     KernelSpec {
         name,
@@ -967,7 +970,7 @@ const fn fft(name: &'static str, family: Family, samples: u64) -> KernelSpec {
 }
 
 /// The kernels of the benchmark table, in report order.
-pub static KERNELS: [KernelSpec; 279] = [
+pub static KERNELS: [KernelSpec; 281] = [
     spec("convert_cs8", Family::Volk, true),
     spec("convert_cs16", Family::Volk, true),
     spec("convert_cu8", Family::VolkAndOwn, true),
@@ -1267,6 +1270,8 @@ pub static KERNELS: [KernelSpec; 279] = [
     proto("bit_descramble_block", Family::GnuRadio),
     proto("bit_scramble_in_place_block", Family::GnuRadio),
     proto("bit_descramble_in_place_block", Family::GnuRadio),
+    proto("snr_estimate_block", Family::GnuRadio),
+    proto("snr_estimate_block_svr", Family::GnuRadio),
     proto("symbol_demap_qam16_block", Family::Own),
     proto("symbol_demap_qam64_block", Family::Own),
     proto("symbol_demap_qam256_block", Family::Own),
@@ -4939,6 +4944,8 @@ mod tests {
             "bit_descramble_block",
             "bit_scramble_in_place_block",
             "bit_descramble_in_place_block",
+            "snr_estimate_block",
+            "snr_estimate_block_svr",
         ];
         let framing = [
             "frame_decode",
@@ -4976,7 +4983,8 @@ mod tests {
         let names = crcs.iter().chain(&framing).copied().collect::<Vec<_>>();
         for level in ["sse2", "sse4.2", "avx2", "avx512", "neon", "simd128"] {
             // The CRCs against GNU Radio's `gr::digital::crc` (D527) and the bit scramblers
-            // against its `scrambler_bb` and `descrambler_bb` (M44.2), the framing against our
+            // against its `scrambler_bb` and `descrambler_bb` (M44.2), the SNR estimate against its
+            // `mpsk_snr_est_cc` (M44.4), the framing against our
             // own code (no library has it).
             for k in crcs {
                 assert_eq!(

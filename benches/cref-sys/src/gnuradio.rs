@@ -16,6 +16,9 @@
 //! - [`GrScrambler`]: the multiplicative scrambler and descrambler `gr::digital::scrambler_bb`
 //!   and `descrambler_bb` with `gr::digital::lfsr` (`gr-scrambler.c`, cfg `has_grscrambler`), the
 //!   scalar reference of the blocks `bit_scramble` and `bit_descramble`;
+//! - [`GrMpskSnrEstCc`]: the SNR estimator block `gr::digital::mpsk_snr_est_cc` with its
+//!   estimators M2M4 and SVR (`gr-snr-est.c`, cfg `has_grsnrest`), the reference of the block
+//!   `snr_estimate`;
 //! - [`GrCostasLoopCc`]: the loop of `digital.costas_loop_cc` with `gr::blocks::control_loop`
 //!   (`gr-costas.c`, cfg `has_grcostas`), the reference of `costas`;
 //! - [`GrConstellationReceiverCb`], [`GrLinearEqualizerRect`]: `digital.constellation_receiver_cb`
@@ -563,6 +566,110 @@ impl GrScrambler {
         {
             let _ = (n, output, self.descramble, &mut self.object);
             0
+        }
+    }
+}
+
+#[cfg(has_grsnrest)]
+mod snr_est_ffi {
+    unsafe extern "C" {
+        pub fn sdrk_gr_mpsk_snr_est_cc_size() -> usize;
+        pub fn sdrk_gr_mpsk_snr_est_cc_init(
+            object: *mut u64,
+            svr: core::ffi::c_int,
+            tag_nsamples: core::ffi::c_int,
+            alpha: f64,
+        );
+        pub fn sdrk_gr_mpsk_snr_est_cc_work(
+            object: *mut u64,
+            noutput_items: core::ffi::c_int,
+            input: *const [f32; 2],
+        ) -> core::ffi::c_int;
+        pub fn sdrk_gr_mpsk_snr_est_cc_last_snr(object: *const u64) -> f64;
+    }
+}
+
+/// Words of storage for the C object of [`GrMpskSnrEstCc`] (a pointer, seven `double` and two
+/// `int`, 72 bytes).
+const GR_SNR_EST_WORDS: usize = 10;
+
+/// GNU Radio's SNR estimator block `gr::digital::mpsk_snr_est_cc(type, tag_nsamples, alpha)` with
+/// the estimator `SNR_EST_M2M4` or `SNR_EST_SVR` (without the copy of its pass-through): it averages the
+/// moments of `|x|` exponentially with `alpha` (six `cabsf` per item for M2M4, two for SVR) and
+/// computes the estimate every `tag_nsamples` items.
+pub struct GrMpskSnrEstCc {
+    object: Box<[u64; GR_SNR_EST_WORDS]>,
+}
+
+impl GrMpskSnrEstCc {
+    /// The block with M2M4 (`svr` false) or SVR (`svr` true); `None` without the library.
+    ///
+    /// # Panics
+    /// If the C object does not fit the storage of the wrapper or `tag_nsamples` exceeds
+    /// `i32::MAX`.
+    #[must_use]
+    pub fn new(svr: bool, tag_nsamples: usize, alpha: f64) -> Option<Self> {
+        if !cfg!(has_grsnrest) {
+            return None;
+        }
+        let tag = core::ffi::c_int::try_from(tag_nsamples).expect("mpsk_snr_est_cc: tag_nsamples");
+        #[cfg_attr(not(has_grsnrest), allow(unused_mut))]
+        let mut object = Box::new([0u64; GR_SNR_EST_WORDS]);
+        #[cfg(has_grsnrest)]
+        // SAFETY: the storage is checked to hold the object, and it is 8-byte aligned.
+        unsafe {
+            assert!(
+                snr_est_ffi::sdrk_gr_mpsk_snr_est_cc_size() <= 8 * GR_SNR_EST_WORDS,
+                "mpsk_snr_est_cc: the object is too large"
+            );
+            snr_est_ffi::sdrk_gr_mpsk_snr_est_cc_init(
+                object.as_mut_ptr(),
+                core::ffi::c_int::from(svr),
+                tag,
+                alpha,
+            );
+        }
+        #[cfg(not(has_grsnrest))]
+        let _ = (svr, tag, alpha, &mut object);
+        Some(GrMpskSnrEstCc { object })
+    }
+
+    /// `work(n, in)` with the history of the block, without the copy of the pass-through:
+    /// `input` holds the item before the first new one and then the new items. Returns the new
+    /// items (0 without the library).
+    ///
+    /// # Panics
+    /// If `input` is empty or longer than `i32::MAX` items.
+    pub fn work(&mut self, input: &[[f32; 2]]) -> usize {
+        assert!(!input.is_empty(), "mpsk_snr_est_cc: the history item");
+        let n = core::ffi::c_int::try_from(input.len() - 1).expect("mpsk_snr_est_cc: too many items");
+        #[cfg(has_grsnrest)]
+        // SAFETY: `input` holds `n + 1` items; the object was initialized by `new`.
+        return unsafe {
+            let done = snr_est_ffi::sdrk_gr_mpsk_snr_est_cc_work(
+                self.object.as_mut_ptr(),
+                n,
+                input.as_ptr(),
+            );
+            usize::try_from(done).unwrap_or(0)
+        };
+        #[cfg(not(has_grsnrest))]
+        {
+            let _ = (n, &mut self.object);
+            0
+        }
+    }
+
+    /// The estimate in dB of the last tag (0 before the first).
+    #[must_use]
+    pub fn last_snr(&self) -> f64 {
+        #[cfg(has_grsnrest)]
+        // SAFETY: the object was initialized by `new`.
+        return unsafe { snr_est_ffi::sdrk_gr_mpsk_snr_est_cc_last_snr(self.object.as_ptr()) };
+        #[cfg(not(has_grsnrest))]
+        {
+            let _ = &self.object;
+            0.0
         }
     }
 }

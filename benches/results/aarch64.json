@@ -2925,7 +2925,7 @@
           "ours_instr_per_sample": 414.27,
           "ratio": 0.82,
           "snr_db": {
-            "other": 133.48,
+            "other": 129.94,
             "ours": 999.0
           },
           "status": "release",
@@ -5292,8 +5292,8 @@
         "qam_demod_qam256_block": {
           "compared_with": "sdrk fallback",
           "goal": true,
-          "other_instr_per_sample": 180.02,
-          "ours_instr_per_sample": 180.02,
+          "other_instr_per_sample": 180.2,
+          "ours_instr_per_sample": 180.2,
           "ratio": 1.0,
           "snr_db": {
             "other": 999.0,

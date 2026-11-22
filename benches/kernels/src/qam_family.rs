@@ -111,7 +111,8 @@
 //! taps, no feedback, `mu_cma` 0.05, `mu_dd` 0.02, `cma_symbols` 1000, `phase_bw` 0.02) with the
 //! constellation `qam16` on 16-QAM through the channel `1 + 0.2 e^(j0.6) z^-1 + 0.05 e^(-j2)
 //! z^-2` with a constant carrier phase of 0.2 rad and uniform noise of ±0.02 per component. The
-//! state lives across the runs: the warm-up call covers the 1000 symbols in CMA mode, so the
+//! state lives across the runs: the warm-up call covers the 1000 blind symbols (the multi-modulus
+//! start of the square grids since M44.4, D2530; CMA before), so the
 //! counted calls run in decision mode, the steady state, as GNU Radio's decision-directed loop
 //! with the same normalized step 0.02 from the centre-spike taps.
 //!
@@ -1096,9 +1097,10 @@ fn qam_demod_block(qam: Qam) -> QamDemodBlock<ArenaStorage<'static>> {
     QamDemodBlock::new(&cfg, rate, &mut leaked_arena(bytes)).expect("qam_demod block")
 }
 
-/// Calls of the warm-up of `qam_demod_block`: 6 calls of 512 symbols cover the 1000 CMA symbols
-/// of the equalizer. The acquisition estimates at symbol 768, so the receiver is in `PullIn` until
-/// the first check at symbol 4864 and in `Track` after it: with the warm-up call of the count the
+/// Calls of the warm-up of `qam_demod_block`: 6 calls of 512 symbols cover the 2000 blind symbols
+/// of the equalizer (the multi-modulus start of 16-QAM, D2530; 1000 CMA symbols before). The
+/// acquisition estimates at symbol 768, so the receiver is in `PullIn` until the first check at
+/// symbol 4864 and in `Track` after it: with the warm-up call of the count the
 /// counted calls take symbols 3584 to 11776, about 1280 of their 8192 symbols in `PullIn` (the
 /// workload of M44, kept so that the cycles before and after M44.1 compare).
 const DEMOD_WARMUP: usize = 6;

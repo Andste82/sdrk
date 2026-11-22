@@ -2068,14 +2068,14 @@
                 "additionalProperties": false,
                 "properties": {
                   "cma_symbols": {
-                    "description": "Symbols in the blind mode (CMA, or the multi-modulus algorithm for qam256 and qam1024) before the switch to decision mode (0: decision mode from the start, 4294967295: never). The default depends on the constellation: 1000 for bpsk to qam64, 8000 for qam256, 16000 for qam1024. Typical: the default of the constellation; 0 for decision mode only, 4294967295 for CMA only. Build-time.",
+                    "description": "Symbols in the blind mode (CMA, or the multi-modulus algorithm for qam16 to qam1024) before the switch to decision mode (0: decision mode from the start, 4294967295: never). The default depends on the constellation: 1000 for bpsk, qpsk and 8psk, 2000 for qam16 and qam64, 8000 for qam256, 16000 for qam1024. Typical: the default of the constellation; 0 for decision mode only, 4294967295 for the blind mode only. Build-time.",
                     "maximum": 4294967295,
                     "minimum": 0,
                     "type": "integer"
                   },
                   "constellation": {
                     "default": "qpsk",
-                    "description": "The constellation of the decisions: bpsk, qpsk or 8psk (the points of psk_mod; qpsk is also the 4-QAM grid), qam16, qam64, qam256 or qam1024 (the unit-power Gray points of symbol_map; the CMA radius R2 = E|s|^4 / E|s|^2 of qam16 and qam64 is 1.32 and 1.381; qam256 and qam1024 start blind with the multi-modulus algorithm). Typical: qpsk; the constellation of the transmitter. Build-time.",
+                    "description": "The constellation of the decisions: bpsk, qpsk or 8psk (the points of psk_mod; qpsk is also the 4-QAM grid), qam16, qam64, qam256 or qam1024 (the unit-power Gray points of symbol_map; bpsk, qpsk and 8psk start blind with the constant-modulus algorithm, qam16 to qam1024 with the multi-modulus algorithm). Typical: qpsk; the constellation of the transmitter. Build-time.",
                     "enum": [
                       "bpsk",
                       "qpsk",
@@ -2095,7 +2095,7 @@
                     "type": "integer"
                   },
                   "mu_cma": {
-                    "description": "Normalized step size of the blind update (CMA, or the multi-modulus algorithm for qam256 and qam1024; used as f32); a change applies from the next symbol. The default depends on the constellation: 0.05 for bpsk to qam64, 0.015 for qam256, 0.01 for qam1024 (the denser grids need a smaller blind step). Typical: the default of the constellation. Runtime.",
+                    "description": "Normalized step size of the blind update (CMA, or the multi-modulus algorithm for qam16 to qam1024; used as f32); a change applies from the next symbol. The default depends on the constellation: 0.05 for bpsk to qam64, 0.015 for qam256, 0.01 for qam1024 (the denser grids need a smaller blind step). Typical: the default of the constellation. Runtime.",
                     "maximum": 1.0,
                     "minimum": 0.00001,
                     "type": "number"

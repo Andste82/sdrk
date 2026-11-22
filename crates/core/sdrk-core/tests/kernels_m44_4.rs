@@ -1,8 +1,9 @@
-//! Tests of the M44.4 §3 blind start of `equalize` for the dense grids (seed 907): 256-QAM and
+//! Tests of the M44.4 §3 blind start of `equalize` for the square grids (seed 907): 16-QAM to
 //! 1024-QAM start with the multi-modulus cost (`EqBlind::Mma`, the radius `Qam::mma_r2` of one
-//! axis), every other constellation keeps the constant-modulus cost; the multi-modulus start turns
-//! the output onto the axes of the grid without the phase tracker, which the constant-modulus
-//! start cannot; the split of a call at the switch to the decision mode (the blind symbols in
+//! axis; 16-QAM and 64-QAM since D2530), the PSK constellations keep the constant-modulus cost;
+//! the multi-modulus start turns the output onto the axes of the grid without the phase tracker,
+//! which the constant-modulus start, blind to the phase, cannot; the split of a call at the
+//! switch to the decision mode (the blind symbols in
 //! their own loop, the rest in the loop of the decision mode) keeps the bits for every cut, with
 //! and without feedback taps, across `reset`; and with the feature `reference` `Fallback` against
 //! `Reference` over the blind start (never switching, and with special values).
@@ -25,10 +26,13 @@ use sdrk_core::{C32, Fallback};
 /// The seed of the signals of this file.
 const SEED: u64 = 907;
 
-/// The dense orders with the multi-modulus start.
-const DENSE: [(Qam, EqConstellation); 2] = [
+/// The square grids, which start with the multi-modulus cost (256-QAM and 1024-QAM first, so
+/// that their signals keep the streams of M44.4).
+const SQUARE: [(Qam, EqConstellation); 4] = [
     (Qam::Qam256, EqConstellation::Qam256),
     (Qam::Qam1024, EqConstellation::Qam1024),
+    (Qam::Qam16, EqConstellation::Qam16),
+    (Qam::Qam64, EqConstellation::Qam64),
 ];
 
 type State = EqualizeState<Vec<C32>, Vec<C32>>;
@@ -150,17 +154,15 @@ fn bits(x: &[C32]) -> Vec<(u32, u32)> {
 }
 
 #[test]
-fn the_dense_grids_start_with_the_multi_modulus_cost() {
+fn the_square_grids_start_with_the_multi_modulus_cost() {
     for c in [
         EqConstellation::Bpsk,
         EqConstellation::Qpsk,
         EqConstellation::Psk8,
-        EqConstellation::Qam16,
-        EqConstellation::Qam64,
     ] {
         assert_eq!(c.blind(), EqBlind::Cma, "{c:?}");
     }
-    for (_, c) in DENSE {
+    for (_, c) in SQUARE {
         assert_eq!(c.blind(), EqBlind::Mma, "{c:?}");
     }
     // R = E[a^4] / E[a^2] of one axis, from the levels of the grid.
@@ -170,6 +172,8 @@ fn the_dense_grids_start_with_the_multi_modulus_cost() {
         let a4 = levels.iter().map(|v| v * v * v * v).sum::<f64>();
         assert!((q.mma_r2() - a4 / a2).abs() < 1e-6, "{q:?}");
     }
+    assert_eq!(Qam::Qam16.mma_r2(), 41.0 / 50.0);
+    assert_eq!(Qam::Qam64.mma_r2(), 37.0 / 42.0);
     assert_eq!(Qam::Qam256.mma_r2(), 761.0 / 850.0);
     assert_eq!(Qam::Qam1024.mma_r2(), 613.0 / 682.0);
 }
@@ -177,9 +181,9 @@ fn the_dense_grids_start_with_the_multi_modulus_cost() {
 #[test]
 fn the_multi_modulus_start_turns_the_output_onto_the_axes() {
     // Without the phase tracker: the multi-modulus start of 1024-QAM takes out the turn of
-    // 0.3 rad (modulo a quarter turn) and the decision mode settles on the grid; the
-    // constant-modulus start is blind to the phase, so 64-QAM through the same channel keeps
-    // the turn and its decisions fail.
+    // 0.3 rad (modulo a quarter turn) and the decision mode settles on the grid; so does that
+    // of 64-QAM through the same channel, which with the constant-modulus start of M44.3 (blind
+    // to the phase) kept the turn, more than a tenth of its last 10000 decisions wrong.
     let n = 30_000;
     let mut rng = Rng::new(1);
     let (x, syms) = channel_signal(&mut rng, n, Qam::Qam1024, 0.3, 32.0);
@@ -197,13 +201,16 @@ fn the_multi_modulus_start_turns_the_output_onto_the_axes() {
     let (x, syms) = channel_signal(&mut rng, n, Qam::Qam64, 0.3, 30.0);
     let mut st = state(EqConstellation::Qam64, 0, 0.01, 8000, 0.0);
     Fallback.equalize(&mut st, &x, &mut y).unwrap();
+    assert_eq!(st.mode(), EqMode::Decision);
     let errors = errors_best_rotation(Qam::Qam64, &y[n - tail..], &syms[n - tail - 5..n - 5]);
-    assert!(errors > tail / 10, "64-QAM with CMA: {errors} errors");
+    assert_eq!(errors, 0, "64-QAM: {errors} errors, mse {}", st.mse());
+    // The squared half level spacing of 64-QAM is 1 / 42.
+    assert!(st.mse() < 0.3 / 42.0, "mse {}", st.mse());
 }
 
 #[test]
 fn the_split_at_the_switch_keeps_the_bits_for_every_cut() {
-    for (stream, (q, c)) in DENSE.into_iter().enumerate() {
+    for (stream, (q, c)) in SQUARE.into_iter().enumerate() {
         for feedback in [0usize, 3] {
             let mut rng = Rng::new(10 + stream as u64);
             let (x, _) = channel_signal(&mut rng, 6000, q, 0.4, 30.0);
@@ -256,7 +263,7 @@ fn the_split_at_the_switch_keeps_the_bits_for_every_cut() {
 
 #[test]
 fn the_multi_modulus_start_stays_finite_on_extreme_input() {
-    for (_, c) in DENSE {
+    for (_, c) in SQUARE {
         let mut st = state(c, 2, 1.0, u32::MAX, 0.2);
         let mut y = vec![C32::default(); 64];
         for v in [
@@ -308,7 +315,7 @@ mod against_the_reference {
 
     #[test]
     fn the_multi_modulus_start_equals_the_reference() {
-        for (stream, (q, c)) in DENSE.into_iter().enumerate() {
+        for (stream, (q, c)) in SQUARE.into_iter().enumerate() {
             for (feedback, cma_symbols, mu, bw) in [
                 (0usize, u32::MAX, 0.01f32, 0.005f64),
                 (0, 3000, 0.05, 0.0),

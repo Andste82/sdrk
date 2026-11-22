@@ -13,7 +13,7 @@ use crate::error::{Error, Result};
 use crate::kernels::check_len;
 use crate::kernels::dot::DotComplex;
 use crate::kernels::equalize::{
-    CMA_CLIP, EqBlind, EqMode, Equalize, EqualizeParts, EqualizeState, MSE_ALPHA, NLMS_EPS,
+    CMA_CLIP, CMA_R2, EqBlind, EqMode, Equalize, EqualizeParts, EqualizeState, MSE_ALPHA, NLMS_EPS,
     PHASE_MAX_FREQ,
 };
 use crate::num::flush_denormal;
@@ -71,8 +71,9 @@ fn adapt(g: &mut EqualizeParts<'_>, y: C32) -> Result<(C32, C32)> {
         let ui = limit(z.im * (qi - r), CMA_CLIP);
         (turn(C32::new(ur, ui), c, sn), g.mu_cma)
     } else if *g.mode == EqMode::Cma {
+        // The constant-modulus cost of the PSK constellations (radius 1).
         let m = y.re * y.re + y.im * y.im;
-        let f = m - g.constellation.cma_r2();
+        let f = m - CMA_R2;
         let er = limit(y.re * f, CMA_CLIP);
         let ei = limit(y.im * f, CMA_CLIP);
         (C32::new(er, ei), g.mu_cma)

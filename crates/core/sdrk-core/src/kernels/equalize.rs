@@ -881,7 +881,7 @@ impl Decide for PskDecide {
 
     #[inline]
     fn cma_r2(self) -> f32 {
-        1.0
+        CMA_R2
     }
 }
 

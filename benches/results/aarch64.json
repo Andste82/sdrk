@@ -2938,14 +2938,14 @@
             {
               "compared_with": "sdrk fallback",
               "label": "misaligned by one sample",
-              "other_instr_per_sample": 424.23,
+              "other_instr_per_sample": 424.24,
               "other_snr_db": null,
-              "ours_instr_per_sample": 424.23,
+              "ours_instr_per_sample": 424.24,
               "ratio": 1.0
             }
           ],
-          "other_instr_per_sample": 424.23,
-          "ours_instr_per_sample": 424.23,
+          "other_instr_per_sample": 424.24,
+          "ours_instr_per_sample": 424.24,
           "ratio": 1.0,
           "snr_db": {
             "other": 999.0,
@@ -2963,12 +2963,12 @@
               "label": "misaligned by one sample",
               "other_instr_per_sample": 508.03,
               "other_snr_db": null,
-              "ours_instr_per_sample": 424.23,
+              "ours_instr_per_sample": 424.24,
               "ratio": 0.84
             }
           ],
           "other_instr_per_sample": 508.03,
-          "ours_instr_per_sample": 424.23,
+          "ours_instr_per_sample": 424.24,
           "ratio": 0.84,
           "snr_db": {
             "other": 127.47,
@@ -5279,8 +5279,8 @@
         "qam_demod_block": {
           "compared_with": "sdrk fallback",
           "goal": true,
-          "other_instr_per_sample": 181.99,
-          "ours_instr_per_sample": 181.99,
+          "other_instr_per_sample": 182.09,
+          "ours_instr_per_sample": 182.09,
           "ratio": 1.0,
           "snr_db": {
             "other": 999.0,
@@ -5305,8 +5305,8 @@
         "qam_demod_search_block": {
           "compared_with": "sdrk fallback",
           "goal": true,
-          "other_instr_per_sample": 198.69,
-          "ours_instr_per_sample": 198.69,
+          "other_instr_per_sample": 198.96,
+          "ours_instr_per_sample": 198.96,
           "ratio": 1.0,
           "snr_db": {
             "other": 999.0,
@@ -5318,8 +5318,8 @@
         "qam_frame_decode_block": {
           "compared_with": "sdrk fallback",
           "goal": true,
-          "other_instr_per_sample": 221.68,
-          "ours_instr_per_sample": 221.68,
+          "other_instr_per_sample": 221.8,
+          "ours_instr_per_sample": 221.8,
           "ratio": 1.0,
           "snr_db": {
             "other": 999.0,

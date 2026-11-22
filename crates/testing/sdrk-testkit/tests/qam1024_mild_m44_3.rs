@@ -2,15 +2,17 @@
 //! D2422). `qam_mod` (4 samples per symbol) -> `Multipath::mild(4.0)` -> Gaussian noise at
 //! Eb/N0 27 and 29 dB (the points of test 3 of M44.2) -> `qam_demod` with `equalizer_taps` 15,
 //! 80000 symbols, seed 894.
-//! With the blind start of D1517 (16000 CMA symbols with `mu_cma` 0.005) these receivers stay in
-//! a false state without lock (the steps of M44.3 found none of 16 receivers at lock, D2411); the
-//! test prints what each receiver does (the symbol of its first lock, its restarts, the decision
-//! error of its equalizer relative to the squared half level spacing and its symbol error rate
-//! over the last 10000 symbols) and guards only what must hold whatever the outcome: a receiver
-//! that reports lock at the end decides its last 10000 symbols correctly (symbol error rate below
-//! 1 %), so a false state is never reported as lock. Since the multi-modulus start of M44.4 §3
-//! the receivers lock, and the one at Eb/N0 27 dB reads 1.65 % at the floor of the channel, above
-//! the bound: open item I44.4-2 (D2513).
+//! With the blind start of D1517 (16000 CMA symbols with `mu_cma` 0.005) these receivers stayed
+//! in a false state without lock (the steps of M44.3 found none of 16 receivers at lock, D2411);
+//! since the multi-modulus start of M44.4 §3 they lock. The test prints what each receiver does
+//! (the symbol of its first lock, its restarts, the decision error of its equalizer relative to
+//! the squared half level spacing and its symbol error rate over the last 10000 symbols) and
+//! guards only what must hold whatever the outcome: a receiver that reports lock at the end has a
+//! decision error `mse / h²` below [`LOCK_MSE`], so a false state is never reported as lock.
+//! The lock is judged by the decision error, not by the symbol error rate (the maintainer's
+//! decision on I44.4-2, option (c), D2526): a lock through `mild` with 15 taps sits at the
+//! floor of the channel, 1 to 2 % of symbol errors at Eb/N0 27 dB, while the decision error
+//! separates a lock (0.15 to 0.41) from a false state (0.6 to 1.0).
 #![cfg(feature = "std")]
 #![allow(
     clippy::unwrap_used,
@@ -44,6 +46,9 @@ const SYMBOLS: usize = 80_000;
 const TAIL: usize = 10_000;
 /// Samples per call of the receivers.
 const CALL: usize = 4096;
+/// The bound of the decision error `mse / h²` of a receiver that reports lock: below it a lock,
+/// above it a false state (D2526).
+const LOCK_MSE: f32 = 0.5;
 
 /// The symbols (10 bits each, the first the most significant) of the soft bits `soft`.
 fn symbols(soft: &[f32]) -> Vec<u32> {
@@ -141,8 +146,9 @@ fn qam1024_through_mild_multipath_is_never_reported_locked_in_a_false_state() {
             rx.restarts()
         );
         assert!(
-            !rx.locked() || ser < 0.01,
-            "Eb/N0 {ebn0} dB: reported lock with a symbol error rate of {ser}"
+            !rx.locked() || mse < LOCK_MSE,
+            "Eb/N0 {ebn0} dB: reported lock with a decision error / h^2 of {mse} (symbol error \
+             rate {ser})"
         );
     }
 }

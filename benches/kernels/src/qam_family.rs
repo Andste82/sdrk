@@ -130,9 +130,10 @@
 //! `qam_mod_qam256_block` is `qam_mod_block` with `qam256` (8 bits per symbol, 512 symbols per
 //! call). `qam_demod_qam256_block` is `qam_demod_block` with `qam256` and the block defaults, the
 //! noise ±0.005 per component (the 16-QAM noise in units of the level spacing); its warm-up of 30
-//! calls covers the blind start of 256-QAM (8000 CMA symbols, D1517) and the first check of the
-//! carrier loop (12288 symbols, at symbol 13056), so its counted calls measure the steady state
-//! (`Track`, the equalizer in decision mode) rather than the mix of `qam_demod_block`.
+//! calls covers the blind start of 256-QAM (8000 multi-modulus symbols, D2509) and the first
+//! check of the carrier loop (12288 symbols, at symbol 13056), so its counted calls measure the
+//! steady state (`Track`, the equalizer in decision mode) rather than the mix of
+//! `qam_demod_block`.
 //!
 //! The 1024-QAM references (D1545) are the workloads of `costas_qam1024` and `equalize_qam1024`
 //! on our fallback: `costas_qam1024_fallback` and `equalize_qam1024_fallback` against GNU Radio's
@@ -1103,11 +1104,12 @@ fn qam_demod_block(qam: Qam) -> QamDemodBlock<ArenaStorage<'static>> {
 const DEMOD_WARMUP: usize = 6;
 
 /// Calls of the warm-up of `qam_demod_qam256_block` (M44.2): 30 calls of 512 symbols (15360
-/// symbols) cover the blind start of the 256-QAM equalizer (8000 CMA symbols, D1517) and the
-/// first check of the carrier loop (12288 symbols after the estimate at symbol 768, at symbol
-/// 13056), so the receiver is in `Track` with the equalizer in decision mode; with the warm-up
-/// call of the count the counted calls take symbols 15872 to 24064, before the next check at
-/// 25344: the steady state of the receiver.
+/// symbols) cover the blind start of the 256-QAM equalizer (8000 multi-modulus symbols, D2509)
+/// and the first check of the carrier loop (12288 symbols after the estimate at symbol 768, at
+/// symbol 13056), so the receiver is in `Track` with the equalizer in decision mode; with the
+/// warm-up call of the count the counted calls take symbols 15872 to 24064, before the next
+/// check at 25344: the steady state of the receiver. The counted calls run no blind symbols:
+/// they measure the steady state that follows the blind start.
 const DEMOD_WARMUP_QAM256: usize = 30;
 
 /// The windows of `n` input samples in the input of `qam_demod_qam256_block` (M44.2, D1524): the

@@ -463,7 +463,9 @@ fn the_new_loops_handle_silence_full_scale_and_non_finite_input() {
 /// 16000 symbols (1024-QAM), the step sizes and lengths that converged in every run of the
 /// measurement; after convergence the decisions are the transmitted symbols up to the noise
 /// (at most 5 errors in the last 20000 symbols), and the blocks cut the input in any way
-/// without changing a bit.
+/// without changing a bit. Since M44.4 these two orders start with the multi-modulus algorithm
+/// instead of CMA (D2507), so the test runs MMA with the step sizes and lengths of D1511; it
+/// still converges in both (the blind start of `qam_demod` takes the values of D2508 and D2509).
 #[test]
 fn the_equalizer_converges_on_256_and_1024_qam_through_a_channel() {
     for (q, e, mu_cma, cma_symbols, ebn0) in [

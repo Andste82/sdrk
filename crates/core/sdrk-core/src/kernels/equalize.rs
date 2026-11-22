@@ -207,7 +207,7 @@ impl EqConstellation {
     /// assert_eq!(EqConstellation::Psk8.blind(), EqBlind::Cma);
     /// ```
     #[inline]
-    pub fn blind(self) -> EqBlind {
+    pub const fn blind(self) -> EqBlind {
         match self {
             Self::Qam256 | Self::Qam1024 => EqBlind::Mma,
             _ => EqBlind::Cma,
@@ -826,6 +826,20 @@ where
         _ => equalize_paths(dot, &mut p, PskDecide::Qpsk, input, output),
     }
 }
+
+// The dispatch of `equalize_with` follows `EqConstellation::blind`: the multi-modulus loop for
+// exactly the constellations of `EqBlind::Mma`, the loops of main for those of `EqBlind::Cma`.
+// A change of `blind` without the dispatch (or the reverse) fails to compile here.
+const _: () = {
+    use EqConstellation as E;
+    assert!(matches!(E::Qam256.blind(), EqBlind::Mma));
+    assert!(matches!(E::Qam1024.blind(), EqBlind::Mma));
+    assert!(matches!(E::Bpsk.blind(), EqBlind::Cma));
+    assert!(matches!(E::Qpsk.blind(), EqBlind::Cma));
+    assert!(matches!(E::Psk8.blind(), EqBlind::Cma));
+    assert!(matches!(E::Qam16.blind(), EqBlind::Cma));
+    assert!(matches!(E::Qam64.blind(), EqBlind::Cma));
+};
 
 /// The decision and the CMA radius of the loops of [`equalize_with`], each loop compiled for one
 /// implementation: [`PskDecide`] (the three PSK constellations, chosen per symbol as in M43) and

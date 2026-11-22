@@ -316,6 +316,29 @@ struct Lanes {
 }
 
 impl Lanes {
+    /// Adds symbol `v` to lane `j`: per axis the decision and the error of [`decide_axis`] in
+    /// grid units, and the second and fourth power of the symbol. The one form of the sums, for
+    /// the whole groups of [`groups`] and the single symbols of the accumulation.
+    #[inline]
+    fn add(&mut self, j: usize, v: C32, k: f32, half: f32, top: f32) {
+        let (dr, er) = decide_axis(v.re, k, half, top);
+        let (di, ei) = decide_axis(v.im, k, half, top);
+        let p = v.re * v.re + v.im * v.im;
+        if let (Some(e), Some(c), Some(d), Some(w), Some(f)) = (
+            self.err.get_mut(j),
+            self.cross.get_mut(j),
+            self.dec.get_mut(j),
+            self.power.get_mut(j),
+            self.fourth.get_mut(j),
+        ) {
+            *e += er * er + ei * ei;
+            *c += er * dr + ei * di;
+            *d += dr * dr + di * di;
+            *w += p;
+            *f += p * p;
+        }
+    }
+
     /// Adds the lanes to `sums` in lane order and clears them.
     fn fold_into(&mut self, sums: &mut Sums) {
         let total = |v: &[f32; LANES]| v.iter().fold(0.0f64, |a, &x| a + f64::from(x));
@@ -332,17 +355,32 @@ impl Lanes {
 /// ties to even).
 const ROUND: f32 = 8_388_608.0;
 
+/// `t` clamped to `0 ..= top`, NaN to 0. On AArch64 by `f32::max` and `f32::min` (`fmaxnm` and
+/// `fminnm`, which return the other operand for NaN); elsewhere by two selects, which give the
+/// same values (NaN and `-0.0` to `+0.0` in effect: the floor below takes the level `+0` for both
+/// zeros) and vectorise on every target, where `f32::max` and `f32::min` have no lane form on
+/// `simd128` and were extracted lane by lane (D2518).
+#[inline]
+fn clamp_level(t: f32, top: f32) -> f32 {
+    if cfg!(target_arch = "aarch64") {
+        t.max(0.0).min(top)
+    } else {
+        let low = if t > 0.0 { t } else { 0.0 };
+        if low < top { low } else { top }
+    }
+}
+
 /// The decision of one axis value `v`: with `t = v k + half` the level `i = floor(t)` clamped to
-/// `0 .. m - 1` (`top = m - 1`), the decision `2 i - top` and the error `2 (t - i) - 1` in grid
-/// units. `f32::max` returns the other operand for NaN, so NaN takes level 0 (its error stays
-/// NaN). The floor of the clamped value `c` is computed in `f32` without a conversion to an
-/// integer (which `as` makes saturating, element by element): `r = (c + 2^23) - 2^23` is `c`
-/// rounded to an integer, and the floor is `r - 1` where `r > c`, else `r`; exact for `0 <= c <
-/// 2^23`. So the decisions of a group of symbols vectorise (D2504).
+/// `0 .. m - 1` (`top = m - 1`, [`clamp_level`]), the decision `2 i - top` and the error
+/// `2 (t - i) - 1` in grid units. NaN takes level 0 (its error stays NaN). The floor of the
+/// clamped value `c` is computed in `f32` without a conversion to an integer (which `as` makes
+/// saturating, element by element): `r = (c + 2^23) - 2^23` is `c` rounded to an integer, and
+/// the floor is `r - 1` where `r > c`, else `r`; exact for `0 <= c < 2^23`. So the decisions of
+/// a group of symbols vectorise (D2504).
 #[inline]
 fn decide_axis(value: f32, gain: f32, half: f32, top: f32) -> (f32, f32) {
     let t = value * gain + half;
-    let clamped = t.max(0.0).min(top);
+    let clamped = clamp_level(t, top);
     let rounded = (clamped + ROUND) - ROUND;
     let level = if rounded > clamped {
         rounded - 1.0
@@ -357,35 +395,13 @@ fn decide_axis(value: f32, gain: f32, half: f32, top: f32) -> (f32, f32) {
 /// lanes of independent sums, which the compiler vectorises.
 #[inline]
 fn groups(l: &mut Lanes, x: &[C32], k: f32, half: f32, top: f32) {
-    let (mut err, mut cross, mut dec) = (l.err, l.cross, l.dec);
-    let (mut power, mut fourth) = (l.power, l.fourth);
+    let mut lanes = *l;
     for g in x.chunks_exact(LANES) {
-        for (j, v) in g.iter().enumerate().take(LANES) {
-            let (dr, er) = decide_axis(v.re, k, half, top);
-            let (di, ei) = decide_axis(v.im, k, half, top);
-            let p = v.re * v.re + v.im * v.im;
-            if let (Some(e), Some(c), Some(d), Some(w), Some(f)) = (
-                err.get_mut(j),
-                cross.get_mut(j),
-                dec.get_mut(j),
-                power.get_mut(j),
-                fourth.get_mut(j),
-            ) {
-                *e += er * er + ei * ei;
-                *c += er * dr + ei * di;
-                *d += dr * dr + di * di;
-                *w += p;
-                *f += p * p;
-            }
+        for (j, &v) in g.iter().enumerate().take(LANES) {
+            lanes.add(j, v, k, half, top);
         }
     }
-    *l = Lanes {
-        err,
-        cross,
-        dec,
-        power,
-        fourth,
-    };
+    *l = lanes;
 }
 
 /// A blind estimate of Es/N0 of square QAM symbols (M44.4 §1): `C32` in, the same `C32` out.
@@ -541,24 +557,6 @@ impl<S: Storage> SnrEstimateBlock<S> {
         let k = self.half_gain;
         let m = self.qam.levels_per_axis() as f32;
         let (half, top) = (0.5 * m, m - 1.0);
-        let one = |l: &mut Lanes, j: usize, v: C32| {
-            let (dr, er) = decide_axis(v.re, k, half, top);
-            let (di, ei) = decide_axis(v.im, k, half, top);
-            let p = v.re * v.re + v.im * v.im;
-            if let (Some(e), Some(c), Some(d), Some(w), Some(f)) = (
-                l.err.get_mut(j),
-                l.cross.get_mut(j),
-                l.dec.get_mut(j),
-                l.power.get_mut(j),
-                l.fourth.get_mut(j),
-            ) {
-                *e += er * er + ei * ei;
-                *c += er * dr + ei * di;
-                *d += dr * dr + di * di;
-                *w += p;
-                *f += p * p;
-            }
-        };
         let mut pos = self.seen;
         let mut rest = x;
         while let Some((&v, tail)) = rest.split_first() {
@@ -572,7 +570,7 @@ impl<S: Storage> SnrEstimateBlock<S> {
                 pos += n;
                 rest = later;
             } else {
-                one(&mut self.lanes, lane, v);
+                self.lanes.add(lane, v, k, half, top);
                 pos += 1;
                 rest = tail;
             }

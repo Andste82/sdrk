@@ -6152,15 +6152,15 @@
             {
               "compared_with": "sdrk fallback",
               "label": "information: fallback",
-              "other_instr_per_sample": 8.55,
+              "other_instr_per_sample": 8.18,
               "other_snr_db": 40.18,
-              "ours_instr_per_sample": 8.55,
+              "ours_instr_per_sample": 8.18,
               "ratio": 1.0
             }
           ],
           "other_instr_per_sample": 53.06,
-          "ours_instr_per_sample": 8.55,
-          "ratio": 0.16,
+          "ours_instr_per_sample": 8.18,
+          "ratio": 0.15,
           "snr_db": {
             "other": 0.39,
             "ours": 40.18
@@ -6175,15 +6175,15 @@
             {
               "compared_with": "sdrk fallback",
               "label": "information: fallback",
-              "other_instr_per_sample": 8.55,
+              "other_instr_per_sample": 8.18,
               "other_snr_db": 40.18,
-              "ours_instr_per_sample": 8.55,
+              "ours_instr_per_sample": 8.18,
               "ratio": 1.0
             }
           ],
           "other_instr_per_sample": 73.56,
-          "ours_instr_per_sample": 8.55,
-          "ratio": 0.12,
+          "ours_instr_per_sample": 8.18,
+          "ratio": 0.11,
           "snr_db": {
             "other": 0.4,
             "ours": 40.18
@@ -8623,9 +8623,9 @@
         "snr_estimate_block": {
           "compared_with": "ours at avx2",
           "goal": false,
-          "other_instr_per_sample": 8.55,
-          "ours_instr_per_sample": 24.24,
-          "ratio": 2.83,
+          "other_instr_per_sample": 8.18,
+          "ours_instr_per_sample": 20.49,
+          "ratio": 2.5,
           "snr_db": {
             "other": 40.18,
             "ours": 40.18
@@ -8636,9 +8636,9 @@
         "snr_estimate_block_svr": {
           "compared_with": "ours at avx2",
           "goal": false,
-          "other_instr_per_sample": 8.55,
-          "ours_instr_per_sample": 24.24,
-          "ratio": 2.83,
+          "other_instr_per_sample": 8.18,
+          "ours_instr_per_sample": 20.49,
+          "ratio": 2.5,
           "snr_db": {
             "other": 40.18,
             "ours": 40.18
@@ -15058,15 +15058,15 @@
             {
               "compared_with": "sdrk fallback",
               "label": "information: fallback",
-              "other_instr_per_sample": 24.24,
+              "other_instr_per_sample": 20.49,
               "other_snr_db": 40.18,
-              "ours_instr_per_sample": 24.24,
+              "ours_instr_per_sample": 20.49,
               "ratio": 1.0
             }
           ],
           "other_instr_per_sample": 53.06,
-          "ours_instr_per_sample": 24.24,
-          "ratio": 0.46,
+          "ours_instr_per_sample": 20.49,
+          "ratio": 0.39,
           "snr_db": {
             "other": 0.39,
             "ours": 40.18
@@ -15081,15 +15081,15 @@
             {
               "compared_with": "sdrk fallback",
               "label": "information: fallback",
-              "other_instr_per_sample": 24.24,
+              "other_instr_per_sample": 20.49,
               "other_snr_db": 40.18,
-              "ours_instr_per_sample": 24.24,
+              "ours_instr_per_sample": 20.49,
               "ratio": 1.0
             }
           ],
           "other_instr_per_sample": 73.56,
-          "ours_instr_per_sample": 24.24,
-          "ratio": 0.33,
+          "ours_instr_per_sample": 20.49,
+          "ratio": 0.28,
           "snr_db": {
             "other": 0.4,
             "ours": 40.18
@@ -21686,15 +21686,15 @@
             {
               "compared_with": "sdrk fallback",
               "label": "information: fallback",
-              "other_instr_per_sample": 23.85,
+              "other_instr_per_sample": 19.97,
               "other_snr_db": 40.18,
-              "ours_instr_per_sample": 23.85,
+              "ours_instr_per_sample": 19.97,
               "ratio": 1.0
             }
           ],
           "other_instr_per_sample": 53.06,
-          "ours_instr_per_sample": 23.85,
-          "ratio": 0.45,
+          "ours_instr_per_sample": 19.97,
+          "ratio": 0.38,
           "snr_db": {
             "other": 0.39,
             "ours": 40.18
@@ -21709,15 +21709,15 @@
             {
               "compared_with": "sdrk fallback",
               "label": "information: fallback",
-              "other_instr_per_sample": 23.85,
+              "other_instr_per_sample": 19.97,
               "other_snr_db": 40.18,
-              "ours_instr_per_sample": 23.85,
+              "ours_instr_per_sample": 19.97,
               "ratio": 1.0
             }
           ],
           "other_instr_per_sample": 73.56,
-          "ours_instr_per_sample": 23.85,
-          "ratio": 0.32,
+          "ours_instr_per_sample": 19.97,
+          "ratio": 0.27,
           "snr_db": {
             "other": 0.4,
             "ours": 40.18

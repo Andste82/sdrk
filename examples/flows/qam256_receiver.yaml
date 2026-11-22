@@ -33,7 +33,7 @@ nodes:
   # root-raised-cosine matched filter (roll-off 0.35, span 10, as the transmitter), Gardner
   # symbol timing, the frequency acquisition (a fourth-power estimate of
   # the carrier offset, up to +-0.125 cycles per symbol = +-3.1 kHz at 25 kBd), the blind
-  # equalizer (the blind start of 256-QAM: 8000 CMA symbols with mu_cma 0.02, then
+  # equalizer (the blind start of 256-QAM: 8000 multi-modulus symbols with mu_cma 0.015, then
   # decision-directed with mu_dd 0.005 and a narrow phase tracker; the controller checks the
   # carrier loop every 12288 symbols, D1517) and the decision-directed carrier loop of 256-QAM
   # with the default carrier_bw 0.0025 (D1618, D1622): the acquisition hands the offset to the

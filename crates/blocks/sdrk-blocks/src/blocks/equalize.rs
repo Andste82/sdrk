@@ -59,7 +59,8 @@ pub static DESCRIPTION: BlockDescription = BlockDescription {
         phase (the multi-modulus algorithm works with the tracker), the tracker gives the \
         decision mode its phase, and costas after it removes what \
         remains. The input amplitude should be about 1 (an agc before symbol_sync). \
-        cma_symbols 0 starts in decision mode, 4294967295 never leaves CMA (for differential \
+        cma_symbols 0 starts in decision mode, 4294967295 never leaves the blind start (CMA, \
+        or MMA for qam256 and qam1024; for differential \
         detection). A larger mu adapts faster but leaves more noise in the weights. Weights \
         and history need 2 (taps + feedback_taps) c32 values of storage. Delay (taps - 1) / 2 \
         symbols; one output per input; a non-finite input gives an output of zero and leaves \

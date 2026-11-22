@@ -517,7 +517,9 @@ jobs:
     needs: check
     if: ${{ !inputs.docs_only }}
     runs-on: ubuntu-24.04
-    timeout-minutes: 60
+    # 90: the four variants run the tests of `sdrk-blocks` in debug builds; the tests of
+    # `snr_estimate` (M44.4) take about 11 minutes of them (D2524).
+    timeout-minutes: 90
     steps:
       - uses: actions/checkout@v4
       - uses: ./.github/actions/rust

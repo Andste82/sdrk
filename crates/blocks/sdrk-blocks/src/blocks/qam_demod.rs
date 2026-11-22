@@ -168,8 +168,8 @@ pub static DESCRIPTION: BlockDescription = BlockDescription {
         new estimate), the adaptive equalizer \
         equalize (the constellation, equalizer_taps taps, no feedback \
         taps, the blind start of the constellation: CMA with mu_cma 0.05 over 1000 symbols for \
-        qpsk to qam64, the multi-modulus algorithm with 0.015 over 8000 for qam256 and 0.01 \
-        over 16000 for qam1024, then \
+        qpsk, the multi-modulus algorithm with 0.05 over 2000 for qam16 and qam64, 0.015 over \
+        8000 for qam256 and 0.01 over 16000 for qam1024, then \
         decision-directed with mu_dd 0.005; its phase \
         tracker at 0.005 until the first check after the estimate, then at 0.0015, a narrow \
         frequency tracker; at the switch to the decision mode the tracker turns by the phase \
@@ -289,7 +289,7 @@ impl QamDemodConfig {
     }
 
     /// The configuration of the equalizer (`None` for `equalizer_taps` 0): the forward taps,
-    /// no feedback, the constellation, `mu_cma` and the CMA symbols of the blind start of
+    /// no feedback, the constellation, `mu_cma` and the blind symbols of the blind start of
     /// `equalize` for the constellation (the defaults of [`EqualizeConfig`], [`EqualizeConfig::blind_start`], D1517, D1536), `mu_dd` 0.005
     /// (D1618) and the phase tracker at
     /// [`QAM_TRACKER_PULL_BW`] (the block narrows it to [`QAM_TRACKER_HOLD_BW`] at the first check
@@ -582,14 +582,15 @@ const _: () = assert!(blind_fits(
 /// quarter turn (`E[s^4]` is real and negative: the mean of `z^4` is `E[s^4] e^(j 4 phi)` for an
 /// output `z = s e^(j phi)`), over the last [`QAM_HANDOVER_SYMBOLS`] blind symbols after an
 /// estimate (before it the tracker turns at frequency 0 and the phase of the output runs).
-/// The multi-modulus start of 256-QAM and 1024-QAM (M44.4 §3) turns the output onto the axes of
-/// the grid itself, so there the turn at the switch is small; it stays the same for every order.
+/// The multi-modulus start of the square grids, 16-QAM to 1024-QAM (M44.4 §3), turns the output
+/// onto the axes of the grid itself, so there the turn at the switch is small; it stays the same
+/// for every order (`qpsk` keeps the constant-modulus start, blind to the phase).
 #[derive(Clone, Copy, Debug)]
 struct HandOver {
     /// The sum of the fourth powers of the output.
     sum: C32,
     /// The blind symbols of the equalizer left before its switch to the decision mode; 0 when it
-    /// is past (the steady state) or without the equalizer (at most the CMA symbols of the blind
+    /// is past (the steady state) or without the equalizer (at most the blind symbols of the blind
     /// start, D1517).
     blind_left: u16,
     /// Whether an estimate went to the equalizer's tracker since its start (only then the phase of

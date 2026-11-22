@@ -472,9 +472,9 @@ fn equalize_block_derives_the_blind_start_of_its_constellation() {
         (EqConstellation::Bpsk, 0.05, 1000),
         (EqConstellation::Qpsk, 0.05, 1000),
         (EqConstellation::Psk8, 0.05, 1000),
-        (EqConstellation::Qam16, 0.05, 1000),
-        (EqConstellation::Qam64, 0.05, 1000),
-        // The multi-modulus start of M44.4 §3 (D2508, D2509).
+        // The multi-modulus start of M44.4 §3 (D2530, D2508, D2509).
+        (EqConstellation::Qam16, 0.05, 2000),
+        (EqConstellation::Qam64, 0.05, 2000),
         (EqConstellation::Qam256, 0.015, 8000),
         (EqConstellation::Qam1024, 0.01, 16_000),
     ] {

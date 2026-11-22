@@ -18,7 +18,9 @@
 )]
 
 use sdrk_core::kernels::dot::{DOT_COMPLEX_PARTIALS, DotComplex};
-use sdrk_core::kernels::equalize::{EqConstellation, EqMode, EqParams, Equalize, EqualizeState};
+use sdrk_core::kernels::equalize::{
+    EqBlind, EqConstellation, EqMode, EqParams, Equalize, EqualizeState,
+};
 use sdrk_core::{C32, Delay, Error, Fallback, Ratio, Timing};
 use sdrk_device::{ErrorKind, SdrkError};
 
@@ -373,8 +375,9 @@ fn decisions_follow_the_rule_of_slice_and_costas() {
         let y = C32::new(a.cos() as f32, a.sin() as f32);
         assert_eq!(EqConstellation::Psk8.decide(y), p, "boundary {k}");
     }
+    // The PSK constellations start with the constant-modulus cost of radius 1 (M44.4 §3).
     for c in [b, q, EqConstellation::Psk8] {
-        assert_eq!(c.cma_r2(), 1.0);
+        assert_eq!(c.blind(), EqBlind::Cma);
     }
 }
 

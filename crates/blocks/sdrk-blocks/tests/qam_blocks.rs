@@ -396,7 +396,7 @@ fn equalize_block_with_qam_equals_the_kernel_whole_and_in_cut_plans() {
         );
         assert_eq!(block.mode(), EqMode::Decision);
         assert!(block.mse() < 0.01, "{q:?}: mse {}", block.mse());
-        assert_eq!(block.state().constellation().cma_r2(), c.cma_r2());
+        assert_eq!(block.state().constellation(), c);
         assert_eq!(
             block.param("constellation"),
             Ok(ParamValue::Choice(if q == Qam::Qam16 { 3 } else { 4 }))
@@ -606,9 +606,10 @@ fn received(order: u32, sps: usize, n_sym: usize, noise: f64, stream: u64) -> Ve
 const ACQ_SKIP: usize = 256;
 const ACQ_SYMBOLS: usize = 512;
 const ACQ_FFT: usize = 1024;
-/// The blind (CMA) symbols of the equalizer of `qam_demod`, and the last of them over which the
-/// hand-over to the decision mode measures the phase of its output.
-const BLIND: usize = 1000;
+/// The blind symbols of the equalizer of `qam_demod` for 16-QAM and 64-QAM (the multi-modulus
+/// start, D2530), and the last of them over which the hand-over to the decision mode measures the
+/// phase of its output.
+const BLIND: usize = 2000;
 const HANDOVER: usize = 256;
 
 /// The frequency acquisition of `qam_demod` written out (M44, I44-3, I44-4) over the symbols
@@ -679,14 +680,15 @@ fn acquire_kernels(x: &[C32]) -> Option<(usize, f64)> {
 
 /// `qam_demod` composed from the kernels: the matched filter, `symbol_sync` (Gardner at the
 /// exact samples per symbol), `equalize` (the QAM constellation, no feedback, `mu_cma` 0.05,
-/// `mu_dd` 0.005, 1000 CMA symbols, the tracker at the pull-in bandwidth 0.005 of D1622: the
+/// `mu_dd` 0.005, 2000 blind symbols of the multi-modulus start (D2530), the tracker at the
+/// pull-in bandwidth 0.005 of D1622: the
 /// input ends before the first check), `costas` with the QAM constellation, and the soft bits
 /// of M44 §2 in `f32` ([`axis_bits`]); the equalizer and the carrier loop run in two calls split
 /// after the symbol at which the frequency acquisition ([`acquire_kernels`]) used its estimate
 /// `f`, which then goes to the equalizer's tracker (and the carrier loop's frequency to 0), or
 /// without the equalizer to the carrier loop; and the hand-over of the equalizer to the decision
-/// mode (I44-17): the calls split after the 1000th symbol as well, the fourth powers `(z^2)^2` of
-/// the equalizer's outputs `z` of the symbols 744 to 999 from the estimate on summed in `f32` in
+/// mode (I44-17): the calls split after the 2000th symbol as well, the fourth powers `(z^2)^2` of
+/// the equalizer's outputs `z` of the symbols 1744 to 1999 from the estimate on summed in `f32` in
 /// their order, and before the decision mode the tracker's phase turned by
 /// `round(atan2(-sum.im, -sum.re) / (8 pi) 2^32)` units of `2^-32` turn.
 fn demod_kernels(cfg: &QamDemodConfig, fs: sdrk::Rate, input: &[C32]) -> Vec<f32> {
@@ -727,7 +729,7 @@ fn demod_kernels(cfg: &QamDemodConfig, fs: sdrk::Rate, input: &[C32]) -> Vec<f32
                 feedback_taps: 0,
                 mu_cma: 0.05,
                 mu_dd: 0.005,
-                cma_symbols: 1000,
+                cma_symbols: BLIND as u32,
                 phase_bw: 0.005,
             },
         )

@@ -180,7 +180,7 @@ fn tail_stats(levels: &[f32]) -> (f64, f32) {
 // --------------------------------------------------------------------------------------------
 
 #[test]
-fn the_new_orders_have_their_grid_and_radius() {
+fn the_new_orders_have_their_grid() {
     for (q, c, e) in QAMS {
         assert_eq!((c.qam(), c.psk_order()), (Some(q), None));
         let st = CostasState::new(c, 0.005, DAMP, 0.05).unwrap();
@@ -197,11 +197,6 @@ fn the_new_orders_have_their_grid_and_radius() {
         let d = e.decide(C32::new(f32::NAN, f32::INFINITY));
         assert_eq!(d, C32::new(l[0], l[l.len() - 1]));
     }
-    // R2 of §1, the exact fractions rounded once to f32, and to four digits.
-    assert_eq!(EqConstellation::Qam256.cma_r2(), (593.0f64 / 425.0) as f32);
-    assert_eq!(EqConstellation::Qam1024.cma_r2(), (477.0f64 / 341.0) as f32);
-    assert!((f64::from(EqConstellation::Qam256.cma_r2()) - 1.3953).abs() < 5e-5);
-    assert!((f64::from(EqConstellation::Qam1024.cma_r2()) - 1.3988).abs() < 5e-5);
 }
 
 /// D1510: `qpsk` is the 4-QAM grid of `costas` and `equalize`. The points of `equalize` `qpsk`
@@ -218,7 +213,7 @@ fn qpsk_is_the_4qam_grid() {
         assert_eq!(EqConstellation::Qpsk.decide(p), p);
         assert_eq!(q.decide(p), p);
     }
-    assert_eq!(EqConstellation::Qpsk.cma_r2(), q.cma_r2() as f32);
+    assert_eq!(q.cma_r2(), 1.0);
     let mut rng = Rng::new(SEED, 2);
     let mut values: Vec<f32> = (0..20_000).map(|_| 3.0 * rng.next()).collect();
     values.extend([

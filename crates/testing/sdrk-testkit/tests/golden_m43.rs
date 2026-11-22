@@ -273,11 +273,13 @@ fn equalize_f64(x: &[C32], st: &State) -> Vec<(f64, f64)> {
     let (kp, ki) = st.phase_gains();
     let (kp, ki) = (f64::from(kp), f64::from(ki));
     let cma_symbols = st.cma_symbols();
-    // The CMA radius as the float64 value of its f32 (1 for PSK).
-    let r2 = f64::from(st.constellation().cma_r2());
+    // The CMA radius of the PSK constellations.
+    let r2 = 1.0;
     // The radius of one axis of the multi-modulus start as the float64 value of its f32 (M44.4
-    // §3), for the constellations that start with it.
+    // §3), for the constellations that start with it (the square grids).
     let mma = match st.constellation() {
+        EqConstellation::Qam16 => Some(f64::from(Qam::Qam16.mma_r2() as f32)),
+        EqConstellation::Qam64 => Some(f64::from(Qam::Qam64.mma_r2() as f32)),
         EqConstellation::Qam256 => Some(f64::from(Qam::Qam256.mma_r2() as f32)),
         EqConstellation::Qam1024 => Some(f64::from(Qam::Qam1024.mma_r2() as f32)),
         _ => None,

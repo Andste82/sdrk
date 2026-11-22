@@ -4,8 +4,9 @@
 //! `tests/baseline/m44_2/` (`sdrk_testkit::baseline`). The same checks then hold the generic
 //! instances for two and three bits per axis to the same bits.
 //!
-//! - **`constants`:** the levels, `sqrt E`, `E`, the point tables and `R2` of `Qam` and of
-//!   `EqConstellation`, and the rotation map of every symbol by 0 to 3 quarter turns.
+//! - **`constants`:** the levels, `sqrt E`, `E`, the point tables and `R2` of `Qam` (also
+//!   rounded to `f32`, the radius `EqConstellation::cma_r2` gave until D2536), and the rotation
+//!   map of every symbol by 0 to 3 quarter turns.
 //! - **`qam_soft_bits`:** the soft bits through the facade `Sdrk` and through `Fallback` at the
 //!   scales 1, 0.5, -2, 7.25, 1e-30, 3e30 and 0, on the axis values of [`axis_values`] (a fine
 //!   sweep, every decision boundary and every kink of the soft bits with the 4 values on either
@@ -194,11 +195,9 @@ fn the_constants_keep_their_baseline() {
         d.bytes(&q.energy().to_bits().to_le_bytes());
         d.bytes(&q.cma_r2().to_bits().to_le_bytes());
         d.c32s(q.point_table());
-        let eq = match q {
-            Qam::Qam16 => EqConstellation::Qam16,
-            _ => EqConstellation::Qam64,
-        };
-        d.f32s(&[eq.cma_r2()]);
+        // The `f32` CMA radius that `EqConstellation::cma_r2` gave before the square grids took
+        // the multi-modulus start (D2536): `Qam::cma_r2` rounded once, the same bits.
+        d.f32s(&[q.cma_r2() as f32]);
         let b = q.bits_per_axis() as u32;
         for s in 0..q.points() as u32 {
             d.f32s(&[q.point(s).re, q.point(s).im]);

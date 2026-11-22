@@ -415,11 +415,7 @@ fn non_finite_input_stays_in_its_own_symbols() {
 // --------------------------------------------------------------------------------------------
 
 #[test]
-fn the_equalizer_decides_on_the_grid_with_the_qam_radius() {
-    assert_eq!(EqConstellation::Qam16.cma_r2(), (33.0f64 / 25.0) as f32);
-    assert_eq!(EqConstellation::Qam64.cma_r2(), (29.0f64 / 21.0) as f32);
-    assert!((f64::from(EqConstellation::Qam16.cma_r2()) - 1.32).abs() < 5e-4);
-    assert!((f64::from(EqConstellation::Qam64.cma_r2()) - 1.381).abs() < 5e-4);
+fn the_equalizer_decides_on_the_grid() {
     for (q, e) in [
         (Qam::Qam16, EqConstellation::Qam16),
         (Qam::Qam64, EqConstellation::Qam64),
@@ -438,7 +434,7 @@ fn the_equalizer_decides_on_the_grid_with_the_qam_radius() {
     }
 }
 
-/// QAM through a symbol-spaced channel with a carrier phase: CMA with the QAM radius, then the
+/// QAM through a symbol-spaced channel with a carrier phase: the multi-modulus start (M44.4 §3), then the
 /// decisions on the grid with the phase tracker; after convergence every decision is the
 /// transmitted symbol (delayed by the centre tap, turned by the quarter turn of the blind
 /// start), and the blocks cut the input in any way without changing a bit.

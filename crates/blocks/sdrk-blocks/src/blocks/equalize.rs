@@ -30,6 +30,8 @@ pub(crate) const DEFAULT_MU_CMA: f64 = 0.05;
 pub(crate) const DEFAULT_MU_DD: f64 = 0.02;
 /// Default number of symbols in CMA mode (D828).
 pub(crate) const DEFAULT_CMA_SYMBOLS: u32 = 1000;
+/// The blind symbols of 16-QAM and 64-QAM, the multi-modulus start (M44.4 §3, D2530).
+pub(crate) const QAM_BLIND_SYMBOLS: u32 = 2000;
 /// Default bandwidth of the phase tracker (that of `costas`).
 pub(crate) const DEFAULT_PHASE_BW: f64 = 0.02;
 /// The names of the constellations, in the order of the choice: those of `symbol_map` (M44.1.1).
@@ -47,11 +49,11 @@ pub static DESCRIPTION: BlockDescription = BlockDescription {
         and the decision d is the nearest point of the constellation to z. The weights start \
         with the centre tap 1 and adapt with the normalized LMS step mu / (sum |x|^2 + 1e-6): \
         blind for the first cma_symbols symbols, step mu_cma, with the constant-modulus \
-        algorithm (e = y (|y|^2 - R2) with R2 = 1 for PSK, 1.32 for qam16 and 1.381 for qam64, \
-        each part clipped to [-1, 1]) or, for qam256 and qam1024, the multi-modulus algorithm \
-        (per axis of z, e = (z.re (z.re^2 - R), z.im (z.im^2 - R)) e^(j theta) with R = \
-        E[a^4] / E[a^2] of one axis, 0.8953 for qam256 and 0.8988 for qam1024, each part \
-        clipped to [-1, 1]; it also turns the output onto the axes of the grid), then \
+        algorithm for bpsk, qpsk and 8psk (e = y (|y|^2 - 1), each part clipped to [-1, 1]) or, \
+        for the square grids qam16 to qam1024, the multi-modulus algorithm (per axis of z, \
+        e = (z.re (z.re^2 - R), z.im (z.im^2 - R)) e^(j theta) with R = E[a^4] / E[a^2] of one \
+        axis, 0.82 for qam16, 0.8810 for qam64, 0.8953 for qam256 and 0.8988 for qam1024, each \
+        part clipped to [-1, 1]; it also turns the output onto the axes of the grid), then \
         decision-directed \
         (e = (z - d) e^(j theta), step mu_dd); w[i] = w[i] - mu e conj(x[i]). The decisions \
         are fed back (as d e^(j theta)) only in decision mode. Chain position: after \
@@ -60,7 +62,7 @@ pub static DESCRIPTION: BlockDescription = BlockDescription {
         decision mode its phase, and costas after it removes what \
         remains. The input amplitude should be about 1 (an agc before symbol_sync). \
         cma_symbols 0 starts in decision mode, 4294967295 never leaves the blind start (CMA, \
-        or MMA for qam256 and qam1024; for differential \
+        or MMA for qam16 to qam1024; for differential \
         detection). A larger mu adapts faster but leaves more noise in the weights. Weights \
         and history need 2 (taps + feedback_taps) c32 values of storage. Delay (taps - 1) / 2 \
         symbols; one output per input; a non-finite input gives an output of zero and leaves \
@@ -114,9 +116,9 @@ pub static DESCRIPTION: BlockDescription = BlockDescription {
             mutability: Mutability::Build,
             description: "The constellation of the decisions: bpsk, qpsk or 8psk (the points \
                 of psk_mod; qpsk is also the 4-QAM grid), qam16, qam64, qam256 or qam1024 (the \
-                unit-power Gray points of symbol_map; the CMA radius R2 = E|s|^4 / E|s|^2 of \
-                qam16 and qam64 is 1.32 and 1.381; qam256 and qam1024 start blind with the \
-                multi-modulus algorithm).",
+                unit-power Gray points of symbol_map; bpsk, qpsk and 8psk start blind with the \
+                constant-modulus algorithm, qam16 to qam1024 with the multi-modulus \
+                algorithm).",
         },
         ParamDesc {
             name: "mu_cma",
@@ -129,7 +131,7 @@ pub static DESCRIPTION: BlockDescription = BlockDescription {
             typical: "the default of the constellation",
             mutability: Mutability::Runtime,
             description: "Normalized step size of the blind update (CMA, or the \
-                multi-modulus algorithm for qam256 and qam1024; used as f32); a change applies \
+                multi-modulus algorithm for qam16 to qam1024; used as f32); a change applies \
                 from the next symbol. The default depends on the constellation: 0.05 for bpsk \
                 to qam64, 0.015 for qam256, 0.01 for qam1024 (the denser grids need a smaller \
                 blind step).",
@@ -156,12 +158,13 @@ pub static DESCRIPTION: BlockDescription = BlockDescription {
                 default: None,
             },
             typical: "the default of the constellation; 0 for decision mode only, 4294967295 \
-                for CMA only",
+                for the blind mode only",
             mutability: Mutability::Build,
             description: "Symbols in the blind mode (CMA, or the multi-modulus algorithm for \
-                qam256 and qam1024) before the switch to decision mode (0: decision mode from \
+                qam16 to qam1024) before the switch to decision mode (0: decision mode from \
                 the start, 4294967295: never). The default depends on the \
-                constellation: 1000 for bpsk to qam64, 8000 for qam256, 16000 for qam1024.",
+                constellation: 1000 for bpsk, qpsk and 8psk, 2000 for qam16 and qam64, 8000 for \
+                qam256, 16000 for qam1024.",
         },
         ParamDesc {
             name: "phase_bw",
@@ -311,19 +314,22 @@ impl EqualizeConfig {
     /// of the two parameters (the maintainer's decision on I44.2-3, D1517; derived in the block,
     /// rule 4 of M44.1.1, D1536). The denser grids need a smaller blind step and more blind
     /// symbols (D1511: at `mu_cma` 0.05 the CMA output stops improving near 18 dB SINR, below what
-    /// 1024-QAM needs for its decisions). BPSK to 64-QAM: CMA, 0.05 over 1000 symbols (D828);
-    /// 256-QAM and 1024-QAM start with the multi-modulus algorithm of the kernel
-    /// ([`EqConstellation::blind`], M44.4 §3): 256-QAM 0.015 over 8000 symbols (the count of D1517
-    /// and D1526), 1024-QAM 0.01 over 16000 (D2508, D2509).
+    /// 1024-QAM needs for its decisions). BPSK, QPSK and 8PSK: CMA, 0.05 over 1000 symbols (D828);
+    /// the square grids start with the multi-modulus algorithm of the kernel
+    /// ([`EqConstellation::blind`], M44.4 §3): 16-QAM and 64-QAM 0.05 over 2000 symbols (D2530),
+    /// 256-QAM 0.015 over 8000 symbols (the count of D1517 and D1526), 1024-QAM 0.01 over 16000
+    /// (D2508, D2509).
     ///
     /// ```
     /// use sdrk_blocks::{EqConstellation, EqualizeConfig};
-    /// assert_eq!(EqualizeConfig::blind_start(EqConstellation::Qam64), (0.05, 1000));
+    /// assert_eq!(EqualizeConfig::blind_start(EqConstellation::Qpsk), (0.05, 1000));
+    /// assert_eq!(EqualizeConfig::blind_start(EqConstellation::Qam64), (0.05, 2000));
     /// assert_eq!(EqualizeConfig::blind_start(EqConstellation::Qam256), (0.015, 8000));
     /// assert_eq!(EqualizeConfig::blind_start(EqConstellation::Qam1024), (0.01, 16_000));
     /// ```
     pub const fn blind_start(c: EqConstellation) -> (f64, u32) {
         match c {
+            EqConstellation::Qam16 | EqConstellation::Qam64 => (DEFAULT_MU_CMA, QAM_BLIND_SYMBOLS),
             EqConstellation::Qam256 => (0.015, 8000),
             EqConstellation::Qam1024 => (0.01, 16_000),
             _ => (DEFAULT_MU_CMA, DEFAULT_CMA_SYMBOLS),

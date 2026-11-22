@@ -20,7 +20,7 @@
   "format_version": 1,
   "kernel": "equalize",
   "model": "float32",
-  "notes": "16-QAM with the Gray mapping of M44 section 1 (unit average power), one sample per symbol, through the symbol-spaced channel 1 + 0.25 e^(j0.9) z^-1 + 0.1 e^(-j1.7) z^-2 (channel: [lag, magnitude, phase]), turned by the carrier phase 0.2 rad, plus complex noise for Eb/N0 20 dB per transmitted symbol energy; equalize with 11 taps, no feedback, the constellation qam16 (CMA radius R2 = 33 / 25), mu_cma 0.02 for the first 4000 symbols, then decision-directed with mu_dd 0.01, the phase tracker at phase_bw 0.02; exact float32 model over the whole input in one call; weights are the final weights, final_mse_bits, final_mode, final_phase and final_frequency_bits the final state; the generator asserts that every decision of the second half is the transmitted symbol delayed by 5 and turned by quarter_turns quarter turns (symbol_errors_second_half) and that mse ends below 0.02; snr_db_guard compares with the float64 loop (D111)",
+  "notes": "16-QAM with the Gray mapping of M44 section 1 (unit average power), one sample per symbol, through the symbol-spaced channel 1 + 0.25 e^(j0.9) z^-1 + 0.1 e^(-j1.7) z^-2 (channel: [lag, magnitude, phase]), turned by the carrier phase 0.2 rad, plus complex noise for Eb/N0 20 dB per transmitted symbol energy; equalize with 11 taps, no feedback, the constellation qam16 (blind with the multi-modulus algorithm of M44.4 section 3, the radius R = 41 / 50 of one axis), mu_cma 0.02 for the first 4000 symbols, then decision-directed with mu_dd 0.01, the phase tracker at phase_bw 0.02; exact float32 model over the whole input in one call; weights are the final weights, final_mse_bits, final_mode, final_phase and final_frequency_bits the final state; the generator asserts that every decision of the second half is the transmitted symbol delayed by 5 and turned by quarter_turns quarter turns (symbol_errors_second_half) and that mse ends below 0.02; snr_db_guard compares with the float64 loop (D111)",
   "params": {
     "channel": [
       [
@@ -44,10 +44,10 @@
     "delay": 5,
     "ebn0_db": 20.0,
     "feedback_taps": 0,
-    "final_frequency_bits": 3088368388,
+    "final_frequency_bits": 3088366889,
     "final_mode": "decision",
-    "final_mse_bits": 993208887,
-    "final_phase": 137687163,
+    "final_mse_bits": 993207327,
+    "final_phase": 148855782,
     "guard_skip": 0,
     "mu_cma": 0.02,
     "mu_dd": 0.01,
@@ -55,7 +55,7 @@
     "phase_rad": 0.2,
     "quarter_turns": 0,
     "sigma": 0.035355339059327376,
-    "snr_db_guard": 126.4,
+    "snr_db_guard": 125.7,
     "symbol_errors_second_half": 0,
     "taps": 11
   },

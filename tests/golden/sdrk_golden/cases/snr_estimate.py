@@ -21,15 +21,18 @@ The model is written from the specification of the block, independently of the R
   11`` and ``M2`` (``M2 / 11`` when the square is not positive); the first window only gives
   that amplitude.
 
-Everything is computed in float64 from the float32 input. The block decides in float32: a symbol
+Everything is computed in float64 from the float32 input, the transcendental functions one value at a time with the C library and the sums with ``math.fsum`` (``scalar_math``), so the vector is the same on every CPU (NumPy dispatches ``exp``, ``log10`` and ``power`` to SIMD code that differs between CPU generations). The block decides in float32: a symbol
 within about 1e-6 of a decision boundary can take the other level there, which moves the
 estimate of a window of 512 symbols by up to about 0.005 dB (one such symbol in window 17 of
 this case: 0.0038 dB), so the tolerance is 0.01 dB.
 """
 
+import math
+
 import numpy as np
 from scipy.special import erfc
 
+from .. import scalar_math
 from ..registry import Array, case
 
 FLOOR_DB = -10.0
@@ -43,7 +46,7 @@ def normal_cdf(x):
 
 
 def normal_pdf(x):
-    return np.exp(-0.5 * x * x) / np.sqrt(2.0 * np.pi)
+    return scalar_math.exp(-0.5 * x * x) / np.sqrt(2.0 * np.pi)
 
 
 def reading_db(b, snr_db):
@@ -51,7 +54,7 @@ def reading_db(b, snr_db):
     m = 1 << b
     v = 2.0 * np.arange(m) - (m - 1)
     energy = 2.0 * (m * m - 1) / 3.0
-    var = energy / (2.0 * 10.0 ** (snr_db / 10.0))
+    var = energy / (2.0 * math.pow(10.0, snr_db / 10.0))
     sd = np.sqrt(var)
     lo_edge = np.concatenate(([-np.inf], v[1:] - 1.0))
     hi_edge = np.concatenate((v[:-1] + 1.0, [np.inf]))
@@ -63,14 +66,14 @@ def reading_db(b, snr_db):
         pdf_lo = np.where(np.isfinite(lo), normal_pdf(np.where(np.isfinite(lo), lo, 0.0)), 0.0)
         pdf_hi = np.where(np.isfinite(hi), normal_pdf(np.where(np.isfinite(hi), hi, 0.0)), 0.0)
         ex = x * p + sd * (pdf_lo - pdf_hi)
-        exd += np.sum(v * ex)
-        edd += np.sum(v * v * p)
+        exd += math.fsum((v * ex).tolist())
+        edd += math.fsum((v * v * p).tolist())
     exd /= m
     edd /= m
-    exx = np.mean(v * v) + var
+    exx = math.fsum((v * v).tolist()) / m + var
     gain = exd / edd
     noise = exx - 2.0 * exd + edd - (exd - edd) ** 2 / edd
-    return 10.0 * np.log10(gain * gain * edd / noise)
+    return 10.0 * math.log10(gain * gain * edd / noise)
 
 
 def table(b):
@@ -97,9 +100,9 @@ def estimate(x, b, window):
     out = []
     for w in range(len(x) // window):
         y = x[w * window : (w + 1) * window]
-        p = np.abs(y) ** 2
-        m2 = np.mean(p)
-        m4 = np.mean(p * p)
+        p = y.real * y.real + y.imag * y.imag
+        m2 = math.fsum(p.tolist()) / len(p)
+        m4 = math.fsum((p * p).tolist()) / len(p)
         s2 = (2.0 * m2 * m2 - m4) / (2.0 - ka)
         signal = min(max(np.sqrt(s2), m2 / 11.0), m2) if s2 > 0 else m2 / 11.0
         nxt = np.sqrt(signal)
@@ -111,12 +114,12 @@ def estimate(x, b, window):
                 i = np.floor(np.clip(t, 0.0, m - 1.0))
                 d = 2.0 * i - (m - 1)
                 e = 2.0 * (t - i) - 1.0
-                err += np.sum(e * e)
-                cross += np.sum(e * d)
-                dec += np.sum(d * d)
+                err += math.fsum((e * e).tolist())
+                cross += math.fsum((e * d).tolist())
+                dec += math.fsum((d * d).tolist())
             gain = 1.0 + cross / dec
             noise = err - cross * cross / dec
-            snr = invert(tab, 10.0 * np.log10(gain * gain * dec / noise))
+            snr = invert(tab, 10.0 * math.log10(gain * gain * dec / noise))
             out.append(snr)
             if snr >= FIT_FROM_DB[b]:
                 nxt = amplitude * gain
@@ -135,7 +138,7 @@ def snr_estimate_qam1024_c32(rng):
     # Es/N0 34 dB (the fitted gain), then 20 dB (the flat part of the table, the moments) and
     # 8 dB (the steep part), six windows each; amplitude 0.6.
     snr = np.repeat([34.0, 20.0, 8.0], per * window)
-    sd = np.sqrt(10.0 ** (-snr / 10.0) / 2.0)
+    sd = np.sqrt(scalar_math.pow10(-snr / 10.0) / 2.0)
     noise = sd * (rng.standard_normal(n) + 1j * rng.standard_normal(n))
     x = (0.6 * (s + noise)).astype(np.complex64)
     expected = estimate(x.astype(np.complex128), b, window)

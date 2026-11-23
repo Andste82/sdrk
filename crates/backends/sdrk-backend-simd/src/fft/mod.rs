@@ -28,6 +28,6 @@
 
 mod c32;
 
-pub(crate) use c32::forward_at;
+pub(crate) use c32::{forward_at, inverse_at};
 mod q15;
 mod real;

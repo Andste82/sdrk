@@ -425,13 +425,28 @@ where
         .take(blocks)
     {
         block((&*history, x, spectrum, &mut *scratch, plan, y))?;
-        history.copy_from_slice(x.get(b - keep..).ok_or_else(internal)?);
+        copy_samples(history, x.get(b - keep..).ok_or_else(internal)?);
     }
     let done = blocks * b;
     Ok(Progress {
         consumed: done,
         produced: done,
     })
+}
+
+/// Copies `src` to `dst` sample by sample (equal lengths; exact). An element loop instead of
+/// `copy_from_slice`, as the history copy of `channelize` (D920): `copy_from_slice` of a
+/// variable length is a call of `memcpy`, which glibc does with `rep movsb` for the copies of
+/// thousands of samples, counted once per byte by the counters of the cycle simulation.
+#[allow(
+    clippy::inline_always,
+    reason = "a backend calls it at its dispatched level, whose target features it must inherit"
+)]
+#[inline(always)]
+fn copy_samples<T: Copy>(dst: &mut [T], src: &[T]) {
+    for (d, s) in dst.iter_mut().zip(src) {
+        *d = *s;
+    }
 }
 
 /// The spectral product of one bin, `w h`, with the fixed formula of the contract: the four
@@ -498,11 +513,11 @@ pub fn overlap_save_block<F: Fft<C32>, Tw: AsRef<[C32]>>(
         return Err(internal());
     }
     let (head, tail) = scratch.split_at_mut(keep);
-    head.copy_from_slice(history);
-    tail.copy_from_slice(x);
+    copy_samples(head, history);
+    copy_samples(tail, x);
     fft.fft(plan, scratch, Direction::Forward, Scaling::Default)?;
     spectral_product(scratch, spectrum)?;
     fft.fft(plan, scratch, Direction::Inverse, Scaling::Default)?;
-    y.copy_from_slice(scratch.get(keep..).ok_or_else(internal)?);
+    copy_samples(y, scratch.get(keep..).ok_or_else(internal)?);
     Ok(())
 }

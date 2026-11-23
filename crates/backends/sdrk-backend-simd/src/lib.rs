@@ -76,6 +76,7 @@ mod spectrum;
 mod stereo;
 mod table;
 mod util;
+pub mod xcorr;
 
 /// The SIMD implementation of the accelerated kernels.
 ///

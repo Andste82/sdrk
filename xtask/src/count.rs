@@ -1006,7 +1006,7 @@ const fn fft(name: &'static str, family: Family, samples: u64) -> KernelSpec {
 }
 
 /// The kernels of the benchmark table, in report order.
-pub static KERNELS: [KernelSpec; 295] = [
+pub static KERNELS: [KernelSpec; 303] = [
     spec("convert_cs8", Family::Volk, true),
     spec("convert_cs16", Family::Volk, true),
     spec("convert_cu8", Family::VolkAndOwn, true),
@@ -1282,8 +1282,12 @@ pub static KERNELS: [KernelSpec; 295] = [
     proto("channel_bank_channelize", Family::Own),
     proto("channel_bank_ddc", Family::Own),
     proto("band_pulse_detect_block", Family::Own),
-    spec("qam_soft_bits_qam16", Family::Own, false),
-    spec("qam_soft_bits_qam64", Family::Own, false),
+    spec("qam_soft_bits_qam16", Family::GnuRadio, false),
+    spec("qam_soft_bits_qam16_lut", Family::GnuRadio, false),
+    spec("qam_soft_bits_qam16_liquid", Family::OwnVsLiquid, false),
+    spec("qam_soft_bits_qam64", Family::GnuRadio, false),
+    spec("qam_soft_bits_qam64_lut", Family::GnuRadio, false),
+    spec("qam_soft_bits_qam64_liquid", Family::OwnVsLiquid, false),
     spec("qam_soft_bits_qpsk", Family::Own, false),
     spec("qam_soft_bits_qam256", Family::Own, false),
     spec("qam_soft_bits_qam1024", Family::Own, false),
@@ -1309,8 +1313,12 @@ pub static KERNELS: [KernelSpec; 295] = [
     proto("bit_descramble_in_place_block", Family::GnuRadio),
     proto("snr_estimate_block", Family::GnuRadio),
     proto("snr_estimate_block_svr", Family::GnuRadio),
-    proto("symbol_demap_qam16_block", Family::Own),
-    proto("symbol_demap_qam64_block", Family::Own),
+    proto("symbol_demap_qam16_block", Family::GnuRadio),
+    proto("symbol_demap_qam16_block_lut", Family::GnuRadio),
+    proto("symbol_demap_qam16_block_liquid", Family::OwnVsLiquid),
+    proto("symbol_demap_qam64_block", Family::GnuRadio),
+    proto("symbol_demap_qam64_block_lut", Family::GnuRadio),
+    proto("symbol_demap_qam64_block_liquid", Family::OwnVsLiquid),
     proto("symbol_demap_qam256_block", Family::Own),
     proto("qam_mod_block", Family::Own),
     proto("qam_mod_qam256_block", Family::Own),
@@ -4948,6 +4956,12 @@ mod tests {
             "symbol_map_block",
             "symbol_map_block_qpsk",
             "symbol_map_block_qam64",
+            "symbol_demap_qam16_block",
+            "symbol_demap_qam16_block_lut",
+            "symbol_demap_qam64_block",
+            "symbol_demap_qam64_block_lut",
+            "qam_soft_bits_qam16_lut",
+            "qam_soft_bits_qam64_lut",
         ] {
             for level in ["sse2", "sse4.2", "avx2", "avx512", "neon", "simd128"] {
                 assert_eq!(
@@ -4965,6 +4979,10 @@ mod tests {
             "symbol_map_block_liquid",
             "symbol_map_block_qpsk_liquid",
             "symbol_map_block_qam64_liquid",
+            "symbol_demap_qam16_block_liquid",
+            "symbol_demap_qam64_block_liquid",
+            "qam_soft_bits_qam16_liquid",
+            "qam_soft_bits_qam64_liquid",
         ] {
             for level in ["sse2", "sse4.2", "avx2", "avx512", "neon", "simd128"] {
                 assert_eq!(
@@ -5053,8 +5071,6 @@ mod tests {
             "channel_bank_channelize",
             "channel_bank_ddc",
             "band_pulse_detect_block",
-            "symbol_demap_qam16_block",
-            "symbol_demap_qam64_block",
             "symbol_demap_qam256_block",
             "qam_mod_block",
             "qam_mod_qam256_block",
@@ -5151,11 +5167,14 @@ mod tests {
             "qam_soft_bits_qam1024",
         ] {
             for level in ["sse2", "sse4.2", "avx2", "avx512", "neon", "simd128"] {
-                assert_eq!(
-                    comparisons(plan(level), kernel(k)),
-                    (Reference::Fallback, Vec::new()),
-                    "{k} at {level}"
-                );
+                // Issue #169 (D2549): `qam16` and `qam64` are judged against GNU Radio's
+                // `calc_soft_dec` (its table and liquid-dsp have entries of their own).
+                let want = if matches!(k, "qam_soft_bits_qam16" | "qam_soft_bits_qam64") {
+                    (Reference::GnuRadio, vec![Reference::Fallback])
+                } else {
+                    (Reference::Fallback, Vec::new())
+                };
+                assert_eq!(comparisons(plan(level), kernel(k)), want, "{k} at {level}");
             }
             assert_eq!(
                 comparisons(plan("avx2-runtime"), kernel(k)).0,
@@ -5174,7 +5193,11 @@ mod tests {
                 .map(|s| s.name)
                 .eq([
                     "symbol_demap_qam16_block",
+                    "symbol_demap_qam16_block_lut",
+                    "symbol_demap_qam16_block_liquid",
                     "symbol_demap_qam64_block",
+                    "symbol_demap_qam64_block_lut",
+                    "symbol_demap_qam64_block_liquid",
                     "symbol_demap_qam256_block"
                 ])
         );

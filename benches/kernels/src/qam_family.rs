@@ -145,7 +145,7 @@ use std::hint::black_box;
 
 use cref_sys::{
     GrChunksToSymbols, GrConstellationReceiverCb, GrFirBank, GrLinearEqualizerRect, GrRect,
-    LiquidFirfiltCrcf, LiquidFirinterpCrcf, LiquidModemMap,
+    GrSoftDecoder, LiquidFirfiltCrcf, LiquidFirinterpCrcf, LiquidModemDemod, LiquidModemMap,
 };
 
 use super::psk_family::GrFront;
@@ -167,16 +167,175 @@ use sdrk_proto::frame::{self, Whitening};
 
 use super::{Aligned, Impl, Kernel, Layout, Pcg32, c32_pairs, c32_pairs_ref, c32s, snr_db};
 
+/// The reference of a soft-bit entry (issue #169, D2549): GNU Radio's `calc_soft_dec` or its
+/// look-up table (`constellation_soft_decoder_cf`), or liquid-dsp's `modemcf_demodulate_soft`.
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub(crate) enum SoftRef {
+    /// No library (the entries of the kernel `qam_soft_bits` of the other constellations).
+    None,
+    GrCalc,
+    GrLut,
+    Liquid,
+}
+
+/// The noise power of GNU Radio's decoder (the default of its constellation) and the precision
+/// of its look-up table (`2^8` by `2^8` cells).
+const GR_NPWR: f32 = 1.0;
+const GR_LUT_PRECISION: i32 = 8;
+
+/// The library of a soft-bit entry with its buffers.
+struct SoftRefs {
+    mode: SoftRef,
+    qam: Qam,
+    gr: Option<GrSoftDecoder>,
+    liquid: Option<LiquidModemDemod>,
+    /// liquid's soft bytes and hard symbols of the last call, and its points.
+    soft: Vec<u8>,
+    syms: Vec<u32>,
+    points: Vec<[f32; 2]>,
+}
+
+impl SoftRefs {
+    fn new(qam: Qam, n: usize, mode: SoftRef) -> Self {
+        let k = qam.bits_per_symbol();
+        let gr = match mode {
+            SoftRef::GrCalc => GrSoftDecoder::new(&qam_points(qam), k, GR_NPWR, 0),
+            SoftRef::GrLut => GrSoftDecoder::new(&qam_points(qam), k, GR_NPWR, GR_LUT_PRECISION),
+            _ => None,
+        };
+        let mut liquid = if mode == SoftRef::Liquid {
+            LiquidModemDemod::new(1 << k)
+        } else {
+            None
+        };
+        let points = liquid
+            .as_mut()
+            .map(LiquidModemDemod::points)
+            .unwrap_or_default();
+        SoftRefs {
+            mode,
+            qam,
+            gr,
+            liquid,
+            soft: vec![0; n * k],
+            syms: vec![0; n],
+            points,
+        }
+    }
+
+    fn supports(&self, which: Impl) -> bool {
+        match which {
+            Impl::GnuRadio => self.gr.is_some(),
+            Impl::Liquid => self.liquid.is_some(),
+            _ => false,
+        }
+    }
+
+    /// One call of the library on `x`; GNU Radio's soft values go to `out`, liquid's bytes to the
+    /// buffers of the entry.
+    fn run(&mut self, which: Impl, x: &[C32], out: &mut [f32]) {
+        match which {
+            Impl::GnuRadio => self
+                .gr
+                .as_mut()
+                .expect("gnuradio")
+                .work(black_box(c32_pairs_ref(x)), out),
+            Impl::Liquid => self.liquid.as_mut().expect("liquid").demod_soft(
+                black_box(c32_pairs_ref(x)),
+                &mut self.soft,
+                &mut self.syms,
+            ),
+            other => unreachable!("a soft-bit entry has no {other:?} as a library"),
+        }
+    }
+
+    /// GNU Radio: the SNR against the exact log-likelihood ratio of `calc_soft_dec` in `f64`
+    /// (the table method is quantized, so its SNR is lower); liquid: 999 when its hard symbol is
+    /// the point of its own constellation nearest to the input and every soft byte is on the side
+    /// of the bit of that symbol (127 is zero), 0 otherwise (liquid's labelling and scale are its
+    /// own, so the values are not comparable with ours).
+    fn accuracy(&mut self, which: Impl, x: &[C32], got: &[f32]) -> f64 {
+        let k = self.qam.bits_per_symbol();
+        if which == Impl::GnuRadio {
+            let pts: Vec<(f64, f64)> = qam_points(self.qam)
+                .iter()
+                .map(|p| (f64::from(p[0]), f64::from(p[1])))
+                .collect();
+            let np = f64::from(GR_NPWR);
+            let mut want = Vec::with_capacity(got.len());
+            for y in x {
+                let d: Vec<f64> = pts
+                    .iter()
+                    .map(|p| {
+                        let (dr, di) = (f64::from(y.re) - p.0, f64::from(y.im) - p.1);
+                        -(dr * dr + di * di) / np
+                    })
+                    .collect();
+                let top = d.iter().copied().fold(f64::NEG_INFINITY, f64::max);
+                for j in 0..k {
+                    let (mut one, mut zero) = (0.0f64, 0.0f64);
+                    for (i, &a) in d.iter().enumerate() {
+                        if (i >> (k - 1 - j)) & 1 == 1 {
+                            one += (a - top).exp();
+                        } else {
+                            zero += (a - top).exp();
+                        }
+                    }
+                    want.push(one.ln() - zero.ln());
+                }
+            }
+            let got: Vec<f64> = got.iter().map(|&v| f64::from(v)).collect();
+            return snr_db(&want, &got);
+        }
+        let ok = x.iter().enumerate().all(|(i, y)| {
+            let s = self.syms[i] as usize;
+            let nearest = self
+                .points
+                .iter()
+                .enumerate()
+                .map(|(j, p)| {
+                    let (dr, di) = (y.re - p[0], y.im - p[1]);
+                    (dr * dr + di * di, j)
+                })
+                .fold(
+                    (f32::INFINITY, 0usize),
+                    |a, b| if b.0 < a.0 { b } else { a },
+                )
+                .1;
+            nearest == s
+                && (0..k).all(|j| (self.soft[i * k + j] > 127) == ((s >> (k - 1 - j)) & 1 == 1))
+        });
+        if ok { 999.0 } else { 0.0 }
+    }
+
+    fn describe(&self, which: Impl) -> &'static str {
+        match (which, self.mode) {
+            (Impl::GnuRadio, SoftRef::GrLut) => {
+                "GNU Radio constellation_soft_decoder_cf with the look-up table of gen_soft_dec_lut (precision 8, npwr 1; constellation.cc of gr-digital; exact log-likelihood ratio, not max-log; the table lookup and a copy of 2 to 3 floats per symbol, no vector allocation)"
+            }
+            (Impl::GnuRadio, _) => {
+                "GNU Radio constellation_soft_decoder_cf with calc_soft_dec (constellation.cc of gr-digital; the exact log-likelihood ratio over all points, npwr 1, not max-log; no vector allocation per symbol, so faster than GNU Radio's object code)"
+            }
+            (Impl::Liquid, _) => {
+                "liquid-dsp 1.8.3 modemcf_demodulate_soft of its own QAM modem (modem_common.proto.c; soft bytes with liquid's scale and labelling; the hard symbol and the soft bits per symbol)"
+            }
+            _ => "sdrk",
+        }
+    }
+}
+
 /// The kernel `qam_soft_bits` over `n` symbols per call: `ours` through the facade, `fallback`
 /// the fallback.
 pub(crate) struct QamSoftBitsK {
     qam: Qam,
     input: Aligned<C32>,
     out: Aligned<f32>,
+    /// GNU Radio's decoder or liquid's demodulator of the entry (issue #169).
+    refs: SoftRefs,
 }
 
 impl QamSoftBitsK {
-    pub(crate) fn new(rng: &mut Pcg32, layout: Layout, qam: Qam) -> Self {
+    pub(crate) fn new(rng: &mut Pcg32, layout: Layout, qam: Qam, mode: SoftRef) -> Self {
         let mut input = Aligned::<C32>::skewed(layout.n, layout.skew(8));
         for x in input.iter_mut() {
             let p = qam.point(rng.next_u32());
@@ -186,6 +345,7 @@ impl QamSoftBitsK {
             qam,
             input,
             out: Aligned::skewed(layout.n * qam.bits_per_symbol(), layout.skew(4)),
+            refs: SoftRefs::new(qam, layout.n, mode),
         }
     }
 }
@@ -206,6 +366,7 @@ impl Kernel for QamSoftBitsK {
                 Impl::Fallback => {
                     soft_bits_call(&Fallback, self.qam, &self.input, &mut self.out);
                 }
+                Impl::GnuRadio | Impl::Liquid => self.refs.run(which, &self.input, &mut self.out),
                 other => unreachable!("qam_soft_bits has no {other:?}"),
             }
             black_box(&self.out);
@@ -218,6 +379,9 @@ impl Kernel for QamSoftBitsK {
             return 0.0;
         }
         self.run(which, 1);
+        if matches!(which, Impl::GnuRadio | Impl::Liquid) {
+            return self.refs.accuracy(which, &self.input, &self.out);
+        }
         let mut want = Vec::with_capacity(self.out.len());
         for y in self.input.iter() {
             axis_f64(self.qam, y.re, &mut want);
@@ -228,12 +392,13 @@ impl Kernel for QamSoftBitsK {
     }
 
     fn supports(&self, which: Impl) -> bool {
-        matches!(which, Impl::Ours | Impl::Fallback)
+        matches!(which, Impl::Ours | Impl::Fallback) || self.refs.supports(which)
     }
 
     fn describe(&self, which: Impl) -> &'static str {
         match which {
             Impl::Fallback => "sdrk fallback",
+            Impl::GnuRadio | Impl::Liquid => self.refs.describe(which),
             _ => "sdrk",
         }
     }
@@ -245,10 +410,12 @@ pub(crate) struct SymbolDemapQamBlockK {
     block: SymbolDemapBlock<C32, ArenaStorage<'static>>,
     input: Vec<C32>,
     out: Vec<f32>,
+    /// GNU Radio's decoder or liquid's demodulator of the entry (issue #169).
+    refs: SoftRefs,
 }
 
 impl SymbolDemapQamBlockK {
-    pub(crate) fn new(rng: &mut Pcg32, layout: Layout, qam: Qam) -> Self {
+    pub(crate) fn new(rng: &mut Pcg32, layout: Layout, qam: Qam, mode: SoftRef) -> Self {
         let constellation = match qam {
             Qam::Qpsk => SymbolDemapConstellation::Qpsk,
             Qam::Qam16 => SymbolDemapConstellation::Qam16,
@@ -278,6 +445,7 @@ impl SymbolDemapQamBlockK {
             block,
             input,
             out: vec![0.0; layout.n * qam.bits_per_symbol()],
+            refs: SoftRefs::new(qam, layout.n, mode),
         }
     }
 }
@@ -310,6 +478,7 @@ impl Kernel for SymbolDemapQamBlockK {
                 Impl::Ours | Impl::Fallback => {
                     symbol_demap_call(&mut self.block, &self.input, &mut self.out);
                 }
+                Impl::GnuRadio | Impl::Liquid => self.refs.run(which, &self.input, &mut self.out),
                 other => unreachable!("symbol_demap_qam has no {other:?}"),
             }
             black_box(&self.out);
@@ -320,6 +489,10 @@ impl Kernel for SymbolDemapQamBlockK {
     fn accuracy(&mut self, which: Impl) -> f64 {
         if !self.supports(which) {
             return 0.0;
+        }
+        if matches!(which, Impl::GnuRadio | Impl::Liquid) {
+            self.run(which, 1);
+            return self.refs.accuracy(which, &self.input, &self.out);
         }
         symbol_demap_call(&mut self.block, &self.input, &mut self.out);
         let mut want = Vec::with_capacity(self.out.len());
@@ -332,12 +505,13 @@ impl Kernel for SymbolDemapQamBlockK {
     }
 
     fn supports(&self, which: Impl) -> bool {
-        matches!(which, Impl::Ours | Impl::Fallback)
+        matches!(which, Impl::Ours | Impl::Fallback) || self.refs.supports(which)
     }
 
     fn describe(&self, which: Impl) -> &'static str {
         match which {
             Impl::Fallback => "sdrk fallback",
+            Impl::GnuRadio | Impl::Liquid => self.refs.describe(which),
             _ => "sdrk",
         }
     }

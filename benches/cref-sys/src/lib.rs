@@ -81,7 +81,7 @@ pub use gnuradio::{
     CostasLoopState, GR_MMSE_STEPS, GrChunksToSymbols, GrConstellationReceiverCb, GrCostasLoopCc,
     GrCrc, GrFirBank, GrFirFilterCcf, GrFmDeemph, GrFrequencyModulatorFc, GrLinearEqualizer,
     GrLinearEqualizerRect, GrMpskSnrEstCc, GrQuadratureDemodCf, GrRect, GrRotator, GrScrambler,
-    GrSymbolSyncCc, gr_constellation_decoder_qpsk,
+    GrSoftDecoder, GrSymbolSyncCc, gr_constellation_decoder_qpsk,
 };
 pub use gr_fastnoise::{GR_FASTNOISE_POOL, GrFastnoiseSourceC, GrFastnoiseSourceF};
 pub use halfband::{
@@ -89,7 +89,7 @@ pub use halfband::{
 };
 pub use liquid::{LiquidDcBlocker, LiquidDcBlockerCrcf};
 pub use liquid_am::LiquidAmpmodem;
-pub use liquid_fir::{LiquidFirfiltCrcf, LiquidFirinterpCrcf, LiquidModemMap};
+pub use liquid_fir::{LiquidFirfiltCrcf, LiquidFirinterpCrcf, LiquidModemDemod, LiquidModemMap};
 pub use liquid_nco::LiquidNcoPll;
 pub use liquid_randn::LiquidRandn;
 

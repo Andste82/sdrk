@@ -134,3 +134,39 @@ void sdrk_liquid_modem_map_block(void* q, const unsigned char* bits, unsigned in
         MODEM(_modulate)((MODEM()) q, sym, &y[i]);
     }
 }
+
+/* ---------------------------------------------------------------------------------------- */
+/* The soft demodulator of liquid's own QAM modem (`modemcf_demodulate_soft`)                  */
+
+/* liquid's own `LIQUID_MODEM_QAM16` or `LIQUID_MODEM_QAM64` modem for `m` = 16 or 64. */
+void* sdrk_liquid_modem_std_create(unsigned int m)
+{
+    if (m == 16) {
+        return MODEM(_create)(LIQUID_MODEM_QAM16);
+    }
+    if (m == 64) {
+        return MODEM(_create)(LIQUID_MODEM_QAM64);
+    }
+    return NULL;
+}
+
+/* The points of the modem in its symbol order (`m` pairs): its labelling is not SDRk's. */
+void sdrk_liquid_modem_points(void* q, unsigned int m, float* pts)
+{
+    for (unsigned int i = 0; i < m; i++) {
+        float complex y;
+        MODEM(_modulate)((MODEM()) q, i, &y);
+        pts[2 * i] = crealf(y);
+        pts[2 * i + 1] = cimagf(y);
+    }
+}
+
+/* `n` symbols in; the hard symbol and the `k` soft bytes (127 is zero, the scale is liquid's:
+ * a fixed gamma of 1.2 M for the table method, 16 per unit) per symbol out. */
+void sdrk_liquid_modem_demod_soft_block(void* q, const float complex* x, unsigned int n, unsigned int k,
+                                        unsigned char* soft, unsigned int* syms)
+{
+    for (unsigned int i = 0; i < n; i++) {
+        MODEM(_demodulate_soft)((MODEM()) q, x[i], &syms[i], &soft[(size_t)i * k]);
+    }
+}

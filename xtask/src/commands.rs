@@ -39,7 +39,7 @@ pub fn run(root: &Path, args: &[String]) -> anyhow::Result<bool> {
         ["emu", rest @ ..] => crate::emu::run(root, rest),
         ["count", rest @ ..] => crate::count::run(root, rest),
         ["measure", rest @ ..] => crate::measure::run(root, rest),
-        ["sde-cpuid", level, path] => crate::count::write_cpuid(level, Path::new(path)),
+        ["sde-cpuid", level, path] => crate::bench::write_cpuid(level, Path::new(path)),
         ["wasm-pkg", rest @ ..] => crate::wasm::wasm_pkg(root, rest),
         ["wasm-test", rest @ ..] => crate::wasm::wasm_test(root, rest),
         _ => bail!("{USAGE}"),

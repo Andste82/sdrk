@@ -24,7 +24,8 @@ use std::process::Command;
 use anyhow::{Context, anyhow, bail};
 use serde_json::{Value, json};
 
-use crate::count::{K, SNR_MARGIN_DB, build_insn_plugin, parse, references, round2};
+use crate::bench::{K, build_insn_plugin, references};
+use crate::count::{SNR_MARGIN_DB, parse, round2};
 use crate::emu::{Tool, find_tool};
 
 /// Samples per call of the workload binary (a kernel of `n` samples, or an FFT of `n` points).

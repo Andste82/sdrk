@@ -3,13 +3,10 @@
 //!
 //! The kernel name selects every entry whose name is the name or starts with the name and `_`:
 //! `biquad_real` selects the count entries `biquad_real`, `biquad_real_q15`,
-//! `biquad_real_fallback` and `biquad_real_q15_fallback` and the golden cases of
+//! `biquad_real_fallback` and `biquad_real_q15_fallback` of the benchmark table
+//! ([`crate::bench::KERNELS`]) and the golden cases of
 //! `tests/golden/vectors/biquad_real`; `biquad` also selects those of `biquad_real`.
 //!
-//! - **Instructions and accuracy of the counts:** the judged records of `cargo xtask count`
-//!   for the selected entries on the levels of the platform (ours, the comparison, the ratio,
-//!   the status and verdict of `benches/limits.json`, the SNR of both against the f64 model).
-//!   Nothing is written to `benches/results`.
 //! - **Golden cases:** the golden tests of `sdrk-testkit` run with the report of
 //!   `sdrk_testkit::golden::assert_matches`; per case the contract floor, the measured SNR (the
 //!   lowest of all comparisons of the case), the achievable optimum (the expected values rounded
@@ -18,12 +15,14 @@
 //!   (`docs/kernels.md#accuracy-policy`).
 //! - **Simulated cycles (level 2):** on every level with a core model (`sse2`, `sse4.2`,
 //!   `avx2`, `avx512`, `neon`; D68), the execution counts per instruction of ours and of the
-//!   judged comparison, taken by the counter of the level in the environment of its count
-//!   (callgrind; Intel SDE `-dcfg`, [`crate::blockcount`]; QEMU with the plugin
-//!   `xtask/plugins/bbcount.c`), simulated by `llvm-mca` on the reference model and the
+//!   judged comparison, taken by the profiler of the level in the environment its binary runs
+//!   in ([`crate::bench`]: callgrind; Intel SDE `-dcfg`, [`crate::blockcount`]; QEMU with the
+//!   plugin `xtask/plugins/bbcount.c`), simulated by `llvm-mca` on the reference model and the
 //!   counter-model of the level ([`crate::mca`]): cycles per sample, the ratio, the efficiency
 //!   (port bound / cycles), the bottleneck class and the coverage. Only the ratio of ours to the
 //!   comparison on one model means something; the absolute cycles are no hardware figures.
+//!   `avx2-runtime` (the run-time detection of the level, on the models of `avx2`) is compared
+//!   with our own entry in the fixed `avx2` build (D2702).
 //!
 //! The result is printed as tables and written to `target/measure/<kernel>.json`.
 #![allow(clippy::print_stdout, clippy::print_stderr)]
@@ -36,9 +35,9 @@ use std::process::Command;
 use anyhow::{Context, bail};
 use serde_json::{Value, json};
 
-use crate::count::{KERNELS, PLANS};
+use crate::bench::{KERNELS, PLANS};
 
-const USAGE: &str = "usage: cargo xtask measure <kernel> [--platform P]... [--level L]... [--no-count] [--no-golden] [--no-cycles] [--cycle-mode whole-loop|per-block] [--cycle-counter sde] [--branches] [--json]";
+const USAGE: &str = "usage: cargo xtask measure <kernel> [--platform P]... [--level L]... [--no-golden] [--no-cycles] [--cycle-mode whole-loop|per-block] [--cycle-counter sde] [--branches] [--json]";
 
 /// The command line of `cargo xtask measure`.
 #[allow(
@@ -53,8 +52,6 @@ pub struct Options {
     pub platforms: Vec<String>,
     /// `--level` (repeatable): only these levels.
     pub levels: Vec<String>,
-    /// Not `--no-count`.
-    pub count: bool,
     /// Not `--no-golden`.
     pub golden: bool,
     /// Not `--no-cycles`.
@@ -62,9 +59,9 @@ pub struct Options {
     /// `--cycle-mode`: the mode of the simulated cycles in the table and in the top-level
     /// fields of the JSON (the other mode is reported beside it).
     pub cycle_mode: crate::mca::CycleMode,
-    /// `--cycle-counter`: take the execution counts of the cycles from this counter instead of
-    /// the counter of the level (`sde` on `avx2` validates the SDE path against callgrind).
-    pub cycle_counter: Option<crate::count::Profiler>,
+    /// `--cycle-counter`: take the execution counts of the cycles from this profiler instead of
+    /// the profiler of the level (`sde` on `avx2` validates the SDE path against callgrind).
+    pub cycle_counter: Option<crate::bench::Profiler>,
     /// `--branches`: count the branch mispredictions per sample with cachegrind on the x86-64
     /// levels (D1611) and, with the cycles, the cost `cycles + mispredictions × penalty`.
     pub branches: bool,
@@ -79,7 +76,6 @@ impl Options {
     /// No kernel, more than one, an unknown option or a missing value.
     pub fn parse(args: &[&str]) -> anyhow::Result<Options> {
         let mut o = Options {
-            count: true,
             golden: true,
             cycles: true,
             ..Options::default()
@@ -94,7 +90,6 @@ impl Options {
             match *arg {
                 "--platform" => o.platforms.push(value()?),
                 "--level" => o.levels.push(value()?),
-                "--no-count" => o.count = false,
                 "--no-golden" => o.golden = false,
                 "--no-cycles" => o.cycles = false,
                 "--cycle-mode" => {
@@ -105,7 +100,7 @@ impl Options {
                 "--cycle-counter" => {
                     let v = value()?;
                     o.cycle_counter =
-                        Some(crate::count::Profiler::parse(&v).ok_or_else(|| {
+                        Some(crate::bench::Profiler::parse(&v).ok_or_else(|| {
                             anyhow::anyhow!("unknown cycle counter `{v}`; {USAGE}")
                         })?);
                 }
@@ -168,7 +163,7 @@ pub fn golden_kernels(root: &Path, kernel: &str) -> anyhow::Result<Vec<String>> 
     Ok(out)
 }
 
-/// The platforms of `cargo xtask count` that a host of `arch` measures by default.
+/// The platforms that `cargo measure` simulates by default on a host of `arch`.
 #[must_use]
 pub fn default_platforms(arch: &str) -> Vec<String> {
     match arch {
@@ -309,45 +304,6 @@ pub fn golden_table(cases: &[GoldenCase]) -> String {
     s
 }
 
-/// The table of the count records of one platform: `(level, kernel -> record)`.
-#[must_use]
-pub fn count_table(levels: &[(String, BTreeMap<String, Value>)]) -> String {
-    let mut s = String::new();
-    let _ = writeln!(
-        s,
-        "{:<26} {:<13} {:>9} {:>9} {:>6}  {:<8} {:<7} {:>15}  comparison",
-        "entry", "level", "ours", "other", "ratio", "status", "verdict", "SNR ours/other"
-    );
-    for (level, records) in levels {
-        for (kernel, r) in records {
-            let num = |key: &str| {
-                field(r, key)
-                    .as_f64()
-                    .map_or("-".to_string(), |v| format!("{v:.2}"))
-            };
-            let snr = format!(
-                "{}/{}",
-                db(field(field(r, "snr_db"), "ours").as_f64()),
-                db(field(field(r, "snr_db"), "other").as_f64())
-            );
-            let _ = writeln!(
-                s,
-                "{:<26} {:<13} {:>9} {:>9} {:>6}  {:<8} {:<7} {:>15}  {}",
-                kernel,
-                level,
-                num("ours_instr_per_sample"),
-                num("other_instr_per_sample"),
-                num("ratio"),
-                field(r, "status").as_str().unwrap_or("-"),
-                field(r, "verdict").as_str().unwrap_or("-"),
-                snr,
-                field(r, "compared_with").as_str().unwrap_or("-"),
-            );
-        }
-    }
-    s
-}
-
 /// Runs the golden tests of `sdrk-testkit` with the report written to `report`.
 fn run_golden(root: &Path, report: &Path) -> anyhow::Result<String> {
     match std::fs::remove_file(report) {
@@ -392,68 +348,6 @@ struct Part {
     table: String,
     doc: Value,
     ok: bool,
-}
-
-/// The counts of the selected entries on every platform of `o`.
-#[allow(
-    clippy::large_stack_frames,
-    reason = "the plan tables and std::process::Command are large; xtask is a host tool"
-)]
-fn measure_counts(root: &Path, o: &Options, entries: &[String]) -> Part {
-    let mut part = Part {
-        table: String::new(),
-        doc: Value::Null,
-        ok: true,
-    };
-    let mut doc = serde_json::Map::new();
-    let platforms = if o.platforms.is_empty() {
-        default_platforms(std::env::consts::ARCH)
-    } else {
-        o.platforms.clone()
-    };
-    for platform in &platforms {
-        let levels: Vec<String> = o
-            .levels
-            .iter()
-            .filter(|l| {
-                PLANS
-                    .iter()
-                    .any(|p| p.platform == platform && p.level == *l)
-            })
-            .cloned()
-            .collect();
-        if !o.levels.is_empty() && levels.is_empty() {
-            continue;
-        }
-        match crate::count::judged_records(root, platform, &levels, entries) {
-            Ok(records) => {
-                let records: Vec<(String, BTreeMap<String, Value>)> = records
-                    .into_iter()
-                    .map(|(l, r)| (l.to_string(), r))
-                    .collect();
-                part.ok &= records.iter().all(|(_, r)| {
-                    r.values()
-                        .all(|v| field(v, "verdict").as_str() != Some("fail"))
-                });
-                let _ = writeln!(part.table, "\ncount, platform {platform}:");
-                part.table.push_str(&count_table(&records));
-                doc.insert(
-                    platform.clone(),
-                    Value::Object(records.into_iter().map(|(l, r)| (l, json!(r))).collect()),
-                );
-            }
-            Err(e) => {
-                part.ok = false;
-                let _ = writeln!(
-                    part.table,
-                    "\ncount, platform {platform}: not measured: {e:#}"
-                );
-                doc.insert(platform.clone(), json!({ "error": format!("{e:#}") }));
-            }
-        }
-    }
-    part.doc = Value::Object(doc);
-    part
 }
 
 /// The levels of `platform` that `o` selects.
@@ -530,10 +424,7 @@ fn measure_cycles(root: &Path, o: &Options, entries: &[String]) -> Part {
                 );
                 continue;
             };
-            if plan.baseline.is_some() {
-                continue;
-            }
-            let Some(profiler) = o.cycle_counter.or_else(|| crate::count::Profiler::of(plan))
+            let Some(profiler) = o.cycle_counter.or_else(|| crate::bench::Profiler::of(plan))
             else {
                 let _ = writeln!(
                     part.table,
@@ -587,11 +478,11 @@ fn model_json(ours: &crate::mca::Simulation, other: &crate::mca::Simulation) -> 
 )]
 fn cycles_of_level(
     root: &Path,
-    plan: &crate::count::LevelPlan,
+    plan: &crate::bench::LevelPlan,
     models: &crate::mca::Models,
     entries: &[String],
     mode: crate::mca::CycleMode,
-    profiler: crate::count::Profiler,
+    profiler: crate::bench::Profiler,
 ) -> anyhow::Result<(String, Value)> {
     let mut table = String::new();
     let _ = writeln!(
@@ -610,7 +501,7 @@ fn cycles_of_level(
     // named in each.
     let counts = profiler.describe(plan);
     let mut value = serde_json::Map::new();
-    for (kernel, e) in crate::count::profiles(root, plan.platform, plan.level, entries, profiler)? {
+    for (kernel, e) in crate::bench::profiles(root, plan.platform, plan.level, entries, profiler)? {
         match e.and_then(|e| entry_cycles(&e, models, &both, &mut table)) {
             Ok(mut v) => {
                 if let Value::Object(m) = &mut v {
@@ -690,7 +581,7 @@ fn fallback_verdicts(entries: &serde_json::Map<String, Value>) -> String {
     reason = "std::process::Command and serde_json values are large; xtask is a host tool"
 )]
 fn entry_cycles(
-    e: &crate::count::EntryProfiles,
+    e: &crate::bench::EntryProfiles,
     models: &crate::mca::Models,
     both: &[crate::mca::CycleMode],
     table: &mut String,
@@ -791,7 +682,7 @@ fn measure_branches(root: &Path, o: &Options, entries: &[String], cycles: Option
             let level_cycles = cycles
                 .and_then(|c| c.get(platform.as_str()))
                 .and_then(|c| c.get(level));
-            match crate::count::branch_profiles(root, platform, level, entries) {
+            match crate::bench::branch_profiles(root, platform, level, entries) {
                 Ok(list) => {
                     let _ = writeln!(
                         part.table,
@@ -863,7 +754,7 @@ fn measure_branches(root: &Path, o: &Options, entries: &[String], cycles: Option
 )]
 fn entry_branches(
     kernel: &str,
-    e: &crate::count::EntryBranches,
+    e: &crate::bench::EntryBranches,
     models: Option<&crate::mca::Models>,
     cycles: Option<&Value>,
     table: &mut String,
@@ -977,10 +868,10 @@ fn measure_golden(root: &Path, report: &Path, golden: &[String]) -> anyhow::Resu
 /// Runs `cargo xtask measure ...`.
 ///
 /// # Errors
-/// Unknown options, a kernel that selects nothing, or a file that cannot be written. A count
-/// that cannot run (a missing counter or reference) is reported in the result, not as an
-/// error; the return value is `Ok(false)` if a count failed or was judged `fail`, or a golden
-/// case failed.
+/// Unknown options, a kernel that selects nothing, or a file that cannot be written. A level
+/// that cannot be simulated (a missing profiler or reference) is reported in the result, not as
+/// an error; the return value is `Ok(false)` if a level could not be simulated, or a golden case
+/// failed.
 #[allow(
     clippy::large_stack_frames,
     reason = "the kernel table and serde_json values are large; xtask is a host tool"
@@ -1000,7 +891,6 @@ pub fn run(root: &Path, args: &[&str]) -> anyhow::Result<bool> {
     }
     let out_dir = root.join("target").join("measure");
     std::fs::create_dir_all(&out_dir)?;
-    let count = (o.count && !entries.is_empty()).then(|| measure_counts(root, &o, &entries));
     let cycles = (o.cycles && !entries.is_empty()).then(|| measure_cycles(root, &o, &entries));
     let branches = (o.branches && !entries.is_empty())
         .then(|| measure_branches(root, &o, &entries, cycles.as_ref().map(|p| &p.doc)));
@@ -1016,7 +906,6 @@ pub fn run(root: &Path, args: &[&str]) -> anyhow::Result<bool> {
     let doc = json!({
         "kernel": o.kernel,
         "selection": { "count": entries, "golden": golden },
-        "count": count.as_ref().map(|p| &p.doc),
         "golden": golden_part.as_ref().map(|p| &p.doc),
         "cycles": cycles.as_ref().map(|p| &p.doc),
         "branches": branches.as_ref().map(|p| &p.doc),
@@ -1029,19 +918,13 @@ pub fn run(root: &Path, args: &[&str]) -> anyhow::Result<bool> {
         print!("{text}");
     } else {
         println!("\nmeasure {}", o.kernel);
-        for part in count
-            .iter()
-            .chain(&cycles)
-            .chain(&branches)
-            .chain(&golden_part)
-        {
+        for part in cycles.iter().chain(&branches).chain(&golden_part) {
             print!("{}", part.table);
         }
         println!("\nwritten to {}", path.display());
     }
-    Ok(count
+    Ok(cycles
         .iter()
-        .chain(&cycles)
         .chain(&branches)
         .chain(&golden_part)
         .all(|p| p.ok))
@@ -1087,13 +970,14 @@ mod tests {
         let o = Options::parse(&["fir", "--level", "avx2", "--no-golden", "--json"]).unwrap();
         assert_eq!(o.kernel, "fir");
         assert_eq!(o.levels, ["avx2"]);
-        assert!(o.count && !o.golden && o.json);
+        assert!(o.cycles && !o.golden && o.json);
+        assert!(Options::parse(&["fir", "--no-count"]).is_err());
         assert_eq!(o.cycle_mode, crate::mca::CycleMode::WholeLoop);
         let o = Options::parse(&["fir", "--cycle-mode", "per-block"]).unwrap();
         assert_eq!(o.cycle_mode, crate::mca::CycleMode::PerBlock);
         assert!(Options::parse(&["fir", "--cycle-mode", "both"]).is_err());
         let o = Options::parse(&["fir", "--cycle-counter", "sde"]).unwrap();
-        assert_eq!(o.cycle_counter, Some(crate::count::Profiler::Sde));
+        assert_eq!(o.cycle_counter, Some(crate::bench::Profiler::Sde));
         assert!(Options::parse(&["fir", "--cycle-counter", "pin"]).is_err());
         assert!(!o.branches);
         assert!(Options::parse(&["fir", "--branches"]).unwrap().branches);

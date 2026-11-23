@@ -1,8 +1,8 @@
 //! M19: `squelch` is not accelerated. The `C32` variant is gated against the `pwr_squelch_cc`
 //! loop of GNU Radio (`release` at every level but `avx2-runtime`, which runs the baseline
 //! build of the same fallback and stays `info`); `squelch_cq15` has no counterpart and is
-//! counted as information at every level. The committed result files must agree with
-//! `benches/limits.json`.
+//! counted as information at every level. The committed `simd128` counts must agree with
+//! `benches/limits.json` (the other levels are measured in cycles, D2700).
 
 #![allow(clippy::expect_used, clippy::indexing_slicing)]
 
@@ -42,13 +42,8 @@ fn expected_status(kernel: &str, level: &str) -> &'static str {
 }
 
 #[test]
-fn every_platform_reports_squelch_with_the_status_of_the_limits() {
-    let expected = [
-        ("x86_64", &["sse2", "sse4.2", "avx2", "avx2-runtime"][..]),
-        ("x86_64-avx512", &["avx512"][..]),
-        ("aarch64", &["neon"][..]),
-        ("wasm32", &["simd128"][..]),
-    ];
+fn the_simd128_counts_report_squelch_with_the_status_of_the_limits() {
+    let expected = [("wasm32", &["simd128"][..])];
     for (platform, levels) in expected {
         let result = bench_file(&format!("results/{platform}.json"));
         for level in levels {

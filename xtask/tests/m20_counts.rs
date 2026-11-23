@@ -1,9 +1,10 @@
 //! M20: `mag` is accelerated and counted against VOLK, the `C32` `agc` is counted against the
 //! `agc_cc` loop of GNU Radio, and `agc_cq15` and `dc_block_real` are counted as information on
 //! every platform (`agc_cq15` and `dc_block_real` `Q15` are not accelerated; `dc_block_real`
-//! `f32` runs the block scan of the SIMD backend, which no SIMD library has). The committed
-//! result files and `benches/limits.json` must carry the entries at every level, and the
-//! Cortex-M4 report (no limits) counts all four kernels of the fallback.
+//! `f32` runs the block scan of the SIMD backend, which no SIMD library has). `benches/limits.json`
+//! must carry the entries at every level, the committed `simd128` counts must agree with it (the
+//! other levels are measured in cycles, D2700), and the Cortex-M4 report (no limits) counts all
+//! four kernels of the fallback.
 
 #![allow(clippy::expect_used, clippy::indexing_slicing)]
 
@@ -14,12 +15,8 @@ use serde_json::Value;
 
 const INFO_KERNELS: [&str; 3] = ["agc_cq15", "dc_block_real", "dc_block_real_q15"];
 
-const PLATFORMS: [(&str, &[&str]); 4] = [
-    ("x86_64", &["sse2", "sse4.2", "avx2", "avx2-runtime"]),
-    ("x86_64-avx512", &["avx512"]),
-    ("aarch64", &["neon"]),
-    ("wasm32", &["simd128"]),
-];
+/// The platforms with instruction counts and their levels.
+const PLATFORMS: [(&str, &[&str]); 1] = [("wasm32", &["simd128"])];
 
 const LEVELS: [&str; 7] = [
     "sse2",
@@ -68,11 +65,6 @@ fn every_platform_counts_mag_against_volk() {
             ] {
                 let entry = &result["levels"][*level]["kernels"][kernel];
                 let status = entry["status"].as_str();
-                if *level == "avx2-runtime" {
-                    // Judged against our own numbers at `avx2`.
-                    assert_eq!(status, Some("release"), "{platform}/{level}/{kernel}");
-                    continue;
-                }
                 assert_eq!(
                     status,
                     Some("release"),
@@ -93,20 +85,9 @@ fn every_platform_counts_agc_against_gnu_radio() {
         let result = bench_file(&format!("results/{platform}.json"));
         for level in levels {
             let entry = &result["levels"][*level]["kernels"]["agc"];
-            if *level == "avx2-runtime" {
-                // Judged against our own numbers at `avx2` (the backend detects the level).
-                assert_eq!(
-                    entry["status"].as_str(),
-                    Some("release"),
-                    "{platform}/{level}"
-                );
-                continue;
-            }
-            // `neon` runs the fallback (D335): `dev` in instructions, faster in cycles.
-            let expected = if *level == "neon" { "dev" } else { "release" };
             assert_eq!(
                 entry["status"].as_str(),
-                Some(expected),
+                Some("release"),
                 "{platform}/{level}: {entry}"
             );
             assert!(

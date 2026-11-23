@@ -4,6 +4,7 @@
 //! The binary (`cargo xtask ...`) is a thin wrapper around this library so that
 //! the checks can be tested against small fake workspaces.
 
+pub mod bench;
 pub mod blockcount;
 pub mod branches;
 pub mod commands;

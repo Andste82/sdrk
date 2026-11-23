@@ -21,6 +21,9 @@
 //!   `snr_estimate`;
 //! - [`GrCostasLoopCc`]: the loop of `digital.costas_loop_cc` with `gr::blocks::control_loop`
 //!   (`gr-costas.c`, cfg `has_grcostas`), the reference of `costas`;
+//! - [`GrSymbolSyncCc`]: `digital.symbol_sync_cc` with the Gardner detector and the MMSE 8-tap
+//!   interpolator (`gr-symbol-sync.c`, cfg `has_grsymsync`), the reference of the `symbol_sync`
+//!   fallback;
 //! - [`GrConstellationReceiverCb`], [`GrLinearEqualizerRect`]: `digital.constellation_receiver_cb`
 //!   and `digital.linear_equalizer` with `adaptive_algorithm_nlms` on a `constellation_rect`
 //!   (`gr-constellation.c`, cfg `has_grconstellation`), the references of the QAM paths of
@@ -466,8 +469,12 @@ impl GrCrc {
 mod scrambler_ffi {
     unsafe extern "C" {
         pub fn sdrk_gr_lfsr_size() -> core::ffi::c_ulong;
-        pub fn sdrk_gr_lfsr_init(object: *mut u64, mask: u64, seed: u64, reg_len: u8)
-        -> core::ffi::c_int;
+        pub fn sdrk_gr_lfsr_init(
+            object: *mut u64,
+            mask: u64,
+            seed: u64,
+            reg_len: u8,
+        ) -> core::ffi::c_int;
         pub fn sdrk_gr_lfsr_reset(object: *mut u64);
         pub fn sdrk_gr_scrambler_bb_work(
             object: *mut u64,
@@ -642,7 +649,8 @@ impl GrMpskSnrEstCc {
     /// If `input` is empty or longer than `i32::MAX` items.
     pub fn work(&mut self, input: &[[f32; 2]]) -> usize {
         assert!(!input.is_empty(), "mpsk_snr_est_cc: the history item");
-        let n = core::ffi::c_int::try_from(input.len() - 1).expect("mpsk_snr_est_cc: too many items");
+        let n =
+            core::ffi::c_int::try_from(input.len() - 1).expect("mpsk_snr_est_cc: too many items");
         #[cfg(has_grsnrest)]
         // SAFETY: `input` holds `n + 1` items; the object was initialized by `new`.
         return unsafe {
@@ -775,6 +783,125 @@ impl GrCostasLoopCc {
         }
         #[cfg(not(has_grcostas))]
         let _ = n;
+    }
+}
+
+#[cfg(has_grsymsync)]
+mod symsync_ffi {
+    unsafe extern "C" {
+        pub fn sdrk_gr_symbol_sync_cc_size() -> usize;
+        pub fn sdrk_gr_symbol_sync_cc_taps() -> *const [f32; 8];
+        pub fn sdrk_gr_symbol_sync_cc_init(
+            state: *mut core::ffi::c_void,
+            sps: f32,
+            loop_bw: f32,
+            damping: f32,
+            ted_gain: f32,
+            max_deviation: f32,
+        );
+        pub fn sdrk_gr_symbol_sync_cc_work(
+            state: *mut core::ffi::c_void,
+            output: *mut [f32; 2],
+            noutput_items: core::ffi::c_int,
+            input: *const [f32; 2],
+            ninput_items: core::ffi::c_int,
+            consumed: *mut core::ffi::c_int,
+        ) -> core::ffi::c_int;
+    }
+}
+
+/// GNU Radio's `symbol_sync_cc(TED_GARDNER, sps, loop_bw, damping, ted_gain, max_deviation, 1,
+/// .., IR_MMSE_8TAP, ..)`: one output per symbol, no diagnostic outputs and no tags. The block
+/// state is the C object (its size comes from the library).
+pub struct GrSymbolSyncCc {
+    #[cfg_attr(not(has_grsymsync), allow(dead_code))]
+    state: Vec<u64>,
+}
+
+/// The steps of the table of the MMSE interpolator (`NSTEPS + 1` rows of 8 taps).
+pub const GR_MMSE_STEPS: usize = 129;
+
+impl GrSymbolSyncCc {
+    /// The 129 by 8 table of `mmse_fir_interpolator` (`interpolator_taps.h`); `None` without the
+    /// library.
+    #[must_use]
+    pub fn mmse_taps() -> Option<&'static [[f32; 8]; GR_MMSE_STEPS]> {
+        #[cfg(has_grsymsync)]
+        {
+            // SAFETY: the C table is static, holds 129 rows of 8 floats and is never written.
+            Some(unsafe { &*symsync_ffi::sdrk_gr_symbol_sync_cc_taps().cast() })
+        }
+        #[cfg(not(has_grsymsync))]
+        None
+    }
+
+    /// The block for `sps` input samples per symbol; `None` without the library.
+    #[must_use]
+    pub fn new(
+        sps: f32,
+        loop_bw: f32,
+        damping: f32,
+        ted_gain: f32,
+        max_deviation: f32,
+    ) -> Option<Self> {
+        #[cfg(has_grsymsync)]
+        {
+            // SAFETY: the size is the C object's; the buffer is 8-byte aligned and zeroed, and
+            // the init function fills it.
+            let mut state =
+                vec![0u64; unsafe { symsync_ffi::sdrk_gr_symbol_sync_cc_size() }.div_ceil(8)];
+            unsafe {
+                symsync_ffi::sdrk_gr_symbol_sync_cc_init(
+                    state.as_mut_ptr().cast(),
+                    sps,
+                    loop_bw,
+                    damping,
+                    ted_gain,
+                    max_deviation,
+                );
+            }
+            Some(GrSymbolSyncCc { state })
+        }
+        #[cfg(not(has_grsymsync))]
+        {
+            let _ = (sps, loop_bw, damping, ted_gain, max_deviation);
+            None
+        }
+    }
+
+    /// `general_work` over `input` (all of it is offered as `ninput_items`): the symbols
+    /// written to `output` (at most its length) and the input samples consumed.
+    ///
+    /// # Panics
+    /// If a buffer holds more than `i32::MAX` samples.
+    pub fn work(&mut self, input: &[[f32; 2]], output: &mut [[f32; 2]]) -> (usize, usize) {
+        let ni = i32::try_from(input.len()).expect("symbol_sync_cc: too many input samples");
+        let no = i32::try_from(output.len()).expect("symbol_sync_cc: too many output samples");
+        #[cfg(has_grsymsync)]
+        {
+            let mut consumed = 0;
+            // SAFETY: the buffers hold `ni` and `no` pairs and do not overlap; the state was
+            // initialized by `new`.
+            let produced = unsafe {
+                symsync_ffi::sdrk_gr_symbol_sync_cc_work(
+                    self.state.as_mut_ptr().cast(),
+                    output.as_mut_ptr(),
+                    no,
+                    input.as_ptr(),
+                    ni,
+                    &raw mut consumed,
+                )
+            };
+            (
+                usize::try_from(produced).unwrap_or(0),
+                usize::try_from(consumed).unwrap_or(0),
+            )
+        }
+        #[cfg(not(has_grsymsync))]
+        {
+            let _ = (ni, no, input, output);
+            (0, 0)
+        }
     }
 }
 

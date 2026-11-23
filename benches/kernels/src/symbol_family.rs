@@ -24,11 +24,12 @@
 
 use std::hint::black_box;
 
+use cref_sys::{GR_MMSE_STEPS, GrSymbolSyncCc};
 use sdrk::kernels::symbol_sync::{SymbolSync, SymbolSyncState, Ted};
 use sdrk::{C32, Fallback, Sample, Sdrk};
 use sdrk_core::Reference;
 
-use super::{Aligned, Impl, Kernel, Layout, Pcg32, c32s, f32s, snr_db};
+use super::{Aligned, Impl, Kernel, Layout, Pcg32, c32_pairs, c32_pairs_ref, c32s, f32s, snr_db};
 
 /// The block defaults of `symbol_sync` (M38 §2, D550).
 const LOOP_BW: f64 = 0.01;
@@ -72,11 +73,14 @@ pub(crate) struct SymbolSyncK<T: Sample> {
     input: Aligned<T>,
     out: Aligned<T>,
     produced: usize,
+    /// The entry `symbol_sync_fallback` (`C32`): our fallback against GNU Radio's
+    /// `symbol_sync_cc`.
+    fallback_entry: bool,
 }
 
 impl SymbolSyncK<C32> {
     /// The `C32` workload: raised-cosine BPSK at 4.1 samples per symbol.
-    pub(crate) fn c32(rng: &mut Pcg32, layout: Layout) -> Self {
+    pub(crate) fn c32(rng: &mut Pcg32, layout: Layout, fallback_entry: bool) -> Self {
         let n = layout.n;
         let skew = layout.skew(core::mem::size_of::<C32>());
         let symbols = (n as f64 / SPS_C32).ceil() as usize + 2 * SPAN as usize + 1;
@@ -99,6 +103,7 @@ impl SymbolSyncK<C32> {
             input,
             out: Aligned::skewed(n, skew),
             produced: 0,
+            fallback_entry,
         }
     }
 }
@@ -126,6 +131,7 @@ impl SymbolSyncK<f32> {
             input,
             out: Aligned::skewed(n, skew),
             produced: 0,
+            fallback_entry: false,
         }
     }
 }
@@ -182,27 +188,140 @@ where
     }
 }
 
+/// The deviation limit of GNU Radio's loop: `max_deviation` is absolute there, ours a fraction of
+/// the samples per symbol.
+#[allow(clippy::cast_possible_truncation, reason = "the f32 parameters of the block")]
+const GR_MAX_DEVIATION: f32 = (MAX_DEVIATION * SPS_C32) as f32;
+
+fn gr_symbol_sync() -> Option<GrSymbolSyncCc> {
+    GrSymbolSyncCc::new(
+        SPS_C32 as f32,
+        LOOP_BW as f32,
+        DAMPING as f32,
+        TED_GAIN as f32,
+        GR_MAX_DEVIATION,
+    )
+}
+
+/// The f64 model of the `symbol_sync_cc` loop (Gardner, `IR_MMSE_8TAP`, one output per symbol):
+/// the exact gains of `clock_tracking_loop`, the same phase arithmetic and the table of the
+/// interpolator with f64 sums, the accuracy reference of [`Impl::GnuRadio`].
+#[allow(clippy::many_single_char_names, reason = "the names of the C++ source")]
+fn gr_symbol_sync_model(input: &[C32]) -> Vec<C32> {
+    let Some(taps) = GrSymbolSyncCc::mmse_taps() else {
+        return Vec::new();
+    };
+    let sps = f64::from(SPS_C32 as f32);
+    let (loop_bw, zeta, ted_gain) = (f64::from(LOOP_BW as f32), f64::from(DAMPING as f32), 1.0);
+    let dev = f64::from(GR_MAX_DEVIATION);
+    let (max_avg, min_avg) = (sps + dev, sps - dev);
+    let k0 = 2.0 / ted_gain;
+    let k1 = (-zeta * loop_bw).exp();
+    let sinh = (zeta * loop_bw).sinh();
+    let omega_d = loop_bw * (1.0 - zeta * zeta).sqrt();
+    let alpha = k0 * k1 * sinh;
+    let beta = k0 * (1.0 - k1 * (sinh + omega_d.cos()));
+    let (mut avg, mut cphase) = (sps, 0.0_f64);
+    let mut inst;
+    // The interpolator phase, the Gardner detector and the block clocks (2 interpolations per
+    // symbol: the detector input is every one, the symbol and the output every second one).
+    let mut iphase = sps;
+    let mut phase_wrapped = iphase - iphase.floor();
+    let (mut x, mut error, mut ted_clock) = ([(0.0_f64, 0.0_f64); 3], 0.0_f64, 1_usize);
+    let mut clock = 1_usize;
+    let mut inst_interp = sps / 2.0;
+    let ni = input.len().saturating_sub(8);
+    let mut out = Vec::new();
+    let mut ii = 0_usize;
+    while ni > 0 && out.len() < input.len() {
+        clock = (clock + 1) % 2;
+        let imu = (phase_wrapped * 128.0).round_ties_even() as usize;
+        let row = &taps[imu.min(GR_MMSE_STEPS - 1)];
+        let (mut re, mut im) = (0.0_f64, 0.0_f64);
+        for (j, s) in input[ii..ii + 8].iter().enumerate() {
+            let t = f64::from(row[7 - j]);
+            re += f64::from(s.re) * t;
+            im += f64::from(s.im) * t;
+        }
+        if clock == 0 {
+            out.push(C32::new(re as f32, im as f32));
+        }
+        x = [(re, im), x[0], x[1]];
+        ted_clock = (ted_clock + 1) % 2;
+        if ted_clock == 0 {
+            error = (x[2].0 - x[0].0) * x[1].0 + (x[2].1 - x[0].1) * x[1].1;
+        }
+        if clock == 0 {
+            avg = (avg + beta * error).clamp(min_avg, max_avg);
+            inst = avg + alpha * error;
+            if inst <= 0.0 {
+                inst = avg;
+            }
+            cphase += inst;
+            while cphase > avg / 2.0 {
+                cphase -= avg;
+            }
+            while cphase <= -avg / 2.0 {
+                cphase += avg;
+            }
+            inst_interp = inst / 2.0;
+            let next = phase_wrapped + inst;
+            if ii + next.floor() as usize >= ni {
+                out.pop();
+                break;
+            }
+        }
+        iphase = phase_wrapped + inst_interp;
+        phase_wrapped = iphase - iphase.floor();
+        ii += iphase.floor() as usize;
+    }
+    out
+}
+
 impl Kernel for SymbolSyncK<C32> {
     fn run(&mut self, which: Impl, k: usize) {
+        if which == Impl::GnuRadio {
+            let mut gr = gr_symbol_sync().expect("gnuradio");
+            for _ in 0..k {
+                self.produced = gr
+                    .work(c32_pairs_ref(&self.input), c32_pairs(&mut self.out))
+                    .0;
+                black_box(&self.out);
+            }
+            return;
+        }
         self.run_impl(which, k);
     }
 
     fn accuracy(&mut self, which: Impl) -> f64 {
         self.run(which, 1);
-        let want = self.reference();
-        if self.produced == 0 || want.len() != self.produced {
+        let want = if which == Impl::GnuRadio {
+            gr_symbol_sync_model(&self.input)
+        } else {
+            self.reference()
+        };
+        if self.produced == 0 || want.len().abs_diff(self.produced) > 1 {
             return f64::NEG_INFINITY;
         }
-        snr_db(&c32s(&want), &c32s(&self.out[..self.produced]))
+        let m = want.len().min(self.produced);
+        snr_db(&c32s(&want[..m]), &c32s(&self.out[..m]))
     }
 
     fn supports(&self, which: Impl) -> bool {
-        matches!(which, Impl::Ours | Impl::Fallback)
+        match which {
+            Impl::Ours => !self.fallback_entry,
+            Impl::Fallback => true,
+            Impl::GnuRadio => self.fallback_entry && gr_symbol_sync().is_some(),
+            _ => false,
+        }
     }
 
     fn describe(&self, which: Impl) -> &'static str {
         match which {
             Impl::Fallback => "sdrk fallback",
+            Impl::GnuRadio => {
+                "GNU Radio symbol_sync_cc (symbol_sync_cc_impl.cc of gr-digital, TED_GARDNER, IR_MMSE_8TAP, generic compiler flags; reference does different work: an 8-tap MMSE interpolator against our 4-point Lagrange polynomial)"
+            }
             _ => "sdrk",
         }
     }

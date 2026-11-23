@@ -6,7 +6,7 @@ use sdrk::{Progress, Rate, Sdrk};
 use sdrk_core::kernels::scramble::Scramble;
 use sdrk_proto::prbs::{Poly, Prbs};
 
-use super::{head, head_mut, unit_timing, unknown};
+use super::{PRBS_OPTIONS, PRBS_POLYS, head, head_mut, prbs_choice, unit_timing, unknown};
 use crate::block::{Block, BlockTiming, ParamValue};
 use crate::describe::{
     BlockDescription, Mutability, ParamDesc, ParamKind, PortDesc, PortType, Unit,
@@ -18,19 +18,6 @@ use crate::storage::{Plan, Storage};
 /// The most samples one call of [`ScrambleBlock::process`] takes: the phase indices of a call
 /// live in the struct (one byte per sample).
 pub const SCRAMBLE_CHUNK: usize = 256;
-
-/// The names of the PRBS keys, in the order of the `key` choice.
-const KEY_OPTIONS: &[&str] = &["prbs5", "prbs7", "prbs9", "prbs10", "prbs11", "prbs15"];
-
-/// The polynomials of [`KEY_OPTIONS`], in the same order.
-const KEY_POLYS: [Poly; 6] = [
-    Poly::Prbs5,
-    Poly::Prbs7,
-    Poly::Prbs9,
-    Poly::Prbs10,
-    Poly::Prbs11,
-    Poly::Prbs15,
-];
 
 /// The choice index of `prbs15`, the default key.
 const KEY_DEFAULT: u16 = 5;
@@ -87,7 +74,7 @@ pub static DESCRIPTION: BlockDescription = BlockDescription {
             name: "key",
             unit: Unit::None,
             kind: ParamKind::Choice {
-                options: KEY_OPTIONS,
+                options: PRBS_OPTIONS,
                 default: KEY_DEFAULT,
             },
             typical: "prbs15; a shorter key repeats after 2^n - 1 bits",
@@ -156,14 +143,6 @@ fn check(name: &str, value: ParamValue) -> Result<()> {
         .check(&value)
 }
 
-/// The choice index of a key polynomial.
-fn key_index(poly: Poly) -> Option<u16> {
-    KEY_POLYS
-        .iter()
-        .position(|&p| p == poly)
-        .and_then(|i| u16::try_from(i).ok())
-}
-
 impl ScrambleConfig {
     /// Checks the configuration (the sample rate does not matter): the ranges, a key of the
     /// choice, and a `key_seed` whose low `n` bits are not all zero (`InvalidParameter` of
@@ -171,7 +150,7 @@ impl ScrambleConfig {
     pub fn validate(&self, _rate_in: Rate) -> Result<()> {
         check("bits", ParamValue::I64(i64::from(self.bits)))?;
         check("key_seed", ParamValue::I64(i64::from(self.key_seed)))?;
-        if key_index(self.key).is_none() {
+        if prbs_choice(self.key).is_none() {
             return Err(Error::InvalidParameter {
                 name: "key",
                 reason: "the key must be prbs5, prbs7, prbs9, prbs10, prbs11 or prbs15",
@@ -196,7 +175,7 @@ impl ScrambleConfig {
             "bits" => self.bits = u32::try_from(value.as_i64()?).unwrap_or(0),
             "inverse" => self.inverse = value.as_bool()?,
             "key" => {
-                self.key = KEY_POLYS
+                self.key = PRBS_POLYS
                     .get(usize::from(value.as_choice()?))
                     .copied()
                     .ok_or(Error::WrongParamType)?;
@@ -213,7 +192,7 @@ impl ScrambleConfig {
             "bits" => Ok(ParamValue::I64(i64::from(self.bits))),
             "inverse" => Ok(ParamValue::Bool(self.inverse)),
             "key" => Ok(ParamValue::Choice(
-                key_index(self.key).unwrap_or(KEY_DEFAULT),
+                prbs_choice(self.key).unwrap_or(KEY_DEFAULT),
             )),
             "key_seed" => Ok(ParamValue::I64(i64::from(self.key_seed))),
             _ => unknown(),

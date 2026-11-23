@@ -80,7 +80,7 @@ fn the_kinds_are_registered() {
     let f = registry.factory("symbol_demap").unwrap();
     assert!(f.kernels().is_empty());
     assert_eq!(f.description().kind, "symbol_demap");
-    assert_eq!(registry.descriptions().count(), 84);
+    assert_eq!(registry.descriptions().count(), 85);
 }
 
 #[test]

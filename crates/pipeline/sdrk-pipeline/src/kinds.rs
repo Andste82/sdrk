@@ -17,34 +17,34 @@ use sdrk_blocks::{
     BiquadConfig, BiquadRealBlock, BitDescrambleBlock, BitScrambleBlock, BitScrambleConfig, Block,
     BlockDescription, BlockSample, ChannelSelectBlock, ChannelSelectConfig, ChannelizeBlock,
     ChannelizeConfig, ConvertBlock, ConvertConfig, ConvertOutBlock, ConvertOutConfig,
-    ConvertRealBlock, CostasBlock, CostasConfig, DcBlockBlock, DcBlockConfig, DcBlockRealBlock,
-    DdcBlock, DdcConfig, DecimateBlock, DecimateConfig, DecimateRealBlock, DeemphasisBlock,
-    DeemphasisConfig, DeemphasisRealBlock, DelayBlock, DelayConfig, DelayRealBlock, DesignSpec,
-    DucBlock, DucConfig, EqualizeBlock, EqualizeConfig, FirBlock, FirConfig, FmDemodBlock,
-    FmDemodConfig, FmModBlock, FmModConfig, FmStereoDemodBlock, FmStereoDemodConfig,
-    FmStereoModBlock, FmStereoModConfig, FmStereoRdsModBlock, FmStereoRdsModConfig,
-    FrameDecodeBlock, FrameDecodeConfig, FrameEncodeBlock, FrameEncodeConfig, FrameRotations,
-    FskDemodBlock, FskDemodConfig, FskModBlock, FskModConfig, HalfbandDecimateBlock,
-    HalfbandDecimateConfig, HalfbandDecimateRealBlock, HdlcDecodeBlock, HdlcDecodeConfig,
-    HdlcEncodeBlock, HdlcEncodeConfig, ImagPartBlock, InterpolateBlock, InterpolateConfig,
-    InterpolateRealBlock, IqOffsetBlock, IqOffsetConfig, MagBlock, MagConfig, MakeComplexBlock,
-    MorseDecodeBlock, MorseDecodeConfig, MorseEncodeBlock, MorseEncodeConfig, MulBlock,
-    MulRealBlock, NcoBlock, NcoConfig, NcoRealBlock, NoiseBlankBlock, NoiseBlankConfig, NoiseBlock,
-    NoiseConfig, NoiseRealBlock, OokDemodBlock, OokDemodConfig, OokModBlock, OokModConfig,
-    ParamValue, PortType, PreemphLimitBlock, PreemphLimitConfig, PskDemodBlock, PskDemodConfig,
-    PskModBlock, PskModConfig, PskVariant, PulseKeyBlock, PulseKeyConfig, PulseMatchBlock,
-    PulseMatchConfig, PulseShapeBlock, PulseShapeConfig, QamAcquireBlock, QamAcquireConfig,
-    QamDemodBlock, QamDemodConfig, QamFrameDecodeBlock, QamFrameDecodeConfig, QamFrameEncodeBlock,
-    QamFrameEncodeConfig, QamModBlock, QamModConfig, QuadDemodBlock, QuadDemodConfig,
-    RESAMPLE_TUNED_PHASES, RdsDecodeBlock, RdsDecodeConfig, RdsDemodBlock, RdsDemodConfig,
-    RdsEncodeBlock, RdsEncodeConfig, RealPartBlock, RealToIqBlock, ResampleBlock, ResampleConfig,
-    ResampleRealBlock, RotateBlock, RotateConfig, ScaleBlock, ScaleConfig, ScrambleBlock,
-    ScrambleConfig, Scrambler, SensorDecodeBlock, SensorDecodeConfig, SensorEncodeBlock,
-    SensorEncodeConfig, SnrEstimateBlock, SnrEstimateConfig, SpectrumBlock, SpectrumConfig,
-    SquelchBlock, SquelchConfig, SsbDemodBlock, SsbDemodConfig, SsbModBlock, SsbModConfig,
-    StereoMatrixBlock, StereoPllBlock, StereoPllConfig, SymbolDemapBlock, SymbolDemapConfig,
-    SymbolDemapConstellation, SymbolMapBlock, SymbolMapConfig, SymbolMapConstellation,
-    SymbolSyncBlock, SymbolSyncConfig, ToComplexBlock,
+    ConvertRealBlock, CorrelateBlock, CorrelateConfig, CostasBlock, CostasConfig, DcBlockBlock,
+    DcBlockConfig, DcBlockRealBlock, DdcBlock, DdcConfig, DecimateBlock, DecimateConfig,
+    DecimateRealBlock, DeemphasisBlock, DeemphasisConfig, DeemphasisRealBlock, DelayBlock,
+    DelayConfig, DelayRealBlock, DesignSpec, DucBlock, DucConfig, EqualizeBlock, EqualizeConfig,
+    FirBlock, FirConfig, FmDemodBlock, FmDemodConfig, FmModBlock, FmModConfig, FmStereoDemodBlock,
+    FmStereoDemodConfig, FmStereoModBlock, FmStereoModConfig, FmStereoRdsModBlock,
+    FmStereoRdsModConfig, FrameDecodeBlock, FrameDecodeConfig, FrameEncodeBlock, FrameEncodeConfig,
+    FrameRotations, FskDemodBlock, FskDemodConfig, FskModBlock, FskModConfig,
+    HalfbandDecimateBlock, HalfbandDecimateConfig, HalfbandDecimateRealBlock, HdlcDecodeBlock,
+    HdlcDecodeConfig, HdlcEncodeBlock, HdlcEncodeConfig, ImagPartBlock, InterpolateBlock,
+    InterpolateConfig, InterpolateRealBlock, IqOffsetBlock, IqOffsetConfig, MagBlock, MagConfig,
+    MakeComplexBlock, MorseDecodeBlock, MorseDecodeConfig, MorseEncodeBlock, MorseEncodeConfig,
+    MulBlock, MulRealBlock, NcoBlock, NcoConfig, NcoRealBlock, NoiseBlankBlock, NoiseBlankConfig,
+    NoiseBlock, NoiseConfig, NoiseRealBlock, OokDemodBlock, OokDemodConfig, OokModBlock,
+    OokModConfig, ParamValue, PortType, PreemphLimitBlock, PreemphLimitConfig, PskDemodBlock,
+    PskDemodConfig, PskModBlock, PskModConfig, PskVariant, PulseKeyBlock, PulseKeyConfig,
+    PulseMatchBlock, PulseMatchConfig, PulseShapeBlock, PulseShapeConfig, QamAcquireBlock,
+    QamAcquireConfig, QamDemodBlock, QamDemodConfig, QamFrameDecodeBlock, QamFrameDecodeConfig,
+    QamFrameEncodeBlock, QamFrameEncodeConfig, QamModBlock, QamModConfig, QuadDemodBlock,
+    QuadDemodConfig, RESAMPLE_TUNED_PHASES, RdsDecodeBlock, RdsDecodeConfig, RdsDemodBlock,
+    RdsDemodConfig, RdsEncodeBlock, RdsEncodeConfig, RealPartBlock, RealToIqBlock, ResampleBlock,
+    ResampleConfig, ResampleRealBlock, RotateBlock, RotateConfig, ScaleBlock, ScaleConfig,
+    ScrambleBlock, ScrambleConfig, Scrambler, SensorDecodeBlock, SensorDecodeConfig,
+    SensorEncodeBlock, SensorEncodeConfig, SnrEstimateBlock, SnrEstimateConfig, SpectrumBlock,
+    SpectrumConfig, SquelchBlock, SquelchConfig, SsbDemodBlock, SsbDemodConfig, SsbModBlock,
+    SsbModConfig, StereoMatrixBlock, StereoPllBlock, StereoPllConfig, SymbolDemapBlock,
+    SymbolDemapConfig, SymbolDemapConstellation, SymbolMapBlock, SymbolMapConfig,
+    SymbolMapConstellation, SymbolSyncBlock, SymbolSyncConfig, ToComplexBlock,
 };
 use sdrk_device::Layout;
 use serde_json::{Map, Value};
@@ -2837,6 +2837,88 @@ where
     Ok(Box::new(StreamNode::new(ScrambleBlock::<T, _>::new(
         cfg, rate, st,
     )?)))
+}
+
+// ------------------------------------------------------------------ correlate
+
+pub(crate) struct CorrelateKind;
+
+impl Kind for CorrelateKind {
+    type Cfg = CorrelateConfig;
+
+    const KIND: &'static str = "correlate";
+    fn kernels() -> &'static [&'static str] {
+        &["xcorr_fft"]
+    }
+    fn default_cfg() -> CorrelateConfig {
+        CorrelateConfig::default()
+    }
+    fn set(cfg: &mut CorrelateConfig, name: &str, value: ParamValue) -> BlockResult<()> {
+        cfg.set(name, value)
+    }
+    fn plan(
+        cfg: &CorrelateConfig,
+        input: PortType,
+        rate: Rate,
+        _p: Precision,
+    ) -> BlockResult<Figures> {
+        if input != PortType::C32 {
+            return Err(mismatch("correlate needs c32 samples"));
+        }
+        let bytes = CorrelateBlock::<VecStorage>::storage_bytes(cfg, rate)?;
+        let (l, n) = (cfg.reference_len()?, cfg.resolved_fft_size()?);
+        let b = n - l + 1;
+        let nf = n as f64;
+        Ok(Figures {
+            rate_out: CorrelateBlock::<VecStorage>::rate_out(cfg, rate)?,
+            memory_bytes: bytes,
+            // M50 §6: two N-point FFTs of 2.5 N log2(N) each (as `spectrum` counts one) and the
+            // spectral product of 4 N per B = N - L + 1 outputs, per input sample.
+            cost: (5.0 * nf * nf.log2() + 4.0 * nf) / b as f64,
+            // The filter runs in the frequency domain: its cost is `cost`, its memory
+            // `memory_bytes`; it reports no time-domain taps for `max_taps_per_node`.
+            taps: 0,
+            delay: Delay::new(l as u64 - 1, 1).unwrap_or(Delay::ZERO),
+            min_input: b,
+            output: stream(PortType::C32),
+        })
+    }
+    fn adjust(e: &sdrk_blocks::Error, d: &mut Diagnostic) {
+        // The FFT size is too small for the reference: name the required size (the `min` of
+        // the error), an `invalid_value` of `fft_size`.
+        if let sdrk_blocks::Error::OutOfRange {
+            name: "fft_size",
+            min,
+            max,
+            got,
+        } = *e
+        {
+            d.code = DiagCode::InvalidValue;
+            d.message = if min > max {
+                format!(
+                    "the reference of the code needs fft_size {min} or more (a power of two of \
+                     at least twice its length), more than the largest {max}: choose a shorter \
+                     code or fewer samples_per_chip"
+                )
+            } else {
+                format!(
+                    "the reference of the code needs fft_size {min} or more (a power of two of \
+                     at least twice its length), got {got}"
+                )
+            };
+        }
+    }
+    fn build(
+        cfg: &CorrelateConfig,
+        _input: PortType,
+        rate: Rate,
+        _p: Precision,
+        st: &mut VecStorage,
+    ) -> BlockResult<Box<dyn Node>> {
+        Ok(Box::new(StreamNode::new(CorrelateBlock::new(
+            cfg, rate, st,
+        )?)))
+    }
 }
 
 // ------------------------------------------------------------------------ add

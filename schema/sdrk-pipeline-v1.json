@@ -1611,6 +1611,74 @@
           },
           {
             "additionalProperties": false,
+            "description": "Sliding correlation of a complex stream with a PRBS code by FFT fast convolution; the peak marks the end of the code.",
+            "properties": {
+              "align": {
+                "$ref": "#/$defs/AlignMode"
+              },
+              "backend": {
+                "$ref": "#/$defs/BackendSpec"
+              },
+              "description": {
+                "maxLength": 2000,
+                "type": "string"
+              },
+              "group": {
+                "description": "The group of the node (a key of `groups`); nodes without one are in `main`.",
+                "pattern": "^[a-z][a-z0-9_]{0,63}$",
+                "type": "string"
+              },
+              "kind": {
+                "const": "correlate"
+              },
+              "params": {
+                "additionalProperties": false,
+                "properties": {
+                  "code": {
+                    "default": "prbs7",
+                    "description": "The PRBS polynomial of the code: prbs5, prbs7, prbs9, prbs10, prbs11 or prbs15; the code is one period of 2^n - 1 chips. Typical: prbs7 (127 chips); prbs10 (1023 chips) for more processing gain. Build-time.",
+                    "enum": [
+                      "prbs5",
+                      "prbs7",
+                      "prbs9",
+                      "prbs10",
+                      "prbs11",
+                      "prbs15"
+                    ],
+                    "type": "string"
+                  },
+                  "fft_size": {
+                    "default": 0,
+                    "description": "FFT size N of the overlap-save: 0 for automatic (the smallest power of two of at least 4 L, from 16 to 65536), else a power of two from 16 to 65536 and at least 2 L. Typical: 0 (automatic, 4 L); the smallest power of two of at least 2 L to save memory. Build-time.",
+                    "maximum": 65536,
+                    "minimum": 0,
+                    "type": "integer"
+                  },
+                  "samples_per_chip": {
+                    "default": 1,
+                    "description": "Samples per chip, 1 to 16: every chip of the code is repeated this many times in the reference. Typical: 1 at the chip rate; 2 or 4 with oversampling. Build-time.",
+                    "maximum": 16,
+                    "minimum": 1,
+                    "type": "integer"
+                  },
+                  "seed": {
+                    "default": 1,
+                    "description": "Initial register of the PRBS, 1 to 32767; only the low n bits are used and they must not all be zero. Typical: 1; the seed of the transmitter. Build-time.",
+                    "maximum": 32767,
+                    "minimum": 1,
+                    "type": "integer"
+                  }
+                },
+                "type": "object"
+              }
+            },
+            "required": [
+              "kind"
+            ],
+            "type": "object"
+          },
+          {
+            "additionalProperties": false,
             "description": "Recovers the carrier of BPSK, QPSK, 8PSK or square QAM symbols (16 to 1024 points): removes phase and frequency offset.",
             "properties": {
               "align": {

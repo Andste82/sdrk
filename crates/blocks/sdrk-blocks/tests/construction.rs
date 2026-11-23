@@ -729,6 +729,7 @@ fn no_block_is_larger_than_512_bytes() {
         BitDescrambleBlock,
         BitScrambleBlock,
         ChannelizeBlock,
+        CorrelateBlock,
         EqualizeBlock,
         FmStereoRdsModBlock,
         FrameDecodeBlock,

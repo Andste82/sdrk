@@ -48,7 +48,7 @@ fn the_kind_is_registered_without_kernels_and_costs_ten() {
     let f = registry.factory("snr_estimate").unwrap();
     assert_eq!(f.kernels().len(), 0);
     assert_eq!(f.description().kind, "snr_estimate");
-    assert_eq!(registry.descriptions().count(), 84);
+    assert_eq!(registry.descriptions().count(), 85);
     let report = validate(&single("c32", json!({ "constellation": "qam256" })));
     assert!(report.is_ok(), "{}", report.to_json());
     assert_eq!(report.cost_per_input_sample, 10.0);

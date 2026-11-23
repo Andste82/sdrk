@@ -79,7 +79,7 @@ pub use channelizer::{Firpfbch2Build, LiquidFirpfbch2};
 pub use fftfilt::{FftfiltBuild, LiquidFftfilt};
 pub use gnuradio::{
     CostasLoopState, GR_MMSE_STEPS, GrChunksToSymbols, GrConstellationReceiverCb, GrCostasLoopCc,
-    GrCrc, GrFirBank, GrFirFilterCcf, GrFmDeemph, GrFrequencyModulatorFc, GrLinearEqualizer,
+    GrCrc, GrFirBank, GrPfbArb, GrFirFilterCcf, GrFmDeemph, GrFrequencyModulatorFc, GrLinearEqualizer,
     GrLinearEqualizerRect, GrMpskSnrEstCc, GrQuadratureDemodCf, GrRect, GrRotator, GrScrambler,
     GrSoftDecoder, GrSymbolSyncCc, gr_constellation_decoder_qpsk,
 };

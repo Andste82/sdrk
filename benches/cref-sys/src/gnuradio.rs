@@ -1235,6 +1235,172 @@ impl Drop for GrFirBank {
 }
 
 #[cfg(has_grsymsync)]
+mod pfb_arb_ffi {
+    unsafe extern "C" {
+        pub fn sdrk_gr_pfb_arb_new(
+            taps: *const f32,
+            ntaps: core::ffi::c_uint,
+            nfilts: core::ffi::c_uint,
+            rate: f32,
+            capacity: core::ffi::c_uint,
+        ) -> *mut core::ffi::c_void;
+        pub fn sdrk_gr_pfb_arb_free(state: *mut core::ffi::c_void);
+        pub fn sdrk_gr_pfb_arb_work(
+            state: *mut core::ffi::c_void,
+            output: *mut [f32; 2],
+            input: *const [f32; 2],
+            n: core::ffi::c_uint,
+        ) -> core::ffi::c_uint;
+    }
+}
+
+#[cfg(has_grvolk)]
+mod pfb_arb_volk_ffi {
+    unsafe extern "C" {
+        pub fn sdrk_gr_volk_pfb_arb_new(
+            taps: *const f32,
+            ntaps: core::ffi::c_uint,
+            nfilts: core::ffi::c_uint,
+            rate: f32,
+            capacity: core::ffi::c_uint,
+        ) -> *mut core::ffi::c_void;
+        pub fn sdrk_gr_volk_pfb_arb_free(state: *mut core::ffi::c_void);
+        pub fn sdrk_gr_volk_pfb_arb_work(
+            state: *mut core::ffi::c_void,
+            output: *mut [f32; 2],
+            input: *const [f32; 2],
+            n: core::ffi::c_uint,
+        ) -> core::ffi::c_uint;
+    }
+}
+
+/// GNU Radio's `pfb_arb_resampler_ccf(rate, taps, nfilts)` (`gr-fir.c`): `nfilts` polyphase
+/// branches of the prototype `taps` and of their derivative, two dot products per output. The
+/// scalar build ([`GrPfbArb::new`], cfg `has_grsymsync`) and the form with VOLK's dispatcher
+/// ([`GrPfbArb::new_volk`], cfg `has_grvolk`). The history lives across the calls.
+pub struct GrPfbArb {
+    #[cfg_attr(not(has_grsymsync), allow(dead_code))]
+    object: *mut core::ffi::c_void,
+    capacity: usize,
+    #[cfg_attr(not(has_grvolk), allow(dead_code))]
+    volk: bool,
+}
+
+// SAFETY: the C object owns its buffers and is used by one thread at a time.
+unsafe impl Send for GrPfbArb {}
+
+impl GrPfbArb {
+    /// The scalar build; `None` without the library.
+    #[must_use]
+    pub fn new(taps: &[f32], nfilts: usize, rate: f32, capacity: usize) -> Option<Self> {
+        #[cfg(has_grsymsync)]
+        {
+            let (n, f, c) = (
+                u32::try_from(taps.len()).ok()?,
+                u32::try_from(nfilts).ok()?,
+                u32::try_from(capacity).ok()?,
+            );
+            // SAFETY: `taps` holds `n` floats; the C side copies them.
+            let object = unsafe { pfb_arb_ffi::sdrk_gr_pfb_arb_new(taps.as_ptr(), n, f, rate, c) };
+            if object.is_null() {
+                return None;
+            }
+            Some(GrPfbArb {
+                object,
+                capacity,
+                volk: false,
+            })
+        }
+        #[cfg(not(has_grsymsync))]
+        {
+            let _ = (taps, nfilts, rate, capacity);
+            None
+        }
+    }
+
+    /// As [`GrPfbArb::new`], the form with VOLK's dispatcher; `None` without the library.
+    #[must_use]
+    pub fn new_volk(taps: &[f32], nfilts: usize, rate: f32, capacity: usize) -> Option<Self> {
+        #[cfg(has_grvolk)]
+        {
+            let (n, f, c) = (
+                u32::try_from(taps.len()).ok()?,
+                u32::try_from(nfilts).ok()?,
+                u32::try_from(capacity).ok()?,
+            );
+            // SAFETY: `taps` holds `n` floats; the C side copies them.
+            let object =
+                unsafe { pfb_arb_volk_ffi::sdrk_gr_volk_pfb_arb_new(taps.as_ptr(), n, f, rate, c) };
+            if object.is_null() {
+                return None;
+            }
+            Some(GrPfbArb {
+                object,
+                capacity,
+                volk: true,
+            })
+        }
+        #[cfg(not(has_grvolk))]
+        {
+            let _ = (taps, nfilts, rate, capacity);
+            None
+        }
+    }
+
+    /// `work` over `input` (at most the capacity); returns the number of outputs written
+    /// (`output` must hold the outputs of the call).
+    ///
+    /// # Panics
+    /// If `input` is above the capacity.
+    pub fn work(&mut self, input: &[[f32; 2]], output: &mut [[f32; 2]]) -> usize {
+        assert!(
+            input.len() <= self.capacity,
+            "pfb_arb_resampler: above the capacity"
+        );
+        let n = u32::try_from(input.len()).expect("pfb_arb_resampler: too many samples");
+        #[cfg(has_grvolk)]
+        if self.volk {
+            // SAFETY: the object was created by `new_volk`; `output` is large enough by the
+            // contract of the caller (the rate of the resampler times the input).
+            return unsafe {
+                pfb_arb_volk_ffi::sdrk_gr_volk_pfb_arb_work(
+                    self.object,
+                    output.as_mut_ptr(),
+                    input.as_ptr(),
+                    n,
+                )
+            } as usize;
+        }
+        #[cfg(has_grsymsync)]
+        // SAFETY: as above, for the object of `new`.
+        return unsafe {
+            pfb_arb_ffi::sdrk_gr_pfb_arb_work(self.object, output.as_mut_ptr(), input.as_ptr(), n)
+        } as usize;
+        #[cfg(not(has_grsymsync))]
+        {
+            let _ = (n, output);
+            0
+        }
+    }
+}
+
+impl Drop for GrPfbArb {
+    fn drop(&mut self) {
+        #[cfg(has_grvolk)]
+        if self.volk {
+            // SAFETY: created by `new_volk`, freed once.
+            unsafe { pfb_arb_volk_ffi::sdrk_gr_volk_pfb_arb_free(self.object) };
+            return;
+        }
+        #[cfg(has_grsymsync)]
+        // SAFETY: created by `new`, freed once.
+        unsafe {
+            pfb_arb_ffi::sdrk_gr_pfb_arb_free(self.object);
+        }
+    }
+}
+
+#[cfg(has_grsymsync)]
 mod chunks_ffi {
     unsafe extern "C" {
         pub fn sdrk_gr_chunks_new(

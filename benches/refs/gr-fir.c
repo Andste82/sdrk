@@ -166,3 +166,96 @@ void sdrk_gr_fir_bank_work(sdrk_gr_fir_bank* self, lv_32fc_t* output, const lv_3
     /* the history of the next call */
     memmove(self->buffer, self->buffer + n, (size_t)h * sizeof(lv_32fc_t));
 }
+
+/*
+ * `gr::filter::pfb_arb_resampler_ccf` (gr-filter/lib/pfb_arb_resampler.cc, GNU Radio main at
+ * ec1bf15) translated to C: `nfilts` polyphase branches of the taps (`d_filters`, branch `i`
+ * holds the taps `i + j * nfilts`, `create_taps`) and the same for the
+ * derivative taps (`d_diff_filters`, `diff[i] = taps[i] - taps[i + 1]`, the last 0), every
+ * branch a `fir_filter_ccf` of the generic or of the VOLK build of this file. The loop of
+ * `filter`: per input sample and branch index `j` below `nfilts`, `out = filter[j] +
+ * diff_filter[j] * acc`, then `acc += flt_rate` and `j += dec_rate + floor(acc)` with
+ * `dec_rate = floor(nfilts / rate)` and `flt_rate = nfilts / rate - dec_rate`; the input
+ * advances by `j / nfilts` and `j` is taken modulo `nfilts` (`d_last_filter` and `d_acc`
+ * persist). The bank of the main taps keeps the history of the input; the derivative branches
+ * read the same window.
+ */
+typedef struct {
+    sdrk_gr_fir_bank* main;
+    sdrk_gr_fir_bank* diff;
+    unsigned int nfilts;
+    unsigned int dec_rate;
+    float flt_rate;
+    float acc;
+    unsigned int last_filter;
+} sdrk_gr_pfb_arb;
+
+void sdrk_gr_pfb_arb_free(sdrk_gr_pfb_arb* self)
+{
+    if (self == NULL) {
+        return;
+    }
+    sdrk_gr_fir_bank_free(self->main);
+    sdrk_gr_fir_bank_free(self->diff);
+    free(self);
+}
+
+/* `pfb_arb_resampler_ccf(rate, taps, nfilts)` for at most `capacity` input samples per call */
+sdrk_gr_pfb_arb* sdrk_gr_pfb_arb_new(const float* taps, unsigned int ntaps, unsigned int nfilts, float rate, unsigned int capacity)
+{
+    if (ntaps < 2 || nfilts == 0 || rate <= 0.0f) {
+        return NULL;
+    }
+    sdrk_gr_pfb_arb* self = calloc(1, sizeof(*self));
+    float* diff = malloc((size_t)ntaps * sizeof(float));
+    if (self == NULL || diff == NULL) {
+        free(self);
+        free(diff);
+        return NULL;
+    }
+    for (unsigned int i = 0; i < ntaps - 1; i++) {
+        diff[i] = taps[i] - taps[i + 1];
+    }
+    diff[ntaps - 1] = 0.0f;
+    /* the branch i of the bank holds taps[i + j * nfilts] */
+    self->main = sdrk_gr_fir_bank_new(taps, ntaps, nfilts, capacity);
+    self->diff = sdrk_gr_fir_bank_new(diff, ntaps, nfilts, capacity);
+    free(diff);
+    self->nfilts = nfilts;
+    float r = (float)nfilts / rate;
+    self->dec_rate = (unsigned int)r;
+    self->flt_rate = r - (float)self->dec_rate;
+    if (self->main == NULL || self->diff == NULL) {
+        sdrk_gr_pfb_arb_free(self);
+        return NULL;
+    }
+    return self;
+}
+
+/* `n` input samples (at most the capacity); returns the number of outputs written */
+unsigned int sdrk_gr_pfb_arb_work(sdrk_gr_pfb_arb* self, lv_32fc_t* output, const lv_32fc_t* input, unsigned int n)
+{
+    sdrk_gr_fir_bank* m = self->main;
+    unsigned int h = m->nt - 1;
+    if (n > m->capacity) {
+        n = m->capacity;
+    }
+    memcpy(m->buffer + h, input, (size_t)n * sizeof(lv_32fc_t));
+    unsigned int i_in = 0, i_out = 0, j = self->last_filter;
+    while (i_in < n) {
+        while (j < self->nfilts) {
+            unsigned int b = j;
+            lv_32fc_t o0 = filter(m, b, &m->buffer[i_in]);
+            lv_32fc_t o1 = filter(self->diff, b, &m->buffer[i_in]);
+            output[i_out++] = lv_cmake(lv_creal(o0) + lv_creal(o1) * self->acc, lv_cimag(o0) + lv_cimag(o1) * self->acc);
+            self->acc += self->flt_rate;
+            j += self->dec_rate + (unsigned int)self->acc;
+            self->acc -= (float)(unsigned int)self->acc;
+        }
+        i_in += j / self->nfilts;
+        j = j % self->nfilts;
+    }
+    self->last_filter = j;
+    memmove(m->buffer, m->buffer + n, (size_t)h * sizeof(lv_32fc_t));
+    return i_out;
+}

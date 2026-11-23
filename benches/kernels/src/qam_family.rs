@@ -144,8 +144,8 @@
 use std::hint::black_box;
 
 use cref_sys::{
-    GrChunksToSymbols, GrConstellationReceiverCb, GrFirBank, GrLinearEqualizerRect, GrRect,
-    GrSoftDecoder, LiquidFirfiltCrcf, LiquidFirinterpCrcf, LiquidModemDemod, LiquidModemMap,
+    GrChunksToSymbols, GrConstellationReceiverCb, GrFirBank, GrLinearEqualizerRect, GrPfbArb,
+    GrRect, GrSoftDecoder, LiquidFirfiltCrcf, LiquidFirinterpCrcf, LiquidModemDemod, LiquidModemMap,
 };
 
 use super::psk_family::GrFront;
@@ -1076,15 +1076,20 @@ pub(crate) struct QamModBlockK {
     block: QamModBlock<ArenaStorage<'static>>,
     bits: Vec<f32>,
     out: Vec<C32>,
+    /// The libraries' modulator flow (the entries of issue #169, D2550).
+    refs: ModRefs,
 }
 
 impl QamModBlockK {
-    pub(crate) fn new(rng: &mut Pcg32, layout: Layout, qam: Qam) -> Self {
+    pub(crate) fn new(rng: &mut Pcg32, layout: Layout, qam: Qam, liquid_entry: bool) -> Self {
+        let bits = qam_bits(rng, qam, layout.n / BLOCK_SPS);
+        let refs = ModRefs::new(&bits, qam.bits_per_symbol(), layout.n, liquid_entry);
         QamModBlockK {
             qam,
             block: qam_mod_block(qam),
-            bits: qam_bits(rng, qam, layout.n / BLOCK_SPS),
+            bits,
             out: vec![C32::default(); layout.n],
+            refs,
         }
     }
 }
@@ -1092,6 +1097,168 @@ impl QamModBlockK {
 #[inline(never)]
 fn qam_mod_call(block: &mut QamModBlock<ArenaStorage<'static>>, bits: &[f32], out: &mut [C32]) {
     let _ = block.process(black_box(bits), out);
+}
+
+/// The GNU Radio `constellation_modulator` (generic_mod) prototype: the root-raised cosine with
+/// roll-off `rolloff` at 32 samples per symbol (`nfilts` 32), `nfilts * 11 * sps` taps, which
+/// `pfb_arb_resampler_ccf` splits into 32 branches of 88 taps. The gain makes its output the
+/// output of `qam_mod` (the pulse of the block, `rrc(rolloff, sps, span) sqrt(sps)`, whose span
+/// the prototype keeps: the taps beyond it are zero, so that the accuracy measures the
+/// arithmetic of the filter and not another pulse); the centre
+/// is where `qam_mod` has it, five symbols after the first tap, so that the outputs of the two
+/// have the same time axis (the cost of the filter is that of GNU Radio's taps, all of them
+/// are used).
+const GR_MOD_NFILTS: usize = 32;
+
+fn gr_mod_taps(rolloff: f64, sps: usize, span: usize) -> Vec<f32> {
+    use std::f64::consts::PI;
+    let ntaps = GR_MOD_NFILTS * 11 * sps;
+    let b = rolloff;
+    let h = |t: f64| -> f64 {
+        if t.abs() < 1e-9 {
+            1.0 - b + 4.0 * b / PI
+        } else if (t.abs() - 1.0 / (4.0 * b)).abs() < 1e-9 {
+            b / 2f64.sqrt()
+                * ((1.0 + 2.0 / PI) * (PI / (4.0 * b)).sin()
+                    + (1.0 - 2.0 / PI) * (PI / (4.0 * b)).cos())
+        } else {
+            ((PI * t * (1.0 - b)).sin() + 4.0 * b * t * (PI * t * (1.0 + b)).cos())
+                / (PI * t * (1.0 - (4.0 * b * t).powi(2)))
+        }
+    };
+    // The peak of our pulse at the sample `span * sps / 2`.
+    let mut ours = vec![0.0f64; sdrk_blocks::design::rrc_len(sps, span).expect("rrc")];
+    sdrk_blocks::design::rrc(rolloff, sps, span, &mut ours).expect("rrc");
+    #[allow(clippy::cast_precision_loss, reason = "a small integer")]
+    let scale = ours[span * sps / 2] * (sps as f64).sqrt() / h(0.0);
+    #[allow(clippy::cast_precision_loss, reason = "a small integer")]
+    let centre = (span / 2) as f64;
+    #[allow(
+        clippy::cast_possible_truncation,
+        clippy::cast_precision_loss,
+        reason = "f32 taps of a library, small integers"
+    )]
+    (0..ntaps)
+        .map(|x| {
+            let t = x as f64 / GR_MOD_NFILTS as f64 - centre;
+            // the pulse of the block ends at `span / 2` symbols on both sides: the taps beyond
+            // are zero, but still multiplied by the 88 taps of every branch
+            if t.abs() > centre { 0.0 } else { (h(t) * scale) as f32 }
+        })
+        .collect()
+}
+
+/// The comparison side of the modulator entries: GNU Radio's `constellation_modulator` as the
+/// sum of its blocks (`pack_k_bits_bb` + `chunks_to_symbols_bc` + `pfb_arb_resampler_ccf`) or
+/// liquid-dsp's `modemcf_modulate` + `firinterp_crcf`, on the bits of the block as bytes (made
+/// once) and the points of its constellation.
+struct ModRefs {
+    k: usize,
+    n_out: usize,
+    liquid_entry: bool,
+    bytes: Vec<u8>,
+    symbols: Vec<[f32; 2]>,
+    chunks: Option<GrChunksToSymbols>,
+    pfb: Option<(GrPfbArb, bool)>,
+    liquid: Option<(LiquidModemMap, LiquidFirinterpCrcf)>,
+}
+
+/// The points of the symbols `0..2^k` as the modulators make them from `k` bits (first the
+/// bits of the in-phase axis, Gray coded; the quadrature axis after).
+fn mod_points(k: usize) -> Vec<[f32; 2]> {
+    (0..1usize << k)
+        .map(|s| {
+            let bits: Vec<f32> = (0..k)
+                .map(|j| if (s >> (k - 1 - j)) & 1 == 1 { 1.0 } else { -1.0 })
+                .collect();
+            #[allow(clippy::cast_possible_truncation, reason = "f32 points of a table")]
+            [
+                axis_level_f64(&bits[..k / 2]) as f32,
+                axis_level_f64(&bits[k / 2..]) as f32,
+            ]
+        })
+        .collect()
+}
+
+impl ModRefs {
+    fn new(bits: &[f32], k: usize, n_out: usize, liquid_entry: bool) -> Self {
+        let sps = BLOCK_SPS;
+        let n_sym = n_out / sps;
+        let points = mod_points(k);
+        let cfg = qam_mod_config(Qam::Qam16).pulse();
+        let bytes: Vec<u8> = bits.iter().map(|&b| u8::from(b > 0.0)).collect();
+        let mut r = ModRefs {
+            k,
+            n_out,
+            liquid_entry,
+            bytes,
+            symbols: vec![[0.0; 2]; n_sym],
+            chunks: None,
+            pfb: None,
+            liquid: None,
+        };
+        if liquid_entry {
+            let taps = pulse_taps((sps as f64).sqrt());
+            r.liquid = LiquidModemMap::new(&points, k)
+                .zip(LiquidFirinterpCrcf::new(&taps, sps, true));
+        } else {
+            let taps = gr_mod_taps(cfg.rolloff, sps, cfg.span);
+            r.chunks = GrChunksToSymbols::new(&points, k, n_sym);
+            #[allow(clippy::cast_precision_loss, reason = "a small integer")]
+            let rate = sps as f32;
+            r.pfb = match GrPfbArb::new_volk(&taps, GR_MOD_NFILTS, rate, n_sym) {
+                Some(b) => Some((b, true)),
+                None => GrPfbArb::new(&taps, GR_MOD_NFILTS, rate, n_sym).map(|b| (b, false)),
+            };
+        }
+        r
+    }
+
+    /// The same flow from the reset state (zero history) on the bits of `bits`.
+    fn fresh(&self, bits: &[f32]) -> Self {
+        ModRefs::new(bits, self.k, self.n_out, self.liquid_entry)
+    }
+
+    fn supports(&self, which: Impl) -> bool {
+        match which {
+            Impl::GnuRadio => self.chunks.is_some() && self.pfb.is_some(),
+            Impl::Liquid => self.liquid.is_some(),
+            _ => false,
+        }
+    }
+
+    fn run(&mut self, which: Impl, out: &mut [C32]) {
+        match which {
+            Impl::GnuRadio => {
+                let (Some(c), Some((p, _))) = (self.chunks.as_mut(), self.pfb.as_mut()) else {
+                    unreachable!("gnuradio")
+                };
+                c.work(black_box(&self.bytes), &mut self.symbols);
+                let _ = p.work(&self.symbols, c32_pairs(out));
+            }
+            Impl::Liquid => {
+                let (m, f) = self.liquid.as_mut().expect("liquid");
+                m.map(black_box(&self.bytes), &mut self.symbols);
+                f.execute(&mut self.symbols, c32_pairs(out));
+            }
+            other => unreachable!("a modulator has no {other:?}"),
+        }
+    }
+
+    fn describe(&self, which: Impl) -> &'static str {
+        match which {
+            Impl::GnuRadio if self.pfb.as_ref().is_some_and(|p| p.1) => {
+                "GNU Radio constellation_modulator as the sum of its blocks: pack_k_bits_bb + chunks_to_symbols_bc + pfb_arb_resampler_ccf (32 filters of 88 taps and their derivative filters), VOLK's dispatched dot product of the level"
+            }
+            Impl::GnuRadio => {
+                "GNU Radio constellation_modulator as the sum of its blocks: pack_k_bits_bb + chunks_to_symbols_bc + pfb_arb_resampler_ccf (32 filters of 88 taps and their derivative filters), VOLK's generic dot product (the wasm32 build of VOLK has no SIMD)"
+            }
+            Impl::Liquid => {
+                "liquid-dsp 1.8.3 modemcf_modulate (arbitrary-constellation modem) + firinterp_crcf (the root-raised cosine of the block), the SIMD dot products of the level (the portable loop at simd128)"
+            }
+            _ => "sdrk",
+        }
+    }
 }
 
 /// `qam_mod` in `f64` from a zero history: the points of M44.2 §1 (`(2 i - (m - 1)) / sqrt(E)`
@@ -1143,7 +1310,7 @@ impl Kernel for QamModBlockK {
                 Impl::Ours | Impl::Fallback => {
                     qam_mod_call(&mut self.block, &self.bits, &mut self.out)
                 }
-                other => unreachable!("qam_mod_block has no {other:?}"),
+                other => self.refs.run(other, &mut self.out),
             }
             black_box(&self.out);
         }
@@ -1154,8 +1321,12 @@ impl Kernel for QamModBlockK {
         if !self.supports(which) {
             return 0.0;
         }
-        self.block.reset();
-        qam_mod_call(&mut self.block, &self.bits, &mut self.out);
+        if matches!(which, Impl::GnuRadio | Impl::Liquid) {
+            self.refs.fresh(&self.bits).run(which, &mut self.out);
+        } else {
+            self.block.reset();
+            qam_mod_call(&mut self.block, &self.bits, &mut self.out);
+        }
         let want: Vec<f64> = qam_mod_f64(self.qam, &self.bits)
             .into_iter()
             .flat_map(|(re, im)| [re, im])
@@ -1164,12 +1335,13 @@ impl Kernel for QamModBlockK {
     }
 
     fn supports(&self, which: Impl) -> bool {
-        matches!(which, Impl::Ours | Impl::Fallback)
+        matches!(which, Impl::Ours | Impl::Fallback) || self.refs.supports(which)
     }
 
     fn describe(&self, which: Impl) -> &'static str {
         match which {
             Impl::Fallback => "sdrk fallback",
+            Impl::GnuRadio | Impl::Liquid => self.refs.describe(which),
             _ => "sdrk",
         }
     }
@@ -1196,16 +1368,21 @@ pub(crate) struct PskModBlockK {
     block: PskModBlock<ArenaStorage<'static>>,
     bits: Vec<f32>,
     out: Vec<C32>,
+    /// The libraries' modulator flow (the entries of issue #169, D2550).
+    refs: ModRefs,
 }
 
 impl PskModBlockK {
-    pub(crate) fn new(rng: &mut Pcg32, layout: Layout) -> Self {
+    pub(crate) fn new(rng: &mut Pcg32, layout: Layout, liquid_entry: bool) -> Self {
+        let bits: Vec<f32> = (0..2 * (layout.n / BLOCK_SPS))
+            .map(|_| if rng.next_u32() & 1 == 1 { 1.0 } else { -1.0 })
+            .collect();
+        let refs = ModRefs::new(&bits, 2, layout.n, liquid_entry);
         PskModBlockK {
             block: psk_mod_block(),
-            bits: (0..2 * (layout.n / BLOCK_SPS))
-                .map(|_| if rng.next_u32() & 1 == 1 { 1.0 } else { -1.0 })
-                .collect(),
+            bits,
             out: vec![C32::default(); layout.n],
+            refs,
         }
     }
 }
@@ -1262,7 +1439,7 @@ impl Kernel for PskModBlockK {
                 Impl::Ours | Impl::Fallback => {
                     psk_mod_call(&mut self.block, &self.bits, &mut self.out);
                 }
-                other => unreachable!("psk_mod_block has no {other:?}"),
+                other => self.refs.run(other, &mut self.out),
             }
             black_box(&self.out);
         }
@@ -1273,8 +1450,12 @@ impl Kernel for PskModBlockK {
         if !self.supports(which) {
             return 0.0;
         }
-        self.block.reset();
-        psk_mod_call(&mut self.block, &self.bits, &mut self.out);
+        if matches!(which, Impl::GnuRadio | Impl::Liquid) {
+            self.refs.fresh(&self.bits).run(which, &mut self.out);
+        } else {
+            self.block.reset();
+            psk_mod_call(&mut self.block, &self.bits, &mut self.out);
+        }
         let want: Vec<f64> = psk_mod_f64(&self.bits)
             .into_iter()
             .flat_map(|(re, im)| [re, im])
@@ -1283,12 +1464,13 @@ impl Kernel for PskModBlockK {
     }
 
     fn supports(&self, which: Impl) -> bool {
-        matches!(which, Impl::Ours | Impl::Fallback)
+        matches!(which, Impl::Ours | Impl::Fallback) || self.refs.supports(which)
     }
 
     fn describe(&self, which: Impl) -> &'static str {
         match which {
             Impl::Fallback => "sdrk fallback",
+            Impl::GnuRadio | Impl::Liquid => self.refs.describe(which),
             _ => "sdrk",
         }
     }

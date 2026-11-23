@@ -370,7 +370,7 @@ pub trait Kernel {
 /// are appended; a `<kernel>_fallback`, `<kernel>_airspy`, `<kernel>_fastnoise`,
 /// `<kernel>_ziggurat`, `<kernel>_dvbs2`, `<kernel>_svr`, `<kernel>_liquid` or `<kernel>_lut` entry takes the seed of `<kernel>`, so
 /// that both entries filter the same input.
-pub const KERNELS: [&str; 303] = [
+pub const KERNELS: [&str; 306] = [
     "convert_cs8",
     "convert_cs16",
     "convert_out_cs16",
@@ -596,6 +596,7 @@ pub const KERNELS: [&str; 303] = [
     "equalize_qam16",
     "equalize_qam16_fallback",
     "qam_mod_block",
+    "qam_mod_block_liquid",
     "qam_demod_block",
     "psk_demod_block",
     "frame_decode_four_block",
@@ -613,6 +614,7 @@ pub const KERNELS: [&str; 303] = [
     "equalize_qam64",
     "equalize_qam64_fallback",
     "psk_mod_block",
+    "psk_mod_block_liquid",
     "symbol_map_block",
     "symbol_map_block_liquid",
     "symbol_map_block_qpsk",
@@ -662,6 +664,7 @@ pub const KERNELS: [&str; 303] = [
     "costas_qam256_fallback",
     "equalize_qam256_fallback",
     "qam_mod_qam256_block",
+    "qam_mod_qam256_block_liquid",
     "qam_demod_qam256_block",
     "bit_scramble_in_place_block",
     "bit_descramble_in_place_block",
@@ -1000,17 +1003,25 @@ pub fn prepare(name: &str, layout: Layout) -> Option<Box<dyn Kernel>> {
             qam_of(seed_of),
             name.ends_with("_fallback"),
         )),
-        "qam_mod_block" => Box::new(qam_family::QamModBlockK::new(
+        "qam_mod_block" | "qam_mod_block_liquid" => Box::new(qam_family::QamModBlockK::new(
             rng,
             layout,
             sdrk_core::kernels::constellation::Qam::Qam16,
+            name.ends_with("_liquid"),
         )),
-        "qam_mod_qam256_block" => Box::new(qam_family::QamModBlockK::new(
+        "qam_mod_qam256_block" | "qam_mod_qam256_block_liquid" => {
+            Box::new(qam_family::QamModBlockK::new(
+                rng,
+                layout,
+                sdrk_core::kernels::constellation::Qam::Qam256,
+                name.ends_with("_liquid"),
+            ))
+        }
+        "psk_mod_block" | "psk_mod_block_liquid" => Box::new(qam_family::PskModBlockK::new(
             rng,
             layout,
-            sdrk_core::kernels::constellation::Qam::Qam256,
+            name.ends_with("_liquid"),
         )),
-        "psk_mod_block" => Box::new(qam_family::PskModBlockK::new(rng, layout)),
         "symbol_map_block" => Box::new(qam_family::SymbolMapBlockK::new(
             rng,
             layout,

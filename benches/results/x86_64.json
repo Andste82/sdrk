@@ -4971,14 +4971,47 @@
           "verdict": "info"
         },
         "psk_mod_block": {
-          "compared_with": "sdrk fallback",
+          "compared_with": "GNU Radio constellation_modulator as the sum of its blocks: pack_k_bits_bb + chunks_to_symbols_bc + pfb_arb_resampler_ccf (32 filters of 88 taps and their derivative filters), VOLK's dispatched dot product of the level",
           "goal": true,
-          "other_instr_per_sample": 24.67,
-          "ours_instr_per_sample": 24.67,
-          "ratio": 1.0,
+          "informational": [
+            {
+              "compared_with": "sdrk fallback",
+              "label": "information: fallback",
+              "other_instr_per_sample": 24.69,
+              "other_snr_db": 144.79,
+              "ours_instr_per_sample": 24.69,
+              "ratio": 1.0
+            }
+          ],
+          "other_instr_per_sample": 622.05,
+          "ours_instr_per_sample": 24.69,
+          "ratio": 0.04,
           "snr_db": {
-            "other": 144.72,
-            "ours": 144.72
+            "other": 143.7,
+            "ours": 144.79
+          },
+          "status": "info",
+          "verdict": "info"
+        },
+        "psk_mod_block_liquid": {
+          "compared_with": "liquid-dsp 1.8.3 modemcf_modulate (arbitrary-constellation modem) + firinterp_crcf (the root-raised cosine of the block), the SIMD dot products of the level (the portable loop at simd128)",
+          "goal": true,
+          "informational": [
+            {
+              "compared_with": "sdrk fallback",
+              "label": "information: fallback",
+              "other_instr_per_sample": 24.69,
+              "other_snr_db": 144.79,
+              "ours_instr_per_sample": 24.69,
+              "ratio": 1.0
+            }
+          ],
+          "other_instr_per_sample": 171.2,
+          "ours_instr_per_sample": 24.69,
+          "ratio": 0.14,
+          "snr_db": {
+            "other": 143.56,
+            "ours": 144.79
           },
           "status": "info",
           "verdict": "info"
@@ -5164,26 +5197,92 @@
           "verdict": "info"
         },
         "qam_mod_block": {
-          "compared_with": "sdrk fallback",
+          "compared_with": "GNU Radio constellation_modulator as the sum of its blocks: pack_k_bits_bb + chunks_to_symbols_bc + pfb_arb_resampler_ccf (32 filters of 88 taps and their derivative filters), VOLK's dispatched dot product of the level",
           "goal": true,
-          "other_instr_per_sample": 24.0,
+          "informational": [
+            {
+              "compared_with": "sdrk fallback",
+              "label": "information: fallback",
+              "other_instr_per_sample": 24.0,
+              "other_snr_db": 143.86,
+              "ours_instr_per_sample": 24.0,
+              "ratio": 1.0
+            }
+          ],
+          "other_instr_per_sample": 624.3,
           "ours_instr_per_sample": 24.0,
-          "ratio": 1.0,
+          "ratio": 0.04,
           "snr_db": {
-            "other": 143.89,
-            "ours": 143.89
+            "other": 142.14,
+            "ours": 143.86
+          },
+          "status": "info",
+          "verdict": "info"
+        },
+        "qam_mod_block_liquid": {
+          "compared_with": "liquid-dsp 1.8.3 modemcf_modulate (arbitrary-constellation modem) + firinterp_crcf (the root-raised cosine of the block), the SIMD dot products of the level (the portable loop at simd128)",
+          "goal": true,
+          "informational": [
+            {
+              "compared_with": "sdrk fallback",
+              "label": "information: fallback",
+              "other_instr_per_sample": 24.0,
+              "other_snr_db": 143.86,
+              "ours_instr_per_sample": 24.0,
+              "ratio": 1.0
+            }
+          ],
+          "other_instr_per_sample": 172.95,
+          "ours_instr_per_sample": 24.0,
+          "ratio": 0.14,
+          "snr_db": {
+            "other": 138.08,
+            "ours": 143.86
           },
           "status": "info",
           "verdict": "info"
         },
         "qam_mod_qam256_block": {
-          "compared_with": "sdrk fallback",
+          "compared_with": "GNU Radio constellation_modulator as the sum of its blocks: pack_k_bits_bb + chunks_to_symbols_bc + pfb_arb_resampler_ccf (32 filters of 88 taps and their derivative filters), VOLK's dispatched dot product of the level",
           "goal": true,
-          "other_instr_per_sample": 25.5,
+          "informational": [
+            {
+              "compared_with": "sdrk fallback",
+              "label": "information: fallback",
+              "other_instr_per_sample": 25.5,
+              "other_snr_db": 144.31,
+              "ours_instr_per_sample": 25.5,
+              "ratio": 1.0
+            }
+          ],
+          "other_instr_per_sample": 628.8,
           "ours_instr_per_sample": 25.5,
-          "ratio": 1.0,
+          "ratio": 0.04,
           "snr_db": {
-            "other": 144.31,
+            "other": 142.61,
+            "ours": 144.31
+          },
+          "status": "info",
+          "verdict": "info"
+        },
+        "qam_mod_qam256_block_liquid": {
+          "compared_with": "liquid-dsp 1.8.3 modemcf_modulate (arbitrary-constellation modem) + firinterp_crcf (the root-raised cosine of the block), the SIMD dot products of the level (the portable loop at simd128)",
+          "goal": true,
+          "informational": [
+            {
+              "compared_with": "sdrk fallback",
+              "label": "information: fallback",
+              "other_instr_per_sample": 25.5,
+              "other_snr_db": 144.31,
+              "ours_instr_per_sample": 25.5,
+              "ratio": 1.0
+            }
+          ],
+          "other_instr_per_sample": 176.45,
+          "ours_instr_per_sample": 25.5,
+          "ratio": 0.14,
+          "snr_db": {
+            "other": 128.27,
             "ours": 144.31
           },
           "status": "info",
@@ -8809,12 +8908,25 @@
         "psk_mod_block": {
           "compared_with": "ours at avx2",
           "goal": false,
-          "other_instr_per_sample": 24.67,
-          "ours_instr_per_sample": 24.77,
+          "other_instr_per_sample": 24.69,
+          "ours_instr_per_sample": 24.79,
           "ratio": 1.0,
           "snr_db": {
-            "other": 144.72,
-            "ours": 144.72
+            "other": 144.79,
+            "ours": 144.79
+          },
+          "status": "info",
+          "verdict": "info"
+        },
+        "psk_mod_block_liquid": {
+          "compared_with": "ours at avx2",
+          "goal": false,
+          "other_instr_per_sample": 24.69,
+          "ours_instr_per_sample": 24.79,
+          "ratio": 1.0,
+          "snr_db": {
+            "other": 144.79,
+            "ours": 144.79
           },
           "status": "info",
           "verdict": "info"
@@ -8956,13 +9068,39 @@
           "ours_instr_per_sample": 24.69,
           "ratio": 1.03,
           "snr_db": {
-            "other": 143.89,
-            "ours": 143.89
+            "other": 143.86,
+            "ours": 143.86
+          },
+          "status": "info",
+          "verdict": "info"
+        },
+        "qam_mod_block_liquid": {
+          "compared_with": "ours at avx2",
+          "goal": false,
+          "other_instr_per_sample": 24.0,
+          "ours_instr_per_sample": 24.69,
+          "ratio": 1.03,
+          "snr_db": {
+            "other": 143.86,
+            "ours": 143.86
           },
           "status": "info",
           "verdict": "info"
         },
         "qam_mod_qam256_block": {
+          "compared_with": "ours at avx2",
+          "goal": false,
+          "other_instr_per_sample": 25.5,
+          "ours_instr_per_sample": 28.2,
+          "ratio": 1.11,
+          "snr_db": {
+            "other": 144.31,
+            "ours": 144.31
+          },
+          "status": "info",
+          "verdict": "info"
+        },
+        "qam_mod_qam256_block_liquid": {
           "compared_with": "ours at avx2",
           "goal": false,
           "other_instr_per_sample": 25.5,
@@ -14763,14 +14901,47 @@
           "verdict": "info"
         },
         "psk_mod_block": {
-          "compared_with": "sdrk fallback",
+          "compared_with": "GNU Radio constellation_modulator as the sum of its blocks: pack_k_bits_bb + chunks_to_symbols_bc + pfb_arb_resampler_ccf (32 filters of 88 taps and their derivative filters), VOLK's dispatched dot product of the level",
           "goal": true,
-          "other_instr_per_sample": 44.28,
-          "ours_instr_per_sample": 44.28,
-          "ratio": 1.0,
+          "informational": [
+            {
+              "compared_with": "sdrk fallback",
+              "label": "information: fallback",
+              "other_instr_per_sample": 44.31,
+              "other_snr_db": 145.18,
+              "ours_instr_per_sample": 44.31,
+              "ratio": 1.0
+            }
+          ],
+          "other_instr_per_sample": 635.65,
+          "ours_instr_per_sample": 44.31,
+          "ratio": 0.07,
           "snr_db": {
-            "other": 145.2,
-            "ours": 145.2
+            "other": 144.64,
+            "ours": 145.18
+          },
+          "status": "info",
+          "verdict": "info"
+        },
+        "psk_mod_block_liquid": {
+          "compared_with": "liquid-dsp 1.8.3 modemcf_modulate (arbitrary-constellation modem) + firinterp_crcf (the root-raised cosine of the block), the SIMD dot products of the level (the portable loop at simd128)",
+          "goal": true,
+          "informational": [
+            {
+              "compared_with": "sdrk fallback",
+              "label": "information: fallback",
+              "other_instr_per_sample": 44.31,
+              "other_snr_db": 145.18,
+              "ours_instr_per_sample": 44.31,
+              "ratio": 1.0
+            }
+          ],
+          "other_instr_per_sample": 158.23,
+          "ours_instr_per_sample": 44.31,
+          "ratio": 0.28,
+          "snr_db": {
+            "other": 145.06,
+            "ours": 145.18
           },
           "status": "info",
           "verdict": "info"
@@ -14956,27 +15127,93 @@
           "verdict": "info"
         },
         "qam_mod_block": {
-          "compared_with": "sdrk fallback",
+          "compared_with": "GNU Radio constellation_modulator as the sum of its blocks: pack_k_bits_bb + chunks_to_symbols_bc + pfb_arb_resampler_ccf (32 filters of 88 taps and their derivative filters), VOLK's dispatched dot product of the level",
           "goal": true,
-          "other_instr_per_sample": 44.21,
+          "informational": [
+            {
+              "compared_with": "sdrk fallback",
+              "label": "information: fallback",
+              "other_instr_per_sample": 44.21,
+              "other_snr_db": 143.65,
+              "ours_instr_per_sample": 44.21,
+              "ratio": 1.0
+            }
+          ],
+          "other_instr_per_sample": 637.9,
           "ours_instr_per_sample": 44.21,
-          "ratio": 1.0,
+          "ratio": 0.07,
           "snr_db": {
-            "other": 143.7,
-            "ours": 143.7
+            "other": 142.87,
+            "ours": 143.65
+          },
+          "status": "info",
+          "verdict": "info"
+        },
+        "qam_mod_block_liquid": {
+          "compared_with": "liquid-dsp 1.8.3 modemcf_modulate (arbitrary-constellation modem) + firinterp_crcf (the root-raised cosine of the block), the SIMD dot products of the level (the portable loop at simd128)",
+          "goal": true,
+          "informational": [
+            {
+              "compared_with": "sdrk fallback",
+              "label": "information: fallback",
+              "other_instr_per_sample": 44.21,
+              "other_snr_db": 143.65,
+              "ours_instr_per_sample": 44.21,
+              "ratio": 1.0
+            }
+          ],
+          "other_instr_per_sample": 159.98,
+          "ours_instr_per_sample": 44.21,
+          "ratio": 0.28,
+          "snr_db": {
+            "other": 138.17,
+            "ours": 143.65
           },
           "status": "info",
           "verdict": "info"
         },
         "qam_mod_qam256_block": {
-          "compared_with": "sdrk fallback",
+          "compared_with": "GNU Radio constellation_modulator as the sum of its blocks: pack_k_bits_bb + chunks_to_symbols_bc + pfb_arb_resampler_ccf (32 filters of 88 taps and their derivative filters), VOLK's dispatched dot product of the level",
           "goal": true,
-          "other_instr_per_sample": 47.72,
+          "informational": [
+            {
+              "compared_with": "sdrk fallback",
+              "label": "information: fallback",
+              "other_instr_per_sample": 47.72,
+              "other_snr_db": 144.0,
+              "ours_instr_per_sample": 47.72,
+              "ratio": 1.0
+            }
+          ],
+          "other_instr_per_sample": 642.4,
           "ours_instr_per_sample": 47.72,
-          "ratio": 1.0,
+          "ratio": 0.07,
           "snr_db": {
-            "other": 143.99,
-            "ours": 143.99
+            "other": 143.48,
+            "ours": 144.0
+          },
+          "status": "info",
+          "verdict": "info"
+        },
+        "qam_mod_qam256_block_liquid": {
+          "compared_with": "liquid-dsp 1.8.3 modemcf_modulate (arbitrary-constellation modem) + firinterp_crcf (the root-raised cosine of the block), the SIMD dot products of the level (the portable loop at simd128)",
+          "goal": true,
+          "informational": [
+            {
+              "compared_with": "sdrk fallback",
+              "label": "information: fallback",
+              "other_instr_per_sample": 47.72,
+              "other_snr_db": 144.0,
+              "ours_instr_per_sample": 47.72,
+              "ratio": 1.0
+            }
+          ],
+          "other_instr_per_sample": 163.48,
+          "ours_instr_per_sample": 47.72,
+          "ratio": 0.29,
+          "snr_db": {
+            "other": 128.35,
+            "ours": 144.0
           },
           "status": "info",
           "verdict": "info"
@@ -22068,14 +22305,47 @@
           "verdict": "info"
         },
         "psk_mod_block": {
-          "compared_with": "sdrk fallback",
+          "compared_with": "GNU Radio constellation_modulator as the sum of its blocks: pack_k_bits_bb + chunks_to_symbols_bc + pfb_arb_resampler_ccf (32 filters of 88 taps and their derivative filters), VOLK's dispatched dot product of the level",
           "goal": true,
-          "other_instr_per_sample": 41.41,
-          "ours_instr_per_sample": 41.41,
-          "ratio": 1.0,
+          "informational": [
+            {
+              "compared_with": "sdrk fallback",
+              "label": "information: fallback",
+              "other_instr_per_sample": 41.43,
+              "other_snr_db": 145.18,
+              "ours_instr_per_sample": 41.43,
+              "ratio": 1.0
+            }
+          ],
+          "other_instr_per_sample": 641.65,
+          "ours_instr_per_sample": 41.43,
+          "ratio": 0.06,
           "snr_db": {
-            "other": 145.2,
-            "ours": 145.2
+            "other": 144.64,
+            "ours": 145.18
+          },
+          "status": "info",
+          "verdict": "info"
+        },
+        "psk_mod_block_liquid": {
+          "compared_with": "liquid-dsp 1.8.3 modemcf_modulate (arbitrary-constellation modem) + firinterp_crcf (the root-raised cosine of the block), the SIMD dot products of the level (the portable loop at simd128)",
+          "goal": true,
+          "informational": [
+            {
+              "compared_with": "sdrk fallback",
+              "label": "information: fallback",
+              "other_instr_per_sample": 41.43,
+              "other_snr_db": 145.18,
+              "ours_instr_per_sample": 41.43,
+              "ratio": 1.0
+            }
+          ],
+          "other_instr_per_sample": 159.23,
+          "ours_instr_per_sample": 41.43,
+          "ratio": 0.26,
+          "snr_db": {
+            "other": 145.06,
+            "ours": 145.18
           },
           "status": "info",
           "verdict": "info"
@@ -22261,27 +22531,93 @@
           "verdict": "info"
         },
         "qam_mod_block": {
-          "compared_with": "sdrk fallback",
+          "compared_with": "GNU Radio constellation_modulator as the sum of its blocks: pack_k_bits_bb + chunks_to_symbols_bc + pfb_arb_resampler_ccf (32 filters of 88 taps and their derivative filters), VOLK's dispatched dot product of the level",
           "goal": true,
-          "other_instr_per_sample": 41.33,
+          "informational": [
+            {
+              "compared_with": "sdrk fallback",
+              "label": "information: fallback",
+              "other_instr_per_sample": 41.33,
+              "other_snr_db": 143.65,
+              "ours_instr_per_sample": 41.33,
+              "ratio": 1.0
+            }
+          ],
+          "other_instr_per_sample": 643.9,
           "ours_instr_per_sample": 41.33,
-          "ratio": 1.0,
+          "ratio": 0.06,
           "snr_db": {
-            "other": 143.7,
-            "ours": 143.7
+            "other": 142.87,
+            "ours": 143.65
+          },
+          "status": "info",
+          "verdict": "info"
+        },
+        "qam_mod_block_liquid": {
+          "compared_with": "liquid-dsp 1.8.3 modemcf_modulate (arbitrary-constellation modem) + firinterp_crcf (the root-raised cosine of the block), the SIMD dot products of the level (the portable loop at simd128)",
+          "goal": true,
+          "informational": [
+            {
+              "compared_with": "sdrk fallback",
+              "label": "information: fallback",
+              "other_instr_per_sample": 41.33,
+              "other_snr_db": 143.65,
+              "ours_instr_per_sample": 41.33,
+              "ratio": 1.0
+            }
+          ],
+          "other_instr_per_sample": 160.98,
+          "ours_instr_per_sample": 41.33,
+          "ratio": 0.26,
+          "snr_db": {
+            "other": 138.17,
+            "ours": 143.65
           },
           "status": "info",
           "verdict": "info"
         },
         "qam_mod_qam256_block": {
-          "compared_with": "sdrk fallback",
+          "compared_with": "GNU Radio constellation_modulator as the sum of its blocks: pack_k_bits_bb + chunks_to_symbols_bc + pfb_arb_resampler_ccf (32 filters of 88 taps and their derivative filters), VOLK's dispatched dot product of the level",
           "goal": true,
-          "other_instr_per_sample": 45.22,
+          "informational": [
+            {
+              "compared_with": "sdrk fallback",
+              "label": "information: fallback",
+              "other_instr_per_sample": 45.22,
+              "other_snr_db": 144.0,
+              "ours_instr_per_sample": 45.22,
+              "ratio": 1.0
+            }
+          ],
+          "other_instr_per_sample": 648.4,
           "ours_instr_per_sample": 45.22,
-          "ratio": 1.0,
+          "ratio": 0.07,
           "snr_db": {
-            "other": 143.99,
-            "ours": 143.99
+            "other": 143.48,
+            "ours": 144.0
+          },
+          "status": "info",
+          "verdict": "info"
+        },
+        "qam_mod_qam256_block_liquid": {
+          "compared_with": "liquid-dsp 1.8.3 modemcf_modulate (arbitrary-constellation modem) + firinterp_crcf (the root-raised cosine of the block), the SIMD dot products of the level (the portable loop at simd128)",
+          "goal": true,
+          "informational": [
+            {
+              "compared_with": "sdrk fallback",
+              "label": "information: fallback",
+              "other_instr_per_sample": 45.22,
+              "other_snr_db": 144.0,
+              "ours_instr_per_sample": 45.22,
+              "ratio": 1.0
+            }
+          ],
+          "other_instr_per_sample": 164.48,
+          "ours_instr_per_sample": 45.22,
+          "ratio": 0.27,
+          "snr_db": {
+            "other": 128.35,
+            "ours": 144.0
           },
           "status": "info",
           "verdict": "info"

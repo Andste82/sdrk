@@ -26,6 +26,7 @@ Up to M25.1 the milestones are strictly sequential: each depends on all previous
 | M11 | [M11-pipeline-time-events-tx.md](M11-pipeline-time-events-tx.md) | 3 | Time base, events, timed parameters, pull mode/bursts, groups, YAML, wire format, two-thread probe |
 | M12 | [M12-io-device-loopback-examples.md](M12-io-device-loopback-examples.md) | 3 | `sdrk-io` (SigMF/WAV/raw), device capabilities + async traits, conformance, loopback, CLI examples, system tests |
 | M13 | [M13-simd-backend.md](M13-simd-backend.md) | 4 | `sdrk-backend-simd`, SIMD FFT, instruction counting vs VOLK/rustfft, CI for AVX-512/AArch64/WASM; the tag v0.1.0 is specified but not made (open item M13-4) |
+| M13.1 | [M13.1-cycles-only.md](M13.1-cycles-only.md) | 4 | Draft. Cycles per sample as the only speed measure on the out-of-order levels: the release gate of `benches/limits.json` in cycles, the instruction counts removed except `simd128` and the in-order cores (Cortex-M4), committed cycle results, a nightly `cargo measure` job in CI instead of the count jobs (D2700 to D2749) |
 | M14 | [M14-wasm-bindings.md](M14-wasm-bindings.md) | 5 | WASM bindings, SIMD/scalar variants, npm package, Node/Chrome/Firefox tests |
 | M15 | [M15-emulator-targets.md](M15-emulator-targets.md) | 6 | Suite bare-metal in QEMU (Cortex-M4/M55, RISC-V), esp-emulator (P4), Espressif QEMU (S3) |
 | M16 | [M16-esp32-p4-pie-backend.md](M16-esp32-p4-pie-backend.md) | 7 | ESP32-P4 PIE backend, static instruction counting vs ESP-DSP |
@@ -122,6 +123,7 @@ From M26 on, the dependencies (the *Depends on* line of each file; dependencies 
 | M44.2 QAM of any square order | M44.1.1 | M46, M48–M56 |
 | M44.3 Equalizer switch and restart | M44.2 | M50–M56 |
 | M44.4 SNR estimate, restart, dense blind start | M44.3 | M50–M56 |
+| M13.1 Cycles only | M13 | everything (tooling only; planned specs updated) |
 | M45 Channelizer, lane streams | M34 | M35–M44, M47 |
 | M45.1 ISM band receiver | M45, M39.1 | M42, M43, M44 |
 | M46 ISM sensor decoders | M45.1 | M42, M43, M44 |

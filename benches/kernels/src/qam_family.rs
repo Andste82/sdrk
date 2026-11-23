@@ -144,8 +144,8 @@
 use std::hint::black_box;
 
 use cref_sys::{
-    GrConstellationReceiverCb, GrFirBank, GrLinearEqualizerRect, GrRect, LiquidFirfiltCrcf,
-    LiquidFirinterpCrcf,
+    GrChunksToSymbols, GrConstellationReceiverCb, GrFirBank, GrLinearEqualizerRect, GrRect,
+    LiquidFirfiltCrcf, LiquidFirinterpCrcf, LiquidModemMap,
 };
 
 use super::psk_family::GrFront;
@@ -1604,26 +1604,109 @@ impl Kernel for FrameDecodeFourBlockK {
     }
 }
 
-/// The block `symbol_map` with `qam16` (the first stage of `qam_mod`, M44.1 §2.1) mapping the
-/// bits of `n` symbols per call to `n` points.
+/// The constellation of a `symbol_map_block` entry: the families of the issue (PSK as `qpsk`,
+/// 16-QAM, 64-QAM).
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub(crate) enum MapKind {
+    Qpsk,
+    Qam16,
+    Qam64,
+}
+
+impl MapKind {
+    fn constellation(self) -> SymbolMapConstellation {
+        match self {
+            MapKind::Qpsk => SymbolMapConstellation::Qpsk,
+            MapKind::Qam16 => SymbolMapConstellation::Qam16,
+            MapKind::Qam64 => SymbolMapConstellation::Qam64,
+        }
+    }
+
+    /// Bits per symbol.
+    fn k(self) -> usize {
+        match self {
+            MapKind::Qpsk => 2,
+            MapKind::Qam16 => 4,
+            MapKind::Qam64 => 6,
+        }
+    }
+}
+
+/// The block `symbol_map` (`qpsk`, `qam16` or `qam64`; the first stage of `qam_mod` and
+/// `psk_mod`, M44.1 §2.1) mapping the bits of `n` symbols per call to `n` points. The entries
+/// `symbol_map_block*` are compared with GNU Radio's `pack_k_bits_bb` + `chunks_to_symbols_bc`
+/// and the entries `symbol_map_block*_liquid` with liquid-dsp's `modemcf_modulate` on its
+/// arbitrary-constellation modem (issue #169, D2548); both libraries get the bits as bytes (0
+/// or 1), made once outside the counted calls, and the points of this block in its symbol order.
 pub(crate) struct SymbolMapBlockK {
+    kind: MapKind,
     block: SymbolMapBlock<ArenaStorage<'static>>,
     bits: Vec<f32>,
     out: Vec<C32>,
+    /// The bits as bytes, one per byte (0 or 1), for the libraries.
+    bytes: Vec<u8>,
+    /// GNU Radio's mapper flow of the counted calls (the entries without `_liquid`).
+    gr: Option<GrChunksToSymbols>,
+    /// liquid's mapper of the counted calls (the entries with `_liquid`).
+    liquid: Option<LiquidModemMap>,
+}
+
+/// The points of `kind` in the symbol order of the block: the block run on every symbol.
+fn map_points(kind: MapKind) -> Vec<[f32; 2]> {
+    let k = kind.k();
+    let cfg = SymbolMapConfig {
+        constellation: kind.constellation(),
+        ..SymbolMapConfig::default()
+    };
+    let mut block = SymbolMapBlock::new(&cfg, block_rate(100_000), &mut ArenaStorage::new(&mut []))
+        .expect("symbol_map block");
+    let m = 1usize << k;
+    let bits: Vec<f32> = (0..m)
+        .flat_map(|s| {
+            (0..k).map(move |j| {
+                if (s >> (k - 1 - j)) & 1 == 1 {
+                    1.0
+                } else {
+                    -1.0
+                }
+            })
+        })
+        .collect();
+    let mut out = vec![C32::default(); m];
+    let _ = block.process(&bits, &mut out);
+    out.iter().map(|p| [p.re, p.im]).collect()
 }
 
 impl SymbolMapBlockK {
-    pub(crate) fn new(rng: &mut Pcg32, layout: Layout) -> Self {
+    pub(crate) fn new(rng: &mut Pcg32, layout: Layout, kind: MapKind, liquid_entry: bool) -> Self {
         let cfg = SymbolMapConfig {
-            constellation: SymbolMapConstellation::Qam16,
+            constellation: kind.constellation(),
             ..SymbolMapConfig::default()
         };
         let block = SymbolMapBlock::new(&cfg, block_rate(100_000), &mut ArenaStorage::new(&mut []))
             .expect("symbol_map block");
+        let k = kind.k();
+        let bits: Vec<f32> = (0..k * layout.n)
+            .map(|_| if rng.next_u32() & 1 == 1 { 1.0 } else { -1.0 })
+            .collect();
+        let bytes: Vec<u8> = bits.iter().map(|&b| u8::from(b > 0.0)).collect();
+        let points = map_points(kind);
         SymbolMapBlockK {
+            kind,
             block,
-            bits: qam_bits(rng, Qam::Qam16, layout.n),
+            bits,
             out: vec![C32::default(); layout.n],
+            bytes,
+            gr: if liquid_entry {
+                None
+            } else {
+                GrChunksToSymbols::new(&points, k, layout.n)
+            },
+            liquid: if liquid_entry {
+                LiquidModemMap::new(&points, k)
+            } else {
+                None
+            },
         }
     }
 }
@@ -1637,13 +1720,21 @@ fn symbol_map_call(
     let _ = block.process(black_box(bits), out);
 }
 
-/// The 16-QAM level of one axis in `f64` from two bits (Gray, M44 §1): `(2 i - 3) / sqrt(10)`.
-fn qam16_level_f64(b: &[f32]) -> f64 {
-    let g = usize::from(b[0] > 0.0) * 2 + usize::from(b[1] > 0.0);
-    let i = (0..4usize).find(|&i| i ^ (i >> 1) == g).unwrap_or(0);
+/// The level of one axis in `f64` from its bits (Gray, M44 §1): `(2 i - (m - 1)) / sqrt(E)` with
+/// `m = 2^bits` levels, `E = 2 (m^2 - 1) / 3`, and `i` the level whose Gray code is the bits
+/// (the most significant first); for `qpsk` (one bit per axis) `(2 b - 1) / sqrt(2)`.
+fn axis_level_f64(b: &[f32]) -> f64 {
+    let g = b
+        .iter()
+        .fold(0usize, |g, &x| (g << 1) | usize::from(x > 0.0));
+    let m = 1usize << b.len();
+    let i = (0..m).find(|&i| i ^ (i >> 1) == g).unwrap_or(0);
     #[allow(clippy::cast_precision_loss, reason = "a small integer")]
-    let v = (2 * i) as f64 - 3.0;
-    v / 10f64.sqrt()
+    let (v, e) = (
+        (2 * i) as f64 - (m as f64 - 1.0),
+        2.0 * ((m * m) as f64 - 1.0) / 3.0,
+    );
+    v / e.sqrt()
 }
 
 impl Kernel for SymbolMapBlockK {
@@ -1653,6 +1744,16 @@ impl Kernel for SymbolMapBlockK {
                 Impl::Ours | Impl::Fallback => {
                     symbol_map_call(&mut self.block, &self.bits, &mut self.out);
                 }
+                Impl::GnuRadio => self
+                    .gr
+                    .as_mut()
+                    .expect("gnuradio")
+                    .work(black_box(&self.bytes), c32_pairs(&mut self.out)),
+                Impl::Liquid => self
+                    .liquid
+                    .as_mut()
+                    .expect("liquid")
+                    .map(black_box(&self.bytes), c32_pairs(&mut self.out)),
                 other => unreachable!("symbol_map_block has no {other:?}"),
             }
             black_box(&self.out);
@@ -1664,23 +1765,34 @@ impl Kernel for SymbolMapBlockK {
         if !self.supports(which) {
             return 0.0;
         }
-        self.block.reset();
-        symbol_map_call(&mut self.block, &self.bits, &mut self.out);
+        self.run(which, 1);
+        let k = self.kind.k();
         let want: Vec<f64> = self
             .bits
-            .chunks_exact(4)
-            .flat_map(|b| [qam16_level_f64(&b[..2]), qam16_level_f64(&b[2..])])
+            .chunks_exact(k)
+            .flat_map(|b| [axis_level_f64(&b[..k / 2]), axis_level_f64(&b[k / 2..])])
             .collect();
         snr_db(&want, &c32s(&self.out))
     }
 
     fn supports(&self, which: Impl) -> bool {
-        matches!(which, Impl::Ours | Impl::Fallback)
+        match which {
+            Impl::Ours | Impl::Fallback => true,
+            Impl::GnuRadio => self.gr.is_some(),
+            Impl::Liquid => self.liquid.is_some(),
+            _ => false,
+        }
     }
 
     fn describe(&self, which: Impl) -> &'static str {
         match which {
             Impl::Fallback => "sdrk fallback",
+            Impl::GnuRadio => {
+                "GNU Radio pack_k_bits_bb + chunks_to_symbols_bc (pack_k_bits.cc of gr-blocks, chunks_to_symbols_impl.cc of gr-digital), the table of the points of the block, generic compiler flags"
+            }
+            Impl::Liquid => {
+                "liquid-dsp 1.8.3 modemcf_modulate on the arbitrary-constellation modem of the points of the block (modem_arb.proto.c), the bits packed by the wrapper"
+            }
             _ => "sdrk",
         }
     }

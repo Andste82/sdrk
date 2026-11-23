@@ -163,7 +163,7 @@ stamp="$prefix/refs.stamp"
 want=$( (cat "${BASH_SOURCE[0]}" "$here/volk-wasm.c" "$here/gr-agc.c" "$here/gr-squelch.c" "$here/kfr-biquad.cpp" "$here/cmsis-biquad.c" "$here/cmsis-m4-heap.c" \
     "$here/cmsis-dsp.c" "$here/gr-rotator.c" "$here/gr-fm-mod.c" "$here/gr-quad-demod.c" "$here/gr-fast-atan2f.c" "$here/gr-deemph.c" "$here/gr-crc.c" "$here/gr-scrambler.c" "$here/gr-snr-est.c" \
     "$here/liquid-dotprod.c" "$here/liquid-dcblock.c" "$here/liquid-halfband.c" "$here/liquid-fir.c" "$here/liquid-nco.c" "$here/liquid-ampmodem.c" "$here/liquid-randn.c" "$here/gr-fastnoise.c" "$here/gr-dvbs2-plscramble.c" "$here/airspy-iqconv.c" \
-    "$here/volk-nofma.c" "$here/volk-generic.c" "$here/gr-costas.c" "$here/gr-equalizer.c" "$here/gr-constellation.c" "$here/liquid-channelizer.c" "$here/liquid-fftfilt.c" "$here/gr-symbol-sync.c" "$here/gr-psk-chain.c" "$here/gr-fir.c" "$here/gr-fir-volk.h"; echo "$platform|$cc_version|$cxx_version|$kfr_cxx_version") | sha256sum | cut -d ' ' -f 1)
+    "$here/volk-nofma.c" "$here/volk-generic.c" "$here/gr-costas.c" "$here/gr-equalizer.c" "$here/gr-constellation.c" "$here/liquid-channelizer.c" "$here/liquid-fftfilt.c" "$here/gr-symbol-sync.c" "$here/gr-psk-chain.c" "$here/gr-fir.c" "$here/gr-chunks.c" "$here/liquid-modem.c" "$here/gr-fir-volk.h"; echo "$platform|$cc_version|$cxx_version|$kfr_cxx_version") | sha256sum | cut -d ' ' -f 1)
 if [ -f "$stamp" ] && [ "$(cat "$stamp")" = "$want" ]; then
     exit 0
 fi
@@ -309,7 +309,8 @@ build_gr_symbol_sync() {
     $cc $GR_AGC_FLAGS -c "$here/gr-symbol-sync.c" -o "$work/gr-symbol-sync.o"
     $cc $GR_AGC_FLAGS -c "$here/gr-psk-chain.c" -o "$work/gr-psk-chain.o"
     $cc $GR_AGC_FLAGS -I "$work/volk/include" -I "$work/volk/kernels" -c "$here/gr-fir.c" -o "$work/gr-fir.o"
-    $ar rcs "$prefix/lib/libgrsymsync.a" "$work/gr-symbol-sync.o" "$work/gr-psk-chain.o" "$work/gr-fir.o"
+    $cc $GR_AGC_FLAGS -c "$here/gr-chunks.c" -o "$work/gr-chunks.o"
+    $ar rcs "$prefix/lib/libgrsymsync.a" "$work/gr-symbol-sync.o" "$work/gr-psk-chain.o" "$work/gr-fir.o" "$work/gr-chunks.o"
 }
 
 # The loop of GNU Radio's costas_loop_cc, compiled with the same generic flags as agc_cc: the
@@ -696,6 +697,16 @@ build_liquid_halfband() {
                 -DSDRK_LIQUID_FFTW=$f -c "$here/liquid-fftfilt.c" -o "$dir/fftfilt$f.o"
             objects+=("$dir/fftfilt$f.o")
         done
+        # The symbol mapper modemcf (liquid-modem.c, issue #169): liquid's modulation tables and
+        # gray code with the wrapper that includes liquid's modem sources.
+        for f in modem/src/modem_utilities modem/src/modem_arb_const modem/src/modem_apsk_const; do
+            $cc $BIQUAD_OPT $march "${inc[@]}" -I "$src/src/modem/src" -Wno-unused-result \
+                -c "$src/src/$f.c" -o "$dir/${f##*/}.o"
+            objects+=("$dir/${f##*/}.o")
+        done
+        $cc $BIQUAD_OPT $march "${inc[@]}" -I "$src/src/modem/src" -Wno-unused-result \
+            -c "$here/liquid-modem.c" -o "$dir/liquid-modem.o"
+        objects+=("$dir/liquid-modem.o")
         # The pulse filters firinterp_crcf and firfilt_crcf (liquid-fir.c, issue #169).
         for f in 1 2; do
             $cc $BIQUAD_OPT $march "${inc[@]}" -I "$src/src/filter/src" -DSDRK_LIQUID_KIND=$f \

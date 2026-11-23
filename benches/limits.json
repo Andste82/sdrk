@@ -5941,31 +5941,181 @@
   "symbol_map_block": {
     "sse2": {
       "status": "info",
-      "waiver": "`symbol_map_block` is the block `symbol_map` (M44.1 §2.1) with `qam16`, the first stage of the composite `qam_mod`: per symbol four bits to the point of the table of `Qam::Qam16`, 4096 symbols per call. No library has the same block (liquid-dsp's `modemcf_modulate` maps one symbol index per call, GNU Radio's `chunks_to_symbols` takes packed symbol indices, not soft bits; D1216), so the entry is our own code, reported as information (cycles and instructions per output symbol; ours and fallback run the same block code)"
+      "waiver": "`symbol_map_block` is the block `symbol_map` (M44.1 §2.1) with `qam16`, per symbol four bits to the point of the table of `Qam::Qam16`, the first stage of the composites `qam_mod` and `psk_mod`, 4096 symbols per call; compared with GNU Radio's `pack_k_bits_bb` followed by `chunks_to_symbols_bc` with the table of the points of the block (the bits as bytes, made once outside the counted calls) (issue #169, D2548), as information: neither library has the soft-bit decision of the block, and no library has a SIMD mapper (both are table lookups), so the comparison is the library's scalar code against our block at every level; our fallback is information too (ours and fallback run the same block code); the other library has its own entry (`symbol_map_block_liquid`)"
     },
     "sse4.2": {
       "status": "info",
-      "waiver": "`symbol_map_block` is the block `symbol_map` (M44.1 §2.1) with `qam16`, the first stage of the composite `qam_mod`: per symbol four bits to the point of the table of `Qam::Qam16`, 4096 symbols per call. No library has the same block (liquid-dsp's `modemcf_modulate` maps one symbol index per call, GNU Radio's `chunks_to_symbols` takes packed symbol indices, not soft bits; D1216), so the entry is our own code, reported as information (cycles and instructions per output symbol; ours and fallback run the same block code)"
+      "waiver": "`symbol_map_block` is the block `symbol_map` (M44.1 §2.1) with `qam16`, per symbol four bits to the point of the table of `Qam::Qam16`, the first stage of the composites `qam_mod` and `psk_mod`, 4096 symbols per call; compared with GNU Radio's `pack_k_bits_bb` followed by `chunks_to_symbols_bc` with the table of the points of the block (the bits as bytes, made once outside the counted calls) (issue #169, D2548), as information: neither library has the soft-bit decision of the block, and no library has a SIMD mapper (both are table lookups), so the comparison is the library's scalar code against our block at every level; our fallback is information too (ours and fallback run the same block code); the other library has its own entry (`symbol_map_block_liquid`)"
     },
     "avx2": {
       "status": "info",
-      "waiver": "`symbol_map_block` is the block `symbol_map` (M44.1 §2.1) with `qam16`, the first stage of the composite `qam_mod`: per symbol four bits to the point of the table of `Qam::Qam16`, 4096 symbols per call. No library has the same block (liquid-dsp's `modemcf_modulate` maps one symbol index per call, GNU Radio's `chunks_to_symbols` takes packed symbol indices, not soft bits; D1216), so the entry is our own code, reported as information (cycles and instructions per output symbol; ours and fallback run the same block code)"
+      "waiver": "`symbol_map_block` is the block `symbol_map` (M44.1 §2.1) with `qam16`, per symbol four bits to the point of the table of `Qam::Qam16`, the first stage of the composites `qam_mod` and `psk_mod`, 4096 symbols per call; compared with GNU Radio's `pack_k_bits_bb` followed by `chunks_to_symbols_bc` with the table of the points of the block (the bits as bytes, made once outside the counted calls) (issue #169, D2548), as information: neither library has the soft-bit decision of the block, and no library has a SIMD mapper (both are table lookups), so the comparison is the library's scalar code against our block at every level; our fallback is information too (ours and fallback run the same block code); the other library has its own entry (`symbol_map_block_liquid`)"
     },
     "avx512": {
       "status": "info",
-      "waiver": "`symbol_map_block` is the block `symbol_map` (M44.1 §2.1) with `qam16`, the first stage of the composite `qam_mod`: per symbol four bits to the point of the table of `Qam::Qam16`, 4096 symbols per call. No library has the same block (liquid-dsp's `modemcf_modulate` maps one symbol index per call, GNU Radio's `chunks_to_symbols` takes packed symbol indices, not soft bits; D1216), so the entry is our own code, reported as information (cycles and instructions per output symbol; ours and fallback run the same block code)"
+      "waiver": "`symbol_map_block` is the block `symbol_map` (M44.1 §2.1) with `qam16`, per symbol four bits to the point of the table of `Qam::Qam16`, the first stage of the composites `qam_mod` and `psk_mod`, 4096 symbols per call; compared with GNU Radio's `pack_k_bits_bb` followed by `chunks_to_symbols_bc` with the table of the points of the block (the bits as bytes, made once outside the counted calls) (issue #169, D2548), as information: neither library has the soft-bit decision of the block, and no library has a SIMD mapper (both are table lookups), so the comparison is the library's scalar code against our block at every level; our fallback is information too (ours and fallback run the same block code); the other library has its own entry (`symbol_map_block_liquid`)"
     },
     "neon": {
       "status": "info",
-      "waiver": "`symbol_map_block` is the block `symbol_map` (M44.1 §2.1) with `qam16`, the first stage of the composite `qam_mod`: per symbol four bits to the point of the table of `Qam::Qam16`, 4096 symbols per call. No library has the same block (liquid-dsp's `modemcf_modulate` maps one symbol index per call, GNU Radio's `chunks_to_symbols` takes packed symbol indices, not soft bits; D1216), so the entry is our own code, reported as information (cycles and instructions per output symbol; ours and fallback run the same block code)"
+      "waiver": "`symbol_map_block` is the block `symbol_map` (M44.1 §2.1) with `qam16`, per symbol four bits to the point of the table of `Qam::Qam16`, the first stage of the composites `qam_mod` and `psk_mod`, 4096 symbols per call; compared with GNU Radio's `pack_k_bits_bb` followed by `chunks_to_symbols_bc` with the table of the points of the block (the bits as bytes, made once outside the counted calls) (issue #169, D2548), as information: neither library has the soft-bit decision of the block, and no library has a SIMD mapper (both are table lookups), so the comparison is the library's scalar code against our block at every level; our fallback is information too (ours and fallback run the same block code); the other library has its own entry (`symbol_map_block_liquid`)"
     },
     "simd128": {
       "status": "info",
-      "waiver": "`symbol_map_block` is the block `symbol_map` (M44.1 §2.1) with `qam16`, the first stage of the composite `qam_mod`: per symbol four bits to the point of the table of `Qam::Qam16`, 4096 symbols per call. No library has the same block (liquid-dsp's `modemcf_modulate` maps one symbol index per call, GNU Radio's `chunks_to_symbols` takes packed symbol indices, not soft bits; D1216), so the entry is our own code, reported as information (cycles and instructions per output symbol; ours and fallback run the same block code)"
+      "waiver": "`symbol_map_block` is the block `symbol_map` (M44.1 §2.1) with `qam16`, per symbol four bits to the point of the table of `Qam::Qam16`, the first stage of the composites `qam_mod` and `psk_mod`, 4096 symbols per call; compared with GNU Radio's `pack_k_bits_bb` followed by `chunks_to_symbols_bc` with the table of the points of the block (the bits as bytes, made once outside the counted calls) (issue #169, D2548), as information: neither library has the soft-bit decision of the block, and no library has a SIMD mapper (both are table lookups), so the comparison is the library's scalar code against our block at every level; our fallback is information too (ours and fallback run the same block code); the other library has its own entry (`symbol_map_block_liquid`)"
     },
     "avx2-runtime": {
       "status": "info",
       "waiver": "`symbol_map_block` is not accelerated: the run-time-detection build runs the block code compiled for the baseline x86-64 target, the `avx2` build the same code compiled for AVX2, so their counts differ by code generation only; reported as information"
+    }
+  },
+  "symbol_map_block_liquid": {
+    "sse2": {
+      "status": "info",
+      "waiver": "`symbol_map_block_liquid` is the block `symbol_map` (M44.1 §2.1) with `qam16`, per symbol four bits to the point of the table of `Qam::Qam16`, the first stage of the composites `qam_mod` and `psk_mod`, 4096 symbols per call; compared with liquid-dsp's `modemcf_modulate` on its arbitrary-constellation modem with the table of the points of the block (the bits as bytes, packed to the symbol by the wrapper) (issue #169, D2548), as information: neither library has the soft-bit decision of the block, and no library has a SIMD mapper (both are table lookups), so the comparison is the library's scalar code against our block at every level; our fallback is information too (ours and fallback run the same block code); the other library has its own entry (`symbol_map_block`)"
+    },
+    "sse4.2": {
+      "status": "info",
+      "waiver": "`symbol_map_block_liquid` is the block `symbol_map` (M44.1 §2.1) with `qam16`, per symbol four bits to the point of the table of `Qam::Qam16`, the first stage of the composites `qam_mod` and `psk_mod`, 4096 symbols per call; compared with liquid-dsp's `modemcf_modulate` on its arbitrary-constellation modem with the table of the points of the block (the bits as bytes, packed to the symbol by the wrapper) (issue #169, D2548), as information: neither library has the soft-bit decision of the block, and no library has a SIMD mapper (both are table lookups), so the comparison is the library's scalar code against our block at every level; our fallback is information too (ours and fallback run the same block code); the other library has its own entry (`symbol_map_block`)"
+    },
+    "avx2": {
+      "status": "info",
+      "waiver": "`symbol_map_block_liquid` is the block `symbol_map` (M44.1 §2.1) with `qam16`, per symbol four bits to the point of the table of `Qam::Qam16`, the first stage of the composites `qam_mod` and `psk_mod`, 4096 symbols per call; compared with liquid-dsp's `modemcf_modulate` on its arbitrary-constellation modem with the table of the points of the block (the bits as bytes, packed to the symbol by the wrapper) (issue #169, D2548), as information: neither library has the soft-bit decision of the block, and no library has a SIMD mapper (both are table lookups), so the comparison is the library's scalar code against our block at every level; our fallback is information too (ours and fallback run the same block code); the other library has its own entry (`symbol_map_block`)"
+    },
+    "avx512": {
+      "status": "info",
+      "waiver": "`symbol_map_block_liquid` is the block `symbol_map` (M44.1 §2.1) with `qam16`, per symbol four bits to the point of the table of `Qam::Qam16`, the first stage of the composites `qam_mod` and `psk_mod`, 4096 symbols per call; compared with liquid-dsp's `modemcf_modulate` on its arbitrary-constellation modem with the table of the points of the block (the bits as bytes, packed to the symbol by the wrapper) (issue #169, D2548), as information: neither library has the soft-bit decision of the block, and no library has a SIMD mapper (both are table lookups), so the comparison is the library's scalar code against our block at every level; our fallback is information too (ours and fallback run the same block code); the other library has its own entry (`symbol_map_block`)"
+    },
+    "neon": {
+      "status": "info",
+      "waiver": "`symbol_map_block_liquid` is the block `symbol_map` (M44.1 §2.1) with `qam16`, per symbol four bits to the point of the table of `Qam::Qam16`, the first stage of the composites `qam_mod` and `psk_mod`, 4096 symbols per call; compared with liquid-dsp's `modemcf_modulate` on its arbitrary-constellation modem with the table of the points of the block (the bits as bytes, packed to the symbol by the wrapper) (issue #169, D2548), as information: neither library has the soft-bit decision of the block, and no library has a SIMD mapper (both are table lookups), so the comparison is the library's scalar code against our block at every level; our fallback is information too (ours and fallback run the same block code); the other library has its own entry (`symbol_map_block`)"
+    },
+    "simd128": {
+      "status": "info",
+      "waiver": "`symbol_map_block_liquid` is the block `symbol_map` (M44.1 §2.1) with `qam16`, per symbol four bits to the point of the table of `Qam::Qam16`, the first stage of the composites `qam_mod` and `psk_mod`, 4096 symbols per call; compared with liquid-dsp's `modemcf_modulate` on its arbitrary-constellation modem with the table of the points of the block (the bits as bytes, packed to the symbol by the wrapper) (issue #169, D2548), as information: neither library has the soft-bit decision of the block, and no library has a SIMD mapper (both are table lookups), so the comparison is the library's scalar code against our block at every level; our fallback is information too (ours and fallback run the same block code); the other library has its own entry (`symbol_map_block`)"
+    },
+    "avx2-runtime": {
+      "status": "info",
+      "waiver": "`symbol_map_block_liquid` is not accelerated: the run-time-detection build runs the block code compiled for the baseline x86-64 target, the `avx2` build the same code compiled for AVX2, so their counts differ by code generation only; reported as information"
+    }
+  },
+  "symbol_map_block_qpsk": {
+    "sse2": {
+      "status": "info",
+      "waiver": "`symbol_map_block_qpsk` is the block `symbol_map` (M44.1 §2.1) with `qpsk`, per symbol two bits to the point `((2 b0 - 1) / sqrt 2, (2 b1 - 1) / sqrt 2)`, the first stage of the composites `qam_mod` and `psk_mod`, 4096 symbols per call; compared with GNU Radio's `pack_k_bits_bb` followed by `chunks_to_symbols_bc` with the table of the points of the block (the bits as bytes, made once outside the counted calls) (issue #169, D2548), as information: neither library has the soft-bit decision of the block, and no library has a SIMD mapper (both are table lookups), so the comparison is the library's scalar code against our block at every level; our fallback is information too (ours and fallback run the same block code); the other library has its own entry (`symbol_map_block_qpsk_liquid`)"
+    },
+    "sse4.2": {
+      "status": "info",
+      "waiver": "`symbol_map_block_qpsk` is the block `symbol_map` (M44.1 §2.1) with `qpsk`, per symbol two bits to the point `((2 b0 - 1) / sqrt 2, (2 b1 - 1) / sqrt 2)`, the first stage of the composites `qam_mod` and `psk_mod`, 4096 symbols per call; compared with GNU Radio's `pack_k_bits_bb` followed by `chunks_to_symbols_bc` with the table of the points of the block (the bits as bytes, made once outside the counted calls) (issue #169, D2548), as information: neither library has the soft-bit decision of the block, and no library has a SIMD mapper (both are table lookups), so the comparison is the library's scalar code against our block at every level; our fallback is information too (ours and fallback run the same block code); the other library has its own entry (`symbol_map_block_qpsk_liquid`)"
+    },
+    "avx2": {
+      "status": "info",
+      "waiver": "`symbol_map_block_qpsk` is the block `symbol_map` (M44.1 §2.1) with `qpsk`, per symbol two bits to the point `((2 b0 - 1) / sqrt 2, (2 b1 - 1) / sqrt 2)`, the first stage of the composites `qam_mod` and `psk_mod`, 4096 symbols per call; compared with GNU Radio's `pack_k_bits_bb` followed by `chunks_to_symbols_bc` with the table of the points of the block (the bits as bytes, made once outside the counted calls) (issue #169, D2548), as information: neither library has the soft-bit decision of the block, and no library has a SIMD mapper (both are table lookups), so the comparison is the library's scalar code against our block at every level; our fallback is information too (ours and fallback run the same block code); the other library has its own entry (`symbol_map_block_qpsk_liquid`)"
+    },
+    "avx512": {
+      "status": "info",
+      "waiver": "`symbol_map_block_qpsk` is the block `symbol_map` (M44.1 §2.1) with `qpsk`, per symbol two bits to the point `((2 b0 - 1) / sqrt 2, (2 b1 - 1) / sqrt 2)`, the first stage of the composites `qam_mod` and `psk_mod`, 4096 symbols per call; compared with GNU Radio's `pack_k_bits_bb` followed by `chunks_to_symbols_bc` with the table of the points of the block (the bits as bytes, made once outside the counted calls) (issue #169, D2548), as information: neither library has the soft-bit decision of the block, and no library has a SIMD mapper (both are table lookups), so the comparison is the library's scalar code against our block at every level; our fallback is information too (ours and fallback run the same block code); the other library has its own entry (`symbol_map_block_qpsk_liquid`)"
+    },
+    "neon": {
+      "status": "info",
+      "waiver": "`symbol_map_block_qpsk` is the block `symbol_map` (M44.1 §2.1) with `qpsk`, per symbol two bits to the point `((2 b0 - 1) / sqrt 2, (2 b1 - 1) / sqrt 2)`, the first stage of the composites `qam_mod` and `psk_mod`, 4096 symbols per call; compared with GNU Radio's `pack_k_bits_bb` followed by `chunks_to_symbols_bc` with the table of the points of the block (the bits as bytes, made once outside the counted calls) (issue #169, D2548), as information: neither library has the soft-bit decision of the block, and no library has a SIMD mapper (both are table lookups), so the comparison is the library's scalar code against our block at every level; our fallback is information too (ours and fallback run the same block code); the other library has its own entry (`symbol_map_block_qpsk_liquid`)"
+    },
+    "simd128": {
+      "status": "info",
+      "waiver": "`symbol_map_block_qpsk` is the block `symbol_map` (M44.1 §2.1) with `qpsk`, per symbol two bits to the point `((2 b0 - 1) / sqrt 2, (2 b1 - 1) / sqrt 2)`, the first stage of the composites `qam_mod` and `psk_mod`, 4096 symbols per call; compared with GNU Radio's `pack_k_bits_bb` followed by `chunks_to_symbols_bc` with the table of the points of the block (the bits as bytes, made once outside the counted calls) (issue #169, D2548), as information: neither library has the soft-bit decision of the block, and no library has a SIMD mapper (both are table lookups), so the comparison is the library's scalar code against our block at every level; our fallback is information too (ours and fallback run the same block code); the other library has its own entry (`symbol_map_block_qpsk_liquid`)"
+    },
+    "avx2-runtime": {
+      "status": "info",
+      "waiver": "`symbol_map_block_qpsk` is not accelerated: the run-time-detection build runs the block code compiled for the baseline x86-64 target, the `avx2` build the same code compiled for AVX2, so their counts differ by code generation only; reported as information"
+    }
+  },
+  "symbol_map_block_qpsk_liquid": {
+    "sse2": {
+      "status": "info",
+      "waiver": "`symbol_map_block_qpsk_liquid` is the block `symbol_map` (M44.1 §2.1) with `qpsk`, per symbol two bits to the point `((2 b0 - 1) / sqrt 2, (2 b1 - 1) / sqrt 2)`, the first stage of the composites `qam_mod` and `psk_mod`, 4096 symbols per call; compared with liquid-dsp's `modemcf_modulate` on its arbitrary-constellation modem with the table of the points of the block (the bits as bytes, packed to the symbol by the wrapper) (issue #169, D2548), as information: neither library has the soft-bit decision of the block, and no library has a SIMD mapper (both are table lookups), so the comparison is the library's scalar code against our block at every level; our fallback is information too (ours and fallback run the same block code); the other library has its own entry (`symbol_map_block_qpsk`)"
+    },
+    "sse4.2": {
+      "status": "info",
+      "waiver": "`symbol_map_block_qpsk_liquid` is the block `symbol_map` (M44.1 §2.1) with `qpsk`, per symbol two bits to the point `((2 b0 - 1) / sqrt 2, (2 b1 - 1) / sqrt 2)`, the first stage of the composites `qam_mod` and `psk_mod`, 4096 symbols per call; compared with liquid-dsp's `modemcf_modulate` on its arbitrary-constellation modem with the table of the points of the block (the bits as bytes, packed to the symbol by the wrapper) (issue #169, D2548), as information: neither library has the soft-bit decision of the block, and no library has a SIMD mapper (both are table lookups), so the comparison is the library's scalar code against our block at every level; our fallback is information too (ours and fallback run the same block code); the other library has its own entry (`symbol_map_block_qpsk`)"
+    },
+    "avx2": {
+      "status": "info",
+      "waiver": "`symbol_map_block_qpsk_liquid` is the block `symbol_map` (M44.1 §2.1) with `qpsk`, per symbol two bits to the point `((2 b0 - 1) / sqrt 2, (2 b1 - 1) / sqrt 2)`, the first stage of the composites `qam_mod` and `psk_mod`, 4096 symbols per call; compared with liquid-dsp's `modemcf_modulate` on its arbitrary-constellation modem with the table of the points of the block (the bits as bytes, packed to the symbol by the wrapper) (issue #169, D2548), as information: neither library has the soft-bit decision of the block, and no library has a SIMD mapper (both are table lookups), so the comparison is the library's scalar code against our block at every level; our fallback is information too (ours and fallback run the same block code); the other library has its own entry (`symbol_map_block_qpsk`)"
+    },
+    "avx512": {
+      "status": "info",
+      "waiver": "`symbol_map_block_qpsk_liquid` is the block `symbol_map` (M44.1 §2.1) with `qpsk`, per symbol two bits to the point `((2 b0 - 1) / sqrt 2, (2 b1 - 1) / sqrt 2)`, the first stage of the composites `qam_mod` and `psk_mod`, 4096 symbols per call; compared with liquid-dsp's `modemcf_modulate` on its arbitrary-constellation modem with the table of the points of the block (the bits as bytes, packed to the symbol by the wrapper) (issue #169, D2548), as information: neither library has the soft-bit decision of the block, and no library has a SIMD mapper (both are table lookups), so the comparison is the library's scalar code against our block at every level; our fallback is information too (ours and fallback run the same block code); the other library has its own entry (`symbol_map_block_qpsk`)"
+    },
+    "neon": {
+      "status": "info",
+      "waiver": "`symbol_map_block_qpsk_liquid` is the block `symbol_map` (M44.1 §2.1) with `qpsk`, per symbol two bits to the point `((2 b0 - 1) / sqrt 2, (2 b1 - 1) / sqrt 2)`, the first stage of the composites `qam_mod` and `psk_mod`, 4096 symbols per call; compared with liquid-dsp's `modemcf_modulate` on its arbitrary-constellation modem with the table of the points of the block (the bits as bytes, packed to the symbol by the wrapper) (issue #169, D2548), as information: neither library has the soft-bit decision of the block, and no library has a SIMD mapper (both are table lookups), so the comparison is the library's scalar code against our block at every level; our fallback is information too (ours and fallback run the same block code); the other library has its own entry (`symbol_map_block_qpsk`)"
+    },
+    "simd128": {
+      "status": "info",
+      "waiver": "`symbol_map_block_qpsk_liquid` is the block `symbol_map` (M44.1 §2.1) with `qpsk`, per symbol two bits to the point `((2 b0 - 1) / sqrt 2, (2 b1 - 1) / sqrt 2)`, the first stage of the composites `qam_mod` and `psk_mod`, 4096 symbols per call; compared with liquid-dsp's `modemcf_modulate` on its arbitrary-constellation modem with the table of the points of the block (the bits as bytes, packed to the symbol by the wrapper) (issue #169, D2548), as information: neither library has the soft-bit decision of the block, and no library has a SIMD mapper (both are table lookups), so the comparison is the library's scalar code against our block at every level; our fallback is information too (ours and fallback run the same block code); the other library has its own entry (`symbol_map_block_qpsk`)"
+    },
+    "avx2-runtime": {
+      "status": "info",
+      "waiver": "`symbol_map_block_qpsk_liquid` is not accelerated: the run-time-detection build runs the block code compiled for the baseline x86-64 target, the `avx2` build the same code compiled for AVX2, so their counts differ by code generation only; reported as information"
+    }
+  },
+  "symbol_map_block_qam64": {
+    "sse2": {
+      "status": "info",
+      "waiver": "`symbol_map_block_qam64` is the block `symbol_map` (M44.1 §2.1) with `qam64`, per symbol six bits to the point of the table of `Qam::Qam64`, the first stage of the composites `qam_mod` and `psk_mod`, 4096 symbols per call; compared with GNU Radio's `pack_k_bits_bb` followed by `chunks_to_symbols_bc` with the table of the points of the block (the bits as bytes, made once outside the counted calls) (issue #169, D2548), as information: neither library has the soft-bit decision of the block, and no library has a SIMD mapper (both are table lookups), so the comparison is the library's scalar code against our block at every level; our fallback is information too (ours and fallback run the same block code); the other library has its own entry (`symbol_map_block_qam64_liquid`)"
+    },
+    "sse4.2": {
+      "status": "info",
+      "waiver": "`symbol_map_block_qam64` is the block `symbol_map` (M44.1 §2.1) with `qam64`, per symbol six bits to the point of the table of `Qam::Qam64`, the first stage of the composites `qam_mod` and `psk_mod`, 4096 symbols per call; compared with GNU Radio's `pack_k_bits_bb` followed by `chunks_to_symbols_bc` with the table of the points of the block (the bits as bytes, made once outside the counted calls) (issue #169, D2548), as information: neither library has the soft-bit decision of the block, and no library has a SIMD mapper (both are table lookups), so the comparison is the library's scalar code against our block at every level; our fallback is information too (ours and fallback run the same block code); the other library has its own entry (`symbol_map_block_qam64_liquid`)"
+    },
+    "avx2": {
+      "status": "info",
+      "waiver": "`symbol_map_block_qam64` is the block `symbol_map` (M44.1 §2.1) with `qam64`, per symbol six bits to the point of the table of `Qam::Qam64`, the first stage of the composites `qam_mod` and `psk_mod`, 4096 symbols per call; compared with GNU Radio's `pack_k_bits_bb` followed by `chunks_to_symbols_bc` with the table of the points of the block (the bits as bytes, made once outside the counted calls) (issue #169, D2548), as information: neither library has the soft-bit decision of the block, and no library has a SIMD mapper (both are table lookups), so the comparison is the library's scalar code against our block at every level; our fallback is information too (ours and fallback run the same block code); the other library has its own entry (`symbol_map_block_qam64_liquid`)"
+    },
+    "avx512": {
+      "status": "info",
+      "waiver": "`symbol_map_block_qam64` is the block `symbol_map` (M44.1 §2.1) with `qam64`, per symbol six bits to the point of the table of `Qam::Qam64`, the first stage of the composites `qam_mod` and `psk_mod`, 4096 symbols per call; compared with GNU Radio's `pack_k_bits_bb` followed by `chunks_to_symbols_bc` with the table of the points of the block (the bits as bytes, made once outside the counted calls) (issue #169, D2548), as information: neither library has the soft-bit decision of the block, and no library has a SIMD mapper (both are table lookups), so the comparison is the library's scalar code against our block at every level; our fallback is information too (ours and fallback run the same block code); the other library has its own entry (`symbol_map_block_qam64_liquid`)"
+    },
+    "neon": {
+      "status": "info",
+      "waiver": "`symbol_map_block_qam64` is the block `symbol_map` (M44.1 §2.1) with `qam64`, per symbol six bits to the point of the table of `Qam::Qam64`, the first stage of the composites `qam_mod` and `psk_mod`, 4096 symbols per call; compared with GNU Radio's `pack_k_bits_bb` followed by `chunks_to_symbols_bc` with the table of the points of the block (the bits as bytes, made once outside the counted calls) (issue #169, D2548), as information: neither library has the soft-bit decision of the block, and no library has a SIMD mapper (both are table lookups), so the comparison is the library's scalar code against our block at every level; our fallback is information too (ours and fallback run the same block code); the other library has its own entry (`symbol_map_block_qam64_liquid`)"
+    },
+    "simd128": {
+      "status": "info",
+      "waiver": "`symbol_map_block_qam64` is the block `symbol_map` (M44.1 §2.1) with `qam64`, per symbol six bits to the point of the table of `Qam::Qam64`, the first stage of the composites `qam_mod` and `psk_mod`, 4096 symbols per call; compared with GNU Radio's `pack_k_bits_bb` followed by `chunks_to_symbols_bc` with the table of the points of the block (the bits as bytes, made once outside the counted calls) (issue #169, D2548), as information: neither library has the soft-bit decision of the block, and no library has a SIMD mapper (both are table lookups), so the comparison is the library's scalar code against our block at every level; our fallback is information too (ours and fallback run the same block code); the other library has its own entry (`symbol_map_block_qam64_liquid`)"
+    },
+    "avx2-runtime": {
+      "status": "info",
+      "waiver": "`symbol_map_block_qam64` is not accelerated: the run-time-detection build runs the block code compiled for the baseline x86-64 target, the `avx2` build the same code compiled for AVX2, so their counts differ by code generation only; reported as information"
+    }
+  },
+  "symbol_map_block_qam64_liquid": {
+    "sse2": {
+      "status": "info",
+      "waiver": "`symbol_map_block_qam64_liquid` is the block `symbol_map` (M44.1 §2.1) with `qam64`, per symbol six bits to the point of the table of `Qam::Qam64`, the first stage of the composites `qam_mod` and `psk_mod`, 4096 symbols per call; compared with liquid-dsp's `modemcf_modulate` on its arbitrary-constellation modem with the table of the points of the block (the bits as bytes, packed to the symbol by the wrapper) (issue #169, D2548), as information: neither library has the soft-bit decision of the block, and no library has a SIMD mapper (both are table lookups), so the comparison is the library's scalar code against our block at every level; our fallback is information too (ours and fallback run the same block code); the other library has its own entry (`symbol_map_block_qam64`)"
+    },
+    "sse4.2": {
+      "status": "info",
+      "waiver": "`symbol_map_block_qam64_liquid` is the block `symbol_map` (M44.1 §2.1) with `qam64`, per symbol six bits to the point of the table of `Qam::Qam64`, the first stage of the composites `qam_mod` and `psk_mod`, 4096 symbols per call; compared with liquid-dsp's `modemcf_modulate` on its arbitrary-constellation modem with the table of the points of the block (the bits as bytes, packed to the symbol by the wrapper) (issue #169, D2548), as information: neither library has the soft-bit decision of the block, and no library has a SIMD mapper (both are table lookups), so the comparison is the library's scalar code against our block at every level; our fallback is information too (ours and fallback run the same block code); the other library has its own entry (`symbol_map_block_qam64`)"
+    },
+    "avx2": {
+      "status": "info",
+      "waiver": "`symbol_map_block_qam64_liquid` is the block `symbol_map` (M44.1 §2.1) with `qam64`, per symbol six bits to the point of the table of `Qam::Qam64`, the first stage of the composites `qam_mod` and `psk_mod`, 4096 symbols per call; compared with liquid-dsp's `modemcf_modulate` on its arbitrary-constellation modem with the table of the points of the block (the bits as bytes, packed to the symbol by the wrapper) (issue #169, D2548), as information: neither library has the soft-bit decision of the block, and no library has a SIMD mapper (both are table lookups), so the comparison is the library's scalar code against our block at every level; our fallback is information too (ours and fallback run the same block code); the other library has its own entry (`symbol_map_block_qam64`)"
+    },
+    "avx512": {
+      "status": "info",
+      "waiver": "`symbol_map_block_qam64_liquid` is the block `symbol_map` (M44.1 §2.1) with `qam64`, per symbol six bits to the point of the table of `Qam::Qam64`, the first stage of the composites `qam_mod` and `psk_mod`, 4096 symbols per call; compared with liquid-dsp's `modemcf_modulate` on its arbitrary-constellation modem with the table of the points of the block (the bits as bytes, packed to the symbol by the wrapper) (issue #169, D2548), as information: neither library has the soft-bit decision of the block, and no library has a SIMD mapper (both are table lookups), so the comparison is the library's scalar code against our block at every level; our fallback is information too (ours and fallback run the same block code); the other library has its own entry (`symbol_map_block_qam64`)"
+    },
+    "neon": {
+      "status": "info",
+      "waiver": "`symbol_map_block_qam64_liquid` is the block `symbol_map` (M44.1 §2.1) with `qam64`, per symbol six bits to the point of the table of `Qam::Qam64`, the first stage of the composites `qam_mod` and `psk_mod`, 4096 symbols per call; compared with liquid-dsp's `modemcf_modulate` on its arbitrary-constellation modem with the table of the points of the block (the bits as bytes, packed to the symbol by the wrapper) (issue #169, D2548), as information: neither library has the soft-bit decision of the block, and no library has a SIMD mapper (both are table lookups), so the comparison is the library's scalar code against our block at every level; our fallback is information too (ours and fallback run the same block code); the other library has its own entry (`symbol_map_block_qam64`)"
+    },
+    "simd128": {
+      "status": "info",
+      "waiver": "`symbol_map_block_qam64_liquid` is the block `symbol_map` (M44.1 §2.1) with `qam64`, per symbol six bits to the point of the table of `Qam::Qam64`, the first stage of the composites `qam_mod` and `psk_mod`, 4096 symbols per call; compared with liquid-dsp's `modemcf_modulate` on its arbitrary-constellation modem with the table of the points of the block (the bits as bytes, packed to the symbol by the wrapper) (issue #169, D2548), as information: neither library has the soft-bit decision of the block, and no library has a SIMD mapper (both are table lookups), so the comparison is the library's scalar code against our block at every level; our fallback is information too (ours and fallback run the same block code); the other library has its own entry (`symbol_map_block_qam64`)"
+    },
+    "avx2-runtime": {
+      "status": "info",
+      "waiver": "`symbol_map_block_qam64_liquid` is not accelerated: the run-time-detection build runs the block code compiled for the baseline x86-64 target, the `avx2` build the same code compiled for AVX2, so their counts differ by code generation only; reported as information"
     }
   },
   "iq_offset_block": {

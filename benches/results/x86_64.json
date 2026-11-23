@@ -6623,14 +6623,139 @@
           "verdict": "info"
         },
         "symbol_map_block": {
-          "compared_with": "sdrk fallback",
+          "compared_with": "GNU Radio pack_k_bits_bb + chunks_to_symbols_bc (pack_k_bits.cc of gr-blocks, chunks_to_symbols_impl.cc of gr-digital), the table of the points of the block, generic compiler flags",
           "goal": true,
-          "other_instr_per_sample": 20.52,
+          "informational": [
+            {
+              "compared_with": "sdrk fallback",
+              "label": "information: fallback",
+              "other_instr_per_sample": 20.52,
+              "other_snr_db": 152.57,
+              "ours_instr_per_sample": 20.52,
+              "ratio": 1.0
+            }
+          ],
+          "other_instr_per_sample": 55.02,
           "ours_instr_per_sample": 20.52,
-          "ratio": 1.0,
+          "ratio": 0.37,
           "snr_db": {
             "other": 152.57,
             "ours": 152.57
+          },
+          "status": "info",
+          "verdict": "info"
+        },
+        "symbol_map_block_liquid": {
+          "compared_with": "liquid-dsp 1.8.3 modemcf_modulate on the arbitrary-constellation modem of the points of the block (modem_arb.proto.c), the bits packed by the wrapper",
+          "goal": true,
+          "informational": [
+            {
+              "compared_with": "sdrk fallback",
+              "label": "information: fallback",
+              "other_instr_per_sample": 20.52,
+              "other_snr_db": 152.57,
+              "ours_instr_per_sample": 20.52,
+              "ratio": 1.0
+            }
+          ],
+          "other_instr_per_sample": 56.02,
+          "ours_instr_per_sample": 20.52,
+          "ratio": 0.37,
+          "snr_db": {
+            "other": 140.05,
+            "ours": 152.57
+          },
+          "status": "info",
+          "verdict": "info"
+        },
+        "symbol_map_block_qam64": {
+          "compared_with": "GNU Radio pack_k_bits_bb + chunks_to_symbols_bc (pack_k_bits.cc of gr-blocks, chunks_to_symbols_impl.cc of gr-digital), the table of the points of the block, generic compiler flags",
+          "goal": true,
+          "informational": [
+            {
+              "compared_with": "sdrk fallback",
+              "label": "information: fallback",
+              "other_instr_per_sample": 25.15,
+              "other_snr_db": 153.92,
+              "ours_instr_per_sample": 25.15,
+              "ratio": 1.0
+            }
+          ],
+          "other_instr_per_sample": 73.02,
+          "ours_instr_per_sample": 25.15,
+          "ratio": 0.34,
+          "snr_db": {
+            "other": 153.92,
+            "ours": 153.92
+          },
+          "status": "info",
+          "verdict": "info"
+        },
+        "symbol_map_block_qam64_liquid": {
+          "compared_with": "liquid-dsp 1.8.3 modemcf_modulate on the arbitrary-constellation modem of the points of the block (modem_arb.proto.c), the bits packed by the wrapper",
+          "goal": true,
+          "informational": [
+            {
+              "compared_with": "sdrk fallback",
+              "label": "information: fallback",
+              "other_instr_per_sample": 25.15,
+              "other_snr_db": 153.92,
+              "ours_instr_per_sample": 25.15,
+              "ratio": 1.0
+            }
+          ],
+          "other_instr_per_sample": 70.02,
+          "ours_instr_per_sample": 25.15,
+          "ratio": 0.36,
+          "snr_db": {
+            "other": 139.14,
+            "ours": 153.92
+          },
+          "status": "info",
+          "verdict": "info"
+        },
+        "symbol_map_block_qpsk": {
+          "compared_with": "GNU Radio pack_k_bits_bb + chunks_to_symbols_bc (pack_k_bits.cc of gr-blocks, chunks_to_symbols_impl.cc of gr-digital), the table of the points of the block, generic compiler flags",
+          "goal": true,
+          "informational": [
+            {
+              "compared_with": "sdrk fallback",
+              "label": "information: fallback",
+              "other_instr_per_sample": 25.83,
+              "other_snr_db": 155.33,
+              "ours_instr_per_sample": 25.83,
+              "ratio": 1.0
+            }
+          ],
+          "other_instr_per_sample": 37.02,
+          "ours_instr_per_sample": 25.83,
+          "ratio": 0.7,
+          "snr_db": {
+            "other": 155.33,
+            "ours": 155.33
+          },
+          "status": "info",
+          "verdict": "info"
+        },
+        "symbol_map_block_qpsk_liquid": {
+          "compared_with": "liquid-dsp 1.8.3 modemcf_modulate on the arbitrary-constellation modem of the points of the block (modem_arb.proto.c), the bits packed by the wrapper",
+          "goal": true,
+          "informational": [
+            {
+              "compared_with": "sdrk fallback",
+              "label": "information: fallback",
+              "other_instr_per_sample": 25.83,
+              "other_snr_db": 155.33,
+              "ours_instr_per_sample": 25.83,
+              "ratio": 1.0
+            }
+          ],
+          "other_instr_per_sample": 42.02,
+          "ours_instr_per_sample": 25.83,
+          "ratio": 0.61,
+          "snr_db": {
+            "other": 155.33,
+            "ours": 155.33
           },
           "status": "info",
           "verdict": "info"
@@ -9101,6 +9226,71 @@
           "snr_db": {
             "other": 152.57,
             "ours": 152.57
+          },
+          "status": "info",
+          "verdict": "info"
+        },
+        "symbol_map_block_liquid": {
+          "compared_with": "ours at avx2",
+          "goal": false,
+          "other_instr_per_sample": 20.52,
+          "ours_instr_per_sample": 26.02,
+          "ratio": 1.27,
+          "snr_db": {
+            "other": 152.57,
+            "ours": 152.57
+          },
+          "status": "info",
+          "verdict": "info"
+        },
+        "symbol_map_block_qam64": {
+          "compared_with": "ours at avx2",
+          "goal": false,
+          "other_instr_per_sample": 25.15,
+          "ours_instr_per_sample": 37.02,
+          "ratio": 1.47,
+          "snr_db": {
+            "other": 153.92,
+            "ours": 153.92
+          },
+          "status": "info",
+          "verdict": "info"
+        },
+        "symbol_map_block_qam64_liquid": {
+          "compared_with": "ours at avx2",
+          "goal": false,
+          "other_instr_per_sample": 25.15,
+          "ours_instr_per_sample": 37.02,
+          "ratio": 1.47,
+          "snr_db": {
+            "other": 153.92,
+            "ours": 153.92
+          },
+          "status": "info",
+          "verdict": "info"
+        },
+        "symbol_map_block_qpsk": {
+          "compared_with": "ours at avx2",
+          "goal": false,
+          "other_instr_per_sample": 25.83,
+          "ours_instr_per_sample": 26.59,
+          "ratio": 1.03,
+          "snr_db": {
+            "other": 155.33,
+            "ours": 155.33
+          },
+          "status": "info",
+          "verdict": "info"
+        },
+        "symbol_map_block_qpsk_liquid": {
+          "compared_with": "ours at avx2",
+          "goal": false,
+          "other_instr_per_sample": 25.83,
+          "ours_instr_per_sample": 26.59,
+          "ratio": 1.03,
+          "snr_db": {
+            "other": 155.33,
+            "ours": 155.33
           },
           "status": "info",
           "verdict": "info"
@@ -15884,14 +16074,139 @@
           "verdict": "info"
         },
         "symbol_map_block": {
-          "compared_with": "sdrk fallback",
+          "compared_with": "GNU Radio pack_k_bits_bb + chunks_to_symbols_bc (pack_k_bits.cc of gr-blocks, chunks_to_symbols_impl.cc of gr-digital), the table of the points of the block, generic compiler flags",
           "goal": true,
-          "other_instr_per_sample": 26.02,
+          "informational": [
+            {
+              "compared_with": "sdrk fallback",
+              "label": "information: fallback",
+              "other_instr_per_sample": 26.02,
+              "other_snr_db": 152.57,
+              "ours_instr_per_sample": 26.02,
+              "ratio": 1.0
+            }
+          ],
+          "other_instr_per_sample": 55.02,
           "ours_instr_per_sample": 26.02,
-          "ratio": 1.0,
+          "ratio": 0.47,
           "snr_db": {
             "other": 152.57,
             "ours": 152.57
+          },
+          "status": "info",
+          "verdict": "info"
+        },
+        "symbol_map_block_liquid": {
+          "compared_with": "liquid-dsp 1.8.3 modemcf_modulate on the arbitrary-constellation modem of the points of the block (modem_arb.proto.c), the bits packed by the wrapper",
+          "goal": true,
+          "informational": [
+            {
+              "compared_with": "sdrk fallback",
+              "label": "information: fallback",
+              "other_instr_per_sample": 26.02,
+              "other_snr_db": 152.57,
+              "ours_instr_per_sample": 26.02,
+              "ratio": 1.0
+            }
+          ],
+          "other_instr_per_sample": 56.02,
+          "ours_instr_per_sample": 26.02,
+          "ratio": 0.46,
+          "snr_db": {
+            "other": 140.05,
+            "ours": 152.57
+          },
+          "status": "info",
+          "verdict": "info"
+        },
+        "symbol_map_block_qam64": {
+          "compared_with": "GNU Radio pack_k_bits_bb + chunks_to_symbols_bc (pack_k_bits.cc of gr-blocks, chunks_to_symbols_impl.cc of gr-digital), the table of the points of the block, generic compiler flags",
+          "goal": true,
+          "informational": [
+            {
+              "compared_with": "sdrk fallback",
+              "label": "information: fallback",
+              "other_instr_per_sample": 37.02,
+              "other_snr_db": 153.92,
+              "ours_instr_per_sample": 37.02,
+              "ratio": 1.0
+            }
+          ],
+          "other_instr_per_sample": 73.02,
+          "ours_instr_per_sample": 37.02,
+          "ratio": 0.51,
+          "snr_db": {
+            "other": 153.92,
+            "ours": 153.92
+          },
+          "status": "info",
+          "verdict": "info"
+        },
+        "symbol_map_block_qam64_liquid": {
+          "compared_with": "liquid-dsp 1.8.3 modemcf_modulate on the arbitrary-constellation modem of the points of the block (modem_arb.proto.c), the bits packed by the wrapper",
+          "goal": true,
+          "informational": [
+            {
+              "compared_with": "sdrk fallback",
+              "label": "information: fallback",
+              "other_instr_per_sample": 37.02,
+              "other_snr_db": 153.92,
+              "ours_instr_per_sample": 37.02,
+              "ratio": 1.0
+            }
+          ],
+          "other_instr_per_sample": 70.02,
+          "ours_instr_per_sample": 37.02,
+          "ratio": 0.53,
+          "snr_db": {
+            "other": 139.14,
+            "ours": 153.92
+          },
+          "status": "info",
+          "verdict": "info"
+        },
+        "symbol_map_block_qpsk": {
+          "compared_with": "GNU Radio pack_k_bits_bb + chunks_to_symbols_bc (pack_k_bits.cc of gr-blocks, chunks_to_symbols_impl.cc of gr-digital), the table of the points of the block, generic compiler flags",
+          "goal": true,
+          "informational": [
+            {
+              "compared_with": "sdrk fallback",
+              "label": "information: fallback",
+              "other_instr_per_sample": 26.59,
+              "other_snr_db": 155.33,
+              "ours_instr_per_sample": 26.59,
+              "ratio": 1.0
+            }
+          ],
+          "other_instr_per_sample": 37.02,
+          "ours_instr_per_sample": 26.59,
+          "ratio": 0.72,
+          "snr_db": {
+            "other": 155.33,
+            "ours": 155.33
+          },
+          "status": "info",
+          "verdict": "info"
+        },
+        "symbol_map_block_qpsk_liquid": {
+          "compared_with": "liquid-dsp 1.8.3 modemcf_modulate on the arbitrary-constellation modem of the points of the block (modem_arb.proto.c), the bits packed by the wrapper",
+          "goal": true,
+          "informational": [
+            {
+              "compared_with": "sdrk fallback",
+              "label": "information: fallback",
+              "other_instr_per_sample": 26.59,
+              "other_snr_db": 155.33,
+              "ours_instr_per_sample": 26.59,
+              "ratio": 1.0
+            }
+          ],
+          "other_instr_per_sample": 42.02,
+          "ours_instr_per_sample": 26.59,
+          "ratio": 0.63,
+          "snr_db": {
+            "other": 155.33,
+            "ours": 155.33
           },
           "status": "info",
           "verdict": "info"
@@ -22789,14 +23104,139 @@
           "verdict": "info"
         },
         "symbol_map_block": {
-          "compared_with": "sdrk fallback",
+          "compared_with": "GNU Radio pack_k_bits_bb + chunks_to_symbols_bc (pack_k_bits.cc of gr-blocks, chunks_to_symbols_impl.cc of gr-digital), the table of the points of the block, generic compiler flags",
           "goal": true,
-          "other_instr_per_sample": 26.02,
+          "informational": [
+            {
+              "compared_with": "sdrk fallback",
+              "label": "information: fallback",
+              "other_instr_per_sample": 26.02,
+              "other_snr_db": 152.57,
+              "ours_instr_per_sample": 26.02,
+              "ratio": 1.0
+            }
+          ],
+          "other_instr_per_sample": 55.02,
           "ours_instr_per_sample": 26.02,
-          "ratio": 1.0,
+          "ratio": 0.47,
           "snr_db": {
             "other": 152.57,
             "ours": 152.57
+          },
+          "status": "info",
+          "verdict": "info"
+        },
+        "symbol_map_block_liquid": {
+          "compared_with": "liquid-dsp 1.8.3 modemcf_modulate on the arbitrary-constellation modem of the points of the block (modem_arb.proto.c), the bits packed by the wrapper",
+          "goal": true,
+          "informational": [
+            {
+              "compared_with": "sdrk fallback",
+              "label": "information: fallback",
+              "other_instr_per_sample": 26.02,
+              "other_snr_db": 152.57,
+              "ours_instr_per_sample": 26.02,
+              "ratio": 1.0
+            }
+          ],
+          "other_instr_per_sample": 56.02,
+          "ours_instr_per_sample": 26.02,
+          "ratio": 0.46,
+          "snr_db": {
+            "other": 140.05,
+            "ours": 152.57
+          },
+          "status": "info",
+          "verdict": "info"
+        },
+        "symbol_map_block_qam64": {
+          "compared_with": "GNU Radio pack_k_bits_bb + chunks_to_symbols_bc (pack_k_bits.cc of gr-blocks, chunks_to_symbols_impl.cc of gr-digital), the table of the points of the block, generic compiler flags",
+          "goal": true,
+          "informational": [
+            {
+              "compared_with": "sdrk fallback",
+              "label": "information: fallback",
+              "other_instr_per_sample": 37.02,
+              "other_snr_db": 153.92,
+              "ours_instr_per_sample": 37.02,
+              "ratio": 1.0
+            }
+          ],
+          "other_instr_per_sample": 73.02,
+          "ours_instr_per_sample": 37.02,
+          "ratio": 0.51,
+          "snr_db": {
+            "other": 153.92,
+            "ours": 153.92
+          },
+          "status": "info",
+          "verdict": "info"
+        },
+        "symbol_map_block_qam64_liquid": {
+          "compared_with": "liquid-dsp 1.8.3 modemcf_modulate on the arbitrary-constellation modem of the points of the block (modem_arb.proto.c), the bits packed by the wrapper",
+          "goal": true,
+          "informational": [
+            {
+              "compared_with": "sdrk fallback",
+              "label": "information: fallback",
+              "other_instr_per_sample": 37.02,
+              "other_snr_db": 153.92,
+              "ours_instr_per_sample": 37.02,
+              "ratio": 1.0
+            }
+          ],
+          "other_instr_per_sample": 70.02,
+          "ours_instr_per_sample": 37.02,
+          "ratio": 0.53,
+          "snr_db": {
+            "other": 139.14,
+            "ours": 153.92
+          },
+          "status": "info",
+          "verdict": "info"
+        },
+        "symbol_map_block_qpsk": {
+          "compared_with": "GNU Radio pack_k_bits_bb + chunks_to_symbols_bc (pack_k_bits.cc of gr-blocks, chunks_to_symbols_impl.cc of gr-digital), the table of the points of the block, generic compiler flags",
+          "goal": true,
+          "informational": [
+            {
+              "compared_with": "sdrk fallback",
+              "label": "information: fallback",
+              "other_instr_per_sample": 26.59,
+              "other_snr_db": 155.33,
+              "ours_instr_per_sample": 26.59,
+              "ratio": 1.0
+            }
+          ],
+          "other_instr_per_sample": 37.02,
+          "ours_instr_per_sample": 26.59,
+          "ratio": 0.72,
+          "snr_db": {
+            "other": 155.33,
+            "ours": 155.33
+          },
+          "status": "info",
+          "verdict": "info"
+        },
+        "symbol_map_block_qpsk_liquid": {
+          "compared_with": "liquid-dsp 1.8.3 modemcf_modulate on the arbitrary-constellation modem of the points of the block (modem_arb.proto.c), the bits packed by the wrapper",
+          "goal": true,
+          "informational": [
+            {
+              "compared_with": "sdrk fallback",
+              "label": "information: fallback",
+              "other_instr_per_sample": 26.59,
+              "other_snr_db": 155.33,
+              "ours_instr_per_sample": 26.59,
+              "ratio": 1.0
+            }
+          ],
+          "other_instr_per_sample": 42.02,
+          "ours_instr_per_sample": 26.59,
+          "ratio": 0.63,
+          "snr_db": {
+            "other": 155.33,
+            "ours": 155.33
           },
           "status": "info",
           "verdict": "info"

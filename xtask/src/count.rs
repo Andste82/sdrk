@@ -1006,7 +1006,7 @@ const fn fft(name: &'static str, family: Family, samples: u64) -> KernelSpec {
 }
 
 /// The kernels of the benchmark table, in report order.
-pub static KERNELS: [KernelSpec; 290] = [
+pub static KERNELS: [KernelSpec; 295] = [
     spec("convert_cs8", Family::Volk, true),
     spec("convert_cs16", Family::Volk, true),
     spec("convert_cu8", Family::VolkAndOwn, true),
@@ -1319,7 +1319,12 @@ pub static KERNELS: [KernelSpec; 290] = [
     proto("qam_demod_qam256_block", Family::Own),
     proto("qam_demod_search_block", Family::Own),
     proto("psk_mod_block", Family::Own),
-    proto("symbol_map_block", Family::Own),
+    proto("symbol_map_block", Family::GnuRadio),
+    proto("symbol_map_block_liquid", Family::OwnVsLiquid),
+    proto("symbol_map_block_qpsk", Family::GnuRadio),
+    proto("symbol_map_block_qpsk_liquid", Family::OwnVsLiquid),
+    proto("symbol_map_block_qam64", Family::GnuRadio),
+    proto("symbol_map_block_qam64_liquid", Family::OwnVsLiquid),
     proto("iq_offset_block", Family::Own),
     proto("qam_acquire_block", Family::Own),
     proto("qam_frame_encode_block", Family::Own),
@@ -4940,6 +4945,9 @@ mod tests {
             "qam_demod_block",
             "pulse_shape_block",
             "pulse_match_block",
+            "symbol_map_block",
+            "symbol_map_block_qpsk",
+            "symbol_map_block_qam64",
         ] {
             for level in ["sse2", "sse4.2", "avx2", "avx512", "neon", "simd128"] {
                 assert_eq!(
@@ -4951,7 +4959,13 @@ mod tests {
         }
         // The pulse filters of the blocks against liquid-dsp's `firinterp_crcf` and
         // `firfilt_crcf` with the dot products of the level (issue #169, D2546).
-        for k in ["pulse_shape_block_liquid", "pulse_match_block_liquid"] {
+        for k in [
+            "pulse_shape_block_liquid",
+            "pulse_match_block_liquid",
+            "symbol_map_block_liquid",
+            "symbol_map_block_qpsk_liquid",
+            "symbol_map_block_qam64_liquid",
+        ] {
             for level in ["sse2", "sse4.2", "avx2", "avx512", "neon", "simd128"] {
                 assert_eq!(
                     comparisons(plan(level), kernel(k)),
@@ -5048,7 +5062,6 @@ mod tests {
             "qam_demod_search_block",
             "frame_decode_four_block",
             "psk_mod_block",
-            "symbol_map_block",
             "iq_offset_block",
             "qam_acquire_block",
             "qam_frame_encode_block",

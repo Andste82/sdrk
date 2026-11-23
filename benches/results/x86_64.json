@@ -5023,13 +5023,23 @@
           "verdict": "info"
         },
         "qam_demod_block": {
-          "compared_with": "sdrk fallback",
+          "compared_with": "GNU Radio fir_filter_ccf + symbol_sync_cc + linear_equalizer + constellation_receiver_cb (the sum of the blocks of the receiver chain, generic compiler flags and VOLK generic dot products; no acquisition, no blind equalizer stage and no lock watches)",
           "goal": true,
-          "other_instr_per_sample": 164.79,
-          "ours_instr_per_sample": 164.79,
-          "ratio": 1.0,
+          "informational": [
+            {
+              "compared_with": "sdrk fallback",
+              "label": "information: fallback",
+              "other_instr_per_sample": 164.76,
+              "other_snr_db": 999.0,
+              "ours_instr_per_sample": 164.76,
+              "ratio": 1.0
+            }
+          ],
+          "other_instr_per_sample": 880.27,
+          "ours_instr_per_sample": 164.76,
+          "ratio": 0.19,
           "snr_db": {
-            "other": 999.0,
+            "other": 0.0,
             "ours": 999.0
           },
           "status": "info",
@@ -8408,8 +8418,8 @@
         "qam_demod_block": {
           "compared_with": "ours at avx2",
           "goal": false,
-          "other_instr_per_sample": 164.79,
-          "ours_instr_per_sample": 171.39,
+          "other_instr_per_sample": 164.76,
+          "ours_instr_per_sample": 171.44,
           "ratio": 1.04,
           "snr_db": {
             "other": 999.0,
@@ -14167,13 +14177,23 @@
           "verdict": "info"
         },
         "qam_demod_block": {
-          "compared_with": "sdrk fallback",
+          "compared_with": "GNU Radio fir_filter_ccf + symbol_sync_cc + linear_equalizer + constellation_receiver_cb (the sum of the blocks of the receiver chain, generic compiler flags and VOLK generic dot products; no acquisition, no blind equalizer stage and no lock watches)",
           "goal": true,
-          "other_instr_per_sample": 295.98,
-          "ours_instr_per_sample": 295.98,
-          "ratio": 1.0,
+          "informational": [
+            {
+              "compared_with": "sdrk fallback",
+              "label": "information: fallback",
+              "other_instr_per_sample": 295.95,
+              "other_snr_db": 999.0,
+              "ours_instr_per_sample": 295.95,
+              "ratio": 1.0
+            }
+          ],
+          "other_instr_per_sample": 874.8,
+          "ours_instr_per_sample": 295.95,
+          "ratio": 0.34,
           "snr_db": {
-            "other": 999.0,
+            "other": 0.0,
             "ours": 999.0
           },
           "status": "info",
@@ -21019,13 +21039,23 @@
           "verdict": "info"
         },
         "qam_demod_block": {
-          "compared_with": "sdrk fallback",
+          "compared_with": "GNU Radio fir_filter_ccf + symbol_sync_cc + linear_equalizer + constellation_receiver_cb (the sum of the blocks of the receiver chain, generic compiler flags and VOLK generic dot products; no acquisition, no blind equalizer stage and no lock watches)",
           "goal": true,
-          "other_instr_per_sample": 292.51,
-          "ours_instr_per_sample": 292.51,
-          "ratio": 1.0,
+          "informational": [
+            {
+              "compared_with": "sdrk fallback",
+              "label": "information: fallback",
+              "other_instr_per_sample": 292.48,
+              "other_snr_db": 999.0,
+              "ours_instr_per_sample": 292.48,
+              "ratio": 1.0
+            }
+          ],
+          "other_instr_per_sample": 874.8,
+          "ours_instr_per_sample": 292.48,
+          "ratio": 0.33,
           "snr_db": {
-            "other": 999.0,
+            "other": 0.0,
             "ours": 999.0
           },
           "status": "info",

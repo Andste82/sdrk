@@ -1310,7 +1310,7 @@ pub static KERNELS: [KernelSpec; 288] = [
     proto("symbol_demap_qam256_block", Family::Own),
     proto("qam_mod_block", Family::Own),
     proto("qam_mod_qam256_block", Family::Own),
-    proto("qam_demod_block", Family::Own),
+    proto("qam_demod_block", Family::GnuRadio),
     proto("psk_demod_block", Family::GnuRadio),
     proto("qam_demod_qam256_block", Family::Own),
     proto("qam_demod_search_block", Family::Own),
@@ -4926,6 +4926,17 @@ mod tests {
                 );
             }
         }
+        // The receiver blocks against the sum of GNU Radio's blocks on the same input
+        // (issue #169, D2541, D2545): information, the chain has no acquisition and no lock watches.
+        for k in ["psk_demod_block", "qam_demod_block"] {
+            for level in ["sse2", "sse4.2", "avx2", "avx512", "neon", "simd128"] {
+                assert_eq!(
+                    comparisons(plan(level), kernel(k)),
+                    (Reference::GnuRadio, vec![Reference::Fallback]),
+                    "{k} at {level}"
+                );
+            }
+        }
         for k in names {
             assert_eq!(
                 comparisons(plan("avx2-runtime"), kernel(k)).0,
@@ -5010,7 +5021,6 @@ mod tests {
             "symbol_demap_qam256_block",
             "qam_mod_block",
             "qam_mod_qam256_block",
-            "qam_demod_block",
             "qam_demod_qam256_block",
             "qam_demod_search_block",
             "frame_decode_four_block",

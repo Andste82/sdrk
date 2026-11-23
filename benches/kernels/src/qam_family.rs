@@ -144,6 +144,8 @@
 use std::hint::black_box;
 
 use cref_sys::{GrConstellationReceiverCb, GrLinearEqualizerRect, GrRect};
+
+use super::psk_family::GrFront;
 use sdrk::kernels::costas::{Costas, CostasConstellation, CostasState};
 use sdrk::kernels::equalize::{EqConstellation, EqParams, Equalize, EqualizeState};
 use sdrk::{C32, Fallback, Rate, Sdrk};
@@ -1186,6 +1188,64 @@ fn qam_demod_input(rng: &mut Pcg32, qam: Qam, n: usize) -> (Vec<f32>, Vec<C32>) 
     (bits, input)
 }
 
+/// The carrier loop bandwidth of `qam_demod` (its default `carrier_bw`) and the timing loop
+/// bandwidth of 16-QAM (`QAM_SYNC_BW`), as GNU Radio's loops get them.
+const DEMOD_CARRIER_BW: f64 = 0.0025;
+const DEMOD_SYNC_BW: f32 = 0.005;
+
+/// GNU Radio's receiver chain of `qam_demod_block` (16-QAM, issue #169, D2545): `fir_filter_ccf`
+/// and `symbol_sync_cc` ([`GrFront`]), `linear_equalizer` with `adaptive_algorithm_nlms` on the
+/// `constellation_rect` (decision-directed from the start: GNU Radio has no blind stage) and
+/// `constellation_receiver_cb` with the carrier loop bandwidth of the block, as the sum of the
+/// blocks on the same input; the output are the derotated symbols.
+struct GrQamChain {
+    front: GrFront,
+    eq: GrLinearEqualizerRect,
+    receiver: GrConstellationReceiverCb,
+    equalized: Vec<[f32; 2]>,
+    locked: Vec<[f32; 2]>,
+}
+
+impl GrQamChain {
+    fn new(n: usize, points: &[[f32; 2]]) -> Option<Self> {
+        let qam = Qam::Qam16;
+        let cap = n / BLOCK_SPS + 64;
+        #[allow(
+            clippy::cast_possible_truncation,
+            reason = "the f32 parameters of the block"
+        )]
+        let (bw, f) = (
+            (DEMOD_CARRIER_BW / (DAMPING + 1.0 / (4.0 * DAMPING))) as f32,
+            (core::f64::consts::TAU * MAX_OFFSET) as f32,
+        );
+        Some(GrQamChain {
+            front: GrFront::new(n, DEMOD_SYNC_BW)?,
+            eq: gr_equalizer(qam, cap, points, false)?,
+            receiver: GrConstellationReceiverCb::new(gr_rect(qam, points), bw, -f, f)?,
+            equalized: vec![[0.0; 2]; cap],
+            locked: vec![[0.0; 2]; cap],
+        })
+    }
+
+    /// One call: `input` through the four blocks; the derotated symbols are in `self.locked`,
+    /// their number is returned.
+    fn process(&mut self, input: &[[f32; 2]]) -> usize {
+        let produced = self.front.process(input);
+        self.eq.work(
+            &self.front.symbols[..produced],
+            &mut self.equalized[..produced],
+        );
+        self.receiver
+            .work(&self.equalized[..produced], &mut self.locked[..produced]);
+        produced
+    }
+}
+
+#[inline(never)]
+fn gr_qam_chain_call(chain: &mut GrQamChain, input: &[C32]) -> usize {
+    chain.process(black_box(c32_pairs_ref(input)))
+}
+
 /// The block `qam_demod` (16-QAM for `qam_demod_block`, 256-QAM for `qam_demod_qam256_block`,
 /// at 25 kBd and 200 kHz, the block defaults: 11 equalizer taps, `carrier_bw` 0.0025, `sync_bw`
 /// 0.005 for 16-QAM and 0.002 for 256-QAM, D1527) reading `n` input samples per call: the
@@ -1204,6 +1264,10 @@ pub(crate) struct QamDemodBlockK {
     symbols: Vec<u32>,
     out: Vec<f32>,
     produced: usize,
+    /// GNU Radio's chain (16-QAM only) and the symbols of its last call.
+    chain: Option<GrQamChain>,
+    produced_gr: usize,
+    points: Vec<[f32; 2]>,
 }
 
 #[inline(never)]
@@ -1244,9 +1308,18 @@ impl QamDemodBlockK {
             // Room for every soft bit of a call (a call may give a symbol more than nominal).
             out: vec![0.0; (n / BLOCK_SPS + 16) * bps],
             produced: 0,
+            chain: None,
+            produced_gr: 0,
+            points: qam_points(qam),
         };
+        if qam == Qam::Qam16 {
+            k.chain = GrQamChain::new(n, &k.points);
+        }
         for _ in 0..warmup {
             k.call();
+            if let Some(chain) = k.chain.as_mut() {
+                k.produced_gr = gr_qam_chain_call(chain, &k.input[..n]);
+            }
         }
         k
     }
@@ -1265,6 +1338,11 @@ impl Kernel for QamDemodBlockK {
         for _ in 0..k {
             match which {
                 Impl::Ours | Impl::Fallback => self.call(),
+                Impl::GnuRadio => {
+                    let n = self.n;
+                    let chain = self.chain.as_mut().expect("gnuradio");
+                    self.produced_gr = gr_qam_chain_call(chain, &self.input[..n]);
+                }
                 other => unreachable!("qam_demod_block has no {other:?}"),
             }
             black_box(&self.out);
@@ -1279,10 +1357,19 @@ impl Kernel for QamDemodBlockK {
             return 0.0;
         }
         self.run(which, 1);
-        let got: Vec<u32> = self.out[..self.produced]
-            .chunks_exact(self.qam.bits_per_symbol())
-            .map(|b| b.iter().fold(0u32, |g, &x| (g << 1) | u32::from(x > 0.0)))
-            .collect();
+        let got: Vec<u32> = if which == Impl::GnuRadio {
+            // The derotated symbols of the chain, decided to the nearest point of the grid.
+            let chain = self.chain.as_ref().expect("gnuradio");
+            chain.locked[..self.produced_gr]
+                .iter()
+                .map(|s| nearest_point(&self.points, *s))
+                .collect()
+        } else {
+            self.out[..self.produced]
+                .chunks_exact(self.qam.bits_per_symbol())
+                .map(|b| b.iter().fold(0u32, |g, &x| (g << 1) | u32::from(x > 0.0)))
+                .collect()
+        };
         #[allow(clippy::cast_possible_truncation, reason = "at most 5 bits per axis")]
         let b = self.qam.bits_per_axis() as u32;
         let m = self.symbols.len();
@@ -1299,15 +1386,37 @@ impl Kernel for QamDemodBlockK {
     }
 
     fn supports(&self, which: Impl) -> bool {
-        matches!(which, Impl::Ours | Impl::Fallback)
+        match which {
+            Impl::Ours | Impl::Fallback => true,
+            Impl::GnuRadio => self.chain.is_some(),
+            _ => false,
+        }
     }
 
     fn describe(&self, which: Impl) -> &'static str {
         match which {
             Impl::Fallback => "sdrk fallback",
+            Impl::GnuRadio => {
+                "GNU Radio fir_filter_ccf + symbol_sync_cc + linear_equalizer + constellation_receiver_cb (the sum of the blocks of the receiver chain, generic compiler flags and VOLK generic dot products; no acquisition, no blind equalizer stage and no lock watches)"
+            }
             _ => "sdrk",
         }
     }
+}
+
+/// The index of the point of `points` nearest to `s` (the symbol of the grid).
+fn nearest_point(points: &[[f32; 2]], s: [f32; 2]) -> u32 {
+    let mut best = (f32::INFINITY, 0u32);
+    for (i, p) in points.iter().enumerate() {
+        let d = (p[0] - s[0]) * (p[0] - s[0]) + (p[1] - s[1]) * (p[1] - s[1]);
+        if d < best.0 {
+            #[allow(clippy::cast_possible_truncation, reason = "at most 1024 points")]
+            {
+                best = (d, i as u32);
+            }
+        }
+    }
+    best.1
 }
 
 /// The block `qam_demod` while its frequency acquisition searches (review of the QAM round,

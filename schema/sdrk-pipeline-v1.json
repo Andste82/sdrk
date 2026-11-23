@@ -5022,7 +5022,7 @@
                     ],
                     "type": "string"
                   },
-                  "key_seed": {
+                  "seed": {
                     "default": 1,
                     "description": "Initial register of the PRBS key, 1 to 32767; only the low n bits are used and they must not all be zero. Typical: 1; any other value starts the key elsewhere. Build-time.",
                     "maximum": 32767,

@@ -350,7 +350,7 @@ R1.2 commands (`cargo xtask check` includes `cargo xtask check cycles`, D321); `
 
 ## Status
 
-Implemented (2026-11-18, branch `m49-scramble`, decisions D2050 to D2093; the maintainer decisions of 2026-11-17 are D2050 and the corrections of D2054, that of 2026-11-18 is D2092). Every item of the deliverables checklist is done; no open item is left (I49-1 and I49-2 are closed by D2092).
+Implemented (2026-11-18, branch `m49-scramble`, decisions D2050 to D2093; the maintainer decisions of 2026-11-17 are D2050 and the corrections of D2054, that of 2026-11-18 is D2092). Every item of the deliverables checklist is done; no open item is left (I49-1 and I49-2 are closed by D2092). Since M50 (maintainer decision 2026-11-23, D2618) the parameter `key_seed` of this spec is named `seed`.
 
 **Done:**
 - §1 to §3: `kernels::scramble` with `Scramble<T>`, the quadrant/residue split, the direct lookup from `COS_F32`/`COS_Q15`, `Fallback` (branch-free, a per-call residue table, D2055, D2056), `Reference` (`f64`, `libm`, rounded once, D2053), `scramble_one_c32`/`scramble_one_cq15` and the backend helpers (D2057; total for every `bits`, D2058), facade delegation to the SIMD backend; contract rows, the `scramble` section and the section "Exact `±1` and `±j` operations" (§A) in `docs/kernels.md`. Round trip measured: `CQ15` at most 2 LSB at every `bits` 3 to 8 (the provisional bound is confirmed, D2064), `C32` 143.9 to 147.1 dB.

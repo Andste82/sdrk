@@ -545,7 +545,7 @@ impl Kernel for ScrambleBlockK {
             return 0.0;
         }
         let cfg = block_config();
-        let Ok(mut prbs) = sdrk_proto::prbs::Prbs::new(cfg.key, cfg.key_seed) else {
+        let Ok(mut prbs) = sdrk_proto::prbs::Prbs::new(cfg.key, cfg.seed) else {
             return 0.0;
         };
         let phase: Vec<u8> = (0..self.input.len())

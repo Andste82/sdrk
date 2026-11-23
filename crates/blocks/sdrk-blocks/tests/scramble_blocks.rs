@@ -50,19 +50,19 @@ const KEYS: [Poly; 6] = [
     Poly::Prbs15,
 ];
 
-fn cfg(bits: u32, inverse: bool, key: Poly, key_seed: u32) -> ScrambleConfig {
+fn cfg(bits: u32, inverse: bool, key: Poly, seed: u32) -> ScrambleConfig {
     ScrambleConfig {
         bits,
         inverse,
         key,
-        key_seed,
+        seed,
     }
 }
 
 /// The phase indices of `n` samples: `bits` bits of `Prbs::next_bit` per sample, the first one
 /// as the most significant bit (the specification of §6).
-fn indices(key: Poly, key_seed: u32, bits: u32, n: usize) -> Vec<u8> {
-    let mut p = Prbs::new(key, key_seed).unwrap();
+fn indices(key: Poly, seed: u32, bits: u32, n: usize) -> Vec<u8> {
+    let mut p = Prbs::new(key, seed).unwrap();
     (0..n)
         .map(|_| (0..bits).fold(0u8, |w, _| (w << 1) | p.next_bit()))
         .collect()
@@ -74,7 +74,7 @@ where
     Sdrk: Scramble<T>,
     T: sdrk_core::ComplexSample + Copy + Default,
 {
-    let phase = indices(c.key, c.key_seed, c.bits, input.len());
+    let phase = indices(c.key, c.seed, c.bits, input.len());
     let mut out = vec![T::default(); input.len()];
     Sdrk.scramble(input, &phase, c.bits, c.inverse, &mut out)
         .unwrap();
@@ -195,9 +195,9 @@ fn the_index_production_equals_next_bit_over_the_full_period() {
         let n = period + 64;
         let probe = vec![C32::new(1.0, 0.0); n];
         for bits in 1..=8 {
-            let key_seed = 1 + rng.below(key.period());
-            let c = cfg(bits, bits % 2 == 0, key, key_seed);
-            let want = indices(key, key_seed, bits, n);
+            let seed = 1 + rng.below(key.period());
+            let c = cfg(bits, bits % 2 == 0, key, seed);
+            let want = indices(key, seed, bits, n);
             let make = || ScrambleBlock::<C32, VecStorage>::new(&c, r, &mut VecStorage).unwrap();
             let got = indices_of_the_block(&c, &run_block(&mut make(), &probe, None));
             assert_eq!(got, want, "{c:?} whole");
@@ -384,33 +384,26 @@ fn invalid_parameters_are_errors_at_their_parameter() {
             "bits",
         );
     }
-    for key_seed in [0, 32768] {
-        out_of_range(
-            new(&ScrambleConfig { key_seed, ..ok }).unwrap_err(),
-            "key_seed",
-        );
+    for seed in [0, 32768] {
+        out_of_range(new(&ScrambleConfig { seed, ..ok }).unwrap_err(), "seed");
     }
     // A seed in range whose low n bits are all zero.
-    for (key, key_seed) in [
+    for (key, seed) in [
         (Poly::Prbs5, 32),
         (Poly::Prbs7, 128),
         (Poly::Prbs9, 512),
         (Poly::Prbs10, 1024),
         (Poly::Prbs11, 2048 * 3),
     ] {
-        let c = ScrambleConfig {
-            key,
-            key_seed,
-            ..ok
-        };
+        let c = ScrambleConfig { key, seed, ..ok };
         for e in [
             new(&c).unwrap_err(),
             c.validate(r).unwrap_err(),
             ScrambleBlock::<C32, VecStorage>::rate_out(&c, r).unwrap_err(),
         ] {
             match e {
-                Error::InvalidParameter { name, .. } => assert_eq!(name, "key_seed"),
-                other => panic!("{key:?} {key_seed}: {other:?}"),
+                Error::InvalidParameter { name, .. } => assert_eq!(name, "seed"),
+                other => panic!("{key:?} {seed}: {other:?}"),
             }
         }
         // The same seed is valid for a longer key.
@@ -427,11 +420,14 @@ fn invalid_parameters_are_errors_at_their_parameter() {
     let mut c = ok;
     out_of_range(c.set("bits", ParamValue::I64(0)).unwrap_err(), "bits");
     out_of_range(c.set("bits", ParamValue::I64(9)).unwrap_err(), "bits");
-    out_of_range(
-        c.set("key_seed", ParamValue::I64(0)).unwrap_err(),
-        "key_seed",
-    );
+    out_of_range(c.set("seed", ParamValue::I64(0)).unwrap_err(), "seed");
     out_of_range(c.set("key", ParamValue::Choice(6)).unwrap_err(), "key");
+    // The old name `key_seed` (renamed to `seed` in M50, D2618) has no alias.
+    assert_eq!(
+        c.set("key_seed", ParamValue::I64(1)),
+        Err(Error::UnknownParameter)
+    );
+    assert_eq!(c.get("key_seed"), Err(Error::UnknownParameter));
     assert_eq!(
         c.set("inverse", ParamValue::I64(1)),
         Err(Error::WrongParamType)
@@ -447,7 +443,7 @@ fn invalid_parameters_are_errors_at_their_parameter() {
     );
     // Every parameter is build-only on the block.
     let mut b = new(&ok).unwrap();
-    for name in ["bits", "inverse", "key", "key_seed"] {
+    for name in ["bits", "inverse", "key", "seed"] {
         let v = b.param(name).unwrap();
         assert_eq!(
             b.set_param(name, v),
@@ -485,7 +481,7 @@ fn the_description_follows_the_rules() {
     assert_eq!(d.outputs[0].types, complex);
     assert_eq!(d.required.len(), 0);
     let names: Vec<_> = d.params.iter().map(|p| p.name).collect();
-    assert_eq!(names, ["bits", "inverse", "key", "key_seed"]);
+    assert_eq!(names, ["bits", "inverse", "key", "seed"]);
     for p in d.params {
         assert_eq!(p.unit, Unit::None, "{}", p.name);
         assert_eq!(p.mutability, Mutability::Build, "{}", p.name);
@@ -511,7 +507,7 @@ fn the_description_follows_the_rules() {
         }
     );
     assert_eq!(
-        d.param("key_seed").unwrap().kind,
+        d.param("seed").unwrap().kind,
         ParamKind::I64 {
             min: 1,
             max: 32767,
@@ -520,7 +516,7 @@ fn the_description_follows_the_rules() {
     );
     let c = ScrambleConfig::default();
     assert_eq!(
-        (c.bits, c.inverse, c.key, c.key_seed),
+        (c.bits, c.inverse, c.key, c.seed),
         (1, false, Poly::Prbs15, 1)
     );
 }

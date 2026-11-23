@@ -32,10 +32,10 @@ pub static DESCRIPTION: BlockDescription = BlockDescription {
         is the most significant). bits 1 gives the signs plus or minus 1, bits 2 the four \
         quadrants (the DVB-S2 physical-layer scrambling pattern), both exact; bits 3 to 8 add \
         a table phasor. With inverse the block multiplies by the conjugate phasors, so a \
-        descrambler with the same key, key_seed and bits that starts at the same sample \
+        descrambler with the same key, seed and bits that starts at the same sample \
         returns the input: exactly at bits 1 and 2 (a Q15 component -1.0 returns as \
         -32767/32768), within 2 LSB (cq15) or about 140 dB (c32) at bits 3 to 8. The PRBS \
-        position runs on across calls; reset restarts it from key_seed. A public PRBS key \
+        position runs on across calls; reset restarts it from seed. A public PRBS key \
         gives spectral whitening and the separation of signals, not secrecy. Pitfall: there \
         is no key synchronisation; scrambler and descrambler must start at the same sample.",
     inputs: &[PortDesc {
@@ -83,7 +83,7 @@ pub static DESCRIPTION: BlockDescription = BlockDescription {
                 or prbs15 (period 2^n - 1 bits).",
         },
         ParamDesc {
-            name: "key_seed",
+            name: "seed",
             unit: Unit::None,
             kind: ParamKind::I64 {
                 min: 1,
@@ -109,7 +109,7 @@ pub static DESCRIPTION: BlockDescription = BlockDescription {
 /// assert!(cfg.validate(rate).is_ok());
 /// assert!(ScrambleConfig { bits: 9, ..cfg }.validate(rate).is_err());
 /// // 32 masks to 0 in the 5-bit register of prbs5.
-/// assert!(ScrambleConfig { key: Poly::Prbs5, key_seed: 32, ..cfg }.validate(rate).is_err());
+/// assert!(ScrambleConfig { key: Poly::Prbs5, seed: 32, ..cfg }.validate(rate).is_err());
 /// # Ok::<(), sdrk_blocks::Error>(())
 /// ```
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
@@ -122,7 +122,7 @@ pub struct ScrambleConfig {
     /// `Prbs15`).
     pub key: Poly,
     /// Initial register of the key, 1 to 32767; the low `n` bits must not all be zero.
-    pub key_seed: u32,
+    pub seed: u32,
 }
 
 impl Default for ScrambleConfig {
@@ -131,7 +131,7 @@ impl Default for ScrambleConfig {
             bits: 1,
             inverse: false,
             key: Poly::Prbs15,
-            key_seed: 1,
+            seed: 1,
         }
     }
 }
@@ -145,11 +145,11 @@ fn check(name: &str, value: ParamValue) -> Result<()> {
 
 impl ScrambleConfig {
     /// Checks the configuration (the sample rate does not matter): the ranges, a key of the
-    /// choice, and a `key_seed` whose low `n` bits are not all zero (`InvalidParameter` of
-    /// `key_seed`).
+    /// choice, and a `seed` whose low `n` bits are not all zero (`InvalidParameter` of
+    /// `seed`).
     pub fn validate(&self, _rate_in: Rate) -> Result<()> {
         check("bits", ParamValue::I64(i64::from(self.bits)))?;
-        check("key_seed", ParamValue::I64(i64::from(self.key_seed)))?;
+        check("seed", ParamValue::I64(i64::from(self.seed)))?;
         if prbs_choice(self.key).is_none() {
             return Err(Error::InvalidParameter {
                 name: "key",
@@ -161,9 +161,9 @@ impl ScrambleConfig {
 
     /// The PRBS generator of the key at its start.
     fn prbs(&self) -> Result<Prbs> {
-        Prbs::new(self.key, self.key_seed).map_err(|_| Error::InvalidParameter {
-            name: "key_seed",
-            reason: "the low n bits of key_seed (n the degree of the key) are all zero",
+        Prbs::new(self.key, self.seed).map_err(|_| Error::InvalidParameter {
+            name: "seed",
+            reason: "the low n bits of seed (n the degree of the key) are all zero",
         })
     }
 
@@ -180,7 +180,7 @@ impl ScrambleConfig {
                     .copied()
                     .ok_or(Error::WrongParamType)?;
             }
-            "key_seed" => self.key_seed = u32::try_from(value.as_i64()?).unwrap_or(0),
+            "seed" => self.seed = u32::try_from(value.as_i64()?).unwrap_or(0),
             _ => return unknown(),
         }
         Ok(())
@@ -194,7 +194,7 @@ impl ScrambleConfig {
             "key" => Ok(ParamValue::Choice(
                 prbs_choice(self.key).unwrap_or(KEY_DEFAULT),
             )),
-            "key_seed" => Ok(ParamValue::I64(i64::from(self.key_seed))),
+            "seed" => Ok(ParamValue::I64(i64::from(self.seed))),
             _ => unknown(),
         }
     }
@@ -205,7 +205,7 @@ impl ScrambleConfig {
 /// Sample `n` (counted from the construction or the last `reset`) is multiplied by
 /// `exp(j 2π p[n] / 2^bits)` (the conjugate for `inverse`), where `p[n]` is made of the PRBS
 /// bits `n · bits` to `n · bits + bits − 1` of the key, the first one as the most significant
-/// bit. The PRBS (`sdrk_proto::prbs`, polynomial `key`, initial register `key_seed`) runs on
+/// bit. The PRBS (`sdrk_proto::prbs`, polynomial `key`, initial register `seed`) runs on
 /// across calls; `reset` restarts it. A call takes at most [`SCRAMBLE_CHUNK`] samples, limited
 /// by the output room. Ratio 1, delay 0, no storage.
 ///

@@ -1,7 +1,7 @@
 //! The kind `scramble` (M49 §6, test 6): registration with the kernel `scramble`, the cost
 //! `7 + 1.25 bits` (`bits` 1 and 2) and `10 + 1.25 bits` (`bits` 3 to 8, measured again in
 //! M49.1 §6), the rate and delay 0, complex input only, the errors at their parameter (`bits` 0 and 9,
-//! `key_seed` 0, a seed that masks to 0 as `invalid_value`, a key that is not a choice), the
+//! `seed` 0, a seed that masks to 0 as `invalid_value`, a key that is not a choice), the
 //! schema, and push-mode flows `scramble` -> `scramble` (`inverse`) that equal the blocks bit for
 //! bit in pieces of 1 to 1000 samples (seeds 696, 697), `c32` and `cq15`.
 #![allow(
@@ -140,24 +140,24 @@ fn invalid_parameters_are_errors_at_their_parameter() {
             DiagCode::WrongType,
         ),
         (
-            json!({ "key_seed": 0 }),
-            "nodes.n.params.key_seed",
+            json!({ "seed": 0 }),
+            "nodes.n.params.seed",
             DiagCode::OutOfRange,
         ),
         (
-            json!({ "key_seed": 32768 }),
-            "nodes.n.params.key_seed",
+            json!({ "seed": 32768 }),
+            "nodes.n.params.seed",
             DiagCode::OutOfRange,
         ),
         // In range, but the low 5 bits of 32 are zero: no state for prbs5.
         (
-            json!({ "key": "prbs5", "key_seed": 32 }),
-            "nodes.n.params.key_seed",
+            json!({ "key": "prbs5", "seed": 32 }),
+            "nodes.n.params.seed",
             DiagCode::InvalidValue,
         ),
         (
-            json!({ "key": "prbs11", "key_seed": 4096 }),
-            "nodes.n.params.key_seed",
+            json!({ "key": "prbs11", "seed": 4096 }),
+            "nodes.n.params.seed",
             DiagCode::InvalidValue,
         ),
         (
@@ -169,6 +169,12 @@ fn invalid_parameters_are_errors_at_their_parameter() {
         let (p, c) = first_error(&single("c32", "f32", 48_000, params.clone()));
         assert_eq!((p.as_str(), c), (path, code), "{params}");
     }
+    // The old name `key_seed` (renamed to `seed` in M50, D2618) is gone: no alias.
+    let (p, c) = first_error(&single("c32", "f32", 48_000, json!({ "key_seed": 1 })));
+    assert_eq!(
+        (p.as_str(), c),
+        ("nodes.n.params.key_seed", DiagCode::UnknownParam)
+    );
     // A key that is not one of the choices is an error at `key`.
     let (p, _) = first_error(&single("c32", "f32", 48_000, json!({ "key": "prbs23" })));
     assert_eq!(p, "nodes.n.params.key");
@@ -179,7 +185,7 @@ fn invalid_parameters_are_errors_at_their_parameter() {
                 "cq15",
                 "q15",
                 48_000,
-                json!({ "bits": 8, "key": key, "key_seed": 32767, "inverse": true }),
+                json!({ "bits": 8, "key": key, "seed": 32767, "inverse": true }),
             ))
             .is_ok(),
             "{key}"
@@ -264,15 +270,15 @@ fn configs() -> Vec<(ScrambleConfig, Value)> {
         (Poly::Prbs9, "prbs9", 6, 77),
     ]
     .into_iter()
-    .map(|(key, name, bits, key_seed)| {
+    .map(|(key, name, bits, seed)| {
         (
             ScrambleConfig {
                 bits,
                 inverse: false,
                 key,
-                key_seed,
+                seed,
             },
-            json!({ "bits": bits, "key": name, "key_seed": key_seed }),
+            json!({ "bits": bits, "key": name, "seed": seed }),
         )
     })
     .collect()

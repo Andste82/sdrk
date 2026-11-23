@@ -61,8 +61,8 @@ use sdrk_blocks::{
     SymbolDemapConstellation, SymbolMapBlock, SymbolMapConfig, SymbolSyncBlock, SymbolSyncConfig,
     Ted, ToComplexBlock, all_descriptions,
 };
+use sdrk_blocks::{CorrelateBlock, CorrelateConfig, ScrambleBlock, ScrambleConfig};
 use sdrk_blocks::{PulseMatchBlock, PulseMatchConfig, PulseShapeBlock, PulseShapeConfig};
-use sdrk_blocks::{ScrambleBlock, ScrambleConfig};
 use sdrk_testkit::VecStorage;
 
 fn is_snake_case(s: &str) -> bool {
@@ -83,8 +83,8 @@ fn text_ok(what: &str, s: &str) {
 #[test]
 fn there_are_sixty_one_unique_kinds() {
     let kinds: BTreeSet<_> = all_descriptions().iter().map(|d| d.kind).collect();
-    assert_eq!(kinds.len(), 84);
-    assert_eq!(all_descriptions().len(), 84);
+    assert_eq!(kinds.len(), 85);
+    assert_eq!(all_descriptions().len(), 85);
     for kind in [
         "convert",
         "convert_out",
@@ -166,6 +166,7 @@ fn there_are_sixty_one_unique_kinds() {
         "noise",
         "scramble",
         "snr_estimate",
+        "correlate",
     ] {
         assert!(kinds.contains(kind), "missing kind {kind}");
     }
@@ -367,6 +368,7 @@ fn config_defaults_match_the_descriptions() {
     defaults_match("nco", |n| NcoConfig::default().get(n), &[]);
     defaults_match("noise", |n| NoiseConfig::default().get(n), &[]);
     defaults_match("scramble", |n| ScrambleConfig::default().get(n), &[]);
+    defaults_match("correlate", |n| CorrelateConfig::default().get(n), &[]);
     defaults_match("stereo_pll", |n| StereoPllConfig::default().get(n), &[]);
     defaults_match("noise_blank", |n| NoiseBlankConfig::default().get(n), &[]);
     defaults_match("auto_notch", |n| AutoNotchConfig::default().get(n), &[]);
@@ -545,6 +547,7 @@ fn configs_accept_every_described_parameter() {
     round_trip!("nco", NcoConfig);
     round_trip!("noise", NoiseConfig);
     round_trip!("scramble", ScrambleConfig);
+    round_trip!("correlate", CorrelateConfig);
     round_trip!("stereo_pll", StereoPllConfig);
     round_trip!("noise_blank", NoiseBlankConfig);
     round_trip!("auto_notch", AutoNotchConfig);
@@ -716,6 +719,10 @@ fn blocks_accept_and_report_every_described_parameter() {
     check_block_params(
         "scramble",
         &mut ScrambleBlock::<CQ15, _>::new(&ScrambleConfig::default(), r, &mut s).unwrap(),
+    );
+    check_block_params(
+        "correlate",
+        &mut CorrelateBlock::new(&CorrelateConfig::default(), r, &mut s).unwrap(),
     );
     check_block_params(
         "stereo_pll",

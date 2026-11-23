@@ -368,7 +368,7 @@ pub trait Kernel {
 /// are appended; a `<kernel>_fallback`, `<kernel>_airspy`, `<kernel>_fastnoise`,
 /// `<kernel>_ziggurat`, `<kernel>_dvbs2` or `<kernel>_svr` entry takes the seed of `<kernel>`, so
 /// that both entries filter the same input.
-pub const KERNELS: [&str; 285] = [
+pub const KERNELS: [&str; 286] = [
     "convert_cs8",
     "convert_cs16",
     "convert_out_cs16",
@@ -654,6 +654,7 @@ pub const KERNELS: [&str; 285] = [
     "xcorr_fft_n4096",
     "xcorr_fft_n512_fallback",
     "xcorr_fft_n4096_fallback",
+    "correlate_block",
 ];
 
 /// Prepares the measurement `name` with `layout` (the FFT sizes are fixed by the name).
@@ -877,6 +878,7 @@ pub fn prepare(name: &str, layout: Layout) -> Option<Box<dyn Kernel>> {
             4096,
             name.ends_with("_fallback"),
         )),
+        "correlate_block" => Box::new(xcorr_family::CorrelateBlockK::new(rng, layout)),
         "channelize" => Box::new(channelize_family::ChannelizeK::new(rng, layout, false)),
         "channelize_fallback" => Box::new(channelize_family::ChannelizeK::new(rng, layout, true)),
         "channelize_block" => Box::new(channelize_family::ChannelizeBlockK::new(rng, layout)),

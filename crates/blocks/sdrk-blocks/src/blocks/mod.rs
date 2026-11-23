@@ -18,6 +18,7 @@ pub mod channelize;
 mod composite_params;
 pub mod convert;
 pub mod convert_out;
+pub mod correlate;
 pub mod costas;
 pub mod dc_block;
 pub mod ddc;
@@ -212,4 +213,26 @@ pub(crate) fn whitening_from_choice(index: u16) -> sdrk_proto::frame::Whitening 
         1 => sdrk_proto::frame::Whitening::Pn9,
         _ => sdrk_proto::frame::Whitening::None,
     }
+}
+
+/// The names of the PRBS polynomials of the choices `key` (`scramble`) and `code`
+/// (`correlate`), in index order.
+pub(crate) const PRBS_OPTIONS: &[&str] = &["prbs5", "prbs7", "prbs9", "prbs10", "prbs11", "prbs15"];
+
+/// The polynomials of [`PRBS_OPTIONS`], in the same order.
+pub(crate) const PRBS_POLYS: [sdrk_proto::prbs::Poly; 6] = [
+    sdrk_proto::prbs::Poly::Prbs5,
+    sdrk_proto::prbs::Poly::Prbs7,
+    sdrk_proto::prbs::Poly::Prbs9,
+    sdrk_proto::prbs::Poly::Prbs10,
+    sdrk_proto::prbs::Poly::Prbs11,
+    sdrk_proto::prbs::Poly::Prbs15,
+];
+
+/// The choice index of a PRBS polynomial in [`PRBS_OPTIONS`].
+pub(crate) fn prbs_choice(poly: sdrk_proto::prbs::Poly) -> Option<u16> {
+    PRBS_POLYS
+        .iter()
+        .position(|&p| p == poly)
+        .and_then(|i| u16::try_from(i).ok())
 }

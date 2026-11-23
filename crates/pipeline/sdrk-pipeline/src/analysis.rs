@@ -84,6 +84,9 @@ pub(crate) struct PlanStream {
     pub elems: (u64, u64),
     /// Largest `min_input` of the readers.
     pub min_input: usize,
+    /// The smallest output of the writer: its `min_input` at its ratio (0 for an input). A
+    /// writer that produces whole blocks (`correlate`) needs that much room in one call.
+    pub min_room: usize,
     /// Group delay from the pipeline input to this stream, in seconds (exact).
     pub delay_s: Frac,
 }
@@ -171,9 +174,10 @@ impl PlanStream {
         }
     }
 
-    /// Capacity of the buffer: `ceil(max_chunk * R) + min_input + 64`; a packet buffer holds
-    /// `ceil(max_chunk * R) + 4` packets (`R` is `max_per_input` behind a decoder, 1 for the
-    /// buffer of a packet input).
+    /// Capacity of the buffer: `ceil(max_chunk * R) + min_input + 64`, at least
+    /// `min_room + 64` (the room the writer needs for its smallest output); a packet buffer
+    /// holds `ceil(max_chunk * R) + 4` packets (`R` is `max_per_input` behind a decoder, 1 for
+    /// the buffer of a packet input).
     pub(crate) fn capacity(&self, max_chunk: usize, origin_rate: Rate, min_input: usize) -> usize {
         if self.ty == PortType::Packets {
             return self
@@ -183,6 +187,20 @@ impl PlanStream {
         self.elements_for(max_chunk, origin_rate)
             .saturating_add(min_input)
             .saturating_add(BUFFER_SLACK)
+            .max(self.min_room.saturating_add(BUFFER_SLACK))
+    }
+}
+
+/// The output of `min_input` input samples at `rate_in` for a writer at `rate_out`:
+/// `ceil(min_input rate_out / rate_in)` (0 on overflow: the buffer keeps its normal size).
+fn min_output(min_input: usize, rate_in: Rate, rate_out: Rate) -> usize {
+    let num = u128::from(rate_out.num()).checked_mul(u128::from(rate_in.den()));
+    let den = u128::from(rate_out.den()).checked_mul(u128::from(rate_in.num()));
+    match (num, den) {
+        (Some(n), Some(d)) => ceil_mul_div(min_input as u128, n, d)
+            .and_then(|v| usize::try_from(v).ok())
+            .unwrap_or(0),
+        _ => 0,
     }
 }
 
@@ -1146,6 +1164,7 @@ impl<'a> Stage2<'a> {
             origin,
             elems,
             min_input: 0,
+            min_room: 0,
             delay_s: (0, 1),
         });
         self.streams.len() - 1
@@ -1232,8 +1251,13 @@ impl<'a> Stage2<'a> {
                     (1, 1)
                 };
                 let s = self.new_stream(ty, rate_out, origin, elems);
+                let min_room = self
+                    .nodes
+                    .get(idx)
+                    .map_or(0, |n| min_output(n.checked.min_input, n.rate_in, rate_out));
                 if let Some(stream) = self.streams.get_mut(s) {
                     stream.delay_s = delay_s;
+                    stream.min_room = min_room;
                 }
                 self.nodes.get_mut(idx)?.dst = PlanDst::Stream(s);
                 Some(Produced::Stream(s))

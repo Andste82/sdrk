@@ -715,6 +715,7 @@ impl Engine {
             ("stereo_pll", F32),
             ("symbol_sync", C32),
             ("window", C32),
+            ("xcorr_fft", C32),
         ];
         KERNELS
             .iter()

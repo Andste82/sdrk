@@ -12,9 +12,9 @@ use crate::error::{Error, Result};
 use crate::kinds::{
     AddKind, AdsbDecodeKind, AdsbParseKind, AfcKind, AgcKind, AmDemodKind, AmModKind,
     AutoNotchKind, BandPulseDetectKind, BiquadKind, BitDescrambleKind, BitScrambleKind,
-    ChannelSelectKind, ChannelizeKind, ConvertKind, ConvertOutKind, CostasKind, DcBlockKind,
-    DdcKind, DecimateKind, DeemphasisKind, DelayKind, DucKind, EqualizeKind, Factory, FirKind,
-    FmDemodKind, FmModKind, FmStereoDemodKind, FmStereoModKind, FmStereoRdsModKind,
+    ChannelSelectKind, ChannelizeKind, ConvertKind, ConvertOutKind, CorrelateKind, CostasKind,
+    DcBlockKind, DdcKind, DecimateKind, DeemphasisKind, DelayKind, DucKind, EqualizeKind, Factory,
+    FirKind, FmDemodKind, FmModKind, FmStereoDemodKind, FmStereoModKind, FmStereoRdsModKind,
     FrameDecodeKind, FrameEncodeKind, FskDemodKind, FskModKind, HalfbandDecimateKind,
     HdlcDecodeKind, HdlcEncodeKind, ImagPartKind, InterpolateKind, IqOffsetKind, Kind, MagKind,
     MakeComplexKind, MorseDecodeKind, MorseEncodeKind, MulKind, NcoKind, NoiseBlankKind, NoiseKind,
@@ -257,7 +257,7 @@ pub struct BuildOptions {
 /// ```
 /// use sdrk_pipeline::Registry;
 /// let registry = Registry::standard();
-/// assert_eq!(registry.descriptions().count(), 84);
+/// assert_eq!(registry.descriptions().count(), 85);
 /// assert!(registry.factory("fm_demod").is_some());
 /// ```
 pub struct Registry {
@@ -366,6 +366,7 @@ impl Registry {
         register::<PulseMatchKind>(&mut factories);
         register::<NoiseKind>(&mut factories);
         register::<ScrambleKind>(&mut factories);
+        register::<CorrelateKind>(&mut factories);
         register::<BitScrambleKind>(&mut factories);
         register::<BitDescrambleKind>(&mut factories);
         register::<SnrEstimateKind>(&mut factories);

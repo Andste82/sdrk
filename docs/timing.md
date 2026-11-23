@@ -27,6 +27,7 @@ Declared values:
 | `FmModState` | `1/1` | 0 |
 | `GaussNoiseState` | `1/1` | 0 (a source clocked by its output length; no input is read) |
 | `scramble` (stateless; the block `ScrambleBlock` keeps the PRBS position) | `1/1` | 0 (element-wise) |
+| `XcorrFftState` with `L` taps | `1/1` | `L - 1`, `Delay::new(L - 1, 1)` (the convolution with the taps of a correlation, `h[k] = conj(r[L - 1 - k])`, puts the peak of a reference that starts at input index `m` at output `m + L - 1`); whole transform blocks of `B = N - L + 1` samples, the remainder of a call is not consumed |
 | `QuadDemodState` | `1/1` | `1/2`, `Delay::new(1, 2)` (the discriminator looks at two samples) |
 | `DeemphasisState` | `1/1` | 0 (IIR; the real delay depends on the frequency and is not part of exact event timing) |
 | `DcBlockState` | `1/1` | 0 (one-pole high-pass; the delay depends on the frequency) |
@@ -92,6 +93,7 @@ Every block of `sdrk-blocks` reports its timing as `BlockTiming { ratio, kind, d
 | `decimate` with `N` taps, factor `M` (complex and real) | `1/M` | `Constant` | `(N - 1) / 2` |
 | `interpolate` with `N` taps (at the output rate), factor `L` (complex and real) | `L/1` | `Constant` | `(N - 1) / (2 L)` |
 | `fir` with `N` taps | `1/1` | `Constant` | `(N - 1) / 2` |
+| `correlate` with a reference of `L` samples (`L = (2^n - 1) samples_per_chip` for a PRBS code) | `1/1` | `Constant` | `L - 1` (exactly; a reference that starts at input index `m` peaks at output `m + L - 1`; `min_input` is the block size `N - L + 1`, and a call gives nothing with less input or output room) |
 | `ddc` with `N` taps, decimation `M` | `1/M` | `Constant` | `(N - 1) / 2` |
 | `duc` with `N` taps, interpolation `L` | `L/1` | `Constant` | `(N - 1) / (2 L)` |
 | `fm_stereo_demod`, audio decimation `M`, audio filter of `N` taps (always present) | `1/M` | `Constant` | `1/2 + (N - 1) / 2` (the discriminator and the FIR; the band-pass, the loop, the matrix and the de-emphasis count 0) |

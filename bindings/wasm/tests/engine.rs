@@ -250,6 +250,9 @@ fn validate_schema_and_backends() {
     // M49: the kernel of the kind `scramble`, and the kind itself in the schema.
     assert!(matches!(backend("scramble"), "simd" | "fallback"));
     assert!(Engine::schema().contains("\"const\": \"scramble\""));
+    // M50: the kernel of the kind `correlate`, and the kind itself in the schema.
+    assert!(matches!(backend("xcorr_fft"), "simd" | "fallback"));
+    assert!(Engine::schema().contains("\"const\": \"correlate\""));
     assert_eq!(backend("auto_notch"), "fallback");
     assert_eq!(backend("stereo_pll"), "fallback");
     assert_eq!(backend("preemph_limit"), "fallback");

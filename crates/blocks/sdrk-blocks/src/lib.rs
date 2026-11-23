@@ -72,6 +72,9 @@ pub use blocks::channel_select::{ChannelSelectBlock, ChannelSelectConfig};
 pub use blocks::channelize::{ChannelizeBlock, ChannelizeConfig};
 pub use blocks::convert::{ConvertBlock, ConvertConfig, ConvertRealBlock};
 pub use blocks::convert_out::{ConvertOutBlock, ConvertOutConfig};
+pub use blocks::correlate::{
+    CORRELATE_MAX_SAMPLES_PER_CHIP, CorrelateBlock, CorrelateConfig, correlate_fft_size,
+};
 pub use blocks::costas::{CostasBlock, CostasConfig};
 pub use blocks::dc_block::{DcBlockBlock, DcBlockConfig, DcBlockRealBlock};
 pub use blocks::ddc::{DdcBlock, DdcConfig};

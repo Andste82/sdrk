@@ -31,7 +31,7 @@
 static size_t fv_align_cache;
 static unsigned int fv_naligned_cache;
 
-static size_t fv_align(void)
+static inline size_t fv_align(void)
 {
     if (fv_align_cache == 0) {
         size_t n = volk_get_alignment() / sizeof(lv_32fc_t);
@@ -41,7 +41,7 @@ static size_t fv_align(void)
     return fv_align_cache;
 }
 
-static unsigned int fv_naligned(void)
+static inline unsigned int fv_naligned(void)
 {
     (void)fv_align();
     return fv_naligned_cache;
@@ -50,7 +50,7 @@ static unsigned int fv_naligned(void)
 /* The distance of two copies in samples: the vector of `d_ntaps + d_naligned - 1` samples,
  * rounded up to the alignment (every `volk::vector` of GNU Radio starts aligned, so the
  * aligned protokernels may load from it) */
-static size_t fv_stride(unsigned int ntaps)
+static inline size_t fv_stride(unsigned int ntaps)
 {
     size_t na = fv_naligned(); /* a power of two: the alignment of VOLK in samples */
     size_t len = (size_t)ntaps + na - 1;
@@ -58,7 +58,7 @@ static size_t fv_stride(unsigned int ntaps)
 }
 
 /* The `naligned` zeroed copies (one block, `volk_free` frees it), NULL when it fails. */
-static lv_32fc_t* fv_alloc(unsigned int ntaps)
+static inline lv_32fc_t* fv_alloc(unsigned int ntaps)
 {
     size_t n = (size_t)fv_naligned() * fv_stride(ntaps);
     lv_32fc_t* p = (lv_32fc_t*)volk_malloc(n * sizeof(lv_32fc_t), fv_align());
@@ -69,7 +69,7 @@ static lv_32fc_t* fv_alloc(unsigned int ntaps)
 }
 
 /* fir_filter::update_tap (and, for every index, set_taps): `d_aligned_taps[i][i + index] = t` */
-static void fv_update_tap(lv_32fc_t* copies, unsigned int ntaps, unsigned int index, lv_32fc_t t)
+static inline void fv_update_tap(lv_32fc_t* copies, unsigned int ntaps, unsigned int index, lv_32fc_t t)
 {
     unsigned int na = fv_naligned();
     size_t stride = fv_stride(ntaps);
@@ -79,7 +79,7 @@ static void fv_update_tap(lv_32fc_t* copies, unsigned int ntaps, unsigned int in
 }
 
 /* fir_filter::filter */
-static lv_32fc_t fv_filter(const lv_32fc_t* copies, unsigned int ntaps, const lv_32fc_t* input)
+static inline lv_32fc_t fv_filter(const lv_32fc_t* copies, unsigned int ntaps, const lv_32fc_t* input)
 {
     size_t align = fv_align();
     const lv_32fc_t* ar = (const lv_32fc_t*)((uintptr_t)input & ~(uintptr_t)(align - 1));

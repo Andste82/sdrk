@@ -368,9 +368,9 @@ pub trait Kernel {
 
 /// All kernel names. The position gives the seed of the input (`1000 + index`), so new kernels
 /// are appended; a `<kernel>_fallback`, `<kernel>_airspy`, `<kernel>_fastnoise`,
-/// `<kernel>_ziggurat`, `<kernel>_dvbs2` or `<kernel>_svr` entry takes the seed of `<kernel>`, so
+/// `<kernel>_ziggurat`, `<kernel>_dvbs2`, `<kernel>_svr` or `<kernel>_liquid` entry takes the seed of `<kernel>`, so
 /// that both entries filter the same input.
-pub const KERNELS: [&str; 288] = [
+pub const KERNELS: [&str; 290] = [
     "convert_cs8",
     "convert_cs16",
     "convert_out_cs16",
@@ -612,6 +612,8 @@ pub const KERNELS: [&str; 288] = [
     "qam_frame_decode_block",
     "pulse_shape_block",
     "pulse_match_block",
+    "pulse_shape_block_liquid",
+    "pulse_match_block_liquid",
     "gauss_noise_c32",
     "gauss_noise_f32",
     "gauss_noise_q15",
@@ -671,6 +673,7 @@ pub fn prepare(name: &str, layout: Layout) -> Option<Box<dyn Kernel>> {
         .or_else(|| name.strip_suffix("_ziggurat"))
         .or_else(|| name.strip_suffix("_dvbs2"))
         .or_else(|| name.strip_suffix("_svr"))
+        .or_else(|| name.strip_suffix("_liquid"))
         .unwrap_or(name);
     // An entry without an entry of its base name (`stereo_pll_fallback`: `stereo_pll` has no SIMD
     // entry) takes the seed of its own position.
@@ -971,8 +974,14 @@ pub fn prepare(name: &str, layout: Layout) -> Option<Box<dyn Kernel>> {
         "qam_acquire_block" => Box::new(qam_family::QamAcquireBlockK::new(rng, layout)),
         "qam_frame_encode_block" => Box::new(qam_family::QamFrameEncodeBlockK::new(rng, layout)),
         "qam_frame_decode_block" => Box::new(qam_family::QamFrameDecodeBlockK::new(rng, layout)),
-        "pulse_shape_block" => Box::new(qam_family::PulseShapeBlockK::new(rng, layout)),
-        "pulse_match_block" => Box::new(qam_family::PulseMatchBlockK::new(rng, layout)),
+        "pulse_shape_block" => Box::new(qam_family::PulseShapeBlockK::new(rng, layout, false)),
+        "pulse_shape_block_liquid" => {
+            Box::new(qam_family::PulseShapeBlockK::new(rng, layout, true))
+        }
+        "pulse_match_block" => Box::new(qam_family::PulseMatchBlockK::new(rng, layout, false)),
+        "pulse_match_block_liquid" => {
+            Box::new(qam_family::PulseMatchBlockK::new(rng, layout, true))
+        }
         "gauss_noise_c32" | "gauss_noise_c32_fallback" | "gauss_noise_c32_fastnoise" => {
             Box::new(gauss_noise_family::GaussNoiseC32K::new(rng, layout))
         }

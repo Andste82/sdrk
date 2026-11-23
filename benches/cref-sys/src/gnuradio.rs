@@ -1057,6 +1057,183 @@ mod volk_ffi {
     }
 }
 
+#[cfg(has_grsymsync)]
+mod fir_bank_ffi {
+    unsafe extern "C" {
+        pub fn sdrk_gr_fir_bank_new(
+            taps: *const f32,
+            ntaps: core::ffi::c_uint,
+            interp: core::ffi::c_uint,
+            capacity: core::ffi::c_uint,
+        ) -> *mut core::ffi::c_void;
+        pub fn sdrk_gr_fir_bank_free(state: *mut core::ffi::c_void);
+        pub fn sdrk_gr_fir_bank_work(
+            state: *mut core::ffi::c_void,
+            output: *mut [f32; 2],
+            input: *const [f32; 2],
+            n: core::ffi::c_uint,
+        );
+    }
+}
+
+#[cfg(has_grvolk)]
+mod fir_bank_volk_ffi {
+    unsafe extern "C" {
+        pub fn sdrk_gr_volk_fir_bank_new(
+            taps: *const f32,
+            ntaps: core::ffi::c_uint,
+            interp: core::ffi::c_uint,
+            capacity: core::ffi::c_uint,
+        ) -> *mut core::ffi::c_void;
+        pub fn sdrk_gr_volk_fir_bank_free(state: *mut core::ffi::c_void);
+        pub fn sdrk_gr_volk_fir_bank_work(
+            state: *mut core::ffi::c_void,
+            output: *mut [f32; 2],
+            input: *const [f32; 2],
+            n: core::ffi::c_uint,
+        );
+    }
+}
+
+/// GNU Radio's `interp_fir_filter_ccf(interp, taps)` (`fir_filter_ccf` for `interp` 1): complex
+/// input, real taps, `interp` polyphase branches each a `fir_filter` of the reversed taps
+/// (`gr-fir.c`). [`GrFirBank::new`] is the scalar build (VOLK's generic dot product, cfg
+/// `has_grsymsync`), [`GrFirBank::new_volk`] the form on a machine with SIMD (the aligned tap
+/// copies and `volk_32fc_32f_dot_prod_32fc_a` of VOLK's dispatcher, cfg `has_grvolk`). The
+/// history lives across the calls.
+pub struct GrFirBank {
+    #[cfg_attr(not(has_grsymsync), allow(dead_code))]
+    object: *mut core::ffi::c_void,
+    interp: usize,
+    capacity: usize,
+    #[cfg_attr(not(has_grvolk), allow(dead_code))]
+    volk: bool,
+}
+
+// SAFETY: the C object owns its buffers and is used by one thread at a time.
+unsafe impl Send for GrFirBank {}
+
+impl GrFirBank {
+    /// The scalar build for `taps`, the interpolation `interp` and at most `capacity` input
+    /// samples per call; `None` without the library.
+    #[must_use]
+    pub fn new(taps: &[f32], interp: usize, capacity: usize) -> Option<Self> {
+        #[cfg(has_grsymsync)]
+        {
+            let (n, i, c) = (
+                u32::try_from(taps.len()).ok()?,
+                u32::try_from(interp).ok()?,
+                u32::try_from(capacity).ok()?,
+            );
+            // SAFETY: `taps` holds `n` floats; the C side copies them.
+            let object = unsafe { fir_bank_ffi::sdrk_gr_fir_bank_new(taps.as_ptr(), n, i, c) };
+            if object.is_null() {
+                return None;
+            }
+            Some(GrFirBank {
+                object,
+                interp,
+                capacity,
+                volk: false,
+            })
+        }
+        #[cfg(not(has_grsymsync))]
+        {
+            let _ = (taps, interp, capacity);
+            None
+        }
+    }
+
+    /// As [`GrFirBank::new`], the form with VOLK's dispatcher; `None` without the library.
+    #[must_use]
+    pub fn new_volk(taps: &[f32], interp: usize, capacity: usize) -> Option<Self> {
+        #[cfg(has_grvolk)]
+        {
+            let (n, i, c) = (
+                u32::try_from(taps.len()).ok()?,
+                u32::try_from(interp).ok()?,
+                u32::try_from(capacity).ok()?,
+            );
+            // SAFETY: `taps` holds `n` floats; the C side copies them.
+            let object =
+                unsafe { fir_bank_volk_ffi::sdrk_gr_volk_fir_bank_new(taps.as_ptr(), n, i, c) };
+            if object.is_null() {
+                return None;
+            }
+            Some(GrFirBank {
+                object,
+                interp,
+                capacity,
+                volk: true,
+            })
+        }
+        #[cfg(not(has_grvolk))]
+        {
+            let _ = (taps, interp, capacity);
+            None
+        }
+    }
+
+    /// `work` over `input` (at most the capacity): `input.len() * interp` outputs.
+    ///
+    /// # Panics
+    /// If `output` is not `input.len() * interp` long or `input` is above the capacity.
+    pub fn work(&mut self, input: &[[f32; 2]], output: &mut [[f32; 2]]) {
+        assert_eq!(
+            output.len(),
+            input.len() * self.interp,
+            "interp_fir_filter: length mismatch"
+        );
+        assert!(
+            input.len() <= self.capacity,
+            "interp_fir_filter: above the capacity"
+        );
+        let n = u32::try_from(input.len()).expect("interp_fir_filter: too many samples");
+        #[cfg(has_grvolk)]
+        if self.volk {
+            // SAFETY: both buffers hold the samples of the call and do not overlap; the object
+            // was created by `new_volk`.
+            unsafe {
+                fir_bank_volk_ffi::sdrk_gr_volk_fir_bank_work(
+                    self.object,
+                    output.as_mut_ptr(),
+                    input.as_ptr(),
+                    n,
+                );
+            }
+            return;
+        }
+        #[cfg(has_grsymsync)]
+        // SAFETY: as above, for the object of `new`.
+        unsafe {
+            fir_bank_ffi::sdrk_gr_fir_bank_work(
+                self.object,
+                output.as_mut_ptr(),
+                input.as_ptr(),
+                n,
+            );
+        }
+        #[cfg(not(has_grsymsync))]
+        let _ = n;
+    }
+}
+
+impl Drop for GrFirBank {
+    fn drop(&mut self) {
+        #[cfg(has_grvolk)]
+        if self.volk {
+            // SAFETY: the object was created by `new_volk` and is freed once.
+            unsafe { fir_bank_volk_ffi::sdrk_gr_volk_fir_bank_free(self.object) };
+            return;
+        }
+        #[cfg(has_grsymsync)]
+        // SAFETY: the object was created by `new` and is freed once.
+        unsafe {
+            fir_bank_ffi::sdrk_gr_fir_bank_free(self.object);
+        }
+    }
+}
+
 #[cfg(has_grequalizer)]
 mod equalizer_ffi {
     unsafe extern "C" {

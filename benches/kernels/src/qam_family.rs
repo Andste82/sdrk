@@ -143,7 +143,10 @@
 
 use std::hint::black_box;
 
-use cref_sys::{GrConstellationReceiverCb, GrLinearEqualizerRect, GrRect};
+use cref_sys::{
+    GrConstellationReceiverCb, GrFirBank, GrLinearEqualizerRect, GrRect, LiquidFirfiltCrcf,
+    LiquidFirinterpCrcf,
+};
 
 use super::psk_family::GrFront;
 use sdrk::kernels::costas::{Costas, CostasConstellation, CostasState};
@@ -2100,6 +2103,31 @@ impl Kernel for QamFrameDecodeBlockK {
     }
 }
 
+/// The `f32` taps of the pulse filters of the block entries (roll-off 0.35, span 10, 8 samples per
+/// symbol: 81 taps): `rrc(0.35, 8, 10) * gain`, `gain` `sqrt(8)` for `pulse_shape`
+/// and `1 / sqrt(8)` for `pulse_match`, each rounded once to `f32` as the blocks do.
+fn pulse_taps(gain: f64) -> Vec<f32> {
+    let cfg = qam_mod_config(Qam::Qam16).pulse();
+    let mut taps = vec![0.0f64; sdrk_blocks::design::rrc_len(BLOCK_SPS, cfg.span).expect("rrc")];
+    sdrk_blocks::design::rrc(cfg.rolloff, BLOCK_SPS, cfg.span, &mut taps).expect("rrc");
+    #[allow(
+        clippy::cast_possible_truncation,
+        reason = "the f32 taps of the blocks"
+    )]
+    taps.iter().map(|t| (t * gain) as f32).collect()
+}
+
+/// GNU Radio's `interp_fir_filter_ccf` / `fir_filter_ccf` (`interp` 1) with the taps of a block
+/// entry for `n` input samples per call: the form with VOLK's dispatcher where the library has
+/// it (the levels with SIMD), the scalar build otherwise (the wasm32 build of VOLK has only the
+/// generic protokernels). The `bool` says which.
+fn gr_fir_bank(taps: &[f32], interp: usize, n: usize) -> Option<(GrFirBank, bool)> {
+    match GrFirBank::new_volk(taps, interp, n) {
+        Some(b) => Some((b, true)),
+        None => GrFirBank::new(taps, interp, n).map(|b| (b, false)),
+    }
+}
+
 /// The block `pulse_shape` with the pulse of `qam_mod_block` (8 samples per symbol, roll-off
 /// 0.35, span 10; the second stage of `qam_mod` and `psk_mod`, M44.1.1 §3.1) writing `n` output
 /// samples per call from `n / 8` random 16-QAM points (the output of `symbol_map` on random
@@ -2109,10 +2137,16 @@ pub(crate) struct PulseShapeBlockK {
     bits: Vec<f32>,
     symbols: Vec<C32>,
     out: Vec<C32>,
+    /// GNU Radio's `interp_fir_filter_ccf` of the counted calls (the entry `pulse_shape_block`),
+    /// and whether it is the form with VOLK's dispatcher.
+    gr: Option<(GrFirBank, bool)>,
+    /// liquid's `firinterp_crcf` of the counted calls (the entry `pulse_shape_block_liquid`) with
+    /// its input as pairs.
+    liquid: Option<(LiquidFirinterpCrcf, Vec<[f32; 2]>)>,
 }
 
 impl PulseShapeBlockK {
-    pub(crate) fn new(rng: &mut Pcg32, layout: Layout) -> Self {
+    pub(crate) fn new(rng: &mut Pcg32, layout: Layout, liquid_entry: bool) -> Self {
         let cfg = qam_mod_config(Qam::Qam16).pulse();
         let rate = block_rate(25_000);
         let bytes =
@@ -2127,12 +2161,24 @@ impl PulseShapeBlockK {
                 .expect("symbol_map block");
         let mut symbols = vec![C32::default(); layout.n / BLOCK_SPS];
         let _ = mapper.process(&bits, &mut symbols);
+        let taps = pulse_taps((BLOCK_SPS as f64).sqrt());
+        let pairs = c32_pairs_ref(&symbols).to_vec();
         PulseShapeBlockK {
             block: PulseShapeBlock::new(&cfg, rate, &mut leaked_arena(bytes))
                 .expect("pulse_shape block"),
             bits,
             symbols,
             out: vec![C32::default(); layout.n],
+            gr: if liquid_entry {
+                None
+            } else {
+                gr_fir_bank(&taps, BLOCK_SPS, layout.n / BLOCK_SPS)
+            },
+            liquid: if liquid_entry {
+                LiquidFirinterpCrcf::new(&taps, BLOCK_SPS, true).map(|l| (l, pairs))
+            } else {
+                None
+            },
         }
     }
 }
@@ -2153,6 +2199,16 @@ impl Kernel for PulseShapeBlockK {
                 Impl::Ours | Impl::Fallback => {
                     pulse_shape_call(&mut self.block, &self.symbols, &mut self.out);
                 }
+                Impl::GnuRadio => self
+                    .gr
+                    .as_mut()
+                    .expect("gnuradio")
+                    .0
+                    .work(c32_pairs_ref(&self.symbols), c32_pairs(&mut self.out)),
+                Impl::Liquid => {
+                    let (l, x) = self.liquid.as_mut().expect("liquid");
+                    l.execute(x, c32_pairs(&mut self.out));
+                }
                 other => unreachable!("pulse_shape_block has no {other:?}"),
             }
             black_box(&self.out);
@@ -2165,8 +2221,22 @@ impl Kernel for PulseShapeBlockK {
         if !self.supports(which) {
             return 0.0;
         }
-        self.block.reset();
-        pulse_shape_call(&mut self.block, &self.symbols, &mut self.out);
+        if which == Impl::GnuRadio {
+            // A fresh filter (zero history) on the same symbols.
+            let taps = pulse_taps((BLOCK_SPS as f64).sqrt());
+            if let Some((mut gr, _)) = gr_fir_bank(&taps, BLOCK_SPS, self.symbols.len()) {
+                gr.work(c32_pairs_ref(&self.symbols), c32_pairs(&mut self.out));
+            }
+        } else if which == Impl::Liquid {
+            let taps = pulse_taps((BLOCK_SPS as f64).sqrt());
+            if let Some(mut l) = LiquidFirinterpCrcf::new(&taps, BLOCK_SPS, true) {
+                let mut x = c32_pairs_ref(&self.symbols).to_vec();
+                l.execute(&mut x, c32_pairs(&mut self.out));
+            }
+        } else {
+            self.block.reset();
+            pulse_shape_call(&mut self.block, &self.symbols, &mut self.out);
+        }
         let want: Vec<f64> = qam_mod_f64(Qam::Qam16, &self.bits)
             .into_iter()
             .flat_map(|(re, im)| [re, im])
@@ -2175,12 +2245,26 @@ impl Kernel for PulseShapeBlockK {
     }
 
     fn supports(&self, which: Impl) -> bool {
-        matches!(which, Impl::Ours | Impl::Fallback)
+        match which {
+            Impl::Ours | Impl::Fallback => true,
+            Impl::GnuRadio => self.gr.is_some(),
+            Impl::Liquid => self.liquid.is_some(),
+            _ => false,
+        }
     }
 
     fn describe(&self, which: Impl) -> &'static str {
         match which {
             Impl::Fallback => "sdrk fallback",
+            Impl::GnuRadio if self.gr.as_ref().is_some_and(|g| g.1) => {
+                "GNU Radio interp_fir_filter_ccf (interp_fir_filter_impl.cc of gr-filter) with VOLK's dispatched dot product of the level (volk_32fc_32f_dot_prod_32fc_a, the aligned tap copies of fir_filter)"
+            }
+            Impl::GnuRadio => {
+                "GNU Radio interp_fir_filter_ccf (interp_fir_filter_impl.cc of gr-filter) with VOLK's generic dot product (the wasm32 build of VOLK has no SIMD), generic compiler flags"
+            }
+            Impl::Liquid => {
+                "liquid-dsp 1.8.3 firinterp_crcf (firinterp.proto.c, firpfb.proto.c), the SIMD dot products of the level (the portable loop at simd128)"
+            }
             _ => "sdrk",
         }
     }
@@ -2194,12 +2278,20 @@ pub(crate) struct PulseMatchBlockK {
     block: PulseMatchBlock<ArenaStorage<'static>>,
     input: Vec<C32>,
     out: Vec<C32>,
+    /// GNU Radio's `fir_filter_ccf` of the counted calls (the entry `pulse_match_block`), and
+    /// whether it is the form with VOLK's dispatcher.
+    gr: Option<(GrFirBank, bool)>,
+    /// liquid's `firfilt_crcf` of the counted calls (the entry `pulse_match_block_liquid`) with
+    /// its input as pairs.
+    liquid: Option<(LiquidFirfiltCrcf, Vec<[f32; 2]>)>,
 }
 
 impl PulseMatchBlockK {
-    pub(crate) fn new(rng: &mut Pcg32, layout: Layout) -> Self {
+    pub(crate) fn new(rng: &mut Pcg32, layout: Layout, liquid_entry: bool) -> Self {
         let n = layout.n;
         let (_, input) = qam_demod_input(rng, Qam::Qam16, n);
+        let taps = pulse_taps(1.0 / (BLOCK_SPS as f64).sqrt());
+        let pairs = c32_pairs_ref(&input).to_vec();
         let cfg = pulse_match_config();
         let rate = block_rate(200_000);
         let bytes =
@@ -2207,8 +2299,18 @@ impl PulseMatchBlockK {
         PulseMatchBlockK {
             block: PulseMatchBlock::new(&cfg, rate, &mut leaked_arena(bytes))
                 .expect("pulse_match block"),
-            input,
             out: vec![C32::default(); n],
+            gr: if liquid_entry {
+                None
+            } else {
+                gr_fir_bank(&taps, 1, n)
+            },
+            liquid: if liquid_entry {
+                LiquidFirfiltCrcf::new(&taps, true).map(|l| (l, pairs))
+            } else {
+                None
+            },
+            input,
         }
     }
 }
@@ -2239,6 +2341,16 @@ impl Kernel for PulseMatchBlockK {
                 Impl::Ours | Impl::Fallback => {
                     pulse_match_call(&mut self.block, &self.input, &mut self.out);
                 }
+                Impl::GnuRadio => self
+                    .gr
+                    .as_mut()
+                    .expect("gnuradio")
+                    .0
+                    .work(c32_pairs_ref(&self.input), c32_pairs(&mut self.out)),
+                Impl::Liquid => {
+                    let (l, x) = self.liquid.as_mut().expect("liquid");
+                    l.execute(x, c32_pairs(&mut self.out));
+                }
                 other => unreachable!("pulse_match_block has no {other:?}"),
             }
             black_box(&self.out);
@@ -2251,8 +2363,22 @@ impl Kernel for PulseMatchBlockK {
         if !self.supports(which) {
             return 0.0;
         }
-        self.block.reset();
-        pulse_match_call(&mut self.block, &self.input, &mut self.out);
+        if which == Impl::GnuRadio {
+            // A fresh filter (zero history) on the same input.
+            let taps = pulse_taps(1.0 / (BLOCK_SPS as f64).sqrt());
+            if let Some((mut gr, _)) = gr_fir_bank(&taps, 1, self.input.len()) {
+                gr.work(c32_pairs_ref(&self.input), c32_pairs(&mut self.out));
+            }
+        } else if which == Impl::Liquid {
+            let taps = pulse_taps(1.0 / (BLOCK_SPS as f64).sqrt());
+            if let Some(mut l) = LiquidFirfiltCrcf::new(&taps, true) {
+                let mut x = c32_pairs_ref(&self.input).to_vec();
+                l.execute(&mut x, c32_pairs(&mut self.out));
+            }
+        } else {
+            self.block.reset();
+            pulse_match_call(&mut self.block, &self.input, &mut self.out);
+        }
         let cfg = pulse_match_config();
         let sps = BLOCK_SPS;
         let mut taps = vec![0.0f64; sdrk_blocks::design::rrc_len(sps, cfg.span).expect("rrc")];
@@ -2275,12 +2401,26 @@ impl Kernel for PulseMatchBlockK {
     }
 
     fn supports(&self, which: Impl) -> bool {
-        matches!(which, Impl::Ours | Impl::Fallback)
+        match which {
+            Impl::Ours | Impl::Fallback => true,
+            Impl::GnuRadio => self.gr.is_some(),
+            Impl::Liquid => self.liquid.is_some(),
+            _ => false,
+        }
     }
 
     fn describe(&self, which: Impl) -> &'static str {
         match which {
             Impl::Fallback => "sdrk fallback",
+            Impl::GnuRadio if self.gr.as_ref().is_some_and(|g| g.1) => {
+                "GNU Radio fir_filter_ccf (fir_filter_ccf_impl.cc of gr-filter) with VOLK's dispatched dot product of the level (volk_32fc_32f_dot_prod_32fc_a, the aligned tap copies of fir_filter)"
+            }
+            Impl::GnuRadio => {
+                "GNU Radio fir_filter_ccf (fir_filter_ccf_impl.cc of gr-filter) with VOLK's generic dot product (the wasm32 build of VOLK has no SIMD), generic compiler flags"
+            }
+            Impl::Liquid => {
+                "liquid-dsp 1.8.3 firfilt_crcf (firfilt.proto.c), the SIMD dot product of the level (the portable loop at simd128)"
+            }
             _ => "sdrk",
         }
     }

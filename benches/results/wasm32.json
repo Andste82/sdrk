@@ -4944,27 +4944,93 @@
           "verdict": "info"
         },
         "pulse_match_block": {
-          "compared_with": "sdrk fallback",
+          "compared_with": "GNU Radio fir_filter_ccf (fir_filter_ccf_impl.cc of gr-filter) with VOLK's generic dot product (the wasm32 build of VOLK has no SIMD), generic compiler flags",
           "goal": true,
-          "other_instr_per_sample": 266.12,
+          "informational": [
+            {
+              "compared_with": "sdrk fallback",
+              "label": "information: fallback",
+              "other_instr_per_sample": 266.12,
+              "other_snr_db": 141.96,
+              "ours_instr_per_sample": 266.12,
+              "ratio": 1.0
+            }
+          ],
+          "other_instr_per_sample": 2475.18,
           "ours_instr_per_sample": 266.12,
-          "ratio": 1.0,
+          "ratio": 0.11,
           "snr_db": {
-            "other": 142.04,
-            "ours": 142.04
+            "other": 135.57,
+            "ours": 141.96
+          },
+          "status": "info",
+          "verdict": "info"
+        },
+        "pulse_match_block_liquid": {
+          "compared_with": "liquid-dsp 1.8.3 firfilt_crcf (firfilt.proto.c), the SIMD dot product of the level (the portable loop at simd128)",
+          "goal": true,
+          "informational": [
+            {
+              "compared_with": "sdrk fallback",
+              "label": "information: fallback",
+              "other_instr_per_sample": 266.12,
+              "other_snr_db": 141.96,
+              "ours_instr_per_sample": 266.12,
+              "ratio": 1.0
+            }
+          ],
+          "other_instr_per_sample": 2291.19,
+          "ours_instr_per_sample": 266.12,
+          "ratio": 0.12,
+          "snr_db": {
+            "other": 135.57,
+            "ours": 141.96
           },
           "status": "info",
           "verdict": "info"
         },
         "pulse_shape_block": {
-          "compared_with": "sdrk fallback",
+          "compared_with": "GNU Radio interp_fir_filter_ccf (interp_fir_filter_impl.cc of gr-filter) with VOLK's generic dot product (the wasm32 build of VOLK has no SIMD), generic compiler flags",
           "goal": true,
-          "other_instr_per_sample": 88.47,
+          "informational": [
+            {
+              "compared_with": "sdrk fallback",
+              "label": "information: fallback",
+              "other_instr_per_sample": 88.47,
+              "other_snr_db": 143.84,
+              "ours_instr_per_sample": 88.47,
+              "ratio": 1.0
+            }
+          ],
+          "other_instr_per_sample": 387.3,
           "ours_instr_per_sample": 88.47,
-          "ratio": 1.0,
+          "ratio": 0.23,
           "snr_db": {
-            "other": 143.82,
-            "ours": 143.82
+            "other": 142.6,
+            "ours": 143.84
+          },
+          "status": "info",
+          "verdict": "info"
+        },
+        "pulse_shape_block_liquid": {
+          "compared_with": "liquid-dsp 1.8.3 firinterp_crcf (firinterp.proto.c, firpfb.proto.c), the SIMD dot products of the level (the portable loop at simd128)",
+          "goal": true,
+          "informational": [
+            {
+              "compared_with": "sdrk fallback",
+              "label": "information: fallback",
+              "other_instr_per_sample": 88.47,
+              "other_snr_db": 143.84,
+              "ours_instr_per_sample": 88.47,
+              "ratio": 1.0
+            }
+          ],
+          "other_instr_per_sample": 414.07,
+          "ours_instr_per_sample": 88.47,
+          "ratio": 0.21,
+          "snr_db": {
+            "other": 142.6,
+            "ours": 143.84
           },
           "status": "info",
           "verdict": "info"

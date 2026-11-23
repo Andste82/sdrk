@@ -3,8 +3,8 @@
 //! `llvm-mca` simulates a loop with a perfect branch predictor. For a data-dependent branch on
 //! the hot path the cost of a form is `cycles + mispredictions × penalty`: the mispredictions
 //! per sample are counted with Valgrind's `cachegrind --branch-sim=yes` on the benchmark
-//! workload of the count entry (the differential method of `cargo xtask count`: a run with the
-//! counted calls minus a run without them), on the x86-64 build of each level, and the penalty
+//! workload of the entry (the differential method of [`crate::bench`]: a run with the
+//! measured calls minus a run without them), on the x86-64 build of each level, and the penalty
 //! is fixed per core model ([`penalty`], `docs/performance.md`, "Branches (D1611)").
 //!
 //! Cachegrind's predictor is a simple model (a table of 2-bit counters indexed by the address

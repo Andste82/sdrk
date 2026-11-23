@@ -1,7 +1,8 @@
 //! M25: `preemph_limit` is not accelerated (both recursions run per sample). Both variants
 //! (`f32` and `Q15`) are counted through the facade, which is the fallback, against our own
 //! fallback as information at every level, including `avx2-runtime`; no library has a peak
-//! limiter of this kind. The committed result files must agree with `benches/limits.json`.
+//! limiter of this kind. The committed `simd128` counts must agree with `benches/limits.json` (the
+//! other levels are measured in cycles, D2700).
 
 #![allow(clippy::expect_used, clippy::indexing_slicing)]
 
@@ -49,13 +50,8 @@ fn the_limits_file_lists_preemph_limit_as_information_at_every_level() {
 }
 
 #[test]
-fn every_platform_reports_preemph_limit_against_the_fallback() {
-    let expected = [
-        ("x86_64", &["sse2", "sse4.2", "avx2", "avx2-runtime"][..]),
-        ("x86_64-avx512", &["avx512"][..]),
-        ("aarch64", &["neon"][..]),
-        ("wasm32", &["simd128"][..]),
-    ];
+fn the_simd128_counts_report_preemph_limit_against_the_fallback() {
+    let expected = [("wasm32", &["simd128"][..])];
     for (platform, levels) in expected {
         let result = bench_file(&format!("results/{platform}.json"));
         for level in levels {
@@ -72,15 +68,9 @@ fn every_platform_reports_preemph_limit_against_the_fallback() {
                         "{platform}/{level}/{kernel}: {entry}"
                     );
                 }
-                // `avx2-runtime` is judged against the fixed `avx2` build of ours.
-                let want = if *level == "avx2-runtime" {
-                    "ours at avx2"
-                } else {
-                    "sdrk fallback"
-                };
                 assert_eq!(
                     entry["compared_with"].as_str(),
-                    Some(want),
+                    Some("sdrk fallback"),
                     "{platform}/{level}/{kernel}"
                 );
             }

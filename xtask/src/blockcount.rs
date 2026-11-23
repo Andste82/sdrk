@@ -1,4 +1,4 @@
-//! Execution counts per instruction from the emulators of `cargo xtask count`, for the
+//! Execution counts per instruction from the emulators of [`crate::bench`], for the
 //! simulated cycles of the levels that callgrind cannot run (D68 in `docs/decisions-log.md`).
 //!
 //! - **Intel SDE** (`sse2`, `sse4.2`, `avx512`): the dynamic control-flow graph of `-dcfg`

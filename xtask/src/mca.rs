@@ -2,8 +2,8 @@
 //! `docs/decisions-log.md`, `docs/performance.md#measurement-policy`).
 //!
 //! The input is the execution count of every instruction of the counted calls and the count of
-//! every taken jump, taken by callgrind with the differential method of `cargo xtask count` (a
-//! run with `K` calls minus a run with none, [`difference`]). The hot code is disassembled with
+//! every taken jump, taken by callgrind with the differential method of [`crate::bench`] (a run
+//! with `K` calls minus a run with none, [`difference`]). The hot code is disassembled with
 //! `objdump` and simulated by `llvm-mca` on a core model: the cycles per iteration and the port
 //! bound (`Block RThroughput`) of every simulated unit. Weighted by their execution counts and
 //! scaled to all executed instructions, they give the cycles per sample and the port bound per
@@ -1389,7 +1389,7 @@ pub struct Simulation {
     pub cpu: String,
     /// The mode the units were cut in.
     pub mode: CycleMode,
-    /// Executed instructions per sample (the count of `cargo xtask count`).
+    /// Executed instructions per sample (of the profile).
     pub instructions_per_sample: f64,
     /// Simulated cycles per sample.
     pub cycles_per_sample: f64,

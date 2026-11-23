@@ -1,5 +1,6 @@
-# The benchmark workspace of SDRk: instruction counts of our kernels against VOLK, rustfft,
-# FFTW, KissFFT, Ne10, GNU Radio, liquid-dsp, KFR and CMSIS-DSP.
+# The benchmark workspace of SDRk: the measurement binary of our kernels against VOLK, rustfft,
+# FFTW, KissFFT, Ne10, GNU Radio, liquid-dsp, KFR and CMSIS-DSP (cycles per sample with
+# `cargo measure`, instruction counts at `simd128` with `cargo xtask count`).
 #
 # It is a workspace of its own and not a member of the repository workspace, because the
 # comparisons link C libraries under their own licenses (VOLK LGPL-3.0-or-later, FFTW and KFR
@@ -8,7 +9,7 @@
 # pinned tarballs. They are never a dependency of a library crate and never ship with SDRk;
 # `cargo deny` only checks the repository workspace.
 [workspace]
-members = ["cref-sys", "kernels", "pipeline", "volk-sys"]
+members = ["cref-sys", "kernels", "volk-sys"]
 resolver = "3"
 
 [workspace.package]

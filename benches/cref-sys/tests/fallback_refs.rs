@@ -6,7 +6,7 @@ use cref_sys::cmsis_dsp as cm;
 use cref_sys::{
     GrConstellationReceiverCb, GrCostasLoopCc, GrCrc, GrFmDeemph, GrFrequencyModulatorFc,
     GrLinearEqualizer, GrLinearEqualizerRect, GrQuadratureDemodCf, GrRect, GrRotator,
-    LiquidAmpmodem, LiquidDcBlocker, LiquidDcBlockerCrcf,
+    GrSymbolSyncCc, LiquidAmpmodem, LiquidDcBlocker, LiquidDcBlockerCrcf,
 };
 use std::f64::consts::PI;
 
@@ -619,6 +619,62 @@ fn gnuradio_costas_loop() {
         assert_close(f64::from(v[1].abs()), r, 1e-2);
     }
     assert!(GrCostasLoopCc::new(0.02, 8).is_none());
+}
+
+#[test]
+fn gnuradio_symbol_sync() {
+    let (sps, n_sym) = (4.1f64, 3000usize);
+    let Some(mut ss) = GrSymbolSyncCc::new(sps as f32, 0.01, 0.707, 1.0, 0.0205) else {
+        eprintln!("skipped: the GNU Radio symbol_sync_cc is not linked");
+        return;
+    };
+    // The 129 by 8 table: the first row passes sample 4 (mu = 0), the last passes sample 5.
+    let taps = GrSymbolSyncCc::mmse_taps().expect("taps");
+    assert_close(f64::from(taps[0][4]), 1.0, 1e-7);
+    assert_close(f64::from(taps[128][3]), 1.0, 1e-7);
+    // BPSK with a raised-cosine pulse (roll-off 0.35) delayed by 0.3 symbols: the loop locks
+    // and the strobes sit on the symbols, whose levels are `+-1`.
+    let rc = |t: f64| {
+        if t.abs() < 1e-9 {
+            return 1.0;
+        }
+        let sinc = (PI * t).sin() / (PI * t);
+        let den = 1.0 - (2.0 * 0.35 * t) * (2.0 * 0.35 * t);
+        if den.abs() < 1e-9 {
+            return PI / 4.0 * sinc;
+        }
+        sinc * (PI * 0.35 * t).cos() / den
+    };
+    let bits: Vec<f64> = (0..n_sym)
+        .map(|k| {
+            if (k as u32).wrapping_mul(2_654_435_761) >> 31 == 1 {
+                1.0
+            } else {
+                -1.0
+            }
+        })
+        .collect();
+    let n = (n_sym as f64 * sps) as usize;
+    let input: Vec<[f32; 2]> = (0..n)
+        .map(|k| {
+            let t = k as f64 / sps - 0.3;
+            let lo = (t - 8.0).ceil().max(0.0) as usize;
+            let hi = ((t + 8.0).floor() as usize).min(n_sym - 1);
+            let v: f64 = (lo..=hi).map(|i| bits[i] * rc(t - i as f64)).sum();
+            [v as f32, 0.0]
+        })
+        .collect();
+    let mut out = vec![[0.0f32; 2]; n_sym];
+    let (produced, consumed) = ss.work(&input, &mut out);
+    assert!(consumed <= input.len());
+    assert!(
+        produced.abs_diff(n_sym) <= 8,
+        "produced {produced} of {n_sym}"
+    );
+    for v in &out[produced - 500..produced] {
+        assert_close(f64::from(v[0].abs()), 1.0, 0.1);
+        assert_close(f64::from(v[1]), 0.0, 1e-3);
+    }
 }
 
 #[test]

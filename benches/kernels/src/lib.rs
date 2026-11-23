@@ -369,7 +369,7 @@ pub trait Kernel {
 /// are appended; a `<kernel>_fallback`, `<kernel>_airspy`, `<kernel>_fastnoise`,
 /// `<kernel>_ziggurat`, `<kernel>_dvbs2` or `<kernel>_svr` entry takes the seed of `<kernel>`, so
 /// that both entries filter the same input.
-pub const KERNELS: [&str; 286] = [
+pub const KERNELS: [&str; 287] = [
     "convert_cs8",
     "convert_cs16",
     "convert_out_cs16",
@@ -564,6 +564,7 @@ pub const KERNELS: [&str; 286] = [
     "frame_decode_block",
     "symbol_sync",
     "symbol_sync_real",
+    "symbol_sync_fallback",
     "costas",
     "costas_fallback",
     "rds_demod_block",
@@ -852,7 +853,8 @@ pub fn prepare(name: &str, layout: Layout) -> Option<Box<dyn Kernel>> {
         "frame_decode" => Box::new(proto_family::FrameDecodeK::new(rng, layout)),
         "frame_encode_block" => Box::new(proto_family::FrameEncodeBlockK::new(rng, layout)),
         "frame_decode_block" => Box::new(proto_family::FrameDecodeBlockK::new(rng, layout)),
-        "symbol_sync" => Box::new(symbol_family::SymbolSyncK::c32(rng, layout)),
+        "symbol_sync" => Box::new(symbol_family::SymbolSyncK::c32(rng, layout, false)),
+        "symbol_sync_fallback" => Box::new(symbol_family::SymbolSyncK::c32(rng, layout, true)),
         "symbol_sync_real" => Box::new(symbol_family::SymbolSyncK::f32(rng, layout)),
         "costas" => Box::new(costas_family::CostasK::new(rng, layout, false)),
         "costas_fallback" => Box::new(costas_family::CostasK::new(rng, layout, true)),

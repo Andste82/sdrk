@@ -6535,6 +6535,29 @@
           "status": "info",
           "verdict": "info"
         },
+        "symbol_sync_fallback": {
+          "compared_with": "GNU Radio symbol_sync_cc (symbol_sync_cc_impl.cc of gr-digital, TED_GARDNER, IR_MMSE_8TAP, generic compiler flags; reference does different work: an 8-tap MMSE interpolator against our 4-point Lagrange polynomial)",
+          "goal": true,
+          "informational": [
+            {
+              "compared_with": "GNU Radio symbol_sync_cc (symbol_sync_cc_impl.cc of gr-digital, TED_GARDNER, IR_MMSE_8TAP, generic compiler flags; reference does different work: an 8-tap MMSE interpolator against our 4-point Lagrange polynomial)",
+              "label": "misaligned by one sample",
+              "other_instr_per_sample": 114.87,
+              "other_snr_db": null,
+              "ours_instr_per_sample": 56.62,
+              "ratio": 0.49
+            }
+          ],
+          "other_instr_per_sample": 114.87,
+          "ours_instr_per_sample": 56.62,
+          "ratio": 0.49,
+          "snr_db": {
+            "other": 61.37,
+            "ours": 999.0
+          },
+          "status": "info",
+          "verdict": "info"
+        },
         "symbol_sync_real": {
           "compared_with": "sdrk fallback",
           "goal": false,
@@ -6847,6 +6870,11 @@
       "gnuradio_scrambler": {
         "build": "gr-scrambler.c (gr::digital::scrambler_bb, descrambler_bb): -O3",
         "sha256": "63647474273b96fddf6892b2a98cb19d831f3317f46f8f7f9e70c8406364dae1",
+        "version": "main at ec1bf15"
+      },
+      "gnuradio_symbol_sync_cc": {
+        "build": "gr-symbol-sync.c (symbol_sync_cc, TED_GARDNER, IR_MMSE_8TAP, one output per symbol, no tags): -O3",
+        "sha256": "5cd4bc5c798f345fa896c177139cb7cf1b042907e0438a04a7572aa8d088dc3e",
         "version": "main at ec1bf15"
       },
       "kfr": {

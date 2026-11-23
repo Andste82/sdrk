@@ -996,7 +996,7 @@ const fn fft(name: &'static str, family: Family, samples: u64) -> KernelSpec {
 }
 
 /// The kernels of the benchmark table, in report order.
-pub static KERNELS: [KernelSpec; 286] = [
+pub static KERNELS: [KernelSpec; 287] = [
     spec("convert_cs8", Family::Volk, true),
     spec("convert_cs16", Family::Volk, true),
     spec("convert_cu8", Family::VolkAndOwn, true),
@@ -1244,6 +1244,7 @@ pub static KERNELS: [KernelSpec; 286] = [
     proto("frame_decode_block", Family::Own),
     spec("symbol_sync", Family::Own, false),
     spec("symbol_sync_real", Family::Own, false),
+    spec("symbol_sync_fallback", Family::FallbackVsGnuRadio, false),
     spec("costas", Family::Own, false),
     spec("costas_fallback", Family::FallbackVsGnuRadio, false),
     proto("rds_demod_block", Family::Own),
@@ -5074,10 +5075,19 @@ mod tests {
             );
             assert!(kernel(k).family.measured_at(plan("avx2-runtime")), "{k}");
             assert!(kernel(k).misaligned && !kernel(k).small_n, "{k}");
-            // Not accelerated: no `_fallback` entry next to the facade entry.
+            // Not accelerated: the fallback entry exists only where a library runs a loop
+            // that does related work (`symbol_sync_fallback` against GNU Radio's
+            // `symbol_sync_cc`, issue #169, D2539).
             let fallback = format!("{k}_fallback");
-            assert!(KERNELS.iter().all(|s| s.name != fallback), "{fallback}");
+            assert_eq!(
+                KERNELS.iter().any(|s| s.name == fallback),
+                k == "symbol_sync",
+                "{fallback}"
+            );
         }
+        // `symbol_sync_fallback` against GNU Radio's `symbol_sync_cc`, information on every
+        // level (the reference does different work, D2539).
+        assert_eq!(kernel("symbol_sync_fallback").family.measured(), "fallback");
         // `qam_soft_bits` (I44-1, D1412): the SIMD paths against our own fallback (no library
         // computes the same soft bits, D1201), misaligned as the other kernels.
         for k in [

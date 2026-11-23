@@ -605,6 +605,7 @@ Instructions per sample of our kernel divided by those of the comparison (lower 
 | `symbol_sync_real` f32 (our fallback) | 1.00 info | 1.00 info | 1.00 info | 1.00 info | 1.00 info | 1.00 info |
 | `costas` C32 (our fallback) | 1.00 info | 1.00 info | 1.00 info | 1.00 info | 1.00 info | 1.00 info |
 | `costas_fallback` C32 (GNU Radio `costas_loop_cc`) | 0.75 | 0.73 | 0.72 | 0.70 | 0.87 | 0.87 |
+| `symbol_sync_fallback` C32 (GNU Radio `symbol_sync_cc`, information) | 0.60 | 0.57 | 0.52 | 0.49 | 0.85 | 0.88 |
 | `rds_demod_block` (our code, per input sample) | 1.00 info | 1.00 info | 1.00 info | 1.00 info | 1.00 info | 1.00 info |
 | `rds_decode_block` (our code, per input sample) | 1.00 info | 1.00 info | 1.00 info | 1.00 info | 1.00 info | 1.00 info |
 | `rds_shape` f32 (our fallback) | 1.00 info | 1.00 info | 1.00 info | 1.00 info | 1.00 info | 0.99 info |
@@ -892,6 +893,7 @@ Instructions per sample, ours / comparison (`avx2-runtime`: ours only, judged ag
 | `symbol_sync_real` f32 (our fallback) | 34.16 / 34.16 | 32.79 / 32.79 | 28.66 / 28.66 | 34.16 | 27.29 / 27.29 | 23.41 / 23.41 | 64.45 / 64.45 |
 | `costas` C32 (our fallback) | 114.03 / 114.03 | 111.03 / 111.03 | 99.03 / 99.03 | 114.03 | 97.03 / 97.03 | 91.03 / 91.03 | 222.04 / 222.04 |
 | `costas_fallback` C32 (GNU Radio `costas_loop_cc`) | 114.03 / 151.96 | 111.03 / 151.96 | 99.03 / 137.67 | - | 97.03 / 137.67 | 91.03 / 105.13 | 222.04 / 255.33 |
+| `symbol_sync_fallback` C32 (GNU Radio `symbol_sync_cc`, information) | 69.30 / 114.87 | 65.89 / 114.87 | 60.28 / 114.87 | - | 56.62 / 114.87 | 46.62 / 55.02 | 138.13 / 156.98 |
 | `rds_demod_block` (our code, per input sample) | 138.04 / 138.04 | 137.86 / 137.85 | 47.12 / 47.12 | 48.07 | 41.24 / 41.24 | 78.47 / 78.47 | 340.22 / 340.22 |
 | `rds_decode_block` (our code, per input sample) | 39.08 / 39.08 | 38.42 / 38.42 | 37.88 / 37.88 | 38.77 | 37.83 / 37.83 | 32.85 / 32.85 | 84.97 / 84.97 |
 | `rds_shape` f32 (our fallback) | 113.16 / 113.16 | 110.16 / 110.16 | 79.16 / 79.16 | 113.16 | 72.16 / 72.16 | 82.13 / 82.13 | 168.41 / 169.41 |
@@ -1179,6 +1181,7 @@ Accuracy (SNR in dB against the f64 reference), ours / comparison:
 | `symbol_sync_real` f32 (our fallback) | exact | exact | exact | exact | exact | exact |
 | `costas` C32 (our fallback) | exact | exact | exact | exact | exact | exact |
 | `costas_fallback` C32 (GNU Radio `costas_loop_cc`) | exact / 129.2 | exact / 129.2 | exact / 129.2 | exact / 129.2 | exact / 129.1 | exact / 129.2 |
+| `symbol_sync_fallback` C32 (GNU Radio `symbol_sync_cc`, information) | exact / 61.4 | exact / 61.4 | exact / 61.4 | exact / 61.4 | exact / 61.7 | exact / 61.4 |
 | `rds_demod_block` (our code, per input sample) | exact | exact | exact | exact | exact | exact |
 | `rds_decode_block` (our code, per input sample) | exact | exact | exact | exact | exact | exact |
 | `rds_shape` f32 (our fallback) | exact | exact | exact | exact | exact | exact |
@@ -1581,6 +1584,7 @@ Reference model `skylake`, counter-model `znver2`, mode `whole-loop`; execution 
 | `symbol_demap_qam64_block` | 3.03 | 3.03 | 1.00 | 3.34 | 3.34 | 1.00 | sdrk fallback |
 | `symbol_map_block` | 7.10 | 7.10 | 1.00 | 6.61 | 6.61 | 1.00 | sdrk fallback |
 | `symbol_sync` | 49.33 | 49.33 | 1.00 | 39.57 | 39.57 | 1.00 | sdrk fallback |
+| `symbol_sync_fallback` | 49.33 | 57.52 | 0.86 | 39.08 | 57.78 | 0.68 | GNU Radio symbol_sync_cc (symbol_sync_cc_impl.cc of gr-digital, TED_GARDNER, IR_MMSE_8TAP, generic compiler flags; reference does different work: an 8-tap MMSE interpolator against our 4-point Lagrange polynomial) |
 | `symbol_sync_real` | 23.16 | 23.16 | 1.00 | 18.66 | 18.66 | 1.00 | sdrk fallback |
 | `xcorr_fft_n4096` | 25.45 | 68.23 | 0.37 | 24.00 | 66.22 | 0.36 | liquid-dsp 1.8.3 fftfilt_cccf (benches/refs/liquid-fftfilt.c), FFTW 3.3.10 |
 | `xcorr_fft_n4096_fallback` | 104.41 | 363.78 | 0.29 | 102.01 | 397.16 | 0.26 | liquid-dsp 1.8.3 fftfilt_cccf (benches/refs/liquid-fftfilt.c), liquid's own FFT |
@@ -1873,6 +1877,7 @@ Reference model `skylake`, counter-model `znver2`, mode `whole-loop`; execution 
 | `symbol_demap_qam64_block` | 3.03 | 3.03 | 1.00 | 3.34 | 3.34 | 1.00 | sdrk fallback |
 | `symbol_map_block` | 7.10 | 7.10 | 1.00 | 6.61 | 6.61 | 1.00 | sdrk fallback |
 | `symbol_sync` | 49.82 | 49.82 | 1.00 | 38.10 | 38.10 | 1.00 | sdrk fallback |
+| `symbol_sync_fallback` | 49.82 | 57.52 | 0.87 | 37.86 | 57.78 | 0.66 | GNU Radio symbol_sync_cc (symbol_sync_cc_impl.cc of gr-digital, TED_GARDNER, IR_MMSE_8TAP, generic compiler flags; reference does different work: an 8-tap MMSE interpolator against our 4-point Lagrange polynomial) |
 | `symbol_sync_real` | 23.29 | 23.29 | 1.00 | 18.29 | 18.29 | 1.00 | sdrk fallback |
 | `xcorr_fft_n4096` | 25.47 | 69.62 | 0.37 | 24.03 | 65.57 | 0.37 | liquid-dsp 1.8.3 fftfilt_cccf (benches/refs/liquid-fftfilt.c), FFTW 3.3.10 |
 | `xcorr_fft_n4096_fallback` | 104.10 | 373.34 | 0.28 | 102.78 | 393.11 | 0.26 | liquid-dsp 1.8.3 fftfilt_cccf (benches/refs/liquid-fftfilt.c), liquid's own FFT |
@@ -2167,6 +2172,7 @@ Reference model `znver3`, counter-model `alderlake`, mode `whole-loop`; executio
 | `symbol_demap_qam64_block` | 1.55 | 1.55 | 1.00 | 1.42 | 1.42 | 1.00 | sdrk fallback |
 | `symbol_map_block` | 5.78 | 5.78 | 1.00 | 7.55 | 7.55 | 1.00 | sdrk fallback |
 | `symbol_sync` | 31.52 | 31.52 | 1.00 | 43.74 | 43.74 | 1.00 | sdrk fallback |
+| `symbol_sync_fallback` | 31.52 | 43.55 | 0.72 | 43.74 | 36.46 | 1.20 | GNU Radio symbol_sync_cc (symbol_sync_cc_impl.cc of gr-digital, TED_GARDNER, IR_MMSE_8TAP, generic compiler flags; reference does different work: an 8-tap MMSE interpolator against our 4-point Lagrange polynomial) |
 | `symbol_sync_real` | 15.66 | 15.66 | 1.00 | 21.81 | 21.81 | 1.00 | sdrk fallback |
 | `xcorr_fft_n4096` | 8.58 | 854.52 | 0.01 | 8.01 | 115.31 | 0.07 | liquid-dsp 1.8.3 fftfilt_cccf (benches/refs/liquid-fftfilt.c), FFTW 3.3.10 |
 | `xcorr_fft_n4096_fallback` | 69.36 | 4332.10 | 0.02 | 63.99 | 605.22 | 0.11 | liquid-dsp 1.8.3 fftfilt_cccf (benches/refs/liquid-fftfilt.c), liquid's own FFT |
@@ -2461,6 +2467,7 @@ Reference model `znver4`, counter-model `sapphirerapids`, mode `whole-loop`; exe
 | `symbol_demap_qam64_block` | 0.77 | 0.77 | 1.00 | 0.77 | 0.77 | 1.00 | sdrk fallback |
 | `symbol_map_block` | 1.28 | 1.28 | 1.00 | 2.17 | 2.17 | 1.00 | sdrk fallback |
 | `symbol_sync` | 28.82 | 28.82 | 1.00 | 39.81 | 39.81 | 1.00 | sdrk fallback |
+| `symbol_sync_fallback` | 28.82 | 36.87 | 0.78 | 39.57 | 36.46 | 1.09 | GNU Radio symbol_sync_cc (symbol_sync_cc_impl.cc of gr-digital, TED_GARDNER, IR_MMSE_8TAP, generic compiler flags; reference does different work: an 8-tap MMSE interpolator against our 4-point Lagrange polynomial) |
 | `symbol_sync_real` | 14.40 | 14.40 | 1.00 | 19.92 | 19.92 | 1.00 | sdrk fallback |
 | `xcorr_fft_n4096` | 9.11 | 854.81 | 0.01 | 6.21 | 115.36 | 0.05 | liquid-dsp 1.8.3 fftfilt_cccf (benches/refs/liquid-fftfilt.c), FFTW 3.3.10 |
 | `xcorr_fft_n4096_fallback` | 64.05 | 7462.48 | 0.01 | 57.48 | 870.12 | 0.07 | liquid-dsp 1.8.3 fftfilt_cccf (benches/refs/liquid-fftfilt.c), liquid's own FFT |
@@ -2755,6 +2762,7 @@ Reference model `cortex-a72`, counter-model `cortex-a76`, mode `whole-loop`; exe
 | `symbol_demap_qam64_block` | 4.55 | 4.55 | 1.00 | 3.04 | 3.04 | 1.00 | sdrk fallback |
 | `symbol_map_block` | 7.08 | 7.08 | 1.00 | 9.07 | 9.07 | 1.00 | sdrk fallback |
 | `symbol_sync` | 47.13 | 47.13 | 1.00 | 28.58 | 28.58 | 1.00 | sdrk fallback |
+| `symbol_sync_fallback` | 51.52 | 42.71 | 1.21 | 28.58 | 29.15 | 0.98 | GNU Radio symbol_sync_cc (symbol_sync_cc_impl.cc of gr-digital, TED_GARDNER, IR_MMSE_8TAP, generic compiler flags; reference does different work: an 8-tap MMSE interpolator against our 4-point Lagrange polynomial) |
 | `symbol_sync_real` | 20.41 | 20.41 | 1.00 | 12.03 | 12.03 | 1.00 | sdrk fallback |
 | `xcorr_fft_n4096` | 52.10 | 144.73 | 0.36 | 35.71 | 112.25 | 0.32 | liquid-dsp 1.8.3 fftfilt_cccf (benches/refs/liquid-fftfilt.c), FFTW 3.3.10 |
 | `xcorr_fft_n4096_fallback` | 113.30 | 451.32 | 0.25 | 112.39 | 482.83 | 0.23 | liquid-dsp 1.8.3 fftfilt_cccf (benches/refs/liquid-fftfilt.c), liquid's own FFT |

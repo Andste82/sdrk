@@ -6,3 +6,8 @@ __pycache__/
 crates/pipeline/sdrk-pipeline/fuzz/Cargo.lock
 crates/pipeline/sdrk-pipeline/fuzz/corpus/
 crates/pipeline/sdrk-pipeline/fuzz/artifacts/
+
+# Local run artifacts of the hardware tools (apps/sdrk-tx lives in the hardware repository)
+/sdrk-tx
+/sdrk-tx.exe
+/log.jsonl

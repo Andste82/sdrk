@@ -295,7 +295,7 @@ The binary entries `despread_c32` and `despread_cq15` are compared with the same
 
 | Kind | Structs | In → Out | Parameters (unit, mutability, default; range) | Kernel and notes |
 | --- | --- | --- | --- | --- |
-| `despread` | `DespreadBlock<T>` | C32/CQ15 → same | `sf`, `code`, `code_seed`, `long` as `spread`; `shift` (I64, build, absent = `ceil(log2 sf)`; 0 … 16; `cq15` only, `invalid_value` at `params.shift` in a `c32` flow) | `despread`; a call consumes chips limited by the output room, a partial window stays in the kernel accumulators |
+| `despread` | `DespreadBlock<T>` | C32/CQ15 → same | `sf`, `code`, `seed`, `long` as `spread`; `shift` (I64, build, absent = `ceil(log2 sf)`; 0 … 16; `cq15` only, `invalid_value` at `params.shift` in a `c32` flow) | `despread`; a call consumes chips limited by the output room, a partial window stays in the kernel accumulators |
 
 - `DespreadConfig`. Storage: the packed code words; exact. Timing ratio `1/sf`. **Delay** 0 (§1: the first chip of the window, as `spread`). The rustdoc states the `CQ15` gain `sf / 2^shift`.
 - Pipeline kind `despread` (`c32` or `cq15`), cost 2 per input chip (two additions with a sign; to be confirmed from the measured cycles), a row in `docs/pipeline.md` and `docs/timing.md`.

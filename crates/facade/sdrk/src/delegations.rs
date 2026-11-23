@@ -167,7 +167,7 @@ crate::delegate! {
     GaussNoise<Q15>::gauss_noise(&self, state: &mut GaussNoiseState, output: &mut [Q15]) -> Result<()> => Fast;
     Scramble<C32>::scramble(&self, input: &[C32], phase: &[u8], bits: u32, inverse: bool, output: &mut [C32]) -> Result<()> => Fast;
     Scramble<CQ15>::scramble(&self, input: &[CQ15], phase: &[u8], bits: u32, inverse: bool, output: &mut [CQ15]) -> Result<()> => Fast;
-    XcorrFft<C32>::xcorr_fft[S: AsRef<[C32]>, Sh: AsRef<[C32]> + AsMut<[C32]>, Sc: AsRef<[C32]> + AsMut<[C32]>, Tw: AsRef<[C32]>](&self, state: &mut XcorrFftState<C32, S, Sh, Sc, Tw>, input: &[C32], output: &mut [C32]) -> Result<Progress> => Fallback;
+    XcorrFft<C32>::xcorr_fft[S: AsRef<[C32]>, Sh: AsRef<[C32]> + AsMut<[C32]>, Sc: AsRef<[C32]> + AsMut<[C32]>, Tw: AsRef<[C32]>](&self, state: &mut XcorrFftState<C32, S, Sh, Sc, Tw>, input: &[C32], output: &mut [C32]) -> Result<Progress> => Fast;
     @extra [
         ("interleave", C32, Fast),
         ("deinterleave", C32, Fast),

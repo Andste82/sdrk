@@ -63,6 +63,7 @@ mod snr_estimate_family;
 mod stereo_family;
 mod stereo_tx_family;
 mod symbol_family;
+mod xcorr_family;
 
 use fir_family::{Entry, FirFamK, Mode};
 use halfband_family::{
@@ -367,7 +368,7 @@ pub trait Kernel {
 /// are appended; a `<kernel>_fallback`, `<kernel>_airspy`, `<kernel>_fastnoise`,
 /// `<kernel>_ziggurat`, `<kernel>_dvbs2` or `<kernel>_svr` entry takes the seed of `<kernel>`, so
 /// that both entries filter the same input.
-pub const KERNELS: [&str; 281] = [
+pub const KERNELS: [&str; 285] = [
     "convert_cs8",
     "convert_cs16",
     "convert_out_cs16",
@@ -649,6 +650,10 @@ pub const KERNELS: [&str; 281] = [
     "equalize_qam1024_fallback",
     "snr_estimate_block",
     "snr_estimate_block_svr",
+    "xcorr_fft_n512",
+    "xcorr_fft_n4096",
+    "xcorr_fft_n512_fallback",
+    "xcorr_fft_n4096_fallback",
 ];
 
 /// Prepares the measurement `name` with `layout` (the FFT sizes are fixed by the name).
@@ -858,6 +863,20 @@ pub fn prepare(name: &str, layout: Layout) -> Option<Box<dyn Kernel>> {
         }
         "equalize" => Box::new(equalize_family::EqualizeK::new(rng, layout, false)),
         "equalize_fallback" => Box::new(equalize_family::EqualizeK::new(rng, layout, true)),
+        "xcorr_fft_n512" | "xcorr_fft_n512_fallback" => Box::new(xcorr_family::XcorrK::new(
+            rng,
+            layout,
+            127,
+            512,
+            name.ends_with("_fallback"),
+        )),
+        "xcorr_fft_n4096" | "xcorr_fft_n4096_fallback" => Box::new(xcorr_family::XcorrK::new(
+            rng,
+            layout,
+            1023,
+            4096,
+            name.ends_with("_fallback"),
+        )),
         "channelize" => Box::new(channelize_family::ChannelizeK::new(rng, layout, false)),
         "channelize_fallback" => Box::new(channelize_family::ChannelizeK::new(rng, layout, true)),
         "channelize_block" => Box::new(channelize_family::ChannelizeBlockK::new(rng, layout)),

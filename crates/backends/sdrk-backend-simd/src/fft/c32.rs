@@ -2066,10 +2066,10 @@ mod sized {
 }
 
 /// The forward unnormalised transform of `data` at the level of `simd`, for a caller that is
-/// already dispatched (`channelize`): no second dispatch per transform, which the build with
-/// run-time detection would otherwise pay on every call. 16 points (the default of the block
-/// `channelize`) take the transform with the constant size, every other size the transform of
-/// any size.
+/// already dispatched (`channelize`, `xcorr_fft`): no second dispatch per transform, which the
+/// build with run-time detection would otherwise pay on every call. 16 points (the default of
+/// the block `channelize`) take the transform with the constant size, every other size the
+/// transform of any size.
 ///
 /// # Errors
 /// `LengthMismatch` if `data.len()` differs from the plan.
@@ -2079,14 +2079,40 @@ pub(crate) fn forward_at<S: SimdToken, Tw: AsRef<[C32]>>(
     plan: &FftPlan<C32, Tw>,
     data: &mut [C32],
 ) -> Result<()> {
+    transform_at(simd, plan, data, false)
+}
+
+/// The inverse transform of `data` at the level of `simd`, scaled by `1 / N` (the `C32` inverse
+/// of `Scaling::Default`, as [`Fft::fft`] and the fallback compute it), for a caller that is
+/// already dispatched (`xcorr_fft`); the sizes as [`forward_at`].
+///
+/// # Errors
+/// `LengthMismatch` if `data.len()` differs from the plan.
+#[inline(always)]
+pub(crate) fn inverse_at<S: SimdToken, Tw: AsRef<[C32]>>(
+    simd: S,
+    plan: &FftPlan<C32, Tw>,
+    data: &mut [C32],
+) -> Result<()> {
+    transform_at(simd, plan, data, true)
+}
+
+/// The transform of [`forward_at`] and [`inverse_at`].
+#[inline(always)]
+fn transform_at<S: SimdToken, Tw: AsRef<[C32]>>(
+    simd: S,
+    plan: &FftPlan<C32, Tw>,
+    data: &mut [C32],
+    inverse: bool,
+) -> Result<()> {
     check_len(plan.len(), data.len())?;
     let tw: &[f32] = bytemuck::cast_slice(plan.twiddles());
     let floats: &mut [f32] = bytemuck::cast_slice_mut(data);
     let stride = plan.twiddle_stride();
     if plan.log2_len() == 4 {
-        fft_c32_of::<S, 16>(simd, floats, tw, stride, false, true);
+        fft_c32_of::<S, 16>(simd, floats, tw, stride, inverse, true);
     } else {
-        fft_c32_of::<S, 0>(simd, floats, tw, stride, false, true);
+        fft_c32_of::<S, 0>(simd, floats, tw, stride, inverse, true);
     }
     Ok(())
 }

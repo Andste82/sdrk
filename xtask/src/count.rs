@@ -958,6 +958,21 @@ const fn proto(name: &'static str, family: Family) -> KernelSpec {
     }
 }
 
+/// An entry of `xcorr_fft` (M50): the whole transform blocks that fit the standard [`N`]
+/// samples of the measurement binary (`samples` = `floor(N / B) B`, `B = N_fft - L + 1`: 10
+/// blocks of 386 for `L` 127, `N_fft` 512; one block of 3074 for `L` 1023, `N_fft` 4096), with
+/// misaligned buffers.
+const fn xcorr(name: &'static str, family: Family, samples: u64) -> KernelSpec {
+    KernelSpec {
+        name,
+        family,
+        samples,
+        small_n: false,
+        misaligned: true,
+        own: None,
+    }
+}
+
 const fn fft(name: &'static str, family: Family, samples: u64) -> KernelSpec {
     KernelSpec {
         name,
@@ -970,7 +985,7 @@ const fn fft(name: &'static str, family: Family, samples: u64) -> KernelSpec {
 }
 
 /// The kernels of the benchmark table, in report order.
-pub static KERNELS: [KernelSpec; 281] = [
+pub static KERNELS: [KernelSpec; 285] = [
     spec("convert_cs8", Family::Volk, true),
     spec("convert_cs16", Family::Volk, true),
     spec("convert_cu8", Family::VolkAndOwn, true),
@@ -1372,6 +1387,10 @@ pub static KERNELS: [KernelSpec; 281] = [
         1024,
     ),
     fft("rfft_1024_fallback", Family::FftFallbackVsCmsis, 1024),
+    xcorr("xcorr_fft_n512", Family::Own, 10 * 386),
+    xcorr("xcorr_fft_n4096", Family::Own, 3074),
+    xcorr("xcorr_fft_n512_fallback", Family::FallbackOwn, 10 * 386),
+    xcorr("xcorr_fft_n4096_fallback", Family::FallbackOwn, 3074),
 ];
 
 /// The CPU Intel SDE emulates.

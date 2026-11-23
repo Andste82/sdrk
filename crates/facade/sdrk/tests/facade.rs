@@ -418,15 +418,15 @@ fn m49_kernels_give_the_bits_of_the_fallback() -> Result<()> {
 
 #[test]
 fn backend_table_lists_the_m50_kernels() {
-    // `xcorr_fft` (`C32` only) runs on the fallback until its SIMD paths exist (M50 §5).
-    assert_eq!(backend_for("xcorr_fft", SampleType::C32), "fallback");
+    // `xcorr_fft` (`C32` only) runs on the SIMD backend where the build has it (M50 §5).
+    assert_eq!(backend_for("xcorr_fft", SampleType::C32), ACCEL);
     for ty in [SampleType::CQ15, SampleType::F32, SampleType::Q15] {
         assert_eq!(backend_for("xcorr_fft", ty), "none", "{ty:?}");
     }
 }
 
 #[test]
-fn m50_kernels_give_the_bits_of_the_fallback() -> Result<()> {
+fn m50_xcorr_fft_agrees_with_the_fallback() -> Result<()> {
     use sdrk::kernels::fft::FftPlan;
     use sdrk::kernels::xcorr::{XcorrFft, XcorrFftState};
 
@@ -451,7 +451,9 @@ fn m50_kernels_give_the_bits_of_the_fallback() -> Result<()> {
     let pb = Fallback.xcorr_fft(&mut b, &x, &mut yb)?;
     assert_eq!(pa, pb);
     assert_eq!(pa.consumed, 157 * 6);
-    assert_eq!(flat(&ya), flat(&yb));
+    // Tolerance: the FFT of the SIMD level differs from the fallback's (M50 §3); the history
+    // is a copy of input samples on every backend.
+    assert_close(&flat(&yb), &flat(&ya));
     assert_eq!(flat(a.history()), flat(b.history()));
     Ok(())
 }

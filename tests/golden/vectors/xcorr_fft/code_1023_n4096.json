@@ -1,0 +1,47 @@
+{
+  "arrays": {
+    "expected": {
+      "dtype": "cf64",
+      "file": "code_1023_n4096.expected.bin",
+      "len": 12296
+    },
+    "input": {
+      "dtype": "cf32",
+      "file": "code_1023_n4096.input.bin",
+      "len": 12296
+    },
+    "taps": {
+      "dtype": "cf32",
+      "file": "code_1023_n4096.taps.bin",
+      "len": 1023
+    }
+  },
+  "case": "code_1023_n4096",
+  "format_version": 1,
+  "kernel": "xcorr_fft",
+  "notes": "one period of prbs10 (seed 1, chip 1 - 2b) at input offset 1738 in complex Gaussian noise of power 10.0 per sample; taps = the code conjugated and reversed; expected = the exact convolution numpy.convolve(x, h)[:rows]; zero history",
+  "params": {
+    "block_size": 3074,
+    "code": "prbs10",
+    "fft_size": 4096,
+    "noise_power": 10.0,
+    "offset": 1738,
+    "peak_index": 2760,
+    "peak_to_median": 12.584129,
+    "seed": 1,
+    "taps_len": 1023
+  },
+  "provenance": {
+    "generator": "tests/golden/generate.py",
+    "numpy": "2.5.4",
+    "python": "3.12",
+    "scipy": "1.18.1"
+  },
+  "seed": 701,
+  "tolerance": {
+    "class": "tolerance",
+    "skip": 0,
+    "snr_db_guard": 131.5,
+    "snr_db_min": 100.0
+  }
+}

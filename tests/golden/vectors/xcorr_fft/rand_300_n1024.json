@@ -1,0 +1,41 @@
+{
+  "arrays": {
+    "expected": {
+      "dtype": "cf64",
+      "file": "rand_300_n1024.expected.bin",
+      "len": 2900
+    },
+    "input": {
+      "dtype": "cf32",
+      "file": "rand_300_n1024.input.bin",
+      "len": 2900
+    },
+    "taps": {
+      "dtype": "cf32",
+      "file": "rand_300_n1024.taps.bin",
+      "len": 300
+    }
+  },
+  "case": "rand_300_n1024",
+  "format_version": 1,
+  "kernel": "xcorr_fft",
+  "notes": "complex Gaussian input (power 1 per sample) and complex Gaussian taps (energy 1 in total); expected = the exact convolution numpy.convolve(x, h)[:rows]; zero history",
+  "params": {
+    "block_size": 725,
+    "fft_size": 1024,
+    "taps_len": 300
+  },
+  "provenance": {
+    "generator": "tests/golden/generate.py",
+    "numpy": "2.5.4",
+    "python": "3.12",
+    "scipy": "1.18.1"
+  },
+  "seed": 703,
+  "tolerance": {
+    "class": "tolerance",
+    "skip": 0,
+    "snr_db_guard": 132.2,
+    "snr_db_min": 100.0
+  }
+}

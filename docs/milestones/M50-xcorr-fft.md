@@ -2,7 +2,7 @@
 
 > Plan: [PLAN.md › Phase 10](../PLAN.md#phase-10--digital-modes) · Depends on: [M07](M07-fft.md), [M43](M43-equalizer.md), [M49](M49-scramble.md) (the PRBS codes of the block) · Next: [M51](M51-spread.md)
 
-> **Status: planned** (written 2026-11-08, revised 2026-11-17 after an algorithm review (maintainer decision)). Kernel milestone of the DSSS/OFDM series (M48 to M56), one kernel per milestone. This is the "FFT-based fast convolution (overlap-save) as a block" item of the backlog, built now as a kernel because the sync-word correlator (`sync_detect`) needs it and any long matched filter can use it. The code-phase search (`code_search`, M53) does not call it: it computes its own circular correlation per Doppler bin and reuses only the idea.
+> **Status: in progress** (step 1 of the implementation delivered 2026-11-23: the kernel with fallback, reference and facade, golden cases, tests 1 to 6; see [Status](#status)) (written 2026-11-08, revised 2026-11-17 after an algorithm review (maintainer decision)). Kernel milestone of the DSSS/OFDM series (M48 to M56), one kernel per milestone. This is the "FFT-based fast convolution (overlap-save) as a block" item of the backlog, built now as a kernel because the sync-word correlator (`sync_detect`) needs it and any long matched filter can use it. The code-phase search (`code_search`, M53) does not call it: it computes its own circular correlation per Doppler bin and reuses only the idea.
 
 > **Revision 2026-11-17.** The shared conventions §A to §D cited in this file are defined in [CONVENTIONS-M49-M56.md](CONVENTIONS-M49-M56.md). The maintainer accepted every recommendation of the algorithm review of M49 to M56; the shared definitions are in the shared conventions of M49 to M56 (§B.1 chip order, §C.3 `CQ15` backlog plan, §D SIMD rule). Changes in this milestone:
 > 1. **Chunk invariance is bit-exact** (`==`) per backend and level (R6.2): the block boundaries are fixed by `B`, the history is a copy and the same FFTs run, so the bits cannot depend on the chunking. Only fallback, SIMD levels and facade against `Reference` (and against each other) use the SNR floor (§3, tests 4 and 7).
@@ -290,11 +290,11 @@ R1.2 commands; `python tests/golden/generate.py --check`; `cargo test -p sdrk-co
 
 ## Deliverables checklist
 
-- [ ] Kernel `xcorr_fft` (`C32`): `XcorrFftState` (`new`, `from_spectrum`), `xcorr_spectrum`, trait, Fallback (overlap-save, the fixed spectral-product formula), Reference (direct), facade delegation, `backend_for`
+- [x] Kernel `xcorr_fft` (`C32`): `XcorrFftState` (`new`, `from_spectrum`), `xcorr_spectrum`, trait, Fallback (overlap-save, the fixed spectral-product formula), Reference (direct), facade delegation, `backend_for` (reports `fallback` until the SIMD step)
 - [ ] SIMD path on every level (`sse2`, `sse4.2`, `avx2`, `avx512`, `neon`, `simd128`; §5): the driver at the level with the backend `fft` (new level-pinned inverse entry, for example `fft::inverse_at`), the vectorised spectral product without FMA (NaN lanes by class, D296); `backend_for` reports the level
-- [ ] Contract row and section in `docs/kernels.md` (overlap-save, the correlation convention and alignment `m + L − 1`, the normalisation note, bit-exact chunk invariance per backend and level, the §D.3 tolerance exception, `from_spectrum`)
-- [ ] Golden cases (seeds 700–703, expected `numpy.convolve(x, h)[:rows]`) and the Python model
-- [ ] Tests 1–8 (seeds 700–708); suite cases
+- [x] Contract row and section in `docs/kernels.md` (overlap-save, the correlation convention and alignment `m + L − 1`, the normalisation note, bit-exact chunk invariance per backend and level, the §D.3 tolerance exception, `from_spectrum`)
+- [x] Golden cases (seeds 700–703, expected `numpy.convolve(x, h)[:rows]`) and the Python model
+- [ ] Tests 1–8 (seeds 700–708); suite cases (tests 1 to 6 and the suite cases done; tests 7 and 8 come with the block and the SIMD paths)
 - [ ] Count and cycle entries (`cargo xtask count`, `cargo measure`) with their `_fallback` entries, `docs/performance.md` (break-even vs. time domain; D321 per level); the reference rows against liquid-dsp `fftfilt_cccf` in both builds (`benches/refs/liquid-fftfilt.c`), the note on GNU Radio `fft_filter_ccc`
 - [ ] Block `CorrelateBlock` and kind `correlate` (§6): `docs/blocks.md` (entry with the memory and cost trade-off, and a new reserved-name row), `docs/pipeline.md`, `docs/timing.md`, schema, WASM kind list; count entry `correlate_block`
 - [ ] `docs/milestones/BACKLOG.md`: the `CQ15` item (entered with the 2026-11-17 revision) still matches §7, with the measured SNR floor once known
@@ -302,4 +302,11 @@ R1.2 commands; `python tests/golden/generate.py --check`; `cargo test -p sdrk-co
 
 ## Status
 
-Planned. Nothing is implemented. Revised 2026-11-17 after an algorithm review (maintainer decision); the changes are listed in the revision note at the top.
+In progress. Revised 2026-11-17 after an algorithm review (maintainer decision); the changes are listed in the revision note at the top. Maintainer decision 2026-11-23: the PRBS start value of the block `correlate` is named `seed` (not `code_seed`), and the parameter `key_seed` of the kind `scramble` is renamed to `seed` (one name per meaning, M44.1.1; a hard rename without an alias); §6 is amended in the step that builds the block.
+
+**Step 1 (2026-11-23, D2600 to D2607): kernel, fallback, reference, golden cases, tests 1 to 6.**
+- `sdrk_core::kernels::xcorr`: `XcorrFftState<T, S, Sh, Sc, Tw>` (`new`, `from_spectrum`, getters, `reset`, `Timing` with ratio 1 and delay `L - 1`), `xcorr_spectrum`, the trait `XcorrFft`, `spectral_product`/`spectral_product_one` (the fixed formula without FMA), the driver `xcorr_fft_with` and the block `overlap_save_block` (public for the SIMD step). `Fallback` (overlap-save over the fallback FFT), `Reference` (the f64 direct convolution with the taps recovered from `H`, D2600), the facade delegation to `Fallback` (`backend_for` reports `fallback`, D2606), the contract row and section in `docs/kernels.md`.
+- Golden cases `xcorr_fft/{code_127_n512, code_1023_n4096, rrc_65_n256, rand_300_n1024}` (seeds 700 to 703; the exact convolution with correctly rounded sums, D2605). Measured against them (whole runs; the facade equals the fallback): fallback 134.54, 132.56, 135.94 and 133.29 dB, reference 145.35, 143.84, 147.00 and 142.76 dB; regression guards 1 dB below the fallback.
+- Tests 1 to 6: `sdrk-testkit/tests/golden_m50.rs` (test 1, chunk plans seed 705; test 3, seed 704, peak-to-RMS 10.24 to 11.97 against `sqrt(127)` = 11.27), `sdrk-core/tests/kernels_m50.rs` (tests 2, 4 and 5; signals seed 709, D2607), `sdrk/tests/facade.rs`, the suite cases `xcorr_fft_c32` (quick) and `extremes_m50` (full) with `sdrk-testkit/tests/suite_m50.rs`.
+
+Open: the SIMD paths with the level-pinned inverse FFT (§5, test 8), the count and cycle entries with the reference rows (§5), the block and kind `correlate` (§6, test 7), the `CQ15` backlog check (§7).

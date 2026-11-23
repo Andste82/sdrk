@@ -75,5 +75,6 @@ mod spectrum;
 mod squelch;
 mod stereo;
 mod symbol_sync;
+mod xcorr;
 
 pub use fft::REFERENCE_IN_PLACE_MAX;

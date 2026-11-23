@@ -18,10 +18,9 @@ mod ffi {
     use core::ffi::{c_uint, c_void};
 
     macro_rules! fftfilt_ffi {
-        ($create:ident, $reset:ident, $destroy:ident, $execute:ident) => {
+        ($create:ident, $destroy:ident, $execute:ident) => {
             unsafe extern "C" {
                 pub fn $create(h: *const [f32; 2], h_len: c_uint, n: c_uint) -> *mut c_void;
-                pub fn $reset(q: *mut c_void);
                 pub fn $destroy(q: *mut c_void);
                 pub fn $execute(
                     q: *mut c_void,
@@ -35,14 +34,12 @@ mod ffi {
 
     fftfilt_ffi!(
         sdrk_liquid_fftfilt_port_create,
-        sdrk_liquid_fftfilt_port_reset,
         sdrk_liquid_fftfilt_port_destroy,
         sdrk_liquid_fftfilt_port_execute
     );
     #[cfg(not(target_arch = "wasm32"))]
     fftfilt_ffi!(
         sdrk_liquid_fftfilt_fftw_create,
-        sdrk_liquid_fftfilt_fftw_reset,
         sdrk_liquid_fftfilt_fftw_destroy,
         sdrk_liquid_fftfilt_fftw_execute
     );
@@ -104,27 +101,6 @@ impl LiquidFftfilt {
         {
             let _ = (build, h_len, n);
             None
-        }
-    }
-
-    /// liquid's block length `n`.
-    #[must_use]
-    pub fn block(&self) -> usize {
-        self.block
-    }
-
-    /// Clears the overlap buffer and the partial block.
-    pub fn reset(&mut self) {
-        #[cfg(has_liquidhb)]
-        // SAFETY: the object is valid until `drop`.
-        unsafe {
-            match self.build {
-                FftfiltBuild::Portable => ffi::sdrk_liquid_fftfilt_port_reset(self.q),
-                #[cfg(not(target_arch = "wasm32"))]
-                FftfiltBuild::Fftw => ffi::sdrk_liquid_fftfilt_fftw_reset(self.q),
-                #[cfg(target_arch = "wasm32")]
-                FftfiltBuild::Fftw => {}
-            }
         }
     }
 

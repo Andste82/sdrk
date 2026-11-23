@@ -2603,23 +2603,31 @@
           "verdict": "pass"
         },
         "equalize": {
-          "compared_with": "sdrk fallback",
+          "compared_with": "GNU Radio linear_equalizer with adaptive_algorithm_nlms (linear_equalizer_impl.cc of gr-digital, VOLK's dispatched dot products of the level with the aligned tap copies of fir_filter)",
           "goal": true,
           "informational": [
             {
               "compared_with": "sdrk fallback",
-              "label": "misaligned by one sample",
+              "label": "information: fallback",
               "other_instr_per_sample": 487.23,
-              "other_snr_db": null,
+              "other_snr_db": 999.0,
               "ours_instr_per_sample": 487.23,
               "ratio": 1.0
+            },
+            {
+              "compared_with": "GNU Radio linear_equalizer with adaptive_algorithm_nlms (linear_equalizer_impl.cc of gr-digital, VOLK's dispatched dot products of the level with the aligned tap copies of fir_filter)",
+              "label": "misaligned by one sample",
+              "other_instr_per_sample": 1165.28,
+              "other_snr_db": null,
+              "ours_instr_per_sample": 487.23,
+              "ratio": 0.42
             }
           ],
-          "other_instr_per_sample": 487.23,
+          "other_instr_per_sample": 1165.28,
           "ours_instr_per_sample": 487.23,
-          "ratio": 1.0,
+          "ratio": 0.42,
           "snr_db": {
-            "other": 999.0,
+            "other": 130.26,
             "ours": 999.0
           },
           "status": "info",
@@ -2695,23 +2703,31 @@
           "verdict": "pass"
         },
         "equalize_qam16": {
-          "compared_with": "sdrk fallback",
+          "compared_with": "GNU Radio linear_equalizer with adaptive_algorithm_nlms on constellation_rect 16-QAM (linear_equalizer_impl.cc and constellation.cc of gr-digital, VOLK's dispatched dot products of the level with the aligned tap copies of fir_filter)",
           "goal": true,
           "informational": [
             {
               "compared_with": "sdrk fallback",
-              "label": "misaligned by one sample",
+              "label": "information: fallback",
               "other_instr_per_sample": 488.34,
-              "other_snr_db": null,
+              "other_snr_db": 999.0,
               "ours_instr_per_sample": 488.34,
               "ratio": 1.0
+            },
+            {
+              "compared_with": "GNU Radio linear_equalizer with adaptive_algorithm_nlms on constellation_rect 16-QAM (linear_equalizer_impl.cc and constellation.cc of gr-digital, VOLK's dispatched dot products of the level with the aligned tap copies of fir_filter)",
+              "label": "misaligned by one sample",
+              "other_instr_per_sample": 1192.28,
+              "other_snr_db": null,
+              "ours_instr_per_sample": 488.34,
+              "ratio": 0.41
             }
           ],
-          "other_instr_per_sample": 488.34,
+          "other_instr_per_sample": 1192.28,
           "ours_instr_per_sample": 488.34,
-          "ratio": 1.0,
+          "ratio": 0.41,
           "snr_db": {
-            "other": 999.0,
+            "other": 128.83,
             "ours": 999.0
           },
           "status": "info",
@@ -2787,23 +2803,31 @@
           "verdict": "pass"
         },
         "equalize_qam64": {
-          "compared_with": "sdrk fallback",
+          "compared_with": "GNU Radio linear_equalizer with adaptive_algorithm_nlms on constellation_rect 64-QAM (linear_equalizer_impl.cc and constellation.cc of gr-digital, VOLK's dispatched dot products of the level with the aligned tap copies of fir_filter)",
           "goal": true,
           "informational": [
             {
               "compared_with": "sdrk fallback",
-              "label": "misaligned by one sample",
+              "label": "information: fallback",
               "other_instr_per_sample": 500.34,
-              "other_snr_db": null,
+              "other_snr_db": 999.0,
               "ours_instr_per_sample": 500.34,
               "ratio": 1.0
+            },
+            {
+              "compared_with": "GNU Radio linear_equalizer with adaptive_algorithm_nlms on constellation_rect 64-QAM (linear_equalizer_impl.cc and constellation.cc of gr-digital, VOLK's dispatched dot products of the level with the aligned tap copies of fir_filter)",
+              "label": "misaligned by one sample",
+              "other_instr_per_sample": 1192.28,
+              "other_snr_db": null,
+              "ours_instr_per_sample": 500.34,
+              "ratio": 0.42
             }
           ],
-          "other_instr_per_sample": 500.34,
+          "other_instr_per_sample": 1192.28,
           "ours_instr_per_sample": 500.34,
-          "ratio": 1.0,
+          "ratio": 0.42,
           "snr_db": {
-            "other": 999.0,
+            "other": 130.7,
             "ours": 999.0
           },
           "status": "info",
@@ -6878,6 +6902,11 @@
       "gnuradio_linear_equalizer": {
         "build": "gr-equalizer.c (linear_equalizer with adaptive_algorithm_nlms, QPSK, decision-directed, VOLK 3.3.0 generic dot products): -O3",
         "sha256": "b28de16052b9478decba1db261bdc0a6e81b64ea8f3a9eb9d9427bb6f1aac312",
+        "version": "main at ec1bf15"
+      },
+      "gnuradio_linear_equalizer_volk": {
+        "build": "gr-equalizer.c and gr-constellation.c with -DSDRK_GR_VOLK (linear_equalizer with the dispatched VOLK dot products and the aligned tap copies of fir_filter, linked to libvolk): -O3",
+        "sha256": "14e32965c0be15bfca771668d76c5884a953480d44a9599c6affef818fabc096",
         "version": "main at ec1bf15"
       },
       "gnuradio_mpsk_snr_est_cc": {

@@ -708,6 +708,12 @@ pub enum Family {
     RealFft,
     /// No established library: our fallback.
     Own,
+    /// A SIMD entry whose loop is the fallback's (every backend runs it, D841) and whose fair
+    /// library comparison is a block of GNU Radio with VOLK's dispatched dot products of the
+    /// level (`equalize`, `equalize_qam16`, `equalize_qam64`, issue #169): the gate where VOLK
+    /// has SIMD implementations, our fallback as information. In the wasm32 build of VOLK
+    /// (the `generic` protokernels only) our fallback is the comparison.
+    OwnVsGnuRadioSimd,
     /// A workload of an own-kernel comparison ([`Reference::OwnKernel`], D69): measured as
     /// [`Family::Own`], but not a kernel of the library, so it has no entry at a level that is
     /// judged against another build of ours (`avx2-runtime`: the workload runs a kernel whose
@@ -1251,15 +1257,15 @@ pub static KERNELS: [KernelSpec; 288] = [
     proto("rds_decode_block", Family::Own),
     spec("dot_complex", Family::VolkNoFmaGate, true),
     spec("dot_complex_fallback", Family::FallbackVsCmsis, false),
-    spec("equalize", Family::Own, false),
+    spec("equalize", Family::OwnVsGnuRadioSimd, false),
     spec("equalize_fallback", Family::FallbackVsGnuRadio, false),
     spec("costas_qam16", Family::Own, false),
     spec("costas_qam16_fallback", Family::FallbackVsGnuRadio, false),
-    spec("equalize_qam16", Family::Own, false),
+    spec("equalize_qam16", Family::OwnVsGnuRadioSimd, false),
     spec("equalize_qam16_fallback", Family::FallbackVsGnuRadio, false),
     spec("costas_qam64", Family::Own, false),
     spec("costas_qam64_fallback", Family::FallbackVsGnuRadio, false),
-    spec("equalize_qam64", Family::Own, false),
+    spec("equalize_qam64", Family::OwnVsGnuRadioSimd, false),
     spec("equalize_qam64_fallback", Family::FallbackVsGnuRadio, false),
     spec("rds_shape", Family::Own, false),
     spec("stereo_encode_rds", Family::Own, false),
@@ -1756,6 +1762,8 @@ fn family_comparisons(plan: &LevelPlan, spec: &KernelSpec) -> (Reference, Vec<Re
             (Reference::Volk, extras)
         }
         Family::GnuRadio => (Reference::GnuRadio, vec![Reference::Fallback]),
+        Family::OwnVsGnuRadioSimd if plan.refs == "wasm32" => (Reference::Fallback, Vec::new()),
+        Family::OwnVsGnuRadioSimd => (Reference::GnuRadio, vec![Reference::Fallback]),
         Family::FftC32 => (plan.fft_c32.0, plan.fft_c32.1.to_vec()),
         Family::FftCq15 => (Reference::KissFft, plan.fft_cq15_extra.to_vec()),
         Family::RealFft => (plan.rfft.0, plan.rfft.1.to_vec()),
@@ -5174,9 +5182,18 @@ mod tests {
             ("equalize_qam1024", "equalize_qam1024_fallback"),
         ] {
             for level in ["sse2", "sse4.2", "avx2", "avx512", "neon", "simd128"] {
+                // The SIMD entries `equalize_qam16` and `equalize_qam64` are judged against
+                // GNU Radio with VOLK's dispatcher where VOLK has SIMD (issue #169); the
+                // others, and `simd128`, against our own fallback.
+                let want =
+                    if matches!(simd, "equalize_qam16" | "equalize_qam64") && level != "simd128" {
+                        (Reference::GnuRadio, vec![Reference::Fallback])
+                    } else {
+                        (Reference::Fallback, Vec::new())
+                    };
                 assert_eq!(
                     comparisons(plan(level), kernel(simd)),
-                    (Reference::Fallback, Vec::new()),
+                    want,
                     "{simd} at {level}"
                 );
                 assert_eq!(
@@ -5273,11 +5290,15 @@ mod tests {
                 (Reference::Cmsis, Vec::new()),
                 "dot_complex_fallback at {level}"
             );
-            assert_eq!(
-                comparisons(plan(level), eq),
-                (Reference::Fallback, Vec::new()),
-                "equalize at {level}"
-            );
+            // Issue #169: GNU Radio with VOLK's dispatcher is the comparison where VOLK has SIMD
+            // implementations, our fallback is information; in the wasm32 build of VOLK (the
+            // generic protokernels only) our fallback is the comparison.
+            let want = if level == "simd128" {
+                (Reference::Fallback, Vec::new())
+            } else {
+                (Reference::GnuRadio, vec![Reference::Fallback])
+            };
+            assert_eq!(comparisons(plan(level), eq), want, "equalize at {level}");
             assert_eq!(
                 comparisons(plan(level), eq_fallback).0,
                 Reference::GnuRadio,

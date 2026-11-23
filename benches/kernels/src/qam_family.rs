@@ -655,8 +655,22 @@ fn gr_taps() -> [[f32; 2]; EQ_TAPS] {
 
 /// GNU Radio's `linear_equalizer` on the `constellation_rect` of `qam` for `n` symbols per call
 /// with the normalized decision-mode step of ours.
-fn gr_equalizer(qam: Qam, n: usize, points: &[[f32; 2]]) -> Option<GrLinearEqualizerRect> {
-    GrLinearEqualizerRect::new(&gr_taps(), eq_params(qam).mu_dd, n, gr_rect(qam, points))
+///
+/// `volk` selects the build with VOLK's dispatcher (the reference of the SIMD entries
+/// `equalize_qam16` and `equalize_qam64`: the dot products of the level, issue #169), otherwise
+/// VOLK's generic dot products (the reference of the fallback entries).
+fn gr_equalizer(
+    qam: Qam,
+    n: usize,
+    points: &[[f32; 2]],
+    volk: bool,
+) -> Option<GrLinearEqualizerRect> {
+    let (mu, rect) = (eq_params(qam).mu_dd, gr_rect(qam, points));
+    if volk {
+        GrLinearEqualizerRect::new_volk(&gr_taps(), mu, n, rect)
+    } else {
+        GrLinearEqualizerRect::new(&gr_taps(), mu, n, rect)
+    }
 }
 
 /// The f64 model of GNU Radio's loop (the accuracy reference of [`Impl::GnuRadio`]): the FIR of
@@ -721,11 +735,7 @@ impl EqualizeQamK {
     pub(crate) fn new(rng: &mut Pcg32, layout: Layout, qam: Qam, fallback_entry: bool) -> Self {
         let skew = layout.skew(core::mem::size_of::<C32>());
         let points = qam_points(qam);
-        let gr = if fallback_entry {
-            gr_equalizer(qam, layout.n, &points)
-        } else {
-            None
-        };
+        let gr = gr_equalizer(qam, layout.n, &points, !fallback_entry);
         EqualizeQamK {
             qam,
             input: qam_input(rng, qam, layout, &EQ_CHANNEL, EQ_PHASE, 0.0, eq_noise(qam)),
@@ -767,7 +777,12 @@ impl Kernel for EqualizeQamK {
             Impl::Ours => equalize(&Sdrk, &mut state, &self.input, &mut got),
             Impl::Fallback => equalize(&Fallback, &mut state, &self.input, &mut got),
             Impl::GnuRadio => {
-                if let Some(mut gr) = gr_equalizer(self.qam, self.input.len(), &self.points) {
+                if let Some(mut gr) = gr_equalizer(
+                    self.qam,
+                    self.input.len(),
+                    &self.points,
+                    !self.fallback_entry,
+                ) {
                     gr.work(c32_pairs_ref(&self.input), c32_pairs(&mut got));
                 }
                 let want = gr_equalizer_model(self.qam, &self.input);
@@ -784,7 +799,7 @@ impl Kernel for EqualizeQamK {
         match which {
             Impl::Ours => !self.fallback_entry,
             Impl::Fallback => true,
-            Impl::GnuRadio => self.fallback_entry && self.gr.is_some(),
+            Impl::GnuRadio => self.gr.is_some(),
             _ => false,
         }
     }
@@ -792,6 +807,20 @@ impl Kernel for EqualizeQamK {
     fn describe(&self, which: Impl) -> &'static str {
         match which {
             Impl::Fallback => "sdrk fallback",
+            Impl::GnuRadio if !self.fallback_entry => match self.qam {
+                Qam::Qam64 => {
+                    "GNU Radio linear_equalizer with adaptive_algorithm_nlms on constellation_rect 64-QAM (linear_equalizer_impl.cc and constellation.cc of gr-digital, VOLK's dispatched dot products of the level with the aligned tap copies of fir_filter)"
+                }
+                Qam::Qam256 => {
+                    "GNU Radio linear_equalizer with adaptive_algorithm_nlms on constellation_rect 256-QAM (linear_equalizer_impl.cc and constellation.cc of gr-digital, VOLK's dispatched dot products of the level with the aligned tap copies of fir_filter)"
+                }
+                Qam::Qam1024 => {
+                    "GNU Radio linear_equalizer with adaptive_algorithm_nlms on constellation_rect 1024-QAM (linear_equalizer_impl.cc and constellation.cc of gr-digital, VOLK's dispatched dot products of the level with the aligned tap copies of fir_filter)"
+                }
+                _ => {
+                    "GNU Radio linear_equalizer with adaptive_algorithm_nlms on constellation_rect 16-QAM (linear_equalizer_impl.cc and constellation.cc of gr-digital, VOLK's dispatched dot products of the level with the aligned tap copies of fir_filter)"
+                }
+            },
             Impl::GnuRadio => match self.qam {
                 Qam::Qam64 => {
                     "GNU Radio linear_equalizer with adaptive_algorithm_nlms on constellation_rect 64-QAM (linear_equalizer_impl.cc and constellation.cc of gr-digital, VOLK generic dot products, generic compiler flags)"

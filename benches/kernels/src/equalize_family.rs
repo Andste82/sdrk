@@ -223,8 +223,17 @@ fn gr_taps() -> [[f32; 2]; EQ_TAPS] {
 
 /// GNU Radio's `linear_equalizer` for `n` symbols per call with the normalized decision-mode
 /// step of ours.
-fn gr_equalizer(n: usize) -> Option<GrLinearEqualizer> {
-    GrLinearEqualizer::new(&gr_taps(), EqParams::default().mu_dd, n)
+///
+/// `volk` selects the build with VOLK's dispatcher (the reference of the SIMD entry `equalize`:
+/// the dot products of the level, issue #169), otherwise VOLK's generic dot products (the
+/// reference of `equalize_fallback`).
+fn gr_equalizer(n: usize, volk: bool) -> Option<GrLinearEqualizer> {
+    let mu = EqParams::default().mu_dd;
+    if volk {
+        GrLinearEqualizer::new_volk(&gr_taps(), mu, n)
+    } else {
+        GrLinearEqualizer::new(&gr_taps(), mu, n)
+    }
 }
 
 /// The f64 model of GNU Radio's loop (the accuracy reference of [`Impl::GnuRadio`]): the FIR of
@@ -323,11 +332,7 @@ impl EqualizeK {
             input,
             out: Aligned::skewed(n, skew),
             state: eq_state(),
-            gr: if fallback_entry {
-                gr_equalizer(n)
-            } else {
-                None
-            },
+            gr: gr_equalizer(n, !fallback_entry),
             fallback_entry,
         }
     }
@@ -362,7 +367,7 @@ impl Kernel for EqualizeK {
             Impl::Ours => equalize(&Sdrk, &mut state, &self.input, &mut got),
             Impl::Fallback => equalize(&Fallback, &mut state, &self.input, &mut got),
             Impl::GnuRadio => {
-                if let Some(mut gr) = gr_equalizer(self.input.len()) {
+                if let Some(mut gr) = gr_equalizer(self.input.len(), !self.fallback_entry) {
                     gr.work(c32_pairs_ref(&self.input), c32_pairs(&mut got));
                 }
                 return snr_db(&c32s(&gr_equalizer_model(&self.input)), &c32s(&got));
@@ -378,7 +383,7 @@ impl Kernel for EqualizeK {
         match which {
             Impl::Ours => !self.fallback_entry,
             Impl::Fallback => true,
-            Impl::GnuRadio => self.fallback_entry && self.gr.is_some(),
+            Impl::GnuRadio => self.gr.is_some(),
             _ => false,
         }
     }
@@ -386,8 +391,11 @@ impl Kernel for EqualizeK {
     fn describe(&self, which: Impl) -> &'static str {
         match which {
             Impl::Fallback => "sdrk fallback",
-            Impl::GnuRadio => {
+            Impl::GnuRadio if self.fallback_entry => {
                 "GNU Radio linear_equalizer with adaptive_algorithm_nlms (linear_equalizer_impl.cc of gr-digital, VOLK generic dot products, generic compiler flags)"
+            }
+            Impl::GnuRadio => {
+                "GNU Radio linear_equalizer with adaptive_algorithm_nlms (linear_equalizer_impl.cc of gr-digital, VOLK's dispatched dot products of the level with the aligned tap copies of fir_filter)"
             }
             _ => "sdrk",
         }

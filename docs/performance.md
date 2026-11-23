@@ -3441,6 +3441,56 @@ Branches (D1611; `--branches`, cachegrind's branch simulation, `sse2`, `sse4.2` 
 
 Instructions per sample that changed (all others are equal): `frame_decode_four_block` at `avx2` 83.82 -> 83.85 (+0.04 %, `avx2-runtime` 86.76 -> 86.79), `qam_frame_decode_block` at `sse2` 340.90 -> 340.91 and at `simd128` (instructions, no cycle model) 645.42 -> 645.43. The largest change is +0.05 % (`frame_decode_four_block` on `alderlake`), far inside the 1 % of the acceptance; the decoder of a configuration is the same as before, so the outputs are bit-identical.
 
+## PSK receiver against GNU Radio (BER and alignment changes, issue #169 §D)
+
+`cargo run --release --bin psk_ber [symbols [first seed [seeds]]]` in `benches/kernels` (with `SDRK_REFS_DIR` as for `cargo xtask count`; the code is `benches/kernels/src/psk_ber.rs`) runs `psk_demod` and GNU Radio's receiver chain (`fir_filter_ccf` with the matched filter, `symbol_sync_cc`, `costas_loop_cc` of the order 2, 4 or 8, the decision of `constellation_decoder_cb` as the nearest point, `diff_decoder_bb` for the differential case; the C translations of `benches/refs`) on the same signals. The signal is the output of `psk_mod` for random bits (8 samples per symbol, roll-off 0.35, span 10) turned by 0.3 rad with a carrier offset of 0.003 cycles per symbol, delayed by 3 samples, with white Gaussian noise for the Eb/N0 of the row (the power of the samples measured); both receivers run the block defaults (`sync_bw` 0.01, `carrier_bw` 0.02, damping 0.707) in calls of 4096 samples. The bits are compared with the sent ones per window of 2000 symbols at the best alignment (the phase ambiguity of the carrier loop and the lag in symbols, searched around the alignment of the window before); the first 6000 symbols are not counted; an alignment change is a window whose best alignment differs from the one before. Eight seeds (2601 to 2608) of 200000 symbols are summed per row. The theory is `Q(sqrt(2 Eb/N0))` for BPSK and QPSK, `2/3 Q(sqrt(6 Eb/N0) sin(pi/8))` for 8PSK and `exp(-Eb/N0)/2` for non-coherent differential BPSK. Both receivers lose 0.2 to 0.4 dB against the theory (the filters, the timing and the carrier loops).
+
+Block defaults (`sync_bw` 0.01):
+
+| constellation | mode | Eb/N0 dB | theory | sdrk BER | GNU Radio BER | sdrk / GNU Radio | sdrk changes per 1e5 | GNU Radio changes per 1e5 | bits |
+| --- | --- | --- | --- | --- | --- | --- | --- | --- | --- |
+| BPSK | coherent | 2 | 3.751e-2 | 7.088e-2 | 3.940e-2 | 1.80 | 8.76 | 0.00 | 1552000 |
+| BPSK | coherent | 4 | 1.250e-2 | 1.623e-2 | 1.314e-2 | 1.24 | 0.19 | 0.00 | 1552000 |
+| BPSK | coherent | 6 | 2.388e-3 | 3.120e-3 | 2.575e-3 | 1.21 | 0.00 | 0.00 | 1552000 |
+| BPSK | coherent | 8 | 1.909e-4 | 3.138e-4 | 2.655e-4 | 1.18 | 0.00 | 0.00 | 1552000 |
+| QPSK | coherent | 2 | 3.751e-2 | 6.109e-2 | 5.080e-2 | 1.20 | 5.86 | 2.77 | 3104000 |
+| QPSK | coherent | 4 | 1.250e-2 | 1.513e-2 | 1.424e-2 | 1.06 | 0.06 | 0.06 | 3104000 |
+| QPSK | coherent | 6 | 2.388e-3 | 3.042e-3 | 2.836e-3 | 1.07 | 0.00 | 0.00 | 3104000 |
+| QPSK | coherent | 8 | 1.909e-4 | 3.199e-4 | 3.206e-4 | 1.00 | 0.00 | 0.00 | 3104000 |
+| 8PSK | coherent | 6 | 2.048e-2 | 3.854e-2 | 3.839e-2 | 1.00 | 5.35 | 5.86 | 4656000 |
+| 8PSK | coherent | 8 | 6.181e-3 | 7.849e-3 | 7.449e-3 | 1.05 | 0.06 | 0.00 | 4656000 |
+| 8PSK | coherent | 10 | 1.011e-3 | 1.402e-3 | 1.323e-3 | 1.06 | 0.00 | 0.00 | 4656000 |
+| 8PSK | coherent | 12 | 6.340e-5 | 1.534e-4 | 1.596e-4 | 0.96 | 0.00 | 0.00 | 4656000 |
+| BPSK | differential | 2 | 1.025e-1 | 1.375e-1 | 7.610e-2 | 1.81 | 8.57 | 0.00 | 1552000 |
+| BPSK | differential | 4 | 4.056e-2 | 4.742e-2 | 2.611e-2 | 1.82 | 0.19 | 0.00 | 1552000 |
+| BPSK | differential | 6 | 9.333e-3 | 1.109e-2 | 5.126e-3 | 2.16 | 0.00 | 0.00 | 1552000 |
+| BPSK | differential | 8 | 9.094e-4 | 1.200e-3 | 4.755e-4 | 2.52 | 0.00 | 0.00 | 1552000 |
+
+The same with `sync_bw` 0.005 for `psk_demod` (GNU Radio's column is the same run, 0.01):
+
+| constellation | mode | Eb/N0 dB | theory | sdrk BER | GNU Radio BER | sdrk / GNU Radio | sdrk changes per 1e5 | GNU Radio changes per 1e5 | bits |
+| --- | --- | --- | --- | --- | --- | --- | --- | --- | --- |
+| BPSK | coherent | 2 | 3.751e-2 | 4.162e-2 | 3.940e-2 | 1.06 | 0.00 | 0.00 | 1552000 |
+| BPSK | coherent | 4 | 1.250e-2 | 1.387e-2 | 1.314e-2 | 1.06 | 0.00 | 0.00 | 1552000 |
+| BPSK | coherent | 6 | 2.388e-3 | 2.718e-3 | 2.575e-3 | 1.06 | 0.00 | 0.00 | 1552000 |
+| BPSK | coherent | 8 | 1.909e-4 | 2.680e-4 | 2.655e-4 | 1.01 | 0.00 | 0.00 | 1552000 |
+| QPSK | coherent | 2 | 3.751e-2 | 5.639e-2 | 5.080e-2 | 1.11 | 4.64 | 2.77 | 3104000 |
+| QPSK | coherent | 4 | 1.250e-2 | 1.451e-2 | 1.424e-2 | 1.02 | 0.06 | 0.06 | 3104000 |
+| QPSK | coherent | 6 | 2.388e-3 | 2.886e-3 | 2.836e-3 | 1.02 | 0.00 | 0.00 | 3104000 |
+| QPSK | coherent | 8 | 1.909e-4 | 3.051e-4 | 3.206e-4 | 0.95 | 0.00 | 0.00 | 3104000 |
+| 8PSK | coherent | 6 | 2.048e-2 | 3.935e-2 | 3.839e-2 | 1.02 | 5.15 | 5.86 | 4656000 |
+| 8PSK | coherent | 8 | 6.181e-3 | 7.485e-3 | 7.449e-3 | 1.00 | 0.00 | 0.00 | 4656000 |
+| 8PSK | coherent | 10 | 1.011e-3 | 1.339e-3 | 1.323e-3 | 1.01 | 0.00 | 0.00 | 4656000 |
+| 8PSK | coherent | 12 | 6.340e-5 | 1.441e-4 | 1.596e-4 | 0.90 | 0.00 | 0.00 | 4656000 |
+| BPSK | differential | 2 | 1.025e-1 | 1.078e-1 | 7.610e-2 | 1.42 | 0.00 | 0.00 | 1552000 |
+| BPSK | differential | 4 | 4.056e-2 | 4.295e-2 | 2.611e-2 | 1.64 | 0.00 | 0.00 | 1552000 |
+| BPSK | differential | 6 | 9.333e-3 | 1.005e-2 | 5.126e-3 | 1.96 | 0.00 | 0.00 | 1552000 |
+| BPSK | differential | 8 | 9.094e-4 | 1.064e-3 | 4.755e-4 | 2.24 | 0.00 | 0.00 | 1552000 |
+
+- **Coherent BPSK, QPSK and 8PSK.** 8PSK and QPSK are within 0 to 7 % of GNU Radio at 4 dB and above (QPSK 8 dB 1.00, 8PSK 12 dB 0.96); BPSK is 18 to 24 % above at 4 to 8 dB and 1.80 times at 2 dB, where `psk_demod` has 8.76 alignment changes per 1e5 symbols against 0 (QPSK 2 dB 5.86 against 2.77, 8PSK 6 dB 5.35 against 5.86). The excess is the timing loop and not the carrier loop: with `carrier_bw` 0.014 and 0.01 the BPSK rows do not change (2 dB 7.05e-2 and 7.03e-2, 8 dB 3.15e-4), with `sync_bw` 0.005 they equal GNU Radio's (ratio 1.01 to 1.06, 0 changes at 2 dB; QPSK 0.95 to 1.11, 8PSK 0.90 to 1.02). The same nominal `sync_bw` is a wider loop in `psk_demod` than in `symbol_sync_cc` (the likely causes, not isolated: the factor `sps` in our gains, D565, and the cubic interpolator against the 8-tap MMSE, D2539): open item I169-2.
+- **Differential BPSK.** `psk_demod` with `differential` is a non-coherent detector (no carrier loop, the product of two symbols) and its BER is the theory of the non-coherent detector plus 17 to 34 % (1.2e-3 at 8 dB against `exp(-Eb/N0)/2` = 9.1e-4); GNU Radio's chain is coherent detection (`costas_loop_cc`) followed by the differential decoder, which has about twice the BER of coherent BPSK (4.8e-4 at 8 dB), so it is 1.8 to 2.5 times better at 2 to 8 dB (1.4 to 2.2 with `sync_bw` 0.005). These are two receivers with different work (the differential mode of `psk_demod` needs no carrier lock and follows frequency offsets that the loop of the chain would have to pull in), reported as information.
+- **Not compared.** Differential QPSK and differential 8PSK: the differential `psk_mod` steps the phase by the mapped phase (odd multiples of 45 degrees for QPSK and 8PSK, M40 and M40.1), so no point set of GNU Radio's `costas_loop_cc` (orders 4 and 8 lock to one point set) follows the signal, and GNU Radio's `diff_encoder_bb` steps by 0, 90, 180 and 270 degrees, another signal; `pi4` and `offset` likewise (no GNU Radio block). The receiver with the equalizer (`equalizer_taps`): the translations of GNU Radio's `linear_equalizer` in `benches/refs` run the decision-directed NLMS (QPSK points and the rectangular constellation of square QAM) without the CMA start of the QAM comparison, and a constellation of BPSK or 8PSK points is not among them; open item I169-3.
+
 ## QAM of any square order (M44.2)
 
 M44.2 makes the constellation part of the QAM kernels and blocks generic over the bits per axis (4-QAM, the constellation `qpsk`, to 1024-QAM) and adds the bit scramblers `bit_scramble` and `bit_descramble`. The measure step of 2026-11-19 counted every entry of the QAM family on the four platforms of the 16-QAM entries (`cargo xtask count --platform <p> --kernel <entry> --merge`, the levels of `x86_64` one at a time) and simulated it on every level with a core model (`cargo measure`, whole-loop, the corrected `llvm-mca` of D942, which reproduces the `costas` row at `neon`, 86.13 / 54.09, first; D1524).

@@ -11,6 +11,10 @@ publish.workspace = true
 name = "count"
 path = "src/bin/count.rs"
 
+[[bin]]
+name = "psk_ber"
+path = "src/bin/psk_ber.rs"
+
 [dependencies]
 # The kernels as users call them: through the facade. The feature `std` selects the SIMD level
 # at run time (the level `avx2-runtime`); without it the level is fixed at compile time by

@@ -145,7 +145,8 @@ use std::hint::black_box;
 
 use cref_sys::{
     GrChunksToSymbols, GrConstellationReceiverCb, GrFirBank, GrLinearEqualizerRect, GrPfbArb,
-    GrRect, GrSoftDecoder, LiquidFirfiltCrcf, LiquidFirinterpCrcf, LiquidModemDemod, LiquidModemMap,
+    GrRect, GrSoftDecoder, LiquidFirfiltCrcf, LiquidFirinterpCrcf, LiquidModemDemod,
+    LiquidModemMap,
 };
 
 use super::psk_family::GrFront;
@@ -1143,7 +1144,11 @@ fn gr_mod_taps(rolloff: f64, sps: usize, span: usize) -> Vec<f32> {
             let t = x as f64 / GR_MOD_NFILTS as f64 - centre;
             // the pulse of the block ends at `span / 2` symbols on both sides: the taps beyond
             // are zero, but still multiplied by the 88 taps of every branch
-            if t.abs() > centre { 0.0 } else { (h(t) * scale) as f32 }
+            if t.abs() > centre {
+                0.0
+            } else {
+                (h(t) * scale) as f32
+            }
         })
         .collect()
 }
@@ -1169,7 +1174,13 @@ fn mod_points(k: usize) -> Vec<[f32; 2]> {
     (0..1usize << k)
         .map(|s| {
             let bits: Vec<f32> = (0..k)
-                .map(|j| if (s >> (k - 1 - j)) & 1 == 1 { 1.0 } else { -1.0 })
+                .map(|j| {
+                    if (s >> (k - 1 - j)) & 1 == 1 {
+                        1.0
+                    } else {
+                        -1.0
+                    }
+                })
                 .collect();
             #[allow(clippy::cast_possible_truncation, reason = "f32 points of a table")]
             [
@@ -1199,8 +1210,8 @@ impl ModRefs {
         };
         if liquid_entry {
             let taps = pulse_taps((sps as f64).sqrt());
-            r.liquid = LiquidModemMap::new(&points, k)
-                .zip(LiquidFirinterpCrcf::new(&taps, sps, true));
+            r.liquid =
+                LiquidModemMap::new(&points, k).zip(LiquidFirinterpCrcf::new(&taps, sps, true));
         } else {
             let taps = gr_mod_taps(cfg.rolloff, sps, cfg.span);
             r.chunks = GrChunksToSymbols::new(&points, k, n_sym);

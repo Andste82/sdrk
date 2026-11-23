@@ -618,7 +618,7 @@ fn gnuradio_costas_loop() {
         assert_close(f64::from(v[0].abs()), r, 1e-2);
         assert_close(f64::from(v[1].abs()), r, 1e-2);
     }
-    assert!(GrCostasLoopCc::new(0.02, 8).is_none());
+    assert!(GrCostasLoopCc::new(0.02, 3).is_none());
 }
 
 #[test]

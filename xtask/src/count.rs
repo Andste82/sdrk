@@ -741,7 +741,9 @@ pub enum Family {
     /// portable dot product (`halfband_decimate_fallback`, `halfband_decimate_real_fallback`) or
     /// its amplitude modulator `ampmodem` (`am_mod_fallback`), or its Gaussian generators
     /// `crandnf` and `randnf` (`gauss_noise_c32_fallback`, `gauss_noise_f32_fallback`, information
-    /// only: liquid does different work).
+    /// only: liquid does different work), its channelizer `firpfbch2_crcf`
+    /// (`channelize_fallback`) or its fast convolution `fftfilt_cccf` with its own FFT
+    /// (`xcorr_fft_n512_fallback`, `xcorr_fft_n4096_fallback`).
     FallbackVsLiquid,
     /// A fallback entry whose kernel has no library that does the same work
     /// (`gauss_noise_q15_fallback`, M48: no library makes `Q15` Gaussian noise): the measured
@@ -757,6 +759,10 @@ pub enum Family {
     /// dot product of the level and FFTW (liquid's own FFT on wasm32, which has no FFTW build),
     /// our fallback as information.
     ChannelizeLiquid,
+    /// The fast convolution `xcorr_fft` (M50 §5): liquid-dsp's `fftfilt_cccf` with FFTW (liquid's
+    /// own FFT on wasm32, which has no FFTW build; information there), our fallback as
+    /// information.
+    XcorrLiquid,
     /// `gauss_noise` (M48): liquid-dsp's `crandnf` and `randnf` over libc `rand()`
     /// (`benches/refs/liquid-randn.c`), which do other work than the contract (`f32` Box–Muller,
     /// no PCG32, no random access, no bit-exact sequence): the comparison as information (`info`
@@ -963,7 +969,10 @@ const fn proto(name: &'static str, family: Family) -> KernelSpec {
 /// transform blocks that fit the standard [`N`]
 /// samples of the measurement binary (`samples` = `floor(N / B) B`, `B = N_fft - L + 1`: 10
 /// blocks of 386 for `L` 127, `N_fft` 512; one block of 3074 for `L` 1023, `N_fft` 4096), with
-/// misaligned buffers.
+/// misaligned buffers. The kernel entries are judged against liquid-dsp's `fftfilt_cccf`
+/// ([`Family::XcorrLiquid`], [`Family::FallbackVsLiquid`]; liquid's block length is the power of
+/// two nearest to `B`, and it takes the same samples per call, D2619); `correlate_block` is
+/// information ([`Family::Own`]).
 const fn xcorr(name: &'static str, family: Family, samples: u64) -> KernelSpec {
     KernelSpec {
         name,
@@ -1389,10 +1398,14 @@ pub static KERNELS: [KernelSpec; 286] = [
         1024,
     ),
     fft("rfft_1024_fallback", Family::FftFallbackVsCmsis, 1024),
-    xcorr("xcorr_fft_n512", Family::Own, 10 * 386),
-    xcorr("xcorr_fft_n4096", Family::Own, 3074),
-    xcorr("xcorr_fft_n512_fallback", Family::FallbackOwn, 10 * 386),
-    xcorr("xcorr_fft_n4096_fallback", Family::FallbackOwn, 3074),
+    xcorr("xcorr_fft_n512", Family::XcorrLiquid, 10 * 386),
+    xcorr("xcorr_fft_n4096", Family::XcorrLiquid, 3074),
+    xcorr(
+        "xcorr_fft_n512_fallback",
+        Family::FallbackVsLiquid,
+        10 * 386,
+    ),
+    xcorr("xcorr_fft_n4096_fallback", Family::FallbackVsLiquid, 3074),
     xcorr("correlate_block", Family::Own, 10 * 386),
 ];
 
@@ -1759,7 +1772,7 @@ fn family_comparisons(plan: &LevelPlan, spec: &KernelSpec) -> (Reference, Vec<Re
         Family::FallbackVsLiquid | Family::HalfbandLiquid | Family::HilbertLiquid => {
             (Reference::Liquid, Vec::new())
         }
-        Family::ChannelizeLiquid | Family::LiquidDifferentWork => {
+        Family::ChannelizeLiquid | Family::XcorrLiquid | Family::LiquidDifferentWork => {
             (Reference::Liquid, vec![Reference::Fallback])
         }
         Family::GaussNoiseFastnoise | Family::ScrambleDvbs2 => (Reference::GnuRadio, Vec::new()),
@@ -5294,6 +5307,50 @@ mod tests {
             );
         }
         assert!(VOLK_FUNCTIONS.contains(&"volk_32fc_x2_dot_prod_32fc"));
+    }
+
+    #[test]
+    fn the_fast_convolution_is_judged_against_liquid_on_every_level() {
+        let plan = |l: &str| PLANS.iter().find(|p| p.level == l).unwrap();
+        let kernel = |k: &str| KERNELS.iter().find(|s| s.name == k).unwrap();
+        let limits = Limits::parse(include_str!("../../benches/limits.json")).unwrap();
+        for n in ["n512", "n4096"] {
+            let name = format!("xcorr_fft_{n}");
+            let simd = kernel(&name);
+            let fallback = kernel(&format!("{name}_fallback"));
+            assert_eq!(simd.family.measured(), "ours");
+            assert_eq!(fallback.family.measured(), "fallback");
+            for level in ["sse2", "sse4.2", "avx2", "avx512", "neon", "simd128"] {
+                assert_eq!(
+                    comparisons(plan(level), simd),
+                    (Reference::Liquid, vec![Reference::Fallback]),
+                    "{name} at {level}"
+                );
+                assert_eq!(
+                    comparisons(plan(level), fallback),
+                    (Reference::Liquid, Vec::new()),
+                    "{name}_fallback at {level}"
+                );
+            }
+            assert!(!fallback.family.measured_at(plan("avx2-runtime")));
+            for spec in [simd, fallback] {
+                for p in PLANS.iter().filter(|p| spec.family.measured_at(p)) {
+                    let limit = limits.get(spec.name, p.level);
+                    assert!(
+                        limit.is_some(),
+                        "{} at {}: no entry in limits.json",
+                        spec.name,
+                        p.level
+                    );
+                    if let Some(limit) = limit.filter(|l| l.status == Status::Info) {
+                        assert!(limit.waiver.is_some(), "{} at {}", spec.name, p.level);
+                    }
+                }
+            }
+        }
+        // No FFTW build on wasm32: liquid's own FFT is no SIMD reference of `simd128`.
+        let wasm = limits.get("xcorr_fft_n512", "simd128").unwrap();
+        assert_eq!(wasm.status, Status::Info);
     }
 
     #[test]

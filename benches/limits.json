@@ -6807,5 +6807,123 @@
       "status": "info",
       "waiver": "`snr_estimate_block_svr` is not accelerated: the run-time-detection build runs the code compiled for the baseline x86-64 target, the `avx2` build the same code compiled for AVX2, so their counts differ by code generation only; reported as information"
     }
+  },
+  "xcorr_fft_n512": {
+    "sse2": {
+      "status": "release"
+    },
+    "sse4.2": {
+      "status": "release"
+    },
+    "avx2": {
+      "status": "release"
+    },
+    "avx512": {
+      "status": "release"
+    },
+    "neon": {
+      "status": "release"
+    },
+    "simd128": {
+      "status": "info",
+      "waiver": "liquid-dsp has no FFTW build on wasm32 (FFTW has no WebAssembly code), so the comparison at this level is `fftfilt_cccf` over liquid's own FFT, portable C compiled with `-msimd128`: no SIMD reference of the level (D32), reported as information (instructions per output sample; the D321 pair is `xcorr_fft_n512_fallback`)"
+    },
+    "avx2-runtime": {
+      "status": "release"
+    }
+  },
+  "xcorr_fft_n4096": {
+    "sse2": {
+      "status": "release"
+    },
+    "sse4.2": {
+      "status": "release"
+    },
+    "avx2": {
+      "status": "release"
+    },
+    "avx512": {
+      "status": "release"
+    },
+    "neon": {
+      "status": "release"
+    },
+    "simd128": {
+      "status": "info",
+      "waiver": "liquid-dsp has no FFTW build on wasm32 (FFTW has no WebAssembly code), so the comparison at this level is `fftfilt_cccf` over liquid's own FFT, portable C compiled with `-msimd128`: no SIMD reference of the level (D32), reported as information (instructions per output sample; the D321 pair is `xcorr_fft_n4096_fallback`)"
+    },
+    "avx2-runtime": {
+      "status": "release"
+    }
+  },
+  "xcorr_fft_n512_fallback": {
+    "sse2": {
+      "status": "release"
+    },
+    "sse4.2": {
+      "status": "release"
+    },
+    "avx2": {
+      "status": "release"
+    },
+    "avx512": {
+      "status": "release"
+    },
+    "neon": {
+      "status": "release"
+    },
+    "simd128": {
+      "status": "release"
+    }
+  },
+  "xcorr_fft_n4096_fallback": {
+    "sse2": {
+      "status": "release"
+    },
+    "sse4.2": {
+      "status": "release"
+    },
+    "avx2": {
+      "status": "release"
+    },
+    "avx512": {
+      "status": "release"
+    },
+    "neon": {
+      "status": "release"
+    },
+    "simd128": {
+      "status": "release"
+    }
+  },
+  "correlate_block": {
+    "sse2": {
+      "status": "info",
+      "waiver": "`correlate_block` is the block `correlate` (M50 §6, the default `prbs7` code: `L` 127, `N` 512, `B` 386) around the kernel `xcorr_fft`: its SIMD path is the kernel's, judged against liquid-dsp's `fftfilt_cccf` in the entries `xcorr_fft_n512` and `xcorr_fft_n512_fallback`; the block adds only the size checks of one call. No library has the block itself, so the entry is our own code, reported as information (cycles and instructions per output sample; ours and fallback run the same block code)"
+    },
+    "sse4.2": {
+      "status": "info",
+      "waiver": "`correlate_block` is the block `correlate` (M50 §6, the default `prbs7` code: `L` 127, `N` 512, `B` 386) around the kernel `xcorr_fft`: its SIMD path is the kernel's, judged against liquid-dsp's `fftfilt_cccf` in the entries `xcorr_fft_n512` and `xcorr_fft_n512_fallback`; the block adds only the size checks of one call. No library has the block itself, so the entry is our own code, reported as information (cycles and instructions per output sample; ours and fallback run the same block code)"
+    },
+    "avx2": {
+      "status": "info",
+      "waiver": "`correlate_block` is the block `correlate` (M50 §6, the default `prbs7` code: `L` 127, `N` 512, `B` 386) around the kernel `xcorr_fft`: its SIMD path is the kernel's, judged against liquid-dsp's `fftfilt_cccf` in the entries `xcorr_fft_n512` and `xcorr_fft_n512_fallback`; the block adds only the size checks of one call. No library has the block itself, so the entry is our own code, reported as information (cycles and instructions per output sample; ours and fallback run the same block code)"
+    },
+    "avx512": {
+      "status": "info",
+      "waiver": "`correlate_block` is the block `correlate` (M50 §6, the default `prbs7` code: `L` 127, `N` 512, `B` 386) around the kernel `xcorr_fft`: its SIMD path is the kernel's, judged against liquid-dsp's `fftfilt_cccf` in the entries `xcorr_fft_n512` and `xcorr_fft_n512_fallback`; the block adds only the size checks of one call. No library has the block itself, so the entry is our own code, reported as information (cycles and instructions per output sample; ours and fallback run the same block code)"
+    },
+    "neon": {
+      "status": "info",
+      "waiver": "`correlate_block` is the block `correlate` (M50 §6, the default `prbs7` code: `L` 127, `N` 512, `B` 386) around the kernel `xcorr_fft`: its SIMD path is the kernel's, judged against liquid-dsp's `fftfilt_cccf` in the entries `xcorr_fft_n512` and `xcorr_fft_n512_fallback`; the block adds only the size checks of one call. No library has the block itself, so the entry is our own code, reported as information (cycles and instructions per output sample; ours and fallback run the same block code)"
+    },
+    "simd128": {
+      "status": "info",
+      "waiver": "`correlate_block` is the block `correlate` (M50 §6, the default `prbs7` code: `L` 127, `N` 512, `B` 386) around the kernel `xcorr_fft`: its SIMD path is the kernel's, judged against liquid-dsp's `fftfilt_cccf` in the entries `xcorr_fft_n512` and `xcorr_fft_n512_fallback`; the block adds only the size checks of one call. No library has the block itself, so the entry is our own code, reported as information (cycles and instructions per output sample; ours and fallback run the same block code)"
+    },
+    "avx2-runtime": {
+      "status": "info",
+      "waiver": "`correlate_block` runs the kernel through the facade, which the run-time-detection build dispatches to the AVX2 path of the kernel at run time; the block code around it is compiled for the baseline x86-64 target; reported as information"
+    }
   }
 }

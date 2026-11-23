@@ -1556,8 +1556,10 @@ Reference model `skylake`, counter-model `znver2`, mode `whole-loop`; execution 
 | `preemph_limit_stereo` | 21.13 | 21.13 | 1.00 | 22.70 | 22.70 | 1.00 | sdrk fallback |
 | `psk_demod_block` | 81.22 | 451.08 | 0.18 | 70.68 | 370.98 | 0.19 | GNU Radio fir_filter_ccf + symbol_sync_cc + costas_loop_cc + constellation_decoder_cb (the sum of the blocks of the receiver chain, generic compiler flags; no acquisition and no lock watches) |
 | `psk_mod_block` | 8.98 | 8.98 | 1.00 | 11.40 | 11.40 | 1.00 | sdrk fallback |
-| `pulse_match_block` | 42.97 | 42.97 | 1.00 | 38.69 | 38.69 | 1.00 | sdrk fallback |
-| `pulse_shape_block` | 8.15 | 8.15 | 1.00 | 10.37 | 10.37 | 1.00 | sdrk fallback |
+| `pulse_match_block` | 42.97 | 94.30 | 0.46 | 38.63 | 96.04 | 0.40 | GNU Radio fir_filter_ccf (fir_filter_ccf_impl.cc of gr-filter) with VOLK's dispatched dot product of the level (volk_32fc_32f_dot_prod_32fc_a, the aligned tap copies of fir_filter) |
+| `pulse_match_block_liquid` | 42.97 | 227.97 | 0.19 | 38.63 | 186.23 | 0.21 | liquid-dsp 1.8.3 firfilt_crcf (firfilt.proto.c), the SIMD dot product of the level (the portable loop at simd128) |
+| `pulse_shape_block` | 8.15 | 48.24 | 0.17 | 10.37 | 52.72 | 0.20 | GNU Radio interp_fir_filter_ccf (interp_fir_filter_impl.cc of gr-filter) with VOLK's dispatched dot product of the level (volk_32fc_32f_dot_prod_32fc_a, the aligned tap copies of fir_filter) |
+| `pulse_shape_block_liquid` | 8.15 | 75.35 | 0.11 | 10.37 | 63.53 | 0.16 | liquid-dsp 1.8.3 firinterp_crcf (firinterp.proto.c, firpfb.proto.c), the SIMD dot products of the level (the portable loop at simd128) |
 | `qam_acquire_block` | 52.13 | 52.13 | 1.00 | 44.16 | 44.16 | 1.00 | sdrk fallback |
 | `qam_demod_block` | 113.96 | 485.36 | 0.23 | 101.98 | 406.48 | 0.25 | GNU Radio fir_filter_ccf + symbol_sync_cc + linear_equalizer + constellation_receiver_cb (the sum of the blocks of the receiver chain, generic compiler flags and VOLK generic dot products; no acquisition, no blind equalizer stage and no lock watches) |
 | `qam_demod_qam256_block` | 114.28 | 114.29 | 1.00 | 104.38 | 104.38 | 1.00 | sdrk fallback |
@@ -1851,8 +1853,10 @@ Reference model `skylake`, counter-model `znver2`, mode `whole-loop`; execution 
 | `preemph_limit_stereo` | 20.85 | 20.85 | 1.00 | 21.65 | 21.65 | 1.00 | sdrk fallback |
 | `psk_demod_block` | 81.27 | 451.08 | 0.18 | 70.04 | 370.98 | 0.19 | GNU Radio fir_filter_ccf + symbol_sync_cc + costas_loop_cc + constellation_decoder_cb (the sum of the blocks of the receiver chain, generic compiler flags; no acquisition and no lock watches) |
 | `psk_mod_block` | 8.64 | 8.64 | 1.00 | 10.62 | 10.62 | 1.00 | sdrk fallback |
-| `pulse_match_block` | 42.97 | 42.97 | 1.00 | 38.69 | 38.69 | 1.00 | sdrk fallback |
-| `pulse_shape_block` | 7.80 | 7.80 | 1.00 | 9.59 | 9.59 | 1.00 | sdrk fallback |
+| `pulse_match_block` | 42.97 | 103.32 | 0.42 | 38.63 | 105.37 | 0.37 | GNU Radio fir_filter_ccf (fir_filter_ccf_impl.cc of gr-filter) with VOLK's dispatched dot product of the level (volk_32fc_32f_dot_prod_32fc_a, the aligned tap copies of fir_filter) |
+| `pulse_match_block_liquid` | 42.97 | 228.29 | 0.19 | 38.63 | 186.56 | 0.21 | liquid-dsp 1.8.3 firfilt_crcf (firfilt.proto.c), the SIMD dot product of the level (the portable loop at simd128) |
+| `pulse_shape_block` | 7.80 | 50.59 | 0.15 | 9.59 | 55.89 | 0.17 | GNU Radio interp_fir_filter_ccf (interp_fir_filter_impl.cc of gr-filter) with VOLK's dispatched dot product of the level (volk_32fc_32f_dot_prod_32fc_a, the aligned tap copies of fir_filter) |
+| `pulse_shape_block_liquid` | 7.80 | 75.35 | 0.10 | 9.59 | 63.52 | 0.15 | liquid-dsp 1.8.3 firinterp_crcf (firinterp.proto.c, firpfb.proto.c), the SIMD dot products of the level (the portable loop at simd128) |
 | `qam_acquire_block` | 51.31 | 51.31 | 1.00 | 43.49 | 43.49 | 1.00 | sdrk fallback |
 | `qam_demod_block` | 113.69 | 485.36 | 0.23 | 100.78 | 406.48 | 0.25 | GNU Radio fir_filter_ccf + symbol_sync_cc + linear_equalizer + constellation_receiver_cb (the sum of the blocks of the receiver chain, generic compiler flags and VOLK generic dot products; no acquisition, no blind equalizer stage and no lock watches) |
 | `qam_demod_qam256_block` | 113.84 | 113.84 | 1.00 | 102.90 | 102.90 | 1.00 | sdrk fallback |
@@ -2147,8 +2151,10 @@ Reference model `znver3`, counter-model `alderlake`, mode `whole-loop`; executio
 | `preemph_limit_stereo` | 16.71 | 16.71 | 1.00 | 22.32 | 22.32 | 1.00 | sdrk fallback |
 | `psk_demod_block` | 39.53 | 1166.49 | 0.03 | 45.81 | 417.25 | 0.11 | GNU Radio fir_filter_ccf + symbol_sync_cc + costas_loop_cc + constellation_decoder_cb (the sum of the blocks of the receiver chain, generic compiler flags; no acquisition and no lock watches) |
 | `psk_mod_block` | 4.36 | 4.36 | 1.00 | 4.24 | 4.24 | 1.00 | sdrk fallback |
-| `pulse_match_block` | 12.41 | 12.41 | 1.00 | 11.36 | 11.36 | 1.00 | sdrk fallback |
-| `pulse_shape_block` | 3.56 | 3.56 | 1.00 | 3.51 | 3.51 | 1.00 | sdrk fallback |
+| `pulse_match_block` | 12.41 | 878.31 | 0.01 | 12.07 | 151.26 | 0.08 | GNU Radio fir_filter_ccf (fir_filter_ccf_impl.cc of gr-filter) with VOLK's dispatched dot product of the level (volk_32fc_32f_dot_prod_32fc_a, the aligned tap copies of fir_filter) |
+| `pulse_match_block_liquid` | 12.41 | 110.01 | 0.11 | 12.07 | 94.89 | 0.13 | liquid-dsp 1.8.3 firfilt_crcf (firfilt.proto.c), the SIMD dot product of the level (the portable loop at simd128) |
+| `pulse_shape_block` | 3.56 | 64.95 | 0.05 | 3.51 | 69.12 | 0.05 | GNU Radio interp_fir_filter_ccf (interp_fir_filter_impl.cc of gr-filter) with VOLK's dispatched dot product of the level (volk_32fc_32f_dot_prod_32fc_a, the aligned tap copies of fir_filter) |
+| `pulse_shape_block_liquid` | 3.56 | 55.52 | 0.06 | 3.51 | 55.16 | 0.06 | liquid-dsp 1.8.3 firinterp_crcf (firinterp.proto.c, firpfb.proto.c), the SIMD dot products of the level (the portable loop at simd128) |
 | `qam_acquire_block` | 26.89 | 26.89 | 1.00 | 32.64 | 32.64 | 1.00 | sdrk fallback |
 | `qam_demod_block` | 64.29 | 1192.82 | 0.05 | 73.54 | 455.77 | 0.16 | GNU Radio fir_filter_ccf + symbol_sync_cc + linear_equalizer + constellation_receiver_cb (the sum of the blocks of the receiver chain, generic compiler flags and VOLK generic dot products; no acquisition, no blind equalizer stage and no lock watches) |
 | `qam_demod_qam256_block` | 68.21 | 68.21 | 1.00 | 75.20 | 75.20 | 1.00 | sdrk fallback |
@@ -2443,8 +2449,10 @@ Reference model `znver4`, counter-model `sapphirerapids`, mode `whole-loop`; exe
 | `preemph_limit_stereo` | 15.64 | 15.64 | 1.00 | 13.07 | 13.07 | 1.00 | sdrk fallback |
 | `psk_demod_block` | 36.33 | 1160.84 | 0.03 | 41.50 | 417.14 | 0.10 | GNU Radio fir_filter_ccf + symbol_sync_cc + costas_loop_cc + constellation_decoder_cb (the sum of the blocks of the receiver chain, generic compiler flags; no acquisition and no lock watches) |
 | `psk_mod_block` | 4.65 | 4.65 | 1.00 | 3.57 | 3.57 | 1.00 | sdrk fallback |
-| `pulse_match_block` | 11.00 | 11.00 | 1.00 | 6.23 | 6.23 | 1.00 | sdrk fallback |
-| `pulse_shape_block` | 3.91 | 3.91 | 1.00 | 2.86 | 2.86 | 1.00 | sdrk fallback |
+| `pulse_match_block` | 10.87 | 878.11 | 0.01 | 10.43 | 150.71 | 0.07 | GNU Radio fir_filter_ccf (fir_filter_ccf_impl.cc of gr-filter) with VOLK's dispatched dot product of the level (volk_32fc_32f_dot_prod_32fc_a, the aligned tap copies of fir_filter) |
+| `pulse_match_block_liquid` | 10.87 | 72.18 | 0.15 | 10.43 | 69.68 | 0.15 | liquid-dsp 1.8.3 firfilt_crcf (firfilt.proto.c), the SIMD dot product of the level (the portable loop at simd128) |
+| `pulse_shape_block` | 3.91 | 170.09 | 0.02 | 2.86 | 86.24 | 0.03 | GNU Radio interp_fir_filter_ccf (interp_fir_filter_impl.cc of gr-filter) with VOLK's dispatched dot product of the level (volk_32fc_32f_dot_prod_32fc_a, the aligned tap copies of fir_filter) |
+| `pulse_shape_block_liquid` | 3.91 | 48.12 | 0.08 | 2.86 | 55.33 | 0.05 | liquid-dsp 1.8.3 firinterp_crcf (firinterp.proto.c, firpfb.proto.c), the SIMD dot products of the level (the portable loop at simd128) |
 | `qam_acquire_block` | 26.62 | 26.62 | 1.00 | 30.31 | 30.31 | 1.00 | sdrk fallback |
 | `qam_demod_block` | 60.92 | 1287.08 | 0.05 | 69.22 | 463.69 | 0.15 | GNU Radio fir_filter_ccf + symbol_sync_cc + linear_equalizer + constellation_receiver_cb (the sum of the blocks of the receiver chain, generic compiler flags and VOLK generic dot products; no acquisition, no blind equalizer stage and no lock watches) |
 | `qam_demod_qam256_block` | 63.72 | 63.72 | 1.00 | 68.26 | 68.26 | 1.00 | sdrk fallback |
@@ -2739,8 +2747,10 @@ Reference model `cortex-a72`, counter-model `cortex-a76`, mode `whole-loop`; exe
 | `preemph_limit_stereo` | 24.12 | 24.12 | 1.00 | 22.90 | 22.90 | 1.00 | sdrk fallback |
 | `psk_demod_block` | 92.51 | 363.00 | 0.25 | 59.41 | 274.03 | 0.22 | GNU Radio fir_filter_ccf + symbol_sync_cc + costas_loop_cc + constellation_decoder_cb (the sum of the blocks of the receiver chain, generic compiler flags; no acquisition and no lock watches) |
 | `psk_mod_block` | 13.98 | 13.98 | 1.00 | 13.05 | 13.05 | 1.00 | sdrk fallback |
-| `pulse_match_block` | 48.91 | 48.91 | 1.00 | 31.64 | 31.64 | 1.00 | sdrk fallback |
-| `pulse_shape_block` | 12.99 | 12.99 | 1.00 | 11.83 | 11.83 | 1.00 | sdrk fallback |
+| `pulse_match_block` | 50.35 | 179.70 | 0.28 | 31.64 | 129.18 | 0.24 | GNU Radio fir_filter_ccf (fir_filter_ccf_impl.cc of gr-filter) with VOLK's dispatched dot product of the level (volk_32fc_32f_dot_prod_32fc_a, the aligned tap copies of fir_filter) |
+| `pulse_match_block_liquid` | 50.35 | 296.62 | 0.17 | 31.64 | 246.95 | 0.13 | liquid-dsp 1.8.3 firfilt_crcf (firfilt.proto.c), the SIMD dot product of the level (the portable loop at simd128) |
+| `pulse_shape_block` | 13.00 | 85.68 | 0.15 | 11.83 | 52.71 | 0.22 | GNU Radio interp_fir_filter_ccf (interp_fir_filter_impl.cc of gr-filter) with VOLK's dispatched dot product of the level (volk_32fc_32f_dot_prod_32fc_a, the aligned tap copies of fir_filter) |
+| `pulse_shape_block_liquid` | 13.00 | 112.24 | 0.12 | 11.83 | 106.13 | 0.11 | liquid-dsp 1.8.3 firinterp_crcf (firinterp.proto.c, firpfb.proto.c), the SIMD dot products of the level (the portable loop at simd128) |
 | `qam_acquire_block` | 61.74 | 61.74 | 1.00 | 48.40 | 48.40 | 1.00 | sdrk fallback |
 | `qam_demod_block` | 136.17 | 413.84 | 0.33 | 91.75 | 316.01 | 0.29 | GNU Radio fir_filter_ccf + symbol_sync_cc + linear_equalizer + constellation_receiver_cb (the sum of the blocks of the receiver chain, generic compiler flags and VOLK generic dot products; no acquisition, no blind equalizer stage and no lock watches) |
 | `qam_demod_qam256_block` | 131.47 | 131.47 | 1.00 | 92.21 | 92.21 | 1.00 | sdrk fallback |

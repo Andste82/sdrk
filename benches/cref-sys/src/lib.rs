@@ -68,6 +68,7 @@ mod gr_fastnoise;
 mod halfband;
 pub mod liquid;
 mod liquid_am;
+mod liquid_fir;
 mod liquid_nco;
 mod liquid_randn;
 pub mod volk_generic;
@@ -77,7 +78,7 @@ pub use biquad::{BIQUAD_REF_LEVEL, CmsisBiquad, KfrBiquad};
 pub use channelizer::{Firpfbch2Build, LiquidFirpfbch2};
 pub use fftfilt::{FftfiltBuild, LiquidFftfilt};
 pub use gnuradio::{
-    CostasLoopState, GR_MMSE_STEPS, GrConstellationReceiverCb, GrCostasLoopCc, GrCrc,
+    CostasLoopState, GR_MMSE_STEPS, GrConstellationReceiverCb, GrCostasLoopCc, GrCrc, GrFirBank,
     GrFirFilterCcf, GrFmDeemph, GrFrequencyModulatorFc, GrLinearEqualizer, GrLinearEqualizerRect,
     GrMpskSnrEstCc, GrQuadratureDemodCf, GrRect, GrRotator, GrScrambler, GrSymbolSyncCc,
     gr_constellation_decoder_qpsk,
@@ -88,6 +89,7 @@ pub use halfband::{
 };
 pub use liquid::{LiquidDcBlocker, LiquidDcBlockerCrcf};
 pub use liquid_am::LiquidAmpmodem;
+pub use liquid_fir::{LiquidFirfiltCrcf, LiquidFirinterpCrcf};
 pub use liquid_nco::LiquidNcoPll;
 pub use liquid_randn::LiquidRandn;
 

@@ -714,6 +714,10 @@ pub enum Family {
     /// has SIMD implementations, our fallback as information. In the wasm32 build of VOLK
     /// (the `generic` protokernels only) our fallback is the comparison.
     OwnVsGnuRadioSimd,
+    /// A block whose pulse filter is compared with liquid-dsp's filter (`firinterp_crcf`,
+    /// `firfilt_crcf`) with its dot products of the level (the portable loop in the wasm32
+    /// build): the gate, our fallback as information (issue #169).
+    OwnVsLiquid,
     /// A workload of an own-kernel comparison ([`Reference::OwnKernel`], D69): measured as
     /// [`Family::Own`], but not a kernel of the library, so it has no entry at a level that is
     /// judged against another build of ours (`avx2-runtime`: the workload runs a kernel whose
@@ -1002,7 +1006,7 @@ const fn fft(name: &'static str, family: Family, samples: u64) -> KernelSpec {
 }
 
 /// The kernels of the benchmark table, in report order.
-pub static KERNELS: [KernelSpec; 288] = [
+pub static KERNELS: [KernelSpec; 290] = [
     spec("convert_cs8", Family::Volk, true),
     spec("convert_cs16", Family::Volk, true),
     spec("convert_cu8", Family::VolkAndOwn, true),
@@ -1320,8 +1324,10 @@ pub static KERNELS: [KernelSpec; 288] = [
     proto("qam_acquire_block", Family::Own),
     proto("qam_frame_encode_block", Family::Own),
     proto("qam_frame_decode_block", Family::Own),
-    proto("pulse_shape_block", Family::Own),
-    proto("pulse_match_block", Family::Own),
+    proto("pulse_shape_block", Family::GnuRadio),
+    proto("pulse_match_block", Family::GnuRadio),
+    proto("pulse_shape_block_liquid", Family::OwnVsLiquid),
+    proto("pulse_match_block_liquid", Family::OwnVsLiquid),
     proto("frame_decode_four_block", Family::Own),
     spec("gauss_noise_c32", Family::LiquidDifferentWork, false),
     spec("gauss_noise_f32", Family::LiquidDifferentWork, false),
@@ -1762,6 +1768,7 @@ fn family_comparisons(plan: &LevelPlan, spec: &KernelSpec) -> (Reference, Vec<Re
             (Reference::Volk, extras)
         }
         Family::GnuRadio => (Reference::GnuRadio, vec![Reference::Fallback]),
+        Family::OwnVsLiquid => (Reference::Liquid, vec![Reference::Fallback]),
         Family::OwnVsGnuRadioSimd if plan.refs == "wasm32" => (Reference::Fallback, Vec::new()),
         Family::OwnVsGnuRadioSimd => (Reference::GnuRadio, vec![Reference::Fallback]),
         Family::FftC32 => (plan.fft_c32.0, plan.fft_c32.1.to_vec()),
@@ -4928,11 +4935,27 @@ mod tests {
         }
         // The receiver blocks against the sum of GNU Radio's blocks on the same input
         // (issue #169, D2541, D2545): information, the chain has no acquisition and no lock watches.
-        for k in ["psk_demod_block", "qam_demod_block"] {
+        for k in [
+            "psk_demod_block",
+            "qam_demod_block",
+            "pulse_shape_block",
+            "pulse_match_block",
+        ] {
             for level in ["sse2", "sse4.2", "avx2", "avx512", "neon", "simd128"] {
                 assert_eq!(
                     comparisons(plan(level), kernel(k)),
                     (Reference::GnuRadio, vec![Reference::Fallback]),
+                    "{k} at {level}"
+                );
+            }
+        }
+        // The pulse filters of the blocks against liquid-dsp's `firinterp_crcf` and
+        // `firfilt_crcf` with the dot products of the level (issue #169, D2546).
+        for k in ["pulse_shape_block_liquid", "pulse_match_block_liquid"] {
+            for level in ["sse2", "sse4.2", "avx2", "avx512", "neon", "simd128"] {
+                assert_eq!(
+                    comparisons(plan(level), kernel(k)),
+                    (Reference::Liquid, vec![Reference::Fallback]),
                     "{k} at {level}"
                 );
             }
@@ -5030,8 +5053,6 @@ mod tests {
             "qam_acquire_block",
             "qam_frame_encode_block",
             "qam_frame_decode_block",
-            "pulse_shape_block",
-            "pulse_match_block",
             "noise_block",
             "scramble_block",
         ];

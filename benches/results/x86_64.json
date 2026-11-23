@@ -4984,27 +4984,93 @@
           "verdict": "info"
         },
         "pulse_match_block": {
-          "compared_with": "sdrk fallback",
+          "compared_with": "GNU Radio fir_filter_ccf (fir_filter_ccf_impl.cc of gr-filter) with VOLK's dispatched dot product of the level (volk_32fc_32f_dot_prod_32fc_a, the aligned tap copies of fir_filter)",
           "goal": true,
-          "other_instr_per_sample": 32.66,
-          "ours_instr_per_sample": 32.66,
-          "ratio": 1.0,
+          "informational": [
+            {
+              "compared_with": "sdrk fallback",
+              "label": "information: fallback",
+              "other_instr_per_sample": 32.65,
+              "other_snr_db": 142.07,
+              "ours_instr_per_sample": 32.65,
+              "ratio": 1.0
+            }
+          ],
+          "other_instr_per_sample": 239.55,
+          "ours_instr_per_sample": 32.65,
+          "ratio": 0.14,
           "snr_db": {
-            "other": 142.21,
-            "ours": 142.21
+            "other": 145.54,
+            "ours": 142.07
+          },
+          "status": "info",
+          "verdict": "info"
+        },
+        "pulse_match_block_liquid": {
+          "compared_with": "liquid-dsp 1.8.3 firfilt_crcf (firfilt.proto.c), the SIMD dot product of the level (the portable loop at simd128)",
+          "goal": true,
+          "informational": [
+            {
+              "compared_with": "sdrk fallback",
+              "label": "information: fallback",
+              "other_instr_per_sample": 32.65,
+              "other_snr_db": 142.07,
+              "ours_instr_per_sample": 32.65,
+              "ratio": 1.0
+            }
+          ],
+          "other_instr_per_sample": 248.82,
+          "ours_instr_per_sample": 32.65,
+          "ratio": 0.13,
+          "snr_db": {
+            "other": 143.88,
+            "ours": 142.07
           },
           "status": "info",
           "verdict": "info"
         },
         "pulse_shape_block": {
-          "compared_with": "sdrk fallback",
+          "compared_with": "GNU Radio interp_fir_filter_ccf (interp_fir_filter_impl.cc of gr-filter) with VOLK's dispatched dot product of the level (volk_32fc_32f_dot_prod_32fc_a, the aligned tap copies of fir_filter)",
           "goal": true,
-          "other_instr_per_sample": 21.04,
+          "informational": [
+            {
+              "compared_with": "sdrk fallback",
+              "label": "information: fallback",
+              "other_instr_per_sample": 21.04,
+              "other_snr_db": 144.0,
+              "ours_instr_per_sample": 21.04,
+              "ratio": 1.0
+            }
+          ],
+          "other_instr_per_sample": 197.13,
           "ours_instr_per_sample": 21.04,
-          "ratio": 1.0,
+          "ratio": 0.11,
           "snr_db": {
-            "other": 144.06,
-            "ours": 144.06
+            "other": 142.6,
+            "ours": 144.0
+          },
+          "status": "info",
+          "verdict": "info"
+        },
+        "pulse_shape_block_liquid": {
+          "compared_with": "liquid-dsp 1.8.3 firinterp_crcf (firinterp.proto.c, firpfb.proto.c), the SIMD dot products of the level (the portable loop at simd128)",
+          "goal": true,
+          "informational": [
+            {
+              "compared_with": "sdrk fallback",
+              "label": "information: fallback",
+              "other_instr_per_sample": 21.04,
+              "other_snr_db": 144.0,
+              "ours_instr_per_sample": 21.04,
+              "ratio": 1.0
+            }
+          ],
+          "other_instr_per_sample": 165.92,
+          "ours_instr_per_sample": 21.04,
+          "ratio": 0.13,
+          "snr_db": {
+            "other": 142.16,
+            "ours": 144.0
           },
           "status": "info",
           "verdict": "info"
@@ -8379,12 +8445,25 @@
         "pulse_match_block": {
           "compared_with": "ours at avx2",
           "goal": false,
-          "other_instr_per_sample": 32.66,
+          "other_instr_per_sample": 32.65,
           "ours_instr_per_sample": 32.67,
           "ratio": 1.0,
           "snr_db": {
-            "other": 142.21,
-            "ours": 142.21
+            "other": 142.07,
+            "ours": 142.07
+          },
+          "status": "info",
+          "verdict": "info"
+        },
+        "pulse_match_block_liquid": {
+          "compared_with": "ours at avx2",
+          "goal": false,
+          "other_instr_per_sample": 32.65,
+          "ours_instr_per_sample": 32.67,
+          "ratio": 1.0,
+          "snr_db": {
+            "other": 142.07,
+            "ours": 142.07
           },
           "status": "info",
           "verdict": "info"
@@ -8396,8 +8475,21 @@
           "ours_instr_per_sample": 21.05,
           "ratio": 1.0,
           "snr_db": {
-            "other": 144.06,
-            "ours": 144.06
+            "other": 144.0,
+            "ours": 144.0
+          },
+          "status": "info",
+          "verdict": "info"
+        },
+        "pulse_shape_block_liquid": {
+          "compared_with": "ours at avx2",
+          "goal": false,
+          "other_instr_per_sample": 21.04,
+          "ours_instr_per_sample": 21.05,
+          "ratio": 1.0,
+          "snr_db": {
+            "other": 144.0,
+            "ours": 144.0
           },
           "status": "info",
           "verdict": "info"
@@ -14138,27 +14230,93 @@
           "verdict": "info"
         },
         "pulse_match_block": {
-          "compared_with": "sdrk fallback",
+          "compared_with": "GNU Radio fir_filter_ccf (fir_filter_ccf_impl.cc of gr-filter) with VOLK's dispatched dot product of the level (volk_32fc_32f_dot_prod_32fc_a, the aligned tap copies of fir_filter)",
           "goal": true,
-          "other_instr_per_sample": 153.36,
-          "ours_instr_per_sample": 153.36,
-          "ratio": 1.0,
+          "informational": [
+            {
+              "compared_with": "sdrk fallback",
+              "label": "information: fallback",
+              "other_instr_per_sample": 153.24,
+              "other_snr_db": 142.47,
+              "ours_instr_per_sample": 153.24,
+              "ratio": 1.0
+            }
+          ],
+          "other_instr_per_sample": 313.06,
+          "ours_instr_per_sample": 153.24,
+          "ratio": 0.49,
           "snr_db": {
-            "other": 142.32,
-            "ours": 142.32
+            "other": 144.9,
+            "ours": 142.47
+          },
+          "status": "info",
+          "verdict": "info"
+        },
+        "pulse_match_block_liquid": {
+          "compared_with": "liquid-dsp 1.8.3 firfilt_crcf (firfilt.proto.c), the SIMD dot product of the level (the portable loop at simd128)",
+          "goal": true,
+          "informational": [
+            {
+              "compared_with": "sdrk fallback",
+              "label": "information: fallback",
+              "other_instr_per_sample": 153.24,
+              "other_snr_db": 142.47,
+              "ours_instr_per_sample": 153.24,
+              "ratio": 1.0
+            }
+          ],
+          "other_instr_per_sample": 343.26,
+          "ours_instr_per_sample": 153.24,
+          "ratio": 0.45,
+          "snr_db": {
+            "other": 140.69,
+            "ours": 142.47
           },
           "status": "info",
           "verdict": "info"
         },
         "pulse_shape_block": {
-          "compared_with": "sdrk fallback",
+          "compared_with": "GNU Radio interp_fir_filter_ccf (interp_fir_filter_impl.cc of gr-filter) with VOLK's dispatched dot product of the level (volk_32fc_32f_dot_prod_32fc_a, the aligned tap copies of fir_filter)",
           "goal": true,
-          "other_instr_per_sample": 40.71,
+          "informational": [
+            {
+              "compared_with": "sdrk fallback",
+              "label": "information: fallback",
+              "other_instr_per_sample": 40.71,
+              "other_snr_db": 143.84,
+              "ours_instr_per_sample": 40.71,
+              "ratio": 1.0
+            }
+          ],
+          "other_instr_per_sample": 142.72,
           "ours_instr_per_sample": 40.71,
-          "ratio": 1.0,
+          "ratio": 0.29,
           "snr_db": {
-            "other": 143.82,
-            "ours": 143.82
+            "other": 142.4,
+            "ours": 143.84
+          },
+          "status": "info",
+          "verdict": "info"
+        },
+        "pulse_shape_block_liquid": {
+          "compared_with": "liquid-dsp 1.8.3 firinterp_crcf (firinterp.proto.c, firpfb.proto.c), the SIMD dot products of the level (the portable loop at simd128)",
+          "goal": true,
+          "informational": [
+            {
+              "compared_with": "sdrk fallback",
+              "label": "information: fallback",
+              "other_instr_per_sample": 40.71,
+              "other_snr_db": 143.84,
+              "ours_instr_per_sample": 40.71,
+              "ratio": 1.0
+            }
+          ],
+          "other_instr_per_sample": 152.96,
+          "ours_instr_per_sample": 40.71,
+          "ratio": 0.27,
+          "snr_db": {
+            "other": 142.9,
+            "ours": 143.84
           },
           "status": "info",
           "verdict": "info"
@@ -21000,27 +21158,93 @@
           "verdict": "info"
         },
         "pulse_match_block": {
-          "compared_with": "sdrk fallback",
+          "compared_with": "GNU Radio fir_filter_ccf (fir_filter_ccf_impl.cc of gr-filter) with VOLK's dispatched dot product of the level (volk_32fc_32f_dot_prod_32fc_a, the aligned tap copies of fir_filter)",
           "goal": true,
-          "other_instr_per_sample": 153.36,
-          "ours_instr_per_sample": 153.36,
-          "ratio": 1.0,
+          "informational": [
+            {
+              "compared_with": "sdrk fallback",
+              "label": "information: fallback",
+              "other_instr_per_sample": 153.24,
+              "other_snr_db": 142.47,
+              "ours_instr_per_sample": 153.24,
+              "ratio": 1.0
+            }
+          ],
+          "other_instr_per_sample": 315.56,
+          "ours_instr_per_sample": 153.24,
+          "ratio": 0.49,
           "snr_db": {
-            "other": 142.32,
-            "ours": 142.32
+            "other": 144.9,
+            "ours": 142.47
+          },
+          "status": "info",
+          "verdict": "info"
+        },
+        "pulse_match_block_liquid": {
+          "compared_with": "liquid-dsp 1.8.3 firfilt_crcf (firfilt.proto.c), the SIMD dot product of the level (the portable loop at simd128)",
+          "goal": true,
+          "informational": [
+            {
+              "compared_with": "sdrk fallback",
+              "label": "information: fallback",
+              "other_instr_per_sample": 153.24,
+              "other_snr_db": 142.47,
+              "ours_instr_per_sample": 153.24,
+              "ratio": 1.0
+            }
+          ],
+          "other_instr_per_sample": 344.26,
+          "ours_instr_per_sample": 153.24,
+          "ratio": 0.45,
+          "snr_db": {
+            "other": 140.69,
+            "ours": 142.47
           },
           "status": "info",
           "verdict": "info"
         },
         "pulse_shape_block": {
-          "compared_with": "sdrk fallback",
+          "compared_with": "GNU Radio interp_fir_filter_ccf (interp_fir_filter_impl.cc of gr-filter) with VOLK's dispatched dot product of the level (volk_32fc_32f_dot_prod_32fc_a, the aligned tap copies of fir_filter)",
           "goal": true,
-          "other_instr_per_sample": 37.84,
+          "informational": [
+            {
+              "compared_with": "sdrk fallback",
+              "label": "information: fallback",
+              "other_instr_per_sample": 37.84,
+              "other_snr_db": 143.84,
+              "ours_instr_per_sample": 37.84,
+              "ratio": 1.0
+            }
+          ],
+          "other_instr_per_sample": 148.22,
           "ours_instr_per_sample": 37.84,
-          "ratio": 1.0,
+          "ratio": 0.26,
           "snr_db": {
-            "other": 143.82,
-            "ours": 143.82
+            "other": 142.4,
+            "ours": 143.84
+          },
+          "status": "info",
+          "verdict": "info"
+        },
+        "pulse_shape_block_liquid": {
+          "compared_with": "liquid-dsp 1.8.3 firinterp_crcf (firinterp.proto.c, firpfb.proto.c), the SIMD dot products of the level (the portable loop at simd128)",
+          "goal": true,
+          "informational": [
+            {
+              "compared_with": "sdrk fallback",
+              "label": "information: fallback",
+              "other_instr_per_sample": 37.84,
+              "other_snr_db": 143.84,
+              "ours_instr_per_sample": 37.84,
+              "ratio": 1.0
+            }
+          ],
+          "other_instr_per_sample": 153.96,
+          "ours_instr_per_sample": 37.84,
+          "ratio": 0.25,
+          "snr_db": {
+            "other": 142.9,
+            "ours": 143.84
           },
           "status": "info",
           "verdict": "info"

@@ -162,8 +162,8 @@ fi
 stamp="$prefix/refs.stamp"
 want=$( (cat "${BASH_SOURCE[0]}" "$here/volk-wasm.c" "$here/gr-agc.c" "$here/gr-squelch.c" "$here/kfr-biquad.cpp" "$here/cmsis-biquad.c" "$here/cmsis-m4-heap.c" \
     "$here/cmsis-dsp.c" "$here/gr-rotator.c" "$here/gr-fm-mod.c" "$here/gr-quad-demod.c" "$here/gr-fast-atan2f.c" "$here/gr-deemph.c" "$here/gr-crc.c" "$here/gr-scrambler.c" "$here/gr-snr-est.c" \
-    "$here/liquid-dotprod.c" "$here/liquid-dcblock.c" "$here/liquid-halfband.c" "$here/liquid-nco.c" "$here/liquid-ampmodem.c" "$here/liquid-randn.c" "$here/gr-fastnoise.c" "$here/gr-dvbs2-plscramble.c" "$here/airspy-iqconv.c" \
-    "$here/volk-nofma.c" "$here/volk-generic.c" "$here/gr-costas.c" "$here/gr-equalizer.c" "$here/gr-constellation.c" "$here/liquid-channelizer.c" "$here/liquid-fftfilt.c" "$here/gr-symbol-sync.c" "$here/gr-psk-chain.c" "$here/gr-fir-volk.h"; echo "$platform|$cc_version|$cxx_version|$kfr_cxx_version") | sha256sum | cut -d ' ' -f 1)
+    "$here/liquid-dotprod.c" "$here/liquid-dcblock.c" "$here/liquid-halfband.c" "$here/liquid-fir.c" "$here/liquid-nco.c" "$here/liquid-ampmodem.c" "$here/liquid-randn.c" "$here/gr-fastnoise.c" "$here/gr-dvbs2-plscramble.c" "$here/airspy-iqconv.c" \
+    "$here/volk-nofma.c" "$here/volk-generic.c" "$here/gr-costas.c" "$here/gr-equalizer.c" "$here/gr-constellation.c" "$here/liquid-channelizer.c" "$here/liquid-fftfilt.c" "$here/gr-symbol-sync.c" "$here/gr-psk-chain.c" "$here/gr-fir.c" "$here/gr-fir-volk.h"; echo "$platform|$cc_version|$cxx_version|$kfr_cxx_version") | sha256sum | cut -d ' ' -f 1)
 if [ -f "$stamp" ] && [ "$(cat "$stamp")" = "$want" ]; then
     exit 0
 fi
@@ -308,7 +308,8 @@ build_gr_fallback() {
 build_gr_symbol_sync() {
     $cc $GR_AGC_FLAGS -c "$here/gr-symbol-sync.c" -o "$work/gr-symbol-sync.o"
     $cc $GR_AGC_FLAGS -c "$here/gr-psk-chain.c" -o "$work/gr-psk-chain.o"
-    $ar rcs "$prefix/lib/libgrsymsync.a" "$work/gr-symbol-sync.o" "$work/gr-psk-chain.o"
+    $cc $GR_AGC_FLAGS -I "$work/volk/include" -I "$work/volk/kernels" -c "$here/gr-fir.c" -o "$work/gr-fir.o"
+    $ar rcs "$prefix/lib/libgrsymsync.a" "$work/gr-symbol-sync.o" "$work/gr-psk-chain.o" "$work/gr-fir.o"
 }
 
 # The loop of GNU Radio's costas_loop_cc, compiled with the same generic flags as agc_cc: the
@@ -335,7 +336,7 @@ build_gr_equalizer() {
 # sdrk_gr_volk_ so that it can sit next to the generic build in one binary.
 build_gr_volk_equalizers() {
     local f names defs
-    for f in gr-equalizer gr-constellation; do
+    for f in gr-equalizer gr-constellation gr-fir; do
         names=$(grep -o 'sdrk_gr_[a-z0-9_]*' "$here/$f.c" | sort -u)
         defs=()
         for n in $names; do
@@ -344,7 +345,7 @@ build_gr_volk_equalizers() {
         $cc $GR_AGC_FLAGS -DSDRK_GR_VOLK "${defs[@]}" -I "$here" -I "$prefix/include" -I "$work/volk/include" -I "$work/volk/kernels" \
             -c "$here/$f.c" -o "$work/$f-volk.o"
     done
-    $ar rcs "$prefix/lib/libgrvolk.a" "$work/gr-equalizer-volk.o" "$work/gr-constellation-volk.o"
+    $ar rcs "$prefix/lib/libgrvolk.a" "$work/gr-equalizer-volk.o" "$work/gr-constellation-volk.o" "$work/gr-fir-volk.o"
 }
 
 # GNU Radio's square-QAM receivers (constellation_receiver_cb and linear_equalizer on a
@@ -695,6 +696,13 @@ build_liquid_halfband() {
                 -DSDRK_LIQUID_FFTW=$f -c "$here/liquid-fftfilt.c" -o "$dir/fftfilt$f.o"
             objects+=("$dir/fftfilt$f.o")
         done
+        # The pulse filters firinterp_crcf and firfilt_crcf (liquid-fir.c, issue #169).
+        for f in 1 2; do
+            $cc $BIQUAD_OPT $march "${inc[@]}" -I "$src/src/filter/src" -DSDRK_LIQUID_KIND=$f \
+                -DSDRK_LIQUID_SIMD="$(liquid_simd "$level" crcf)" $LIQUID_HB_RENAME -Wno-unused-result \
+                -c "$here/liquid-fir.c" -o "$dir/fir$f.o"
+            objects+=("$dir/fir$f.o")
+        done
         for f in 1 2 3; do
             if [ "$f" = 1 ]; then
                 simd=$(liquid_simd "$level" crcf)
@@ -892,7 +900,7 @@ esac
             grsquelch) entry="\"gnuradio_pwr_squelch_cc\": { \"version\": \"main at ec1bf15\", \"sha256\": \"$(sha256sum "$here/gr-squelch.c" | cut -d ' ' -f 1)\", \"build\": \"$GR_AGC_FLAGS\" }" ;;
             grfallback) entry="\"gnuradio_fallback_references\": { \"version\": \"main at ec1bf15\", \"sha256\": \"$(cat "$here/gr-rotator.c" "$here/gr-fm-mod.c" "$here/gr-quad-demod.c" "$here/gr-fast-atan2f.c" "$here/gr-deemph.c" | sha256sum | cut -d ' ' -f 1)\", \"build\": \"gr-rotator.c gr-fm-mod.c gr-quad-demod.c gr-fast-atan2f.c gr-deemph.c (VOLK $VOLK_VERSION generic multiply_conjugate): $GR_AGC_FLAGS\" }" ;;
             grcostas) entry="\"gnuradio_costas_loop_cc\": { \"version\": \"main at ec1bf15\", \"sha256\": \"$(sha256sum "$here/gr-costas.c" | cut -d ' ' -f 1)\", \"build\": \"gr-costas.c (costas_loop_cc, order 2 and 4, use_snr false): $GR_AGC_FLAGS\" }" ;;
-            grvolk) entry="\"gnuradio_linear_equalizer_volk\": { \"version\": \"main at ec1bf15\", \"sha256\": \"$(cat "$here/gr-equalizer.c" "$here/gr-constellation.c" "$here/gr-fir-volk.h" | sha256sum | cut -d ' ' -f 1)\", \"build\": \"gr-equalizer.c and gr-constellation.c with -DSDRK_GR_VOLK (linear_equalizer with the dispatched VOLK dot products and the aligned tap copies of fir_filter, linked to libvolk): $GR_AGC_FLAGS\" }" ;;
+            grvolk) entry="\"gnuradio_linear_equalizer_volk\": { \"version\": \"main at ec1bf15\", \"sha256\": \"$(cat "$here/gr-equalizer.c" "$here/gr-constellation.c" "$here/gr-fir.c" "$here/gr-fir-volk.h" | sha256sum | cut -d ' ' -f 1)\", \"build\": \"gr-equalizer.c, gr-constellation.c and gr-fir.c with -DSDRK_GR_VOLK (linear_equalizer, fir_filter_ccf and interp_fir_filter_ccf with the dispatched VOLK dot products and the aligned tap copies of fir_filter, linked to libvolk): $GR_AGC_FLAGS\" }" ;;
             grsymsync) entry="\"gnuradio_symbol_sync_cc\": { \"version\": \"main at ec1bf15\", \"sha256\": \"$(cat "$here/gr-symbol-sync.c" "$here/gr-psk-chain.c" | sha256sum | cut -d ' ' -f 1)\", \"build\": \"gr-symbol-sync.c (symbol_sync_cc, TED_GARDNER, IR_MMSE_8TAP, one output per symbol, no tags) and gr-psk-chain.c (fir_filter_ccf, constellation_decoder_cb with constellation_qpsk): $GR_AGC_FLAGS\" }" ;;
             grequalizer) entry="\"gnuradio_linear_equalizer\": { \"version\": \"main at ec1bf15\", \"sha256\": \"$(sha256sum "$here/gr-equalizer.c" | cut -d ' ' -f 1)\", \"build\": \"gr-equalizer.c (linear_equalizer with adaptive_algorithm_nlms, QPSK, decision-directed, VOLK $VOLK_VERSION generic dot products): $GR_AGC_FLAGS\" }" ;;
             grconstellation) entry="\"gnuradio_constellation\": { \"version\": \"main at ec1bf15\", \"sha256\": \"$(sha256sum "$here/gr-constellation.c" | cut -d ' ' -f 1)\", \"build\": \"gr-constellation.c (constellation_receiver_cb and linear_equalizer with adaptive_algorithm_nlms on a constellation_rect, VOLK $VOLK_VERSION generic dot products): $GR_AGC_FLAGS\" }" ;;

@@ -1575,7 +1575,8 @@ Reference model `skylake`, counter-model `znver2`, mode `whole-loop`; execution 
 | `preemph_limit_q15` | 51.64 | 51.64 | 1.00 | 43.84 | 43.84 | 1.00 | sdrk fallback |
 | `preemph_limit_stereo` | 21.13 | 21.13 | 1.00 | 22.70 | 22.70 | 1.00 | sdrk fallback |
 | `psk_demod_block` | 81.22 | 451.08 | 0.18 | 70.68 | 370.98 | 0.19 | GNU Radio fir_filter_ccf + symbol_sync_cc + costas_loop_cc + constellation_decoder_cb (the sum of the blocks of the receiver chain, generic compiler flags; no acquisition and no lock watches) |
-| `psk_mod_block` | 8.98 | 8.98 | 1.00 | 11.40 | 11.40 | 1.00 | sdrk fallback |
+| `psk_mod_block` | 8.98 | 198.05 | 0.05 | 11.40 | 193.95 | 0.06 | GNU Radio constellation_modulator as the sum of its blocks: pack_k_bits_bb + chunks_to_symbols_bc + pfb_arb_resampler_ccf (32 filters of 88 taps and their derivative filters), VOLK's dispatched dot product of the level |
+| `psk_mod_block_liquid` | 8.98 | 77.95 | 0.12 | 11.40 | 66.01 | 0.17 | liquid-dsp 1.8.3 modemcf_modulate (arbitrary-constellation modem) + firinterp_crcf (the root-raised cosine of the block), the SIMD dot products of the level (the portable loop at simd128) |
 | `pulse_match_block` | 42.97 | 94.30 | 0.46 | 38.63 | 96.04 | 0.40 | GNU Radio fir_filter_ccf (fir_filter_ccf_impl.cc of gr-filter) with VOLK's dispatched dot product of the level (volk_32fc_32f_dot_prod_32fc_a, the aligned tap copies of fir_filter) |
 | `pulse_match_block_liquid` | 42.97 | 227.97 | 0.19 | 38.63 | 186.23 | 0.21 | liquid-dsp 1.8.3 firfilt_crcf (firfilt.proto.c), the SIMD dot product of the level (the portable loop at simd128) |
 | `pulse_shape_block` | 8.15 | 48.24 | 0.17 | 10.37 | 52.72 | 0.20 | GNU Radio interp_fir_filter_ccf (interp_fir_filter_impl.cc of gr-filter) with VOLK's dispatched dot product of the level (volk_32fc_32f_dot_prod_32fc_a, the aligned tap copies of fir_filter) |
@@ -1586,8 +1587,10 @@ Reference model `skylake`, counter-model `znver2`, mode `whole-loop`; execution 
 | `qam_demod_search_block` | 121.02 | 121.02 | 1.00 | 109.51 | 109.51 | 1.00 | sdrk fallback |
 | `qam_frame_decode_block` | 131.83 | 131.85 | 1.00 | 120.67 | 120.68 | 1.00 | sdrk fallback |
 | `qam_frame_encode_block` | 10.11 | 10.11 | 1.00 | 12.23 | 12.23 | 1.00 | sdrk fallback |
-| `qam_mod_block` | 9.08 | 9.08 | 1.00 | 11.26 | 11.26 | 1.00 | sdrk fallback |
-| `qam_mod_qam256_block` | 10.03 | 10.03 | 1.00 | 12.39 | 12.39 | 1.00 | sdrk fallback |
+| `qam_mod_block` | 9.08 | 198.63 | 0.05 | 11.25 | 194.53 | 0.06 | GNU Radio constellation_modulator as the sum of its blocks: pack_k_bits_bb + chunks_to_symbols_bc + pfb_arb_resampler_ccf (32 filters of 88 taps and their derivative filters), VOLK's dispatched dot product of the level |
+| `qam_mod_block_liquid` | 9.08 | 78.46 | 0.12 | 11.25 | 66.51 | 0.17 | liquid-dsp 1.8.3 modemcf_modulate (arbitrary-constellation modem) + firinterp_crcf (the root-raised cosine of the block), the SIMD dot products of the level (the portable loop at simd128) |
+| `qam_mod_qam256_block` | 10.03 | 199.78 | 0.05 | 12.32 | 195.67 | 0.06 | GNU Radio constellation_modulator as the sum of its blocks: pack_k_bits_bb + chunks_to_symbols_bc + pfb_arb_resampler_ccf (32 filters of 88 taps and their derivative filters), VOLK's dispatched dot product of the level |
+| `qam_mod_qam256_block_liquid` | 10.03 | 79.47 | 0.13 | 12.32 | 67.53 | 0.18 | liquid-dsp 1.8.3 modemcf_modulate (arbitrary-constellation modem) + firinterp_crcf (the root-raised cosine of the block), the SIMD dot products of the level (the portable loop at simd128) |
 | `qam_soft_bits_qam1024` | 7.89 | 7.88 | 1.00 | 9.05 | 9.05 | 1.00 | sdrk fallback |
 | `qam_soft_bits_qam16` | 1.35 | 1864.75 | 0.00 | 1.49 | 1588.52 | 0.00 | GNU Radio constellation_soft_decoder_cf with calc_soft_dec (constellation.cc of gr-digital; the exact log-likelihood ratio over all points, npwr 1, not max-log; no vector allocation per symbol, so faster than GNU Radio's object code) |
 | `qam_soft_bits_qam16_liquid` | 1.35 | 224.89 | 0.01 | 1.49 | 227.62 | 0.01 | liquid-dsp 1.8.3 modemcf_demodulate_soft of its own QAM modem (modem_common.proto.c; soft bytes with liquid's scale and labelling; the hard symbol and the soft bits per symbol) |
@@ -1885,7 +1888,8 @@ Reference model `skylake`, counter-model `znver2`, mode `whole-loop`; execution 
 | `preemph_limit_q15` | 51.64 | 51.64 | 1.00 | 43.84 | 43.84 | 1.00 | sdrk fallback |
 | `preemph_limit_stereo` | 20.85 | 20.85 | 1.00 | 21.65 | 21.65 | 1.00 | sdrk fallback |
 | `psk_demod_block` | 81.27 | 451.08 | 0.18 | 70.04 | 370.98 | 0.19 | GNU Radio fir_filter_ccf + symbol_sync_cc + costas_loop_cc + constellation_decoder_cb (the sum of the blocks of the receiver chain, generic compiler flags; no acquisition and no lock watches) |
-| `psk_mod_block` | 8.64 | 8.64 | 1.00 | 10.62 | 10.62 | 1.00 | sdrk fallback |
+| `psk_mod_block` | 8.64 | 216.10 | 0.04 | 10.63 | 212.97 | 0.05 | GNU Radio constellation_modulator as the sum of its blocks: pack_k_bits_bb + chunks_to_symbols_bc + pfb_arb_resampler_ccf (32 filters of 88 taps and their derivative filters), VOLK's dispatched dot product of the level |
+| `psk_mod_block_liquid` | 8.64 | 77.95 | 0.11 | 10.63 | 66.00 | 0.16 | liquid-dsp 1.8.3 modemcf_modulate (arbitrary-constellation modem) + firinterp_crcf (the root-raised cosine of the block), the SIMD dot products of the level (the portable loop at simd128) |
 | `pulse_match_block` | 42.97 | 103.32 | 0.42 | 38.63 | 105.37 | 0.37 | GNU Radio fir_filter_ccf (fir_filter_ccf_impl.cc of gr-filter) with VOLK's dispatched dot product of the level (volk_32fc_32f_dot_prod_32fc_a, the aligned tap copies of fir_filter) |
 | `pulse_match_block_liquid` | 42.97 | 228.29 | 0.19 | 38.63 | 186.56 | 0.21 | liquid-dsp 1.8.3 firfilt_crcf (firfilt.proto.c), the SIMD dot product of the level (the portable loop at simd128) |
 | `pulse_shape_block` | 7.80 | 50.59 | 0.15 | 9.59 | 55.89 | 0.17 | GNU Radio interp_fir_filter_ccf (interp_fir_filter_impl.cc of gr-filter) with VOLK's dispatched dot product of the level (volk_32fc_32f_dot_prod_32fc_a, the aligned tap copies of fir_filter) |
@@ -1896,8 +1900,10 @@ Reference model `skylake`, counter-model `znver2`, mode `whole-loop`; execution 
 | `qam_demod_search_block` | 119.46 | 119.46 | 1.00 | 106.96 | 106.96 | 1.00 | sdrk fallback |
 | `qam_frame_decode_block` | 131.61 | 131.61 | 1.00 | 119.18 | 119.18 | 1.00 | sdrk fallback |
 | `qam_frame_encode_block` | 9.77 | 9.77 | 1.00 | 11.45 | 11.45 | 1.00 | sdrk fallback |
-| `qam_mod_block` | 8.74 | 8.74 | 1.00 | 10.48 | 10.48 | 1.00 | sdrk fallback |
-| `qam_mod_qam256_block` | 10.00 | 10.00 | 1.00 | 11.46 | 11.46 | 1.00 | sdrk fallback |
+| `qam_mod_block` | 8.74 | 216.68 | 0.04 | 10.48 | 213.55 | 0.05 | GNU Radio constellation_modulator as the sum of its blocks: pack_k_bits_bb + chunks_to_symbols_bc + pfb_arb_resampler_ccf (32 filters of 88 taps and their derivative filters), VOLK's dispatched dot product of the level |
+| `qam_mod_block_liquid` | 8.74 | 78.45 | 0.11 | 10.48 | 66.50 | 0.16 | liquid-dsp 1.8.3 modemcf_modulate (arbitrary-constellation modem) + firinterp_crcf (the root-raised cosine of the block), the SIMD dot products of the level (the portable loop at simd128) |
+| `qam_mod_qam256_block` | 10.00 | 217.84 | 0.05 | 11.45 | 214.69 | 0.05 | GNU Radio constellation_modulator as the sum of its blocks: pack_k_bits_bb + chunks_to_symbols_bc + pfb_arb_resampler_ccf (32 filters of 88 taps and their derivative filters), VOLK's dispatched dot product of the level |
+| `qam_mod_qam256_block_liquid` | 10.00 | 79.47 | 0.13 | 11.45 | 67.52 | 0.17 | liquid-dsp 1.8.3 modemcf_modulate (arbitrary-constellation modem) + firinterp_crcf (the root-raised cosine of the block), the SIMD dot products of the level (the portable loop at simd128) |
 | `qam_soft_bits_qam1024` | 7.20 | 7.19 | 1.00 | 8.07 | 8.06 | 1.00 | sdrk fallback |
 | `qam_soft_bits_qam16` | 1.35 | 1864.75 | 0.00 | 1.49 | 1588.52 | 0.00 | GNU Radio constellation_soft_decoder_cf with calc_soft_dec (constellation.cc of gr-digital; the exact log-likelihood ratio over all points, npwr 1, not max-log; no vector allocation per symbol, so faster than GNU Radio's object code) |
 | `qam_soft_bits_qam16_liquid` | 1.35 | 220.41 | 0.01 | 1.49 | 226.70 | 0.01 | liquid-dsp 1.8.3 modemcf_demodulate_soft of its own QAM modem (modem_common.proto.c; soft bytes with liquid's scale and labelling; the hard symbol and the soft bits per symbol) |
@@ -2196,7 +2202,8 @@ Reference model `znver3`, counter-model `alderlake`, mode `whole-loop`; executio
 | `preemph_limit_q15` | 27.62 | 27.62 | 1.00 | 18.69 | 18.69 | 1.00 | sdrk fallback |
 | `preemph_limit_stereo` | 16.71 | 16.71 | 1.00 | 22.32 | 22.32 | 1.00 | sdrk fallback |
 | `psk_demod_block` | 39.53 | 1166.49 | 0.03 | 45.81 | 417.25 | 0.11 | GNU Radio fir_filter_ccf + symbol_sync_cc + costas_loop_cc + constellation_decoder_cb (the sum of the blocks of the receiver chain, generic compiler flags; no acquisition and no lock watches) |
-| `psk_mod_block` | 4.36 | 4.36 | 1.00 | 4.24 | 4.24 | 1.00 | sdrk fallback |
+| `psk_mod_block` | 4.37 | 180.44 | 0.02 | 4.25 | 249.99 | 0.02 | GNU Radio constellation_modulator as the sum of its blocks: pack_k_bits_bb + chunks_to_symbols_bc + pfb_arb_resampler_ccf (32 filters of 88 taps and their derivative filters), VOLK's dispatched dot product of the level |
+| `psk_mod_block_liquid` | 4.37 | 57.45 | 0.08 | 4.25 | 57.04 | 0.07 | liquid-dsp 1.8.3 modemcf_modulate (arbitrary-constellation modem) + firinterp_crcf (the root-raised cosine of the block), the SIMD dot products of the level (the portable loop at simd128) |
 | `pulse_match_block` | 12.41 | 878.31 | 0.01 | 12.07 | 151.26 | 0.08 | GNU Radio fir_filter_ccf (fir_filter_ccf_impl.cc of gr-filter) with VOLK's dispatched dot product of the level (volk_32fc_32f_dot_prod_32fc_a, the aligned tap copies of fir_filter) |
 | `pulse_match_block_liquid` | 12.41 | 110.01 | 0.11 | 12.07 | 94.89 | 0.13 | liquid-dsp 1.8.3 firfilt_crcf (firfilt.proto.c), the SIMD dot product of the level (the portable loop at simd128) |
 | `pulse_shape_block` | 3.56 | 64.95 | 0.05 | 3.51 | 69.12 | 0.05 | GNU Radio interp_fir_filter_ccf (interp_fir_filter_impl.cc of gr-filter) with VOLK's dispatched dot product of the level (volk_32fc_32f_dot_prod_32fc_a, the aligned tap copies of fir_filter) |
@@ -2207,8 +2214,10 @@ Reference model `znver3`, counter-model `alderlake`, mode `whole-loop`; executio
 | `qam_demod_search_block` | 67.07 | 67.07 | 1.00 | 75.94 | 75.94 | 1.00 | sdrk fallback |
 | `qam_frame_decode_block` | 76.35 | 76.35 | 1.00 | 83.11 | 83.11 | 1.00 | sdrk fallback |
 | `qam_frame_encode_block` | 5.26 | 5.26 | 1.00 | 5.45 | 5.45 | 1.00 | sdrk fallback |
-| `qam_mod_block` | 4.39 | 4.39 | 1.00 | 4.54 | 4.54 | 1.00 | sdrk fallback |
-| `qam_mod_qam256_block` | 4.95 | 4.95 | 1.00 | 4.71 | 4.71 | 1.00 | sdrk fallback |
+| `qam_mod_block` | 4.39 | 180.83 | 0.02 | 4.54 | 250.52 | 0.02 | GNU Radio constellation_modulator as the sum of its blocks: pack_k_bits_bb + chunks_to_symbols_bc + pfb_arb_resampler_ccf (32 filters of 88 taps and their derivative filters), VOLK's dispatched dot product of the level |
+| `qam_mod_block_liquid` | 4.39 | 57.96 | 0.08 | 4.54 | 57.80 | 0.08 | liquid-dsp 1.8.3 modemcf_modulate (arbitrary-constellation modem) + firinterp_crcf (the root-raised cosine of the block), the SIMD dot products of the level (the portable loop at simd128) |
+| `qam_mod_qam256_block` | 4.95 | 181.61 | 0.03 | 4.71 | 251.58 | 0.02 | GNU Radio constellation_modulator as the sum of its blocks: pack_k_bits_bb + chunks_to_symbols_bc + pfb_arb_resampler_ccf (32 filters of 88 taps and their derivative filters), VOLK's dispatched dot product of the level |
+| `qam_mod_qam256_block_liquid` | 4.95 | 58.98 | 0.08 | 4.71 | 59.33 | 0.08 | liquid-dsp 1.8.3 modemcf_modulate (arbitrary-constellation modem) + firinterp_crcf (the root-raised cosine of the block), the SIMD dot products of the level (the portable loop at simd128) |
 | `qam_soft_bits_qam1024` | 5.53 | 5.53 | 1.00 | 4.31 | 4.31 | 1.00 | sdrk fallback |
 | `qam_soft_bits_qam16` | 0.52 | 1246.72 | 0.00 | 1.02 | 1332.14 | 0.00 | GNU Radio constellation_soft_decoder_cf with calc_soft_dec (constellation.cc of gr-digital; the exact log-likelihood ratio over all points, npwr 1, not max-log; no vector allocation per symbol, so faster than GNU Radio's object code) |
 | `qam_soft_bits_qam16_liquid` | 0.52 | 164.76 | 0.00 | 1.02 | 165.37 | 0.01 | liquid-dsp 1.8.3 modemcf_demodulate_soft of its own QAM modem (modem_common.proto.c; soft bytes with liquid's scale and labelling; the hard symbol and the soft bits per symbol) |
@@ -2507,7 +2516,8 @@ Reference model `znver4`, counter-model `sapphirerapids`, mode `whole-loop`; exe
 | `preemph_limit_q15` | 26.71 | 26.71 | 1.00 | 18.69 | 18.69 | 1.00 | sdrk fallback |
 | `preemph_limit_stereo` | 15.64 | 15.64 | 1.00 | 13.07 | 13.07 | 1.00 | sdrk fallback |
 | `psk_demod_block` | 36.33 | 1160.84 | 0.03 | 41.50 | 417.14 | 0.10 | GNU Radio fir_filter_ccf + symbol_sync_cc + costas_loop_cc + constellation_decoder_cb (the sum of the blocks of the receiver chain, generic compiler flags; no acquisition and no lock watches) |
-| `psk_mod_block` | 4.65 | 4.65 | 1.00 | 3.57 | 3.57 | 1.00 | sdrk fallback |
+| `psk_mod_block` | 4.66 | 216.38 | 0.02 | 3.57 | 250.10 | 0.01 | GNU Radio constellation_modulator as the sum of its blocks: pack_k_bits_bb + chunks_to_symbols_bc + pfb_arb_resampler_ccf (32 filters of 88 taps and their derivative filters), VOLK's dispatched dot product of the level |
+| `psk_mod_block_liquid` | 4.66 | 49.88 | 0.09 | 3.57 | 57.19 | 0.06 | liquid-dsp 1.8.3 modemcf_modulate (arbitrary-constellation modem) + firinterp_crcf (the root-raised cosine of the block), the SIMD dot products of the level (the portable loop at simd128) |
 | `pulse_match_block` | 10.87 | 878.11 | 0.01 | 10.43 | 150.71 | 0.07 | GNU Radio fir_filter_ccf (fir_filter_ccf_impl.cc of gr-filter) with VOLK's dispatched dot product of the level (volk_32fc_32f_dot_prod_32fc_a, the aligned tap copies of fir_filter) |
 | `pulse_match_block_liquid` | 10.87 | 72.18 | 0.15 | 10.43 | 69.68 | 0.15 | liquid-dsp 1.8.3 firfilt_crcf (firfilt.proto.c), the SIMD dot product of the level (the portable loop at simd128) |
 | `pulse_shape_block` | 3.91 | 170.09 | 0.02 | 2.86 | 86.24 | 0.03 | GNU Radio interp_fir_filter_ccf (interp_fir_filter_impl.cc of gr-filter) with VOLK's dispatched dot product of the level (volk_32fc_32f_dot_prod_32fc_a, the aligned tap copies of fir_filter) |
@@ -2518,8 +2528,10 @@ Reference model `znver4`, counter-model `sapphirerapids`, mode `whole-loop`; exe
 | `qam_demod_search_block` | 65.75 | 65.75 | 1.00 | 70.92 | 70.92 | 1.00 | sdrk fallback |
 | `qam_frame_decode_block` | 73.87 | 73.87 | 1.00 | 78.15 | 78.15 | 1.00 | sdrk fallback |
 | `qam_frame_encode_block` | 5.02 | 5.02 | 1.00 | 4.12 | 4.12 | 1.00 | sdrk fallback |
-| `qam_mod_block` | 4.17 | 4.17 | 1.00 | 3.21 | 3.21 | 1.00 | sdrk fallback |
-| `qam_mod_qam256_block` | 4.41 | 4.41 | 1.00 | 3.54 | 3.54 | 1.00 | sdrk fallback |
+| `qam_mod_block` | 4.15 | 216.77 | 0.02 | 3.21 | 250.63 | 0.01 | GNU Radio constellation_modulator as the sum of its blocks: pack_k_bits_bb + chunks_to_symbols_bc + pfb_arb_resampler_ccf (32 filters of 88 taps and their derivative filters), VOLK's dispatched dot product of the level |
+| `qam_mod_block_liquid` | 4.15 | 50.39 | 0.08 | 3.21 | 57.96 | 0.06 | liquid-dsp 1.8.3 modemcf_modulate (arbitrary-constellation modem) + firinterp_crcf (the root-raised cosine of the block), the SIMD dot products of the level (the portable loop at simd128) |
+| `qam_mod_qam256_block` | 4.38 | 217.54 | 0.02 | 3.54 | 251.68 | 0.01 | GNU Radio constellation_modulator as the sum of its blocks: pack_k_bits_bb + chunks_to_symbols_bc + pfb_arb_resampler_ccf (32 filters of 88 taps and their derivative filters), VOLK's dispatched dot product of the level |
+| `qam_mod_qam256_block_liquid` | 4.38 | 51.41 | 0.09 | 3.54 | 59.48 | 0.06 | liquid-dsp 1.8.3 modemcf_modulate (arbitrary-constellation modem) + firinterp_crcf (the root-raised cosine of the block), the SIMD dot products of the level (the portable loop at simd128) |
 | `qam_soft_bits_qam1024` | 2.05 | 2.05 | 1.00 | 2.06 | 2.06 | 1.00 | sdrk fallback |
 | `qam_soft_bits_qam16` | 0.36 | 1224.82 | 0.00 | 0.35 | 1335.74 | 0.00 | GNU Radio constellation_soft_decoder_cf with calc_soft_dec (constellation.cc of gr-digital; the exact log-likelihood ratio over all points, npwr 1, not max-log; no vector allocation per symbol, so faster than GNU Radio's object code) |
 | `qam_soft_bits_qam16_liquid` | 0.36 | 159.85 | 0.00 | 0.35 | 173.32 | 0.00 | liquid-dsp 1.8.3 modemcf_demodulate_soft of its own QAM modem (modem_common.proto.c; soft bytes with liquid's scale and labelling; the hard symbol and the soft bits per symbol) |
@@ -2818,7 +2830,8 @@ Reference model `cortex-a72`, counter-model `cortex-a76`, mode `whole-loop`; exe
 | `preemph_limit_q15` | 55.11 | 55.11 | 1.00 | 40.70 | 40.70 | 1.00 | sdrk fallback |
 | `preemph_limit_stereo` | 24.12 | 24.12 | 1.00 | 22.90 | 22.90 | 1.00 | sdrk fallback |
 | `psk_demod_block` | 92.51 | 363.00 | 0.25 | 59.41 | 274.03 | 0.22 | GNU Radio fir_filter_ccf + symbol_sync_cc + costas_loop_cc + constellation_decoder_cb (the sum of the blocks of the receiver chain, generic compiler flags; no acquisition and no lock watches) |
-| `psk_mod_block` | 13.98 | 13.98 | 1.00 | 13.05 | 13.05 | 1.00 | sdrk fallback |
+| `psk_mod_block` | 14.00 | 340.13 | 0.04 | 13.06 | 264.83 | 0.05 | GNU Radio constellation_modulator as the sum of its blocks: pack_k_bits_bb + chunks_to_symbols_bc + pfb_arb_resampler_ccf (32 filters of 88 taps and their derivative filters), VOLK's dispatched dot product of the level |
+| `psk_mod_block_liquid` | 14.00 | 115.22 | 0.12 | 13.06 | 109.07 | 0.12 | liquid-dsp 1.8.3 modemcf_modulate (arbitrary-constellation modem) + firinterp_crcf (the root-raised cosine of the block), the SIMD dot products of the level (the portable loop at simd128) |
 | `pulse_match_block` | 50.35 | 179.70 | 0.28 | 31.64 | 129.18 | 0.24 | GNU Radio fir_filter_ccf (fir_filter_ccf_impl.cc of gr-filter) with VOLK's dispatched dot product of the level (volk_32fc_32f_dot_prod_32fc_a, the aligned tap copies of fir_filter) |
 | `pulse_match_block_liquid` | 50.35 | 296.62 | 0.17 | 31.64 | 246.95 | 0.13 | liquid-dsp 1.8.3 firfilt_crcf (firfilt.proto.c), the SIMD dot product of the level (the portable loop at simd128) |
 | `pulse_shape_block` | 13.00 | 85.68 | 0.15 | 11.83 | 52.71 | 0.22 | GNU Radio interp_fir_filter_ccf (interp_fir_filter_impl.cc of gr-filter) with VOLK's dispatched dot product of the level (volk_32fc_32f_dot_prod_32fc_a, the aligned tap copies of fir_filter) |
@@ -2829,8 +2842,10 @@ Reference model `cortex-a72`, counter-model `cortex-a76`, mode `whole-loop`; exe
 | `qam_demod_search_block` | 136.80 | 136.80 | 1.00 | 100.50 | 100.50 | 1.00 | sdrk fallback |
 | `qam_frame_decode_block` | 152.19 | 152.19 | 1.00 | 115.26 | 115.26 | 1.00 | sdrk fallback |
 | `qam_frame_encode_block` | 15.11 | 15.11 | 1.00 | 14.15 | 14.15 | 1.00 | sdrk fallback |
-| `qam_mod_block` | 13.98 | 13.98 | 1.00 | 13.08 | 13.08 | 1.00 | sdrk fallback |
-| `qam_mod_qam256_block` | 14.59 | 14.59 | 1.00 | 13.92 | 13.92 | 1.00 | sdrk fallback |
+| `qam_mod_block` | 13.99 | 341.01 | 0.04 | 13.08 | 265.71 | 0.05 | GNU Radio constellation_modulator as the sum of its blocks: pack_k_bits_bb + chunks_to_symbols_bc + pfb_arb_resampler_ccf (32 filters of 88 taps and their derivative filters), VOLK's dispatched dot product of the level |
+| `qam_mod_block_liquid` | 13.99 | 115.72 | 0.12 | 13.08 | 109.57 | 0.12 | liquid-dsp 1.8.3 modemcf_modulate (arbitrary-constellation modem) + firinterp_crcf (the root-raised cosine of the block), the SIMD dot products of the level (the portable loop at simd128) |
+| `qam_mod_qam256_block` | 14.60 | 342.77 | 0.04 | 13.92 | 267.47 | 0.05 | GNU Radio constellation_modulator as the sum of its blocks: pack_k_bits_bb + chunks_to_symbols_bc + pfb_arb_resampler_ccf (32 filters of 88 taps and their derivative filters), VOLK's dispatched dot product of the level |
+| `qam_mod_qam256_block_liquid` | 14.60 | 116.74 | 0.13 | 13.92 | 110.59 | 0.13 | liquid-dsp 1.8.3 modemcf_modulate (arbitrary-constellation modem) + firinterp_crcf (the root-raised cosine of the block), the SIMD dot products of the level (the portable loop at simd128) |
 | `qam_soft_bits_qam1024` | 15.10 | 15.10 | 1.00 | 9.08 | 9.08 | 1.00 | sdrk fallback |
 | `qam_soft_bits_qam16` | 3.04 | 1973.09 | 0.00 | 2.03 | 1412.59 | 0.00 | GNU Radio constellation_soft_decoder_cf with calc_soft_dec (constellation.cc of gr-digital; the exact log-likelihood ratio over all points, npwr 1, not max-log; no vector allocation per symbol, so faster than GNU Radio's object code) |
 | `qam_soft_bits_qam16_liquid` | 3.04 | 285.02 | 0.01 | 2.03 | 301.73 | 0.01 | liquid-dsp 1.8.3 modemcf_demodulate_soft of its own QAM modem (modem_common.proto.c; soft bytes with liquid's scale and labelling; the hard symbol and the soft bits per symbol) |

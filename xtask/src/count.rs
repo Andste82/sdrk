@@ -1006,7 +1006,7 @@ const fn fft(name: &'static str, family: Family, samples: u64) -> KernelSpec {
 }
 
 /// The kernels of the benchmark table, in report order.
-pub static KERNELS: [KernelSpec; 303] = [
+pub static KERNELS: [KernelSpec; 306] = [
     spec("convert_cs8", Family::Volk, true),
     spec("convert_cs16", Family::Volk, true),
     spec("convert_cu8", Family::VolkAndOwn, true),
@@ -1320,13 +1320,16 @@ pub static KERNELS: [KernelSpec; 303] = [
     proto("symbol_demap_qam64_block_lut", Family::GnuRadio),
     proto("symbol_demap_qam64_block_liquid", Family::OwnVsLiquid),
     proto("symbol_demap_qam256_block", Family::Own),
-    proto("qam_mod_block", Family::Own),
-    proto("qam_mod_qam256_block", Family::Own),
+    proto("qam_mod_block", Family::GnuRadio),
+    proto("qam_mod_block_liquid", Family::OwnVsLiquid),
+    proto("qam_mod_qam256_block", Family::GnuRadio),
+    proto("qam_mod_qam256_block_liquid", Family::OwnVsLiquid),
     proto("qam_demod_block", Family::GnuRadio),
     proto("psk_demod_block", Family::GnuRadio),
     proto("qam_demod_qam256_block", Family::Own),
     proto("qam_demod_search_block", Family::Own),
-    proto("psk_mod_block", Family::Own),
+    proto("psk_mod_block", Family::GnuRadio),
+    proto("psk_mod_block_liquid", Family::OwnVsLiquid),
     proto("symbol_map_block", Family::GnuRadio),
     proto("symbol_map_block_liquid", Family::OwnVsLiquid),
     proto("symbol_map_block_qpsk", Family::GnuRadio),
@@ -4951,6 +4954,9 @@ mod tests {
         for k in [
             "psk_demod_block",
             "qam_demod_block",
+            "qam_mod_block",
+            "qam_mod_qam256_block",
+            "psk_mod_block",
             "pulse_shape_block",
             "pulse_match_block",
             "symbol_map_block",
@@ -4976,6 +4982,9 @@ mod tests {
         for k in [
             "pulse_shape_block_liquid",
             "pulse_match_block_liquid",
+            "qam_mod_block_liquid",
+            "qam_mod_qam256_block_liquid",
+            "psk_mod_block_liquid",
             "symbol_map_block_liquid",
             "symbol_map_block_qpsk_liquid",
             "symbol_map_block_qam64_liquid",
@@ -5072,12 +5081,9 @@ mod tests {
             "channel_bank_ddc",
             "band_pulse_detect_block",
             "symbol_demap_qam256_block",
-            "qam_mod_block",
-            "qam_mod_qam256_block",
             "qam_demod_qam256_block",
             "qam_demod_search_block",
             "frame_decode_four_block",
-            "psk_mod_block",
             "iq_offset_block",
             "qam_acquire_block",
             "qam_frame_encode_block",

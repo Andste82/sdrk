@@ -4931,14 +4931,47 @@
           "verdict": "info"
         },
         "psk_mod_block": {
-          "compared_with": "sdrk fallback",
+          "compared_with": "GNU Radio constellation_modulator as the sum of its blocks: pack_k_bits_bb + chunks_to_symbols_bc + pfb_arb_resampler_ccf (32 filters of 88 taps and their derivative filters), VOLK's generic dot product (the wasm32 build of VOLK has no SIMD)",
           "goal": true,
-          "other_instr_per_sample": 96.37,
+          "informational": [
+            {
+              "compared_with": "sdrk fallback",
+              "label": "information: fallback",
+              "other_instr_per_sample": 96.37,
+              "other_snr_db": 145.18,
+              "ours_instr_per_sample": 96.37,
+              "ratio": 1.0
+            }
+          ],
+          "other_instr_per_sample": 5353.1,
           "ours_instr_per_sample": 96.37,
-          "ratio": 1.0,
+          "ratio": 0.02,
           "snr_db": {
-            "other": 145.2,
-            "ours": 145.2
+            "other": 144.2,
+            "ours": 145.18
+          },
+          "status": "info",
+          "verdict": "info"
+        },
+        "psk_mod_block_liquid": {
+          "compared_with": "liquid-dsp 1.8.3 modemcf_modulate (arbitrary-constellation modem) + firinterp_crcf (the root-raised cosine of the block), the SIMD dot products of the level (the portable loop at simd128)",
+          "goal": true,
+          "informational": [
+            {
+              "compared_with": "sdrk fallback",
+              "label": "information: fallback",
+              "other_instr_per_sample": 96.37,
+              "other_snr_db": 145.18,
+              "ours_instr_per_sample": 96.37,
+              "ratio": 1.0
+            }
+          ],
+          "other_instr_per_sample": 426.59,
+          "ours_instr_per_sample": 96.37,
+          "ratio": 0.23,
+          "snr_db": {
+            "other": 139.37,
+            "ours": 145.18
           },
           "status": "info",
           "verdict": "info"
@@ -5124,27 +5157,93 @@
           "verdict": "info"
         },
         "qam_mod_block": {
-          "compared_with": "sdrk fallback",
+          "compared_with": "GNU Radio constellation_modulator as the sum of its blocks: pack_k_bits_bb + chunks_to_symbols_bc + pfb_arb_resampler_ccf (32 filters of 88 taps and their derivative filters), VOLK's generic dot product (the wasm32 build of VOLK has no SIMD)",
           "goal": true,
-          "other_instr_per_sample": 93.11,
+          "informational": [
+            {
+              "compared_with": "sdrk fallback",
+              "label": "information: fallback",
+              "other_instr_per_sample": 93.11,
+              "other_snr_db": 143.65,
+              "ours_instr_per_sample": 93.11,
+              "ratio": 1.0
+            }
+          ],
+          "other_instr_per_sample": 5357.73,
           "ours_instr_per_sample": 93.11,
-          "ratio": 1.0,
+          "ratio": 0.02,
           "snr_db": {
-            "other": 143.7,
-            "ours": 143.7
+            "other": 142.51,
+            "ours": 143.65
+          },
+          "status": "info",
+          "verdict": "info"
+        },
+        "qam_mod_block_liquid": {
+          "compared_with": "liquid-dsp 1.8.3 modemcf_modulate (arbitrary-constellation modem) + firinterp_crcf (the root-raised cosine of the block), the SIMD dot products of the level (the portable loop at simd128)",
+          "goal": true,
+          "informational": [
+            {
+              "compared_with": "sdrk fallback",
+              "label": "information: fallback",
+              "other_instr_per_sample": 93.11,
+              "other_snr_db": 143.65,
+              "ours_instr_per_sample": 93.11,
+              "ratio": 1.0
+            }
+          ],
+          "other_instr_per_sample": 427.59,
+          "ours_instr_per_sample": 93.11,
+          "ratio": 0.22,
+          "snr_db": {
+            "other": 138.09,
+            "ours": 143.65
           },
           "status": "info",
           "verdict": "info"
         },
         "qam_mod_qam256_block": {
-          "compared_with": "sdrk fallback",
+          "compared_with": "GNU Radio constellation_modulator as the sum of its blocks: pack_k_bits_bb + chunks_to_symbols_bc + pfb_arb_resampler_ccf (32 filters of 88 taps and their derivative filters), VOLK's generic dot product (the wasm32 build of VOLK has no SIMD)",
           "goal": true,
-          "other_instr_per_sample": 95.8,
+          "informational": [
+            {
+              "compared_with": "sdrk fallback",
+              "label": "information: fallback",
+              "other_instr_per_sample": 95.8,
+              "other_snr_db": 144.0,
+              "ours_instr_per_sample": 95.8,
+              "ratio": 1.0
+            }
+          ],
+          "other_instr_per_sample": 5366.98,
           "ours_instr_per_sample": 95.8,
-          "ratio": 1.0,
+          "ratio": 0.02,
           "snr_db": {
-            "other": 143.99,
-            "ours": 143.99
+            "other": 142.9,
+            "ours": 144.0
+          },
+          "status": "info",
+          "verdict": "info"
+        },
+        "qam_mod_qam256_block_liquid": {
+          "compared_with": "liquid-dsp 1.8.3 modemcf_modulate (arbitrary-constellation modem) + firinterp_crcf (the root-raised cosine of the block), the SIMD dot products of the level (the portable loop at simd128)",
+          "goal": true,
+          "informational": [
+            {
+              "compared_with": "sdrk fallback",
+              "label": "information: fallback",
+              "other_instr_per_sample": 95.8,
+              "other_snr_db": 144.0,
+              "ours_instr_per_sample": 95.8,
+              "ratio": 1.0
+            }
+          ],
+          "other_instr_per_sample": 433.34,
+          "ours_instr_per_sample": 95.8,
+          "ratio": 0.22,
+          "snr_db": {
+            "other": 128.34,
+            "ours": 144.0
           },
           "status": "info",
           "verdict": "info"

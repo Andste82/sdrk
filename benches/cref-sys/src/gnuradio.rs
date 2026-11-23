@@ -1335,6 +1335,96 @@ impl Drop for GrChunksToSymbols {
     }
 }
 
+#[cfg(has_grsymsync)]
+mod softdec_ffi {
+    unsafe extern "C" {
+        pub fn sdrk_gr_softdec_new(
+            pts: *const f32,
+            m: core::ffi::c_uint,
+            k: core::ffi::c_uint,
+            npwr: f32,
+            precision: core::ffi::c_int,
+        ) -> *mut core::ffi::c_void;
+        pub fn sdrk_gr_softdec_free(state: *mut core::ffi::c_void);
+        pub fn sdrk_gr_softdec_work(
+            state: *mut core::ffi::c_void,
+            out: *mut f32,
+            input: *const [f32; 2],
+            n: core::ffi::c_uint,
+        );
+    }
+}
+
+/// GNU Radio's `constellation_soft_decoder_cf` (`gr-softdec.c`, cfg `has_grsymsync`) on a
+/// constellation of the caller's points: the exact log-likelihood ratio of `calc_soft_dec`
+/// (`precision` 0) or the look-up table of `gen_soft_dec_lut` with `precision` bits per axis.
+pub struct GrSoftDecoder {
+    #[cfg_attr(not(has_grsymsync), allow(dead_code))]
+    object: *mut core::ffi::c_void,
+    k: usize,
+}
+
+// SAFETY: the C object owns its buffers and is used by one thread at a time.
+unsafe impl Send for GrSoftDecoder {}
+
+impl GrSoftDecoder {
+    /// The decoder for the table `points` (symbol order, `2^k` entries), the noise power `npwr`
+    /// and the table precision; `None` without the library or for another table length.
+    #[must_use]
+    pub fn new(points: &[[f32; 2]], k: usize, npwr: f32, precision: i32) -> Option<Self> {
+        if k == 0 || k > 16 || points.len() != 1 << k {
+            return None;
+        }
+        #[cfg(has_grsymsync)]
+        {
+            let (m, kk) = (u32::try_from(points.len()).ok()?, u32::try_from(k).ok()?);
+            // SAFETY: `points` holds `m` pairs; the C side copies them.
+            let object = unsafe {
+                softdec_ffi::sdrk_gr_softdec_new(points.as_ptr().cast(), m, kk, npwr, precision)
+            };
+            if object.is_null() {
+                return None;
+            }
+            Some(GrSoftDecoder { object, k })
+        }
+        #[cfg(not(has_grsymsync))]
+        {
+            let _ = (npwr, precision);
+            None
+        }
+    }
+
+    /// `input.len() * k` soft values (the first bit of a symbol the most significant).
+    ///
+    /// # Panics
+    /// If `out` is not `input.len() * k` long.
+    pub fn work(&mut self, input: &[[f32; 2]], out: &mut [f32]) {
+        assert_eq!(
+            out.len(),
+            input.len() * self.k,
+            "soft decoder: length mismatch"
+        );
+        let n = u32::try_from(input.len()).expect("soft decoder: too many symbols");
+        #[cfg(has_grsymsync)]
+        // SAFETY: `input` holds `n` pairs and `out` `n k` floats; they do not overlap.
+        unsafe {
+            softdec_ffi::sdrk_gr_softdec_work(self.object, out.as_mut_ptr(), input.as_ptr(), n);
+        }
+        #[cfg(not(has_grsymsync))]
+        let _ = n;
+    }
+}
+
+impl Drop for GrSoftDecoder {
+    fn drop(&mut self) {
+        #[cfg(has_grsymsync)]
+        // SAFETY: the object was created by `new` and is freed once.
+        unsafe {
+            softdec_ffi::sdrk_gr_softdec_free(self.object);
+        }
+    }
+}
+
 #[cfg(has_grequalizer)]
 mod equalizer_ffi {
     unsafe extern "C" {

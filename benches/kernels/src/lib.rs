@@ -368,9 +368,9 @@ pub trait Kernel {
 
 /// All kernel names. The position gives the seed of the input (`1000 + index`), so new kernels
 /// are appended; a `<kernel>_fallback`, `<kernel>_airspy`, `<kernel>_fastnoise`,
-/// `<kernel>_ziggurat`, `<kernel>_dvbs2`, `<kernel>_svr` or `<kernel>_liquid` entry takes the seed of `<kernel>`, so
+/// `<kernel>_ziggurat`, `<kernel>_dvbs2`, `<kernel>_svr`, `<kernel>_liquid` or `<kernel>_lut` entry takes the seed of `<kernel>`, so
 /// that both entries filter the same input.
-pub const KERNELS: [&str; 295] = [
+pub const KERNELS: [&str; 303] = [
     "convert_cs8",
     "convert_cs16",
     "convert_out_cs16",
@@ -586,7 +586,11 @@ pub const KERNELS: [&str; 295] = [
     "channel_bank_ddc",
     "band_pulse_detect_block",
     "symbol_demap_qam16_block",
+    "symbol_demap_qam16_block_lut",
+    "symbol_demap_qam16_block_liquid",
     "symbol_demap_qam64_block",
+    "symbol_demap_qam64_block_lut",
+    "symbol_demap_qam64_block_liquid",
     "costas_qam16",
     "costas_qam16_fallback",
     "equalize_qam16",
@@ -596,7 +600,11 @@ pub const KERNELS: [&str; 295] = [
     "psk_demod_block",
     "frame_decode_four_block",
     "qam_soft_bits_qam16",
+    "qam_soft_bits_qam16_lut",
+    "qam_soft_bits_qam16_liquid",
     "qam_soft_bits_qam64",
+    "qam_soft_bits_qam64_lut",
+    "qam_soft_bits_qam64_liquid",
     "fir_interpolate_short",
     "fir_interpolate_short_fallback",
     "qam_demod_search_block",
@@ -668,6 +676,18 @@ pub const KERNELS: [&str; 295] = [
     "correlate_block",
 ];
 
+/// The library of a soft-bit entry by its name: `_lut` GNU Radio's look-up table, `_liquid`
+/// liquid-dsp, otherwise GNU Radio's `calc_soft_dec` (issue #169, D2549).
+fn soft_ref_of(name: &str) -> qam_family::SoftRef {
+    if name.ends_with("_lut") {
+        qam_family::SoftRef::GrLut
+    } else if name.ends_with("_liquid") {
+        qam_family::SoftRef::Liquid
+    } else {
+        qam_family::SoftRef::GrCalc
+    }
+}
+
 /// Prepares the measurement `name` with `layout` (the FFT sizes are fixed by the name).
 pub fn prepare(name: &str, layout: Layout) -> Option<Box<dyn Kernel>> {
     KERNELS.iter().position(|k| *k == name)?;
@@ -679,6 +699,7 @@ pub fn prepare(name: &str, layout: Layout) -> Option<Box<dyn Kernel>> {
         .or_else(|| name.strip_suffix("_dvbs2"))
         .or_else(|| name.strip_suffix("_svr"))
         .or_else(|| name.strip_suffix("_liquid"))
+        .or_else(|| name.strip_suffix("_lut"))
         .unwrap_or(name);
     // An entry without an entry of its base name (`stereo_pll_fallback`: `stereo_pll` has no SIMD
     // entry) takes the seed of its own position.
@@ -897,45 +918,61 @@ pub fn prepare(name: &str, layout: Layout) -> Option<Box<dyn Kernel>> {
         "channelize" => Box::new(channelize_family::ChannelizeK::new(rng, layout, false)),
         "channelize_fallback" => Box::new(channelize_family::ChannelizeK::new(rng, layout, true)),
         "channelize_block" => Box::new(channelize_family::ChannelizeBlockK::new(rng, layout)),
-        "symbol_demap_qam16_block" => Box::new(qam_family::SymbolDemapQamBlockK::new(
+        "symbol_demap_qam16_block"
+        | "symbol_demap_qam16_block_lut"
+        | "symbol_demap_qam16_block_liquid" => Box::new(qam_family::SymbolDemapQamBlockK::new(
             rng,
             layout,
             sdrk_core::kernels::constellation::Qam::Qam16,
+            soft_ref_of(name),
         )),
-        "symbol_demap_qam64_block" => Box::new(qam_family::SymbolDemapQamBlockK::new(
+        "symbol_demap_qam64_block"
+        | "symbol_demap_qam64_block_lut"
+        | "symbol_demap_qam64_block_liquid" => Box::new(qam_family::SymbolDemapQamBlockK::new(
             rng,
             layout,
             sdrk_core::kernels::constellation::Qam::Qam64,
+            soft_ref_of(name),
         )),
         "symbol_demap_qam256_block" => Box::new(qam_family::SymbolDemapQamBlockK::new(
             rng,
             layout,
             sdrk_core::kernels::constellation::Qam::Qam256,
+            qam_family::SoftRef::None,
         )),
-        "qam_soft_bits_qam16" => Box::new(qam_family::QamSoftBitsK::new(
-            rng,
-            layout,
-            sdrk_core::kernels::constellation::Qam::Qam16,
-        )),
-        "qam_soft_bits_qam64" => Box::new(qam_family::QamSoftBitsK::new(
-            rng,
-            layout,
-            sdrk_core::kernels::constellation::Qam::Qam64,
-        )),
+        "qam_soft_bits_qam16" | "qam_soft_bits_qam16_lut" | "qam_soft_bits_qam16_liquid" => {
+            Box::new(qam_family::QamSoftBitsK::new(
+                rng,
+                layout,
+                sdrk_core::kernels::constellation::Qam::Qam16,
+                soft_ref_of(name),
+            ))
+        }
+        "qam_soft_bits_qam64" | "qam_soft_bits_qam64_lut" | "qam_soft_bits_qam64_liquid" => {
+            Box::new(qam_family::QamSoftBitsK::new(
+                rng,
+                layout,
+                sdrk_core::kernels::constellation::Qam::Qam64,
+                soft_ref_of(name),
+            ))
+        }
         "qam_soft_bits_qpsk" => Box::new(qam_family::QamSoftBitsK::new(
             rng,
             layout,
             sdrk_core::kernels::constellation::Qam::Qpsk,
+            qam_family::SoftRef::None,
         )),
         "qam_soft_bits_qam256" => Box::new(qam_family::QamSoftBitsK::new(
             rng,
             layout,
             sdrk_core::kernels::constellation::Qam::Qam256,
+            qam_family::SoftRef::None,
         )),
         "qam_soft_bits_qam1024" => Box::new(qam_family::QamSoftBitsK::new(
             rng,
             layout,
             sdrk_core::kernels::constellation::Qam::Qam1024,
+            qam_family::SoftRef::None,
         )),
         "costas_qam16"
         | "costas_qam16_fallback"

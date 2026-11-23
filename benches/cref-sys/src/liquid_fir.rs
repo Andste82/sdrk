@@ -43,6 +43,16 @@ mod ffi {
             n: c_uint,
             y: *mut [f32; 2],
         );
+        pub fn sdrk_liquid_modem_std_create(m: c_uint) -> *mut c_void;
+        pub fn sdrk_liquid_modem_points(q: *mut c_void, m: c_uint, pts: *mut f32);
+        pub fn sdrk_liquid_modem_demod_soft_block(
+            q: *mut c_void,
+            x: *const [f32; 2],
+            n: c_uint,
+            k: c_uint,
+            soft: *mut u8,
+            syms: *mut c_uint,
+        );
         pub fn sdrk_liquid_firfilt_crcf_execute_block(
             q: *mut c_void,
             x: *mut [f32; 2],
@@ -271,6 +281,101 @@ impl LiquidModemMap {
 
 #[cfg(has_liquidhb)]
 impl Drop for LiquidModemMap {
+    fn drop(&mut self) {
+        // SAFETY: the object came from the constructor and is destroyed once.
+        unsafe { ffi::sdrk_liquid_modem_destroy(self.q) }
+    }
+}
+
+/// liquid's own 16-QAM or 64-QAM modem (`modemcf_create(LIQUID_MODEM_QAM16 / QAM64)`) as a soft
+/// demodulator (`modemcf_demodulate_soft`, `benches/refs/liquid-modem.c`): the hard symbol and
+/// one unsigned byte per bit (127 is zero, liquid's scale), liquid's symbol labelling (not
+/// SDRk's).
+pub struct LiquidModemDemod {
+    #[cfg_attr(not(has_liquidhb), allow(dead_code))]
+    q: *mut c_void,
+    m: usize,
+    k: usize,
+}
+
+// SAFETY: the C object owns its tables and is used by one thread at a time.
+unsafe impl Send for LiquidModemDemod {}
+
+impl LiquidModemDemod {
+    /// The modem with `m` = 16 or 64 points; `None` without the library or for another size.
+    #[must_use]
+    pub fn new(m: usize) -> Option<Self> {
+        if m != 16 && m != 64 {
+            return None;
+        }
+        #[cfg(has_liquidhb)]
+        {
+            // SAFETY: plain construction.
+            let q = unsafe { ffi::sdrk_liquid_modem_std_create(count(m)) };
+            if q.is_null() {
+                None
+            } else {
+                Some(Self {
+                    q,
+                    m,
+                    k: m.trailing_zeros() as usize,
+                })
+            }
+        }
+        #[cfg(not(has_liquidhb))]
+        {
+            None
+        }
+    }
+
+    /// The bits per symbol.
+    #[must_use]
+    pub fn bits_per_symbol(&self) -> usize {
+        self.k
+    }
+
+    /// The points of the modem in its symbol order.
+    #[must_use]
+    pub fn points(&mut self) -> Vec<[f32; 2]> {
+        #[allow(unused_mut)]
+        let mut pts = vec![[0.0f32; 2]; self.m];
+        #[cfg(has_liquidhb)]
+        // SAFETY: `pts` holds `m` pairs.
+        unsafe {
+            ffi::sdrk_liquid_modem_points(self.q, count(self.m), pts.as_mut_ptr().cast());
+        }
+        pts
+    }
+
+    /// `x.len()` symbols: the hard symbols into `syms` and `k` soft bytes per symbol into `soft`.
+    ///
+    /// # Panics
+    /// If `syms` is not as long as `x` or `soft` not `k` times as long.
+    pub fn demod_soft(&mut self, x: &[[f32; 2]], soft: &mut [u8], syms: &mut [u32]) {
+        assert!(
+            syms.len() == x.len() && soft.len() == x.len() * self.k,
+            "liquid modem: lengths"
+        );
+        let n = count(x.len());
+        #[cfg(has_liquidhb)]
+        // SAFETY: the buffers hold `n`, `n k` and `n` elements.
+        unsafe {
+            ffi::sdrk_liquid_modem_demod_soft_block(
+                self.q,
+                x.as_ptr(),
+                n,
+                count(self.k),
+                soft.as_mut_ptr(),
+                syms.as_mut_ptr(),
+            );
+        }
+        #[cfg(not(has_liquidhb))]
+        let _ = n;
+    }
+}
+
+#[cfg(has_liquidhb)]
+impl Drop for LiquidModemDemod {
     fn drop(&mut self) {
         // SAFETY: the object came from the constructor and is destroyed once.
         unsafe { ffi::sdrk_liquid_modem_destroy(self.q) }

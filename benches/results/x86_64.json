@@ -5213,24 +5213,94 @@
           "verdict": "info"
         },
         "qam_soft_bits_qam16": {
-          "compared_with": "sdrk fallback",
-          "goal": false,
+          "compared_with": "GNU Radio constellation_soft_decoder_cf with calc_soft_dec (constellation.cc of gr-digital; the exact log-likelihood ratio over all points, npwr 1, not max-log; no vector allocation per symbol, so faster than GNU Radio's object code)",
+          "goal": true,
           "informational": [
             {
               "compared_with": "sdrk fallback",
-              "label": "misaligned by one sample",
+              "label": "information: fallback",
               "other_instr_per_sample": 2.46,
+              "other_snr_db": 149.13,
+              "ours_instr_per_sample": 2.47,
+              "ratio": 1.0
+            },
+            {
+              "compared_with": "GNU Radio constellation_soft_decoder_cf with calc_soft_dec (constellation.cc of gr-digital; the exact log-likelihood ratio over all points, npwr 1, not max-log; no vector allocation per symbol, so faster than GNU Radio's object code)",
+              "label": "misaligned by one sample",
+              "other_instr_per_sample": 2340.02,
               "other_snr_db": null,
               "ours_instr_per_sample": 2.47,
-              "ratio": 1.01
+              "ratio": 0.0
             }
           ],
-          "other_instr_per_sample": 2.46,
+          "other_instr_per_sample": 2340.02,
           "ours_instr_per_sample": 2.47,
-          "ratio": 1.01,
+          "ratio": 0.0,
           "snr_db": {
-            "other": 149.04,
-            "ours": 149.04
+            "other": 141.08,
+            "ours": 149.13
+          },
+          "status": "info",
+          "verdict": "info"
+        },
+        "qam_soft_bits_qam16_liquid": {
+          "compared_with": "liquid-dsp 1.8.3 modemcf_demodulate_soft of its own QAM modem (modem_common.proto.c; soft bytes with liquid's scale and labelling; the hard symbol and the soft bits per symbol)",
+          "goal": true,
+          "informational": [
+            {
+              "compared_with": "sdrk fallback",
+              "label": "information: fallback",
+              "other_instr_per_sample": 2.46,
+              "other_snr_db": 149.13,
+              "ours_instr_per_sample": 2.47,
+              "ratio": 1.0
+            },
+            {
+              "compared_with": "liquid-dsp 1.8.3 modemcf_demodulate_soft of its own QAM modem (modem_common.proto.c; soft bytes with liquid's scale and labelling; the hard symbol and the soft bits per symbol)",
+              "label": "misaligned by one sample",
+              "other_instr_per_sample": 637.14,
+              "other_snr_db": null,
+              "ours_instr_per_sample": 2.47,
+              "ratio": 0.0
+            }
+          ],
+          "other_instr_per_sample": 637.14,
+          "ours_instr_per_sample": 2.47,
+          "ratio": 0.0,
+          "snr_db": {
+            "other": 999.0,
+            "ours": 149.13
+          },
+          "status": "info",
+          "verdict": "info"
+        },
+        "qam_soft_bits_qam16_lut": {
+          "compared_with": "GNU Radio constellation_soft_decoder_cf with the look-up table of gen_soft_dec_lut (precision 8, npwr 1; constellation.cc of gr-digital; exact log-likelihood ratio, not max-log; the table lookup and a copy of 2 to 3 floats per symbol, no vector allocation)",
+          "goal": true,
+          "informational": [
+            {
+              "compared_with": "sdrk fallback",
+              "label": "information: fallback",
+              "other_instr_per_sample": 2.46,
+              "other_snr_db": 149.13,
+              "ours_instr_per_sample": 2.47,
+              "ratio": 1.0
+            },
+            {
+              "compared_with": "GNU Radio constellation_soft_decoder_cf with the look-up table of gen_soft_dec_lut (precision 8, npwr 1; constellation.cc of gr-digital; exact log-likelihood ratio, not max-log; the table lookup and a copy of 2 to 3 floats per symbol, no vector allocation)",
+              "label": "misaligned by one sample",
+              "other_instr_per_sample": 129.02,
+              "other_snr_db": null,
+              "ours_instr_per_sample": 2.47,
+              "ratio": 0.02
+            }
+          ],
+          "other_instr_per_sample": 129.02,
+          "ours_instr_per_sample": 2.47,
+          "ratio": 0.02,
+          "snr_db": {
+            "other": 43.03,
+            "ours": 149.13
           },
           "status": "info",
           "verdict": "info"
@@ -5259,24 +5329,94 @@
           "verdict": "info"
         },
         "qam_soft_bits_qam64": {
-          "compared_with": "sdrk fallback",
+          "compared_with": "GNU Radio constellation_soft_decoder_cf with calc_soft_dec (constellation.cc of gr-digital; the exact log-likelihood ratio over all points, npwr 1, not max-log; no vector allocation per symbol, so faster than GNU Radio's object code)",
           "goal": true,
           "informational": [
             {
               "compared_with": "sdrk fallback",
-              "label": "misaligned by one sample",
+              "label": "information: fallback",
               "other_instr_per_sample": 7.02,
-              "other_snr_db": null,
+              "other_snr_db": 145.82,
               "ours_instr_per_sample": 5.22,
               "ratio": 0.74
+            },
+            {
+              "compared_with": "GNU Radio constellation_soft_decoder_cf with calc_soft_dec (constellation.cc of gr-digital; the exact log-likelihood ratio over all points, npwr 1, not max-log; no vector allocation per symbol, so faster than GNU Radio's object code)",
+              "label": "misaligned by one sample",
+              "other_instr_per_sample": 10088.02,
+              "other_snr_db": null,
+              "ours_instr_per_sample": 5.22,
+              "ratio": 0.0
             }
           ],
-          "other_instr_per_sample": 7.02,
+          "other_instr_per_sample": 10088.02,
           "ours_instr_per_sample": 5.22,
-          "ratio": 0.74,
+          "ratio": 0.0,
           "snr_db": {
-            "other": 145.89,
-            "ours": 145.89
+            "other": 134.82,
+            "ours": 145.82
+          },
+          "status": "info",
+          "verdict": "info"
+        },
+        "qam_soft_bits_qam64_liquid": {
+          "compared_with": "liquid-dsp 1.8.3 modemcf_demodulate_soft of its own QAM modem (modem_common.proto.c; soft bytes with liquid's scale and labelling; the hard symbol and the soft bits per symbol)",
+          "goal": true,
+          "informational": [
+            {
+              "compared_with": "sdrk fallback",
+              "label": "information: fallback",
+              "other_instr_per_sample": 7.02,
+              "other_snr_db": 145.82,
+              "ours_instr_per_sample": 5.22,
+              "ratio": 0.74
+            },
+            {
+              "compared_with": "liquid-dsp 1.8.3 modemcf_demodulate_soft of its own QAM modem (modem_common.proto.c; soft bytes with liquid's scale and labelling; the hard symbol and the soft bits per symbol)",
+              "label": "misaligned by one sample",
+              "other_instr_per_sample": 813.22,
+              "other_snr_db": null,
+              "ours_instr_per_sample": 5.22,
+              "ratio": 0.01
+            }
+          ],
+          "other_instr_per_sample": 813.22,
+          "ours_instr_per_sample": 5.22,
+          "ratio": 0.01,
+          "snr_db": {
+            "other": 999.0,
+            "ours": 145.82
+          },
+          "status": "info",
+          "verdict": "info"
+        },
+        "qam_soft_bits_qam64_lut": {
+          "compared_with": "GNU Radio constellation_soft_decoder_cf with the look-up table of gen_soft_dec_lut (precision 8, npwr 1; constellation.cc of gr-digital; exact log-likelihood ratio, not max-log; the table lookup and a copy of 2 to 3 floats per symbol, no vector allocation)",
+          "goal": true,
+          "informational": [
+            {
+              "compared_with": "sdrk fallback",
+              "label": "information: fallback",
+              "other_instr_per_sample": 7.02,
+              "other_snr_db": 145.82,
+              "ours_instr_per_sample": 5.22,
+              "ratio": 0.74
+            },
+            {
+              "compared_with": "GNU Radio constellation_soft_decoder_cf with the look-up table of gen_soft_dec_lut (precision 8, npwr 1; constellation.cc of gr-digital; exact log-likelihood ratio, not max-log; the table lookup and a copy of 2 to 3 floats per symbol, no vector allocation)",
+              "label": "misaligned by one sample",
+              "other_instr_per_sample": 129.02,
+              "other_snr_db": null,
+              "ours_instr_per_sample": 5.22,
+              "ratio": 0.04
+            }
+          ],
+          "other_instr_per_sample": 129.02,
+          "ours_instr_per_sample": 5.22,
+          "ratio": 0.04,
+          "snr_db": {
+            "other": 41.96,
+            "ours": 145.82
           },
           "status": "info",
           "verdict": "info"
@@ -6584,13 +6724,69 @@
           "verdict": "info"
         },
         "symbol_demap_qam16_block": {
-          "compared_with": "sdrk fallback",
+          "compared_with": "GNU Radio constellation_soft_decoder_cf with calc_soft_dec (constellation.cc of gr-digital; the exact log-likelihood ratio over all points, npwr 1, not max-log; no vector allocation per symbol, so faster than GNU Radio's object code)",
           "goal": true,
-          "other_instr_per_sample": 2.48,
+          "informational": [
+            {
+              "compared_with": "sdrk fallback",
+              "label": "information: fallback",
+              "other_instr_per_sample": 2.48,
+              "other_snr_db": 149.16,
+              "ours_instr_per_sample": 2.48,
+              "ratio": 1.0
+            }
+          ],
+          "other_instr_per_sample": 2340.02,
           "ours_instr_per_sample": 2.48,
-          "ratio": 1.0,
+          "ratio": 0.0,
           "snr_db": {
-            "other": 149.16,
+            "other": 141.13,
+            "ours": 149.16
+          },
+          "status": "info",
+          "verdict": "info"
+        },
+        "symbol_demap_qam16_block_liquid": {
+          "compared_with": "liquid-dsp 1.8.3 modemcf_demodulate_soft of its own QAM modem (modem_common.proto.c; soft bytes with liquid's scale and labelling; the hard symbol and the soft bits per symbol)",
+          "goal": true,
+          "informational": [
+            {
+              "compared_with": "sdrk fallback",
+              "label": "information: fallback",
+              "other_instr_per_sample": 2.48,
+              "other_snr_db": 149.16,
+              "ours_instr_per_sample": 2.48,
+              "ratio": 1.0
+            }
+          ],
+          "other_instr_per_sample": 637.12,
+          "ours_instr_per_sample": 2.48,
+          "ratio": 0.0,
+          "snr_db": {
+            "other": 999.0,
+            "ours": 149.16
+          },
+          "status": "info",
+          "verdict": "info"
+        },
+        "symbol_demap_qam16_block_lut": {
+          "compared_with": "GNU Radio constellation_soft_decoder_cf with the look-up table of gen_soft_dec_lut (precision 8, npwr 1; constellation.cc of gr-digital; exact log-likelihood ratio, not max-log; the table lookup and a copy of 2 to 3 floats per symbol, no vector allocation)",
+          "goal": true,
+          "informational": [
+            {
+              "compared_with": "sdrk fallback",
+              "label": "information: fallback",
+              "other_instr_per_sample": 2.48,
+              "other_snr_db": 149.16,
+              "ours_instr_per_sample": 2.48,
+              "ratio": 1.0
+            }
+          ],
+          "other_instr_per_sample": 129.01,
+          "ours_instr_per_sample": 2.48,
+          "ratio": 0.02,
+          "snr_db": {
+            "other": 42.96,
             "ours": 149.16
           },
           "status": "info",
@@ -6610,14 +6806,70 @@
           "verdict": "info"
         },
         "symbol_demap_qam64_block": {
-          "compared_with": "sdrk fallback",
+          "compared_with": "GNU Radio constellation_soft_decoder_cf with calc_soft_dec (constellation.cc of gr-digital; the exact log-likelihood ratio over all points, npwr 1, not max-log; no vector allocation per symbol, so faster than GNU Radio's object code)",
           "goal": true,
-          "other_instr_per_sample": 5.23,
+          "informational": [
+            {
+              "compared_with": "sdrk fallback",
+              "label": "information: fallback",
+              "other_instr_per_sample": 5.23,
+              "other_snr_db": 145.84,
+              "ours_instr_per_sample": 5.23,
+              "ratio": 1.0
+            }
+          ],
+          "other_instr_per_sample": 10088.02,
           "ours_instr_per_sample": 5.23,
-          "ratio": 1.0,
+          "ratio": 0.0,
           "snr_db": {
-            "other": 145.98,
-            "ours": 145.98
+            "other": 134.91,
+            "ours": 145.84
+          },
+          "status": "info",
+          "verdict": "info"
+        },
+        "symbol_demap_qam64_block_liquid": {
+          "compared_with": "liquid-dsp 1.8.3 modemcf_demodulate_soft of its own QAM modem (modem_common.proto.c; soft bytes with liquid's scale and labelling; the hard symbol and the soft bits per symbol)",
+          "goal": true,
+          "informational": [
+            {
+              "compared_with": "sdrk fallback",
+              "label": "information: fallback",
+              "other_instr_per_sample": 5.23,
+              "other_snr_db": 145.84,
+              "ours_instr_per_sample": 5.23,
+              "ratio": 1.0
+            }
+          ],
+          "other_instr_per_sample": 813.19,
+          "ours_instr_per_sample": 5.23,
+          "ratio": 0.01,
+          "snr_db": {
+            "other": 999.0,
+            "ours": 145.84
+          },
+          "status": "info",
+          "verdict": "info"
+        },
+        "symbol_demap_qam64_block_lut": {
+          "compared_with": "GNU Radio constellation_soft_decoder_cf with the look-up table of gen_soft_dec_lut (precision 8, npwr 1; constellation.cc of gr-digital; exact log-likelihood ratio, not max-log; the table lookup and a copy of 2 to 3 floats per symbol, no vector allocation)",
+          "goal": true,
+          "informational": [
+            {
+              "compared_with": "sdrk fallback",
+              "label": "information: fallback",
+              "other_instr_per_sample": 5.23,
+              "other_snr_db": 145.84,
+              "ours_instr_per_sample": 5.23,
+              "ratio": 1.0
+            }
+          ],
+          "other_instr_per_sample": 129.02,
+          "ours_instr_per_sample": 5.23,
+          "ratio": 0.04,
+          "snr_db": {
+            "other": 42.07,
+            "ours": 145.84
           },
           "status": "info",
           "verdict": "info"
@@ -8743,8 +8995,34 @@
           "ours_instr_per_sample": 2.48,
           "ratio": 1.0,
           "snr_db": {
-            "other": 149.04,
-            "ours": 149.04
+            "other": 149.13,
+            "ours": 149.13
+          },
+          "status": "release",
+          "verdict": "pass"
+        },
+        "qam_soft_bits_qam16_liquid": {
+          "compared_with": "ours at avx2",
+          "goal": false,
+          "other_instr_per_sample": 2.47,
+          "ours_instr_per_sample": 2.48,
+          "ratio": 1.0,
+          "snr_db": {
+            "other": 149.13,
+            "ours": 149.13
+          },
+          "status": "release",
+          "verdict": "pass"
+        },
+        "qam_soft_bits_qam16_lut": {
+          "compared_with": "ours at avx2",
+          "goal": false,
+          "other_instr_per_sample": 2.47,
+          "ours_instr_per_sample": 2.48,
+          "ratio": 1.0,
+          "snr_db": {
+            "other": 149.13,
+            "ours": 149.13
           },
           "status": "release",
           "verdict": "pass"
@@ -8769,8 +9047,34 @@
           "ours_instr_per_sample": 5.23,
           "ratio": 1.0,
           "snr_db": {
-            "other": 145.89,
-            "ours": 145.89
+            "other": 145.82,
+            "ours": 145.82
+          },
+          "status": "release",
+          "verdict": "pass"
+        },
+        "qam_soft_bits_qam64_liquid": {
+          "compared_with": "ours at avx2",
+          "goal": false,
+          "other_instr_per_sample": 5.22,
+          "ours_instr_per_sample": 5.23,
+          "ratio": 1.0,
+          "snr_db": {
+            "other": 145.82,
+            "ours": 145.82
+          },
+          "status": "release",
+          "verdict": "pass"
+        },
+        "qam_soft_bits_qam64_lut": {
+          "compared_with": "ours at avx2",
+          "goal": false,
+          "other_instr_per_sample": 5.22,
+          "ours_instr_per_sample": 5.23,
+          "ratio": 1.0,
+          "snr_db": {
+            "other": 145.82,
+            "ours": 145.82
           },
           "status": "release",
           "verdict": "pass"
@@ -9191,6 +9495,32 @@
           "status": "release",
           "verdict": "pass"
         },
+        "symbol_demap_qam16_block_liquid": {
+          "compared_with": "ours at avx2",
+          "goal": false,
+          "other_instr_per_sample": 2.48,
+          "ours_instr_per_sample": 2.48,
+          "ratio": 1.0,
+          "snr_db": {
+            "other": 149.16,
+            "ours": 149.16
+          },
+          "status": "release",
+          "verdict": "pass"
+        },
+        "symbol_demap_qam16_block_lut": {
+          "compared_with": "ours at avx2",
+          "goal": false,
+          "other_instr_per_sample": 2.48,
+          "ours_instr_per_sample": 2.48,
+          "ratio": 1.0,
+          "snr_db": {
+            "other": 149.16,
+            "ours": 149.16
+          },
+          "status": "release",
+          "verdict": "pass"
+        },
         "symbol_demap_qam256_block": {
           "compared_with": "ours at avx2",
           "goal": false,
@@ -9211,8 +9541,34 @@
           "ours_instr_per_sample": 5.24,
           "ratio": 1.0,
           "snr_db": {
-            "other": 145.98,
-            "ours": 145.98
+            "other": 145.84,
+            "ours": 145.84
+          },
+          "status": "release",
+          "verdict": "pass"
+        },
+        "symbol_demap_qam64_block_liquid": {
+          "compared_with": "ours at avx2",
+          "goal": false,
+          "other_instr_per_sample": 5.23,
+          "ours_instr_per_sample": 5.24,
+          "ratio": 1.0,
+          "snr_db": {
+            "other": 145.84,
+            "ours": 145.84
+          },
+          "status": "release",
+          "verdict": "pass"
+        },
+        "symbol_demap_qam64_block_lut": {
+          "compared_with": "ours at avx2",
+          "goal": false,
+          "other_instr_per_sample": 5.23,
+          "ours_instr_per_sample": 5.24,
+          "ratio": 1.0,
+          "snr_db": {
+            "other": 145.84,
+            "ours": 145.84
           },
           "status": "release",
           "verdict": "pass"
@@ -14649,24 +15005,94 @@
           "verdict": "info"
         },
         "qam_soft_bits_qam16": {
-          "compared_with": "sdrk fallback",
+          "compared_with": "GNU Radio constellation_soft_decoder_cf with calc_soft_dec (constellation.cc of gr-digital; the exact log-likelihood ratio over all points, npwr 1, not max-log; no vector allocation per symbol, so faster than GNU Radio's object code)",
           "goal": true,
           "informational": [
             {
               "compared_with": "sdrk fallback",
-              "label": "misaligned by one sample",
+              "label": "information: fallback",
               "other_instr_per_sample": 9.52,
-              "other_snr_db": null,
+              "other_snr_db": 149.13,
               "ours_instr_per_sample": 5.91,
               "ratio": 0.62
+            },
+            {
+              "compared_with": "GNU Radio constellation_soft_decoder_cf with calc_soft_dec (constellation.cc of gr-digital; the exact log-likelihood ratio over all points, npwr 1, not max-log; no vector allocation per symbol, so faster than GNU Radio's object code)",
+              "label": "misaligned by one sample",
+              "other_instr_per_sample": 2461.02,
+              "other_snr_db": null,
+              "ours_instr_per_sample": 5.91,
+              "ratio": 0.0
             }
           ],
-          "other_instr_per_sample": 9.52,
+          "other_instr_per_sample": 2461.02,
           "ours_instr_per_sample": 5.91,
-          "ratio": 0.62,
+          "ratio": 0.0,
           "snr_db": {
-            "other": 149.04,
-            "ours": 149.04
+            "other": 141.08,
+            "ours": 149.13
+          },
+          "status": "info",
+          "verdict": "info"
+        },
+        "qam_soft_bits_qam16_liquid": {
+          "compared_with": "liquid-dsp 1.8.3 modemcf_demodulate_soft of its own QAM modem (modem_common.proto.c; soft bytes with liquid's scale and labelling; the hard symbol and the soft bits per symbol)",
+          "goal": true,
+          "informational": [
+            {
+              "compared_with": "sdrk fallback",
+              "label": "information: fallback",
+              "other_instr_per_sample": 9.52,
+              "other_snr_db": 149.13,
+              "ours_instr_per_sample": 5.91,
+              "ratio": 0.62
+            },
+            {
+              "compared_with": "liquid-dsp 1.8.3 modemcf_demodulate_soft of its own QAM modem (modem_common.proto.c; soft bytes with liquid's scale and labelling; the hard symbol and the soft bits per symbol)",
+              "label": "misaligned by one sample",
+              "other_instr_per_sample": 660.27,
+              "other_snr_db": null,
+              "ours_instr_per_sample": 5.91,
+              "ratio": 0.01
+            }
+          ],
+          "other_instr_per_sample": 660.27,
+          "ours_instr_per_sample": 5.91,
+          "ratio": 0.01,
+          "snr_db": {
+            "other": 999.0,
+            "ours": 149.13
+          },
+          "status": "info",
+          "verdict": "info"
+        },
+        "qam_soft_bits_qam16_lut": {
+          "compared_with": "GNU Radio constellation_soft_decoder_cf with the look-up table of gen_soft_dec_lut (precision 8, npwr 1; constellation.cc of gr-digital; exact log-likelihood ratio, not max-log; the table lookup and a copy of 2 to 3 floats per symbol, no vector allocation)",
+          "goal": true,
+          "informational": [
+            {
+              "compared_with": "sdrk fallback",
+              "label": "information: fallback",
+              "other_instr_per_sample": 9.52,
+              "other_snr_db": 149.13,
+              "ours_instr_per_sample": 5.91,
+              "ratio": 0.62
+            },
+            {
+              "compared_with": "GNU Radio constellation_soft_decoder_cf with the look-up table of gen_soft_dec_lut (precision 8, npwr 1; constellation.cc of gr-digital; exact log-likelihood ratio, not max-log; the table lookup and a copy of 2 to 3 floats per symbol, no vector allocation)",
+              "label": "misaligned by one sample",
+              "other_instr_per_sample": 129.02,
+              "other_snr_db": null,
+              "ours_instr_per_sample": 5.91,
+              "ratio": 0.05
+            }
+          ],
+          "other_instr_per_sample": 129.02,
+          "ours_instr_per_sample": 5.91,
+          "ratio": 0.05,
+          "snr_db": {
+            "other": 43.03,
+            "ours": 149.13
           },
           "status": "info",
           "verdict": "info"
@@ -14695,24 +15121,94 @@
           "verdict": "info"
         },
         "qam_soft_bits_qam64": {
-          "compared_with": "sdrk fallback",
+          "compared_with": "GNU Radio constellation_soft_decoder_cf with calc_soft_dec (constellation.cc of gr-digital; the exact log-likelihood ratio over all points, npwr 1, not max-log; no vector allocation per symbol, so faster than GNU Radio's object code)",
           "goal": true,
           "informational": [
             {
               "compared_with": "sdrk fallback",
-              "label": "misaligned by one sample",
+              "label": "information: fallback",
               "other_instr_per_sample": 14.52,
-              "other_snr_db": null,
+              "other_snr_db": 145.82,
               "ours_instr_per_sample": 11.54,
               "ratio": 0.79
+            },
+            {
+              "compared_with": "GNU Radio constellation_soft_decoder_cf with calc_soft_dec (constellation.cc of gr-digital; the exact log-likelihood ratio over all points, npwr 1, not max-log; no vector allocation per symbol, so faster than GNU Radio's object code)",
+              "label": "misaligned by one sample",
+              "other_instr_per_sample": 10436.02,
+              "other_snr_db": null,
+              "ours_instr_per_sample": 11.54,
+              "ratio": 0.0
             }
           ],
-          "other_instr_per_sample": 14.52,
+          "other_instr_per_sample": 10436.02,
           "ours_instr_per_sample": 11.54,
-          "ratio": 0.79,
+          "ratio": 0.0,
           "snr_db": {
-            "other": 145.89,
-            "ours": 145.89
+            "other": 134.82,
+            "ours": 145.82
+          },
+          "status": "info",
+          "verdict": "info"
+        },
+        "qam_soft_bits_qam64_liquid": {
+          "compared_with": "liquid-dsp 1.8.3 modemcf_demodulate_soft of its own QAM modem (modem_common.proto.c; soft bytes with liquid's scale and labelling; the hard symbol and the soft bits per symbol)",
+          "goal": true,
+          "informational": [
+            {
+              "compared_with": "sdrk fallback",
+              "label": "information: fallback",
+              "other_instr_per_sample": 14.52,
+              "other_snr_db": 145.82,
+              "ours_instr_per_sample": 11.54,
+              "ratio": 0.79
+            },
+            {
+              "compared_with": "liquid-dsp 1.8.3 modemcf_demodulate_soft of its own QAM modem (modem_common.proto.c; soft bytes with liquid's scale and labelling; the hard symbol and the soft bits per symbol)",
+              "label": "misaligned by one sample",
+              "other_instr_per_sample": 819.59,
+              "other_snr_db": null,
+              "ours_instr_per_sample": 11.54,
+              "ratio": 0.01
+            }
+          ],
+          "other_instr_per_sample": 819.59,
+          "ours_instr_per_sample": 11.54,
+          "ratio": 0.01,
+          "snr_db": {
+            "other": 999.0,
+            "ours": 145.82
+          },
+          "status": "info",
+          "verdict": "info"
+        },
+        "qam_soft_bits_qam64_lut": {
+          "compared_with": "GNU Radio constellation_soft_decoder_cf with the look-up table of gen_soft_dec_lut (precision 8, npwr 1; constellation.cc of gr-digital; exact log-likelihood ratio, not max-log; the table lookup and a copy of 2 to 3 floats per symbol, no vector allocation)",
+          "goal": true,
+          "informational": [
+            {
+              "compared_with": "sdrk fallback",
+              "label": "information: fallback",
+              "other_instr_per_sample": 14.52,
+              "other_snr_db": 145.82,
+              "ours_instr_per_sample": 11.54,
+              "ratio": 0.79
+            },
+            {
+              "compared_with": "GNU Radio constellation_soft_decoder_cf with the look-up table of gen_soft_dec_lut (precision 8, npwr 1; constellation.cc of gr-digital; exact log-likelihood ratio, not max-log; the table lookup and a copy of 2 to 3 floats per symbol, no vector allocation)",
+              "label": "misaligned by one sample",
+              "other_instr_per_sample": 129.02,
+              "other_snr_db": null,
+              "ours_instr_per_sample": 11.54,
+              "ratio": 0.09
+            }
+          ],
+          "other_instr_per_sample": 129.02,
+          "ours_instr_per_sample": 11.54,
+          "ratio": 0.09,
+          "snr_db": {
+            "other": 41.96,
+            "ours": 145.82
           },
           "status": "info",
           "verdict": "info"
@@ -16035,13 +16531,69 @@
           "verdict": "info"
         },
         "symbol_demap_qam16_block": {
-          "compared_with": "sdrk fallback",
+          "compared_with": "GNU Radio constellation_soft_decoder_cf with calc_soft_dec (constellation.cc of gr-digital; the exact log-likelihood ratio over all points, npwr 1, not max-log; no vector allocation per symbol, so faster than GNU Radio's object code)",
           "goal": true,
-          "other_instr_per_sample": 5.91,
+          "informational": [
+            {
+              "compared_with": "sdrk fallback",
+              "label": "information: fallback",
+              "other_instr_per_sample": 5.91,
+              "other_snr_db": 149.16,
+              "ours_instr_per_sample": 5.91,
+              "ratio": 1.0
+            }
+          ],
+          "other_instr_per_sample": 2461.02,
           "ours_instr_per_sample": 5.91,
-          "ratio": 1.0,
+          "ratio": 0.0,
           "snr_db": {
-            "other": 149.16,
+            "other": 141.13,
+            "ours": 149.16
+          },
+          "status": "info",
+          "verdict": "info"
+        },
+        "symbol_demap_qam16_block_liquid": {
+          "compared_with": "liquid-dsp 1.8.3 modemcf_demodulate_soft of its own QAM modem (modem_common.proto.c; soft bytes with liquid's scale and labelling; the hard symbol and the soft bits per symbol)",
+          "goal": true,
+          "informational": [
+            {
+              "compared_with": "sdrk fallback",
+              "label": "information: fallback",
+              "other_instr_per_sample": 5.91,
+              "other_snr_db": 149.16,
+              "ours_instr_per_sample": 5.91,
+              "ratio": 1.0
+            }
+          ],
+          "other_instr_per_sample": 660.25,
+          "ours_instr_per_sample": 5.91,
+          "ratio": 0.01,
+          "snr_db": {
+            "other": 999.0,
+            "ours": 149.16
+          },
+          "status": "info",
+          "verdict": "info"
+        },
+        "symbol_demap_qam16_block_lut": {
+          "compared_with": "GNU Radio constellation_soft_decoder_cf with the look-up table of gen_soft_dec_lut (precision 8, npwr 1; constellation.cc of gr-digital; exact log-likelihood ratio, not max-log; the table lookup and a copy of 2 to 3 floats per symbol, no vector allocation)",
+          "goal": true,
+          "informational": [
+            {
+              "compared_with": "sdrk fallback",
+              "label": "information: fallback",
+              "other_instr_per_sample": 5.91,
+              "other_snr_db": 149.16,
+              "ours_instr_per_sample": 5.91,
+              "ratio": 1.0
+            }
+          ],
+          "other_instr_per_sample": 129.01,
+          "ours_instr_per_sample": 5.91,
+          "ratio": 0.05,
+          "snr_db": {
+            "other": 42.96,
             "ours": 149.16
           },
           "status": "info",
@@ -16061,14 +16613,70 @@
           "verdict": "info"
         },
         "symbol_demap_qam64_block": {
-          "compared_with": "sdrk fallback",
+          "compared_with": "GNU Radio constellation_soft_decoder_cf with calc_soft_dec (constellation.cc of gr-digital; the exact log-likelihood ratio over all points, npwr 1, not max-log; no vector allocation per symbol, so faster than GNU Radio's object code)",
           "goal": true,
-          "other_instr_per_sample": 11.54,
+          "informational": [
+            {
+              "compared_with": "sdrk fallback",
+              "label": "information: fallback",
+              "other_instr_per_sample": 11.54,
+              "other_snr_db": 145.84,
+              "ours_instr_per_sample": 11.54,
+              "ratio": 1.0
+            }
+          ],
+          "other_instr_per_sample": 10436.02,
           "ours_instr_per_sample": 11.54,
-          "ratio": 1.0,
+          "ratio": 0.0,
           "snr_db": {
-            "other": 145.98,
-            "ours": 145.98
+            "other": 134.91,
+            "ours": 145.84
+          },
+          "status": "info",
+          "verdict": "info"
+        },
+        "symbol_demap_qam64_block_liquid": {
+          "compared_with": "liquid-dsp 1.8.3 modemcf_demodulate_soft of its own QAM modem (modem_common.proto.c; soft bytes with liquid's scale and labelling; the hard symbol and the soft bits per symbol)",
+          "goal": true,
+          "informational": [
+            {
+              "compared_with": "sdrk fallback",
+              "label": "information: fallback",
+              "other_instr_per_sample": 11.54,
+              "other_snr_db": 145.84,
+              "ours_instr_per_sample": 11.54,
+              "ratio": 1.0
+            }
+          ],
+          "other_instr_per_sample": 819.56,
+          "ours_instr_per_sample": 11.54,
+          "ratio": 0.01,
+          "snr_db": {
+            "other": 999.0,
+            "ours": 145.84
+          },
+          "status": "info",
+          "verdict": "info"
+        },
+        "symbol_demap_qam64_block_lut": {
+          "compared_with": "GNU Radio constellation_soft_decoder_cf with the look-up table of gen_soft_dec_lut (precision 8, npwr 1; constellation.cc of gr-digital; exact log-likelihood ratio, not max-log; the table lookup and a copy of 2 to 3 floats per symbol, no vector allocation)",
+          "goal": true,
+          "informational": [
+            {
+              "compared_with": "sdrk fallback",
+              "label": "information: fallback",
+              "other_instr_per_sample": 11.54,
+              "other_snr_db": 145.84,
+              "ours_instr_per_sample": 11.54,
+              "ratio": 1.0
+            }
+          ],
+          "other_instr_per_sample": 129.02,
+          "ours_instr_per_sample": 11.54,
+          "ratio": 0.09,
+          "snr_db": {
+            "other": 42.07,
+            "ours": 145.84
           },
           "status": "info",
           "verdict": "info"
@@ -21702,24 +22310,94 @@
           "verdict": "info"
         },
         "qam_soft_bits_qam16": {
-          "compared_with": "sdrk fallback",
+          "compared_with": "GNU Radio constellation_soft_decoder_cf with calc_soft_dec (constellation.cc of gr-digital; the exact log-likelihood ratio over all points, npwr 1, not max-log; no vector allocation per symbol, so faster than GNU Radio's object code)",
           "goal": true,
           "informational": [
             {
               "compared_with": "sdrk fallback",
-              "label": "misaligned by one sample",
+              "label": "information: fallback",
               "other_instr_per_sample": 9.52,
-              "other_snr_db": null,
+              "other_snr_db": 149.13,
               "ours_instr_per_sample": 5.91,
               "ratio": 0.62
+            },
+            {
+              "compared_with": "GNU Radio constellation_soft_decoder_cf with calc_soft_dec (constellation.cc of gr-digital; the exact log-likelihood ratio over all points, npwr 1, not max-log; no vector allocation per symbol, so faster than GNU Radio's object code)",
+              "label": "misaligned by one sample",
+              "other_instr_per_sample": 2461.02,
+              "other_snr_db": null,
+              "ours_instr_per_sample": 5.91,
+              "ratio": 0.0
             }
           ],
-          "other_instr_per_sample": 9.52,
+          "other_instr_per_sample": 2461.02,
           "ours_instr_per_sample": 5.91,
-          "ratio": 0.62,
+          "ratio": 0.0,
           "snr_db": {
-            "other": 149.04,
-            "ours": 149.04
+            "other": 141.08,
+            "ours": 149.13
+          },
+          "status": "info",
+          "verdict": "info"
+        },
+        "qam_soft_bits_qam16_liquid": {
+          "compared_with": "liquid-dsp 1.8.3 modemcf_demodulate_soft of its own QAM modem (modem_common.proto.c; soft bytes with liquid's scale and labelling; the hard symbol and the soft bits per symbol)",
+          "goal": true,
+          "informational": [
+            {
+              "compared_with": "sdrk fallback",
+              "label": "information: fallback",
+              "other_instr_per_sample": 9.52,
+              "other_snr_db": 149.13,
+              "ours_instr_per_sample": 5.91,
+              "ratio": 0.62
+            },
+            {
+              "compared_with": "liquid-dsp 1.8.3 modemcf_demodulate_soft of its own QAM modem (modem_common.proto.c; soft bytes with liquid's scale and labelling; the hard symbol and the soft bits per symbol)",
+              "label": "misaligned by one sample",
+              "other_instr_per_sample": 661.27,
+              "other_snr_db": null,
+              "ours_instr_per_sample": 5.91,
+              "ratio": 0.01
+            }
+          ],
+          "other_instr_per_sample": 661.27,
+          "ours_instr_per_sample": 5.91,
+          "ratio": 0.01,
+          "snr_db": {
+            "other": 999.0,
+            "ours": 149.13
+          },
+          "status": "info",
+          "verdict": "info"
+        },
+        "qam_soft_bits_qam16_lut": {
+          "compared_with": "GNU Radio constellation_soft_decoder_cf with the look-up table of gen_soft_dec_lut (precision 8, npwr 1; constellation.cc of gr-digital; exact log-likelihood ratio, not max-log; the table lookup and a copy of 2 to 3 floats per symbol, no vector allocation)",
+          "goal": true,
+          "informational": [
+            {
+              "compared_with": "sdrk fallback",
+              "label": "information: fallback",
+              "other_instr_per_sample": 9.52,
+              "other_snr_db": 149.13,
+              "ours_instr_per_sample": 5.91,
+              "ratio": 0.62
+            },
+            {
+              "compared_with": "GNU Radio constellation_soft_decoder_cf with the look-up table of gen_soft_dec_lut (precision 8, npwr 1; constellation.cc of gr-digital; exact log-likelihood ratio, not max-log; the table lookup and a copy of 2 to 3 floats per symbol, no vector allocation)",
+              "label": "misaligned by one sample",
+              "other_instr_per_sample": 129.02,
+              "other_snr_db": null,
+              "ours_instr_per_sample": 5.91,
+              "ratio": 0.05
+            }
+          ],
+          "other_instr_per_sample": 129.02,
+          "ours_instr_per_sample": 5.91,
+          "ratio": 0.05,
+          "snr_db": {
+            "other": 43.03,
+            "ours": 149.13
           },
           "status": "info",
           "verdict": "info"
@@ -21748,24 +22426,94 @@
           "verdict": "info"
         },
         "qam_soft_bits_qam64": {
-          "compared_with": "sdrk fallback",
+          "compared_with": "GNU Radio constellation_soft_decoder_cf with calc_soft_dec (constellation.cc of gr-digital; the exact log-likelihood ratio over all points, npwr 1, not max-log; no vector allocation per symbol, so faster than GNU Radio's object code)",
           "goal": true,
           "informational": [
             {
               "compared_with": "sdrk fallback",
-              "label": "misaligned by one sample",
+              "label": "information: fallback",
               "other_instr_per_sample": 14.02,
-              "other_snr_db": null,
+              "other_snr_db": 145.82,
               "ours_instr_per_sample": 11.54,
               "ratio": 0.82
+            },
+            {
+              "compared_with": "GNU Radio constellation_soft_decoder_cf with calc_soft_dec (constellation.cc of gr-digital; the exact log-likelihood ratio over all points, npwr 1, not max-log; no vector allocation per symbol, so faster than GNU Radio's object code)",
+              "label": "misaligned by one sample",
+              "other_instr_per_sample": 10436.02,
+              "other_snr_db": null,
+              "ours_instr_per_sample": 11.54,
+              "ratio": 0.0
             }
           ],
-          "other_instr_per_sample": 14.02,
+          "other_instr_per_sample": 10436.02,
           "ours_instr_per_sample": 11.54,
-          "ratio": 0.82,
+          "ratio": 0.0,
           "snr_db": {
-            "other": 145.89,
-            "ours": 145.89
+            "other": 134.82,
+            "ours": 145.82
+          },
+          "status": "info",
+          "verdict": "info"
+        },
+        "qam_soft_bits_qam64_liquid": {
+          "compared_with": "liquid-dsp 1.8.3 modemcf_demodulate_soft of its own QAM modem (modem_common.proto.c; soft bytes with liquid's scale and labelling; the hard symbol and the soft bits per symbol)",
+          "goal": true,
+          "informational": [
+            {
+              "compared_with": "sdrk fallback",
+              "label": "information: fallback",
+              "other_instr_per_sample": 14.02,
+              "other_snr_db": 145.82,
+              "ours_instr_per_sample": 11.54,
+              "ratio": 0.82
+            },
+            {
+              "compared_with": "liquid-dsp 1.8.3 modemcf_demodulate_soft of its own QAM modem (modem_common.proto.c; soft bytes with liquid's scale and labelling; the hard symbol and the soft bits per symbol)",
+              "label": "misaligned by one sample",
+              "other_instr_per_sample": 820.59,
+              "other_snr_db": null,
+              "ours_instr_per_sample": 11.54,
+              "ratio": 0.01
+            }
+          ],
+          "other_instr_per_sample": 820.59,
+          "ours_instr_per_sample": 11.54,
+          "ratio": 0.01,
+          "snr_db": {
+            "other": 999.0,
+            "ours": 145.82
+          },
+          "status": "info",
+          "verdict": "info"
+        },
+        "qam_soft_bits_qam64_lut": {
+          "compared_with": "GNU Radio constellation_soft_decoder_cf with the look-up table of gen_soft_dec_lut (precision 8, npwr 1; constellation.cc of gr-digital; exact log-likelihood ratio, not max-log; the table lookup and a copy of 2 to 3 floats per symbol, no vector allocation)",
+          "goal": true,
+          "informational": [
+            {
+              "compared_with": "sdrk fallback",
+              "label": "information: fallback",
+              "other_instr_per_sample": 14.02,
+              "other_snr_db": 145.82,
+              "ours_instr_per_sample": 11.54,
+              "ratio": 0.82
+            },
+            {
+              "compared_with": "GNU Radio constellation_soft_decoder_cf with the look-up table of gen_soft_dec_lut (precision 8, npwr 1; constellation.cc of gr-digital; exact log-likelihood ratio, not max-log; the table lookup and a copy of 2 to 3 floats per symbol, no vector allocation)",
+              "label": "misaligned by one sample",
+              "other_instr_per_sample": 129.02,
+              "other_snr_db": null,
+              "ours_instr_per_sample": 11.54,
+              "ratio": 0.09
+            }
+          ],
+          "other_instr_per_sample": 129.02,
+          "ours_instr_per_sample": 11.54,
+          "ratio": 0.09,
+          "snr_db": {
+            "other": 41.96,
+            "ours": 145.82
           },
           "status": "info",
           "verdict": "info"
@@ -23065,13 +23813,69 @@
           "verdict": "info"
         },
         "symbol_demap_qam16_block": {
-          "compared_with": "sdrk fallback",
+          "compared_with": "GNU Radio constellation_soft_decoder_cf with calc_soft_dec (constellation.cc of gr-digital; the exact log-likelihood ratio over all points, npwr 1, not max-log; no vector allocation per symbol, so faster than GNU Radio's object code)",
           "goal": true,
-          "other_instr_per_sample": 5.91,
+          "informational": [
+            {
+              "compared_with": "sdrk fallback",
+              "label": "information: fallback",
+              "other_instr_per_sample": 5.91,
+              "other_snr_db": 149.16,
+              "ours_instr_per_sample": 5.91,
+              "ratio": 1.0
+            }
+          ],
+          "other_instr_per_sample": 2461.02,
           "ours_instr_per_sample": 5.91,
-          "ratio": 1.0,
+          "ratio": 0.0,
           "snr_db": {
-            "other": 149.16,
+            "other": 141.13,
+            "ours": 149.16
+          },
+          "status": "info",
+          "verdict": "info"
+        },
+        "symbol_demap_qam16_block_liquid": {
+          "compared_with": "liquid-dsp 1.8.3 modemcf_demodulate_soft of its own QAM modem (modem_common.proto.c; soft bytes with liquid's scale and labelling; the hard symbol and the soft bits per symbol)",
+          "goal": true,
+          "informational": [
+            {
+              "compared_with": "sdrk fallback",
+              "label": "information: fallback",
+              "other_instr_per_sample": 5.91,
+              "other_snr_db": 149.16,
+              "ours_instr_per_sample": 5.91,
+              "ratio": 1.0
+            }
+          ],
+          "other_instr_per_sample": 661.25,
+          "ours_instr_per_sample": 5.91,
+          "ratio": 0.01,
+          "snr_db": {
+            "other": 999.0,
+            "ours": 149.16
+          },
+          "status": "info",
+          "verdict": "info"
+        },
+        "symbol_demap_qam16_block_lut": {
+          "compared_with": "GNU Radio constellation_soft_decoder_cf with the look-up table of gen_soft_dec_lut (precision 8, npwr 1; constellation.cc of gr-digital; exact log-likelihood ratio, not max-log; the table lookup and a copy of 2 to 3 floats per symbol, no vector allocation)",
+          "goal": true,
+          "informational": [
+            {
+              "compared_with": "sdrk fallback",
+              "label": "information: fallback",
+              "other_instr_per_sample": 5.91,
+              "other_snr_db": 149.16,
+              "ours_instr_per_sample": 5.91,
+              "ratio": 1.0
+            }
+          ],
+          "other_instr_per_sample": 129.01,
+          "ours_instr_per_sample": 5.91,
+          "ratio": 0.05,
+          "snr_db": {
+            "other": 42.96,
             "ours": 149.16
           },
           "status": "info",
@@ -23091,14 +23895,70 @@
           "verdict": "info"
         },
         "symbol_demap_qam64_block": {
-          "compared_with": "sdrk fallback",
+          "compared_with": "GNU Radio constellation_soft_decoder_cf with calc_soft_dec (constellation.cc of gr-digital; the exact log-likelihood ratio over all points, npwr 1, not max-log; no vector allocation per symbol, so faster than GNU Radio's object code)",
           "goal": true,
-          "other_instr_per_sample": 11.54,
+          "informational": [
+            {
+              "compared_with": "sdrk fallback",
+              "label": "information: fallback",
+              "other_instr_per_sample": 11.54,
+              "other_snr_db": 145.84,
+              "ours_instr_per_sample": 11.54,
+              "ratio": 1.0
+            }
+          ],
+          "other_instr_per_sample": 10436.02,
           "ours_instr_per_sample": 11.54,
-          "ratio": 1.0,
+          "ratio": 0.0,
           "snr_db": {
-            "other": 145.98,
-            "ours": 145.98
+            "other": 134.91,
+            "ours": 145.84
+          },
+          "status": "info",
+          "verdict": "info"
+        },
+        "symbol_demap_qam64_block_liquid": {
+          "compared_with": "liquid-dsp 1.8.3 modemcf_demodulate_soft of its own QAM modem (modem_common.proto.c; soft bytes with liquid's scale and labelling; the hard symbol and the soft bits per symbol)",
+          "goal": true,
+          "informational": [
+            {
+              "compared_with": "sdrk fallback",
+              "label": "information: fallback",
+              "other_instr_per_sample": 11.54,
+              "other_snr_db": 145.84,
+              "ours_instr_per_sample": 11.54,
+              "ratio": 1.0
+            }
+          ],
+          "other_instr_per_sample": 820.56,
+          "ours_instr_per_sample": 11.54,
+          "ratio": 0.01,
+          "snr_db": {
+            "other": 999.0,
+            "ours": 145.84
+          },
+          "status": "info",
+          "verdict": "info"
+        },
+        "symbol_demap_qam64_block_lut": {
+          "compared_with": "GNU Radio constellation_soft_decoder_cf with the look-up table of gen_soft_dec_lut (precision 8, npwr 1; constellation.cc of gr-digital; exact log-likelihood ratio, not max-log; the table lookup and a copy of 2 to 3 floats per symbol, no vector allocation)",
+          "goal": true,
+          "informational": [
+            {
+              "compared_with": "sdrk fallback",
+              "label": "information: fallback",
+              "other_instr_per_sample": 11.54,
+              "other_snr_db": 145.84,
+              "ours_instr_per_sample": 11.54,
+              "ratio": 1.0
+            }
+          ],
+          "other_instr_per_sample": 129.02,
+          "ours_instr_per_sample": 11.54,
+          "ratio": 0.09,
+          "snr_db": {
+            "other": 42.07,
+            "ours": 145.84
           },
           "status": "info",
           "verdict": "info"

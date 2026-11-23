@@ -1,0 +1,44 @@
+{
+  "arrays": {
+    "expected": {
+      "dtype": "cf64",
+      "file": "rrc_65_n256.expected.bin",
+      "len": 768
+    },
+    "input": {
+      "dtype": "cf32",
+      "file": "rrc_65_n256.input.bin",
+      "len": 768
+    },
+    "taps": {
+      "dtype": "cf32",
+      "file": "rrc_65_n256.taps.bin",
+      "len": 65
+    }
+  },
+  "case": "rrc_65_n256",
+  "format_version": 1,
+  "kernel": "xcorr_fft",
+  "notes": "QPSK (+-0.5 per component) at 4 samples per symbol shaped by the unit-energy RRC (rolloff 0.35, span 16), cast to cf32; taps = the RRC in float32 as complex (the matched filter); expected = the exact convolution numpy.convolve(x, h)[:rows]; zero history",
+  "params": {
+    "block_size": 192,
+    "fft_size": 256,
+    "rolloff": 0.35,
+    "span": 16,
+    "sps": 4,
+    "taps_len": 65
+  },
+  "provenance": {
+    "generator": "tests/golden/generate.py",
+    "numpy": "2.5.4",
+    "python": "3.12",
+    "scipy": "1.18.1"
+  },
+  "seed": 702,
+  "tolerance": {
+    "class": "tolerance",
+    "skip": 0,
+    "snr_db_guard": 134.9,
+    "snr_db_min": 100.0
+  }
+}

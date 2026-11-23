@@ -56,4 +56,5 @@ from . import (  # noqa: F401
     stereo_encode,
     symbol_sync,
     window,
+    xcorr,
 )

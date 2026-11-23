@@ -417,6 +417,46 @@ fn m49_kernels_give_the_bits_of_the_fallback() -> Result<()> {
 }
 
 #[test]
+fn backend_table_lists_the_m50_kernels() {
+    // `xcorr_fft` (`C32` only) runs on the fallback until its SIMD paths exist (M50 §5).
+    assert_eq!(backend_for("xcorr_fft", SampleType::C32), "fallback");
+    for ty in [SampleType::CQ15, SampleType::F32, SampleType::Q15] {
+        assert_eq!(backend_for("xcorr_fft", ty), "none", "{ty:?}");
+    }
+}
+
+#[test]
+fn m50_kernels_give_the_bits_of_the_fallback() -> Result<()> {
+    use sdrk::kernels::fft::FftPlan;
+    use sdrk::kernels::xcorr::{XcorrFft, XcorrFftState};
+
+    let taps: Vec<C32> = (0..100)
+        .map(|i| C32::new((i as f32 * 0.21).cos(), (i as f32 * 0.17).sin()))
+        .collect();
+    let x: Vec<C32> = (0..1000)
+        .map(|i| C32::new((i as f32 * 0.37).sin(), (i as f32 * 0.11).cos()))
+        .collect();
+    let state = || -> Result<_> {
+        XcorrFftState::new(
+            &taps,
+            vec![C32::default(); 256],
+            vec![C32::default(); 99],
+            vec![C32::default(); 256],
+            FftPlan::new(256, vec![C32::default(); 128])?,
+        )
+    };
+    let (mut a, mut b) = (state()?, state()?);
+    let (mut ya, mut yb) = (vec![C32::default(); 1000], vec![C32::default(); 1000]);
+    let pa = Sdrk.xcorr_fft(&mut a, &x, &mut ya)?;
+    let pb = Fallback.xcorr_fft(&mut b, &x, &mut yb)?;
+    assert_eq!(pa, pb);
+    assert_eq!(pa.consumed, 157 * 6);
+    assert_eq!(flat(&ya), flat(&yb));
+    assert_eq!(flat(a.history()), flat(b.history()));
+    Ok(())
+}
+
+#[test]
 fn backend_table_lists_the_m40_kernels() {
     // The carrier loop is a recursion over the symbols: not accelerated (`C32` only).
     assert_eq!(backend_for("costas", SampleType::C32), "fallback");

@@ -1559,7 +1559,7 @@ Reference model `skylake`, counter-model `znver2`, mode `whole-loop`; execution 
 | `pulse_match_block` | 42.97 | 42.97 | 1.00 | 38.69 | 38.69 | 1.00 | sdrk fallback |
 | `pulse_shape_block` | 8.15 | 8.15 | 1.00 | 10.37 | 10.37 | 1.00 | sdrk fallback |
 | `qam_acquire_block` | 52.13 | 52.13 | 1.00 | 44.16 | 44.16 | 1.00 | sdrk fallback |
-| `qam_demod_block` | 113.89 | 113.89 | 1.00 | 103.37 | 103.37 | 1.00 | sdrk fallback |
+| `qam_demod_block` | 113.96 | 485.36 | 0.23 | 101.98 | 406.48 | 0.25 | GNU Radio fir_filter_ccf + symbol_sync_cc + linear_equalizer + constellation_receiver_cb (the sum of the blocks of the receiver chain, generic compiler flags and VOLK generic dot products; no acquisition, no blind equalizer stage and no lock watches) |
 | `qam_demod_qam256_block` | 114.28 | 114.29 | 1.00 | 104.38 | 104.38 | 1.00 | sdrk fallback |
 | `qam_demod_search_block` | 121.02 | 121.02 | 1.00 | 109.51 | 109.51 | 1.00 | sdrk fallback |
 | `qam_frame_decode_block` | 131.83 | 131.85 | 1.00 | 120.67 | 120.68 | 1.00 | sdrk fallback |
@@ -1854,7 +1854,7 @@ Reference model `skylake`, counter-model `znver2`, mode `whole-loop`; execution 
 | `pulse_match_block` | 42.97 | 42.97 | 1.00 | 38.69 | 38.69 | 1.00 | sdrk fallback |
 | `pulse_shape_block` | 7.80 | 7.80 | 1.00 | 9.59 | 9.59 | 1.00 | sdrk fallback |
 | `qam_acquire_block` | 51.31 | 51.31 | 1.00 | 43.49 | 43.49 | 1.00 | sdrk fallback |
-| `qam_demod_block` | 113.63 | 113.63 | 1.00 | 102.03 | 102.03 | 1.00 | sdrk fallback |
+| `qam_demod_block` | 113.69 | 485.36 | 0.23 | 100.78 | 406.48 | 0.25 | GNU Radio fir_filter_ccf + symbol_sync_cc + linear_equalizer + constellation_receiver_cb (the sum of the blocks of the receiver chain, generic compiler flags and VOLK generic dot products; no acquisition, no blind equalizer stage and no lock watches) |
 | `qam_demod_qam256_block` | 113.84 | 113.84 | 1.00 | 102.90 | 102.90 | 1.00 | sdrk fallback |
 | `qam_demod_search_block` | 119.46 | 119.46 | 1.00 | 106.96 | 106.96 | 1.00 | sdrk fallback |
 | `qam_frame_decode_block` | 131.61 | 131.61 | 1.00 | 119.18 | 119.18 | 1.00 | sdrk fallback |
@@ -2150,7 +2150,7 @@ Reference model `znver3`, counter-model `alderlake`, mode `whole-loop`; executio
 | `pulse_match_block` | 12.41 | 12.41 | 1.00 | 11.36 | 11.36 | 1.00 | sdrk fallback |
 | `pulse_shape_block` | 3.56 | 3.56 | 1.00 | 3.51 | 3.51 | 1.00 | sdrk fallback |
 | `qam_acquire_block` | 26.89 | 26.89 | 1.00 | 32.64 | 32.64 | 1.00 | sdrk fallback |
-| `qam_demod_block` | 64.32 | 64.32 | 1.00 | 72.28 | 72.28 | 1.00 | sdrk fallback |
+| `qam_demod_block` | 64.29 | 1192.82 | 0.05 | 73.54 | 455.77 | 0.16 | GNU Radio fir_filter_ccf + symbol_sync_cc + linear_equalizer + constellation_receiver_cb (the sum of the blocks of the receiver chain, generic compiler flags and VOLK generic dot products; no acquisition, no blind equalizer stage and no lock watches) |
 | `qam_demod_qam256_block` | 68.21 | 68.21 | 1.00 | 75.20 | 75.20 | 1.00 | sdrk fallback |
 | `qam_demod_search_block` | 67.07 | 67.07 | 1.00 | 75.94 | 75.94 | 1.00 | sdrk fallback |
 | `qam_frame_decode_block` | 76.35 | 76.35 | 1.00 | 83.11 | 83.11 | 1.00 | sdrk fallback |
@@ -2446,7 +2446,7 @@ Reference model `znver4`, counter-model `sapphirerapids`, mode `whole-loop`; exe
 | `pulse_match_block` | 11.00 | 11.00 | 1.00 | 6.23 | 6.23 | 1.00 | sdrk fallback |
 | `pulse_shape_block` | 3.91 | 3.91 | 1.00 | 2.86 | 2.86 | 1.00 | sdrk fallback |
 | `qam_acquire_block` | 26.62 | 26.62 | 1.00 | 30.31 | 30.31 | 1.00 | sdrk fallback |
-| `qam_demod_block` | 62.37 | 62.41 | 1.00 | 67.06 | 67.12 | 1.00 | sdrk fallback |
+| `qam_demod_block` | 60.92 | 1287.08 | 0.05 | 69.22 | 463.69 | 0.15 | GNU Radio fir_filter_ccf + symbol_sync_cc + linear_equalizer + constellation_receiver_cb (the sum of the blocks of the receiver chain, generic compiler flags and VOLK generic dot products; no acquisition, no blind equalizer stage and no lock watches) |
 | `qam_demod_qam256_block` | 63.72 | 63.72 | 1.00 | 68.26 | 68.26 | 1.00 | sdrk fallback |
 | `qam_demod_search_block` | 65.75 | 65.75 | 1.00 | 70.92 | 70.92 | 1.00 | sdrk fallback |
 | `qam_frame_decode_block` | 73.87 | 73.87 | 1.00 | 78.15 | 78.15 | 1.00 | sdrk fallback |
@@ -2742,7 +2742,7 @@ Reference model `cortex-a72`, counter-model `cortex-a76`, mode `whole-loop`; exe
 | `pulse_match_block` | 48.91 | 48.91 | 1.00 | 31.64 | 31.64 | 1.00 | sdrk fallback |
 | `pulse_shape_block` | 12.99 | 12.99 | 1.00 | 11.83 | 11.83 | 1.00 | sdrk fallback |
 | `qam_acquire_block` | 61.74 | 61.74 | 1.00 | 48.40 | 48.40 | 1.00 | sdrk fallback |
-| `qam_demod_block` | 127.49 | 127.49 | 1.00 | 91.74 | 91.74 | 1.00 | sdrk fallback |
+| `qam_demod_block` | 136.17 | 413.84 | 0.33 | 91.75 | 316.01 | 0.29 | GNU Radio fir_filter_ccf + symbol_sync_cc + linear_equalizer + constellation_receiver_cb (the sum of the blocks of the receiver chain, generic compiler flags and VOLK generic dot products; no acquisition, no blind equalizer stage and no lock watches) |
 | `qam_demod_qam256_block` | 131.47 | 131.47 | 1.00 | 92.21 | 92.21 | 1.00 | sdrk fallback |
 | `qam_demod_search_block` | 136.80 | 136.80 | 1.00 | 100.50 | 100.50 | 1.00 | sdrk fallback |
 | `qam_frame_decode_block` | 152.19 | 152.19 | 1.00 | 115.26 | 115.26 | 1.00 | sdrk fallback |

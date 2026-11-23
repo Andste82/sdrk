@@ -5023,13 +5023,23 @@
           "verdict": "info"
         },
         "qam_demod_block": {
-          "compared_with": "sdrk fallback",
+          "compared_with": "GNU Radio fir_filter_ccf + symbol_sync_cc + linear_equalizer + constellation_receiver_cb (the sum of the blocks of the receiver chain, generic compiler flags and VOLK generic dot products; no acquisition, no blind equalizer stage and no lock watches)",
           "goal": true,
-          "other_instr_per_sample": 146.24,
-          "ours_instr_per_sample": 146.24,
-          "ratio": 1.0,
+          "informational": [
+            {
+              "compared_with": "sdrk fallback",
+              "label": "information: fallback",
+              "other_instr_per_sample": 146.2,
+              "other_snr_db": 999.0,
+              "ours_instr_per_sample": 146.2,
+              "ratio": 1.0
+            }
+          ],
+          "other_instr_per_sample": 881.15,
+          "ours_instr_per_sample": 146.2,
+          "ratio": 0.17,
           "snr_db": {
-            "other": 999.0,
+            "other": 0.0,
             "ours": 999.0
           },
           "status": "info",

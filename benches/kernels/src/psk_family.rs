@@ -75,7 +75,7 @@ fn psk_mod_block() -> PskModBlock<ArenaStorage<'static>> {
 }
 
 /// The matched filter of `psk_demod` (`rrc(0.35, 8, 10) / sqrt(8)`, `f32`).
-fn matched_taps() -> Vec<f32> {
+pub(crate) fn matched_taps() -> Vec<f32> {
     let cfg = demod_config();
     let mut taps =
         vec![0.0f64; sdrk_blocks::design::rrc_len(BLOCK_SPS, cfg.span).expect("rrc length")];
@@ -99,44 +99,43 @@ fn gr_carrier_bw() -> f32 {
     }
 }
 
-/// GNU Radio's chain `fir_filter_ccf` + `symbol_sync_cc` + `costas_loop_cc` +
-/// `constellation_decoder_cb` with its buffers.
-struct GrChain {
+/// The front end of GNU Radio's receiver chains: `fir_filter_ccf` with the matched filter, then
+/// `symbol_sync_cc`, with the buffers the scheduler keeps between the calls (the history of the
+/// filter and the samples the timing loop leaves unconsumed).
+pub(crate) struct GrFront {
     fir: GrFirFilterCcf,
     sync: GrSymbolSyncCc,
-    costas: GrCostasLoopCc,
     /// The last `ntaps - 1` input samples (the history of the filter) before the call's input.
     window: Vec<[f32; 2]>,
     /// The samples the timing loop has not consumed, then the filter output of the call.
     pending: Vec<[f32; 2]>,
     pending_len: usize,
-    symbols: Vec<[f32; 2]>,
-    locked: Vec<[f32; 2]>,
+    /// The symbols of the last call.
+    pub(crate) symbols: Vec<[f32; 2]>,
 }
 
-impl GrChain {
-    fn new(n: usize) -> Option<Self> {
+impl GrFront {
+    /// The front end for `n` input samples per call at 8 samples per symbol with the timing loop
+    /// bandwidth `sync_bw` (damping 0.707, `max_deviation` 0.005 symbols, `ted_gain` 1).
+    pub(crate) fn new(n: usize, sync_bw: f32) -> Option<Self> {
         let fir = GrFirFilterCcf::new(&matched_taps())?;
         #[allow(clippy::cast_precision_loss, reason = "a small integer")]
         let sps = BLOCK_SPS as f32;
-        let sync = GrSymbolSyncCc::new(sps, SYNC_BW, DAMPING, 1.0, MAX_DEVIATION * sps)?;
-        let costas = GrCostasLoopCc::new(gr_carrier_bw(), 4)?;
+        let sync = GrSymbolSyncCc::new(sps, sync_bw, DAMPING, 1.0, MAX_DEVIATION * sps)?;
         let history = fir.ntaps() - 1;
-        Some(GrChain {
+        Some(GrFront {
             fir,
             sync,
-            costas,
             window: vec![[0.0; 2]; history + n],
             pending: vec![[0.0; 2]; n + 64],
             pending_len: 0,
             symbols: vec![[0.0; 2]; n / BLOCK_SPS + 64],
-            locked: vec![[0.0; 2]; n / BLOCK_SPS + 64],
         })
     }
 
-    /// One call: `input` through the four blocks; the decoded symbols are written to `out`, the
-    /// number of them is returned.
-    fn process(&mut self, input: &[[f32; 2]], out: &mut [u8]) -> usize {
+    /// One call: `input` through the filter and the timing loop; the symbols are in
+    /// [`GrFront::symbols`], their number is returned.
+    pub(crate) fn process(&mut self, input: &[[f32; 2]]) -> usize {
         let history = self.fir.ntaps() - 1;
         let n = input.len();
         // The filter: the history, then the input.
@@ -149,9 +148,36 @@ impl GrChain {
         let (produced, consumed) = self.sync.work(&self.pending[..at + n], &mut self.symbols);
         self.pending.copy_within(consumed..at + n, 0);
         self.pending_len = at + n - consumed;
+        produced
+    }
+}
+
+/// GNU Radio's chain `fir_filter_ccf` + `symbol_sync_cc` + `costas_loop_cc` +
+/// `constellation_decoder_cb` with its buffers.
+struct GrChain {
+    front: GrFront,
+    costas: GrCostasLoopCc,
+    locked: Vec<[f32; 2]>,
+}
+
+impl GrChain {
+    fn new(n: usize) -> Option<Self> {
+        Some(GrChain {
+            front: GrFront::new(n, SYNC_BW)?,
+            costas: GrCostasLoopCc::new(gr_carrier_bw(), 4)?,
+            locked: vec![[0.0; 2]; n / BLOCK_SPS + 64],
+        })
+    }
+
+    /// One call: `input` through the four blocks; the decoded symbols are written to `out`, the
+    /// number of them is returned.
+    fn process(&mut self, input: &[[f32; 2]], out: &mut [u8]) -> usize {
+        let produced = self.front.process(input);
         // The carrier loop and the decision.
-        self.costas
-            .work(&self.symbols[..produced], &mut self.locked[..produced]);
+        self.costas.work(
+            &self.front.symbols[..produced],
+            &mut self.locked[..produced],
+        );
         gr_constellation_decoder_qpsk(&self.locked[..produced], &mut out[..produced]);
         produced
     }

@@ -742,11 +742,11 @@ pub struct GrCostasLoopCc {
 }
 
 impl GrCostasLoopCc {
-    /// The block `costas_loop_cc(loop_bw, order)` for the order 2 or 4; `None` without the
+    /// The block `costas_loop_cc(loop_bw, order)` for the order 2, 4 or 8; `None` without the
     /// library or for another order.
     #[must_use]
     pub fn new(loop_bw: f32, order: u32) -> Option<Self> {
-        if !cfg!(has_grcostas) || !matches!(order, 2 | 4) {
+        if !cfg!(has_grcostas) || !matches!(order, 2 | 4 | 8) {
             return None;
         }
         #[cfg_attr(not(has_grcostas), allow(unused_mut))]

@@ -55,6 +55,7 @@ mod math_family;
 mod morse_family;
 mod noise_family;
 mod proto_family;
+pub mod psk_ber;
 mod psk_family;
 mod qam_family;
 mod rds_family;

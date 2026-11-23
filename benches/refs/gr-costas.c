@@ -72,6 +72,18 @@ static inline float phase_detector_4(sdrk_gr_complex sample)
     return ((sample.re > 0.0f ? 1.0f : -1.0f) * sample.im - (sample.im > 0.0f ? 1.0f : -1.0f) * sample.re);
 }
 
+/* costas_loop_cc_impl::phase_detector_8: K = sqrt(2) - 1 */
+static inline float phase_detector_8(sdrk_gr_complex sample)
+{
+    const float K = (float)(1.41421356237309504880 - 1.0);
+    float sr = sample.re > 0.0f ? 1.0f : -1.0f;
+    float si = sample.im > 0.0f ? 1.0f : -1.0f;
+    if (fabsf(sample.re) >= fabsf(sample.im)) {
+        return (sr * sample.im - si * sample.re * K);
+    }
+    return (sr * sample.im * K - si * sample.re);
+}
+
 static inline float phase_detector_2(sdrk_gr_complex sample) { return (sample.re * sample.im); }
 
 static inline float branchless_clip(float x, float clip) { return 0.5 * (fabsf(x + clip) - fabsf(x - clip)); }
@@ -117,6 +129,9 @@ void sdrk_gr_costas_cc_work(sdrk_gr_costas_cc* self, sdrk_gr_complex optr[], con
             break;
         case 4:
             self->d_error = phase_detector_4(optr[i]);
+            break;
+        case 8:
+            self->d_error = phase_detector_8(optr[i]);
             break;
         }
         self->d_error = branchless_clip(self->d_error, 1.0);

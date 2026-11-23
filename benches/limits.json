@@ -4887,7 +4887,8 @@
       "status": "release"
     },
     "simd128": {
-      "status": "release"
+      "status": "info",
+      "waiver": "liquid-dsp has no FFTW build on wasm32 (FFTW has no WebAssembly code), so the comparison at this level is `firpfbch2_crcf` over liquid's own FFT, portable C compiled with `-msimd128`: no SIMD reference of the level (D32), reported as information, as `xcorr_fft` (the maintainer's decision D2623 on I50-3)"
     },
     "avx2-runtime": {
       "status": "release"

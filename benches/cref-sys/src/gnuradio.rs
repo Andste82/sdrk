@@ -1234,6 +1234,107 @@ impl Drop for GrFirBank {
     }
 }
 
+#[cfg(has_grsymsync)]
+mod chunks_ffi {
+    unsafe extern "C" {
+        pub fn sdrk_gr_chunks_new(
+            points: *const f32,
+            m: core::ffi::c_uint,
+            k: core::ffi::c_uint,
+            capacity: core::ffi::c_uint,
+        ) -> *mut core::ffi::c_void;
+        pub fn sdrk_gr_chunks_free(state: *mut core::ffi::c_void);
+        pub fn sdrk_gr_chunks_work(
+            state: *mut core::ffi::c_void,
+            output: *mut [f32; 2],
+            bits: *const u8,
+            n: core::ffi::c_uint,
+        );
+    }
+}
+
+/// GNU Radio's mapper flow `pack_k_bits_bb(k)` + `chunks_to_symbols_bc(points, 1)`
+/// (`gr-chunks.c`, cfg `has_grsymsync`): `k` bits (one per byte, the first the most
+/// significant) to a byte, the byte to its point of the table.
+pub struct GrChunksToSymbols {
+    #[cfg_attr(not(has_grsymsync), allow(dead_code))]
+    object: *mut core::ffi::c_void,
+    k: usize,
+    capacity: usize,
+}
+
+// SAFETY: the C object owns its buffers and is used by one thread at a time.
+unsafe impl Send for GrChunksToSymbols {}
+
+impl GrChunksToSymbols {
+    /// The mapper for the table `points` (symbol order) of `2^k` entries and at most `capacity`
+    /// symbols per call; `None` without the library or for another table length.
+    #[must_use]
+    pub fn new(points: &[[f32; 2]], k: usize, capacity: usize) -> Option<Self> {
+        if k == 0 || k > 8 || points.len() != 1 << k {
+            return None;
+        }
+        #[cfg(has_grsymsync)]
+        {
+            let (m, kk, c) = (
+                u32::try_from(points.len()).ok()?,
+                u32::try_from(k).ok()?,
+                u32::try_from(capacity).ok()?,
+            );
+            // SAFETY: `points` holds `m` pairs; the C side copies them.
+            let object =
+                unsafe { chunks_ffi::sdrk_gr_chunks_new(points.as_ptr().cast(), m, kk, c) };
+            if object.is_null() {
+                return None;
+            }
+            Some(GrChunksToSymbols {
+                object,
+                k,
+                capacity,
+            })
+        }
+        #[cfg(not(has_grsymsync))]
+        {
+            let _ = (capacity, k);
+            None
+        }
+    }
+
+    /// `output.len()` symbols from `bits` (`output.len() * k` bytes of 0 or 1).
+    ///
+    /// # Panics
+    /// If `bits` is not `output.len() * k` long or `output` is above the capacity.
+    pub fn work(&mut self, bits: &[u8], output: &mut [[f32; 2]]) {
+        assert_eq!(
+            bits.len(),
+            output.len() * self.k,
+            "chunks_to_symbols: length mismatch"
+        );
+        assert!(
+            output.len() <= self.capacity,
+            "chunks_to_symbols: above the capacity"
+        );
+        let n = u32::try_from(output.len()).expect("chunks_to_symbols: too many symbols");
+        #[cfg(has_grsymsync)]
+        // SAFETY: `bits` holds `n * k` bytes and `output` `n` pairs; they do not overlap.
+        unsafe {
+            chunks_ffi::sdrk_gr_chunks_work(self.object, output.as_mut_ptr(), bits.as_ptr(), n);
+        }
+        #[cfg(not(has_grsymsync))]
+        let _ = n;
+    }
+}
+
+impl Drop for GrChunksToSymbols {
+    fn drop(&mut self) {
+        #[cfg(has_grsymsync)]
+        // SAFETY: the object was created by `new` and is freed once.
+        unsafe {
+            chunks_ffi::sdrk_gr_chunks_free(self.object);
+        }
+    }
+}
+
 #[cfg(has_grequalizer)]
 mod equalizer_ffi {
     unsafe extern "C" {

@@ -370,7 +370,7 @@ pub trait Kernel {
 /// are appended; a `<kernel>_fallback`, `<kernel>_airspy`, `<kernel>_fastnoise`,
 /// `<kernel>_ziggurat`, `<kernel>_dvbs2`, `<kernel>_svr` or `<kernel>_liquid` entry takes the seed of `<kernel>`, so
 /// that both entries filter the same input.
-pub const KERNELS: [&str; 290] = [
+pub const KERNELS: [&str; 295] = [
     "convert_cs8",
     "convert_cs16",
     "convert_out_cs16",
@@ -606,6 +606,11 @@ pub const KERNELS: [&str; 290] = [
     "equalize_qam64_fallback",
     "psk_mod_block",
     "symbol_map_block",
+    "symbol_map_block_liquid",
+    "symbol_map_block_qpsk",
+    "symbol_map_block_qpsk_liquid",
+    "symbol_map_block_qam64",
+    "symbol_map_block_qam64_liquid",
     "iq_offset_block",
     "qam_acquire_block",
     "qam_frame_encode_block",
@@ -969,7 +974,42 @@ pub fn prepare(name: &str, layout: Layout) -> Option<Box<dyn Kernel>> {
             sdrk_core::kernels::constellation::Qam::Qam256,
         )),
         "psk_mod_block" => Box::new(qam_family::PskModBlockK::new(rng, layout)),
-        "symbol_map_block" => Box::new(qam_family::SymbolMapBlockK::new(rng, layout)),
+        "symbol_map_block" => Box::new(qam_family::SymbolMapBlockK::new(
+            rng,
+            layout,
+            qam_family::MapKind::Qam16,
+            false,
+        )),
+        "symbol_map_block_liquid" => Box::new(qam_family::SymbolMapBlockK::new(
+            rng,
+            layout,
+            qam_family::MapKind::Qam16,
+            true,
+        )),
+        "symbol_map_block_qpsk" => Box::new(qam_family::SymbolMapBlockK::new(
+            rng,
+            layout,
+            qam_family::MapKind::Qpsk,
+            false,
+        )),
+        "symbol_map_block_qpsk_liquid" => Box::new(qam_family::SymbolMapBlockK::new(
+            rng,
+            layout,
+            qam_family::MapKind::Qpsk,
+            true,
+        )),
+        "symbol_map_block_qam64" => Box::new(qam_family::SymbolMapBlockK::new(
+            rng,
+            layout,
+            qam_family::MapKind::Qam64,
+            false,
+        )),
+        "symbol_map_block_qam64_liquid" => Box::new(qam_family::SymbolMapBlockK::new(
+            rng,
+            layout,
+            qam_family::MapKind::Qam64,
+            true,
+        )),
         "iq_offset_block" => Box::new(qam_family::IqOffsetBlockK::new(rng, layout)),
         "qam_acquire_block" => Box::new(qam_family::QamAcquireBlockK::new(rng, layout)),
         "qam_frame_encode_block" => Box::new(qam_family::QamFrameEncodeBlockK::new(rng, layout)),

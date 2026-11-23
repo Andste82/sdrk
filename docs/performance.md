@@ -1614,7 +1614,12 @@ Reference model `skylake`, counter-model `znver2`, mode `whole-loop`; execution 
 | `symbol_demap_qam16_block` | 1.35 | 1.35 | 1.00 | 1.49 | 1.49 | 1.00 | sdrk fallback |
 | `symbol_demap_qam256_block` | 6.02 | 6.02 | 1.00 | 6.02 | 6.02 | 1.00 | sdrk fallback |
 | `symbol_demap_qam64_block` | 3.03 | 3.03 | 1.00 | 3.34 | 3.34 | 1.00 | sdrk fallback |
-| `symbol_map_block` | 7.10 | 7.10 | 1.00 | 6.61 | 6.61 | 1.00 | sdrk fallback |
+| `symbol_map_block` | 7.10 | 13.20 | 0.54 | 6.61 | 15.02 | 0.44 | GNU Radio pack_k_bits_bb + chunks_to_symbols_bc (pack_k_bits.cc of gr-blocks, chunks_to_symbols_impl.cc of gr-digital), the table of the points of the block, generic compiler flags |
+| `symbol_map_block_liquid` | 7.10 | 22.45 | 0.32 | 6.61 | 23.09 | 0.29 | liquid-dsp 1.8.3 modemcf_modulate on the arbitrary-constellation modem of the points of the block (modem_arb.proto.c), the bits packed by the wrapper |
+| `symbol_map_block_qam64` | 10.11 | 17.84 | 0.57 | 10.12 | 19.62 | 0.52 | GNU Radio pack_k_bits_bb + chunks_to_symbols_bc (pack_k_bits.cc of gr-blocks, chunks_to_symbols_impl.cc of gr-digital), the table of the points of the block, generic compiler flags |
+| `symbol_map_block_qam64_liquid` | 10.11 | 26.53 | 0.38 | 10.12 | 27.16 | 0.37 | liquid-dsp 1.8.3 modemcf_modulate on the arbitrary-constellation modem of the points of the block (modem_arb.proto.c), the bits packed by the wrapper |
+| `symbol_map_block_qpsk` | 6.27 | 8.56 | 0.73 | 7.75 | 10.43 | 0.74 | GNU Radio pack_k_bits_bb + chunks_to_symbols_bc (pack_k_bits.cc of gr-blocks, chunks_to_symbols_impl.cc of gr-digital), the table of the points of the block, generic compiler flags |
+| `symbol_map_block_qpsk_liquid` | 6.27 | 18.37 | 0.34 | 7.75 | 19.02 | 0.41 | liquid-dsp 1.8.3 modemcf_modulate on the arbitrary-constellation modem of the points of the block (modem_arb.proto.c), the bits packed by the wrapper |
 | `symbol_sync` | 49.33 | 49.33 | 1.00 | 39.57 | 39.57 | 1.00 | sdrk fallback |
 | `symbol_sync_fallback` | 49.33 | 57.52 | 0.86 | 39.08 | 57.78 | 0.68 | GNU Radio symbol_sync_cc (symbol_sync_cc_impl.cc of gr-digital, TED_GARDNER, IR_MMSE_8TAP, generic compiler flags; reference does different work: an 8-tap MMSE interpolator against our 4-point Lagrange polynomial) |
 | `symbol_sync_real` | 23.16 | 23.16 | 1.00 | 18.66 | 18.66 | 1.00 | sdrk fallback |
@@ -1910,7 +1915,12 @@ Reference model `skylake`, counter-model `znver2`, mode `whole-loop`; execution 
 | `symbol_demap_qam16_block` | 1.35 | 1.35 | 1.00 | 1.49 | 1.49 | 1.00 | sdrk fallback |
 | `symbol_demap_qam256_block` | 5.66 | 5.66 | 1.00 | 5.72 | 5.72 | 1.00 | sdrk fallback |
 | `symbol_demap_qam64_block` | 3.03 | 3.03 | 1.00 | 3.34 | 3.34 | 1.00 | sdrk fallback |
-| `symbol_map_block` | 7.10 | 7.10 | 1.00 | 6.61 | 6.61 | 1.00 | sdrk fallback |
+| `symbol_map_block` | 7.10 | 13.20 | 0.54 | 6.61 | 15.02 | 0.44 | GNU Radio pack_k_bits_bb + chunks_to_symbols_bc (pack_k_bits.cc of gr-blocks, chunks_to_symbols_impl.cc of gr-digital), the table of the points of the block, generic compiler flags |
+| `symbol_map_block_liquid` | 7.10 | 22.45 | 0.32 | 6.61 | 23.09 | 0.29 | liquid-dsp 1.8.3 modemcf_modulate on the arbitrary-constellation modem of the points of the block (modem_arb.proto.c), the bits packed by the wrapper |
+| `symbol_map_block_qam64` | 10.11 | 17.84 | 0.57 | 10.12 | 19.62 | 0.52 | GNU Radio pack_k_bits_bb + chunks_to_symbols_bc (pack_k_bits.cc of gr-blocks, chunks_to_symbols_impl.cc of gr-digital), the table of the points of the block, generic compiler flags |
+| `symbol_map_block_qam64_liquid` | 10.11 | 26.53 | 0.38 | 10.12 | 27.16 | 0.37 | liquid-dsp 1.8.3 modemcf_modulate on the arbitrary-constellation modem of the points of the block (modem_arb.proto.c), the bits packed by the wrapper |
+| `symbol_map_block_qpsk` | 6.27 | 8.56 | 0.73 | 7.75 | 10.43 | 0.74 | GNU Radio pack_k_bits_bb + chunks_to_symbols_bc (pack_k_bits.cc of gr-blocks, chunks_to_symbols_impl.cc of gr-digital), the table of the points of the block, generic compiler flags |
+| `symbol_map_block_qpsk_liquid` | 6.27 | 18.37 | 0.34 | 7.75 | 19.02 | 0.41 | liquid-dsp 1.8.3 modemcf_modulate on the arbitrary-constellation modem of the points of the block (modem_arb.proto.c), the bits packed by the wrapper |
 | `symbol_sync` | 49.82 | 49.82 | 1.00 | 38.10 | 38.10 | 1.00 | sdrk fallback |
 | `symbol_sync_fallback` | 49.82 | 57.52 | 0.87 | 37.86 | 57.78 | 0.66 | GNU Radio symbol_sync_cc (symbol_sync_cc_impl.cc of gr-digital, TED_GARDNER, IR_MMSE_8TAP, generic compiler flags; reference does different work: an 8-tap MMSE interpolator against our 4-point Lagrange polynomial) |
 | `symbol_sync_real` | 23.29 | 23.29 | 1.00 | 18.29 | 18.29 | 1.00 | sdrk fallback |
@@ -2208,7 +2218,12 @@ Reference model `znver3`, counter-model `alderlake`, mode `whole-loop`; executio
 | `symbol_demap_qam16_block` | 0.52 | 0.52 | 1.00 | 1.02 | 1.02 | 1.00 | sdrk fallback |
 | `symbol_demap_qam256_block` | 2.51 | 2.51 | 1.00 | 4.06 | 4.06 | 1.00 | sdrk fallback |
 | `symbol_demap_qam64_block` | 1.55 | 1.55 | 1.00 | 1.42 | 1.42 | 1.00 | sdrk fallback |
-| `symbol_map_block` | 5.78 | 5.78 | 1.00 | 7.55 | 7.55 | 1.00 | sdrk fallback |
+| `symbol_map_block` | 5.78 | 10.49 | 0.55 | 7.55 | 11.66 | 0.65 | GNU Radio pack_k_bits_bb + chunks_to_symbols_bc (pack_k_bits.cc of gr-blocks, chunks_to_symbols_impl.cc of gr-digital), the table of the points of the block, generic compiler flags |
+| `symbol_map_block_liquid` | 5.78 | 18.48 | 0.31 | 7.55 | 20.14 | 0.38 | liquid-dsp 1.8.3 modemcf_modulate on the arbitrary-constellation modem of the points of the block (modem_arb.proto.c), the bits packed by the wrapper |
+| `symbol_map_block_qam64` | 7.65 | 13.61 | 0.56 | 7.32 | 15.92 | 0.46 | GNU Radio pack_k_bits_bb + chunks_to_symbols_bc (pack_k_bits.cc of gr-blocks, chunks_to_symbols_impl.cc of gr-digital), the table of the points of the block, generic compiler flags |
+| `symbol_map_block_qam64_liquid` | 7.65 | 22.56 | 0.34 | 7.32 | 26.23 | 0.28 | liquid-dsp 1.8.3 modemcf_modulate on the arbitrary-constellation modem of the points of the block (modem_arb.proto.c), the bits packed by the wrapper |
+| `symbol_map_block_qpsk` | 5.57 | 7.37 | 0.76 | 5.16 | 7.40 | 0.70 | GNU Radio pack_k_bits_bb + chunks_to_symbols_bc (pack_k_bits.cc of gr-blocks, chunks_to_symbols_impl.cc of gr-digital), the table of the points of the block, generic compiler flags |
+| `symbol_map_block_qpsk_liquid` | 5.57 | 14.40 | 0.39 | 5.16 | 14.05 | 0.37 | liquid-dsp 1.8.3 modemcf_modulate on the arbitrary-constellation modem of the points of the block (modem_arb.proto.c), the bits packed by the wrapper |
 | `symbol_sync` | 31.52 | 31.52 | 1.00 | 43.74 | 43.74 | 1.00 | sdrk fallback |
 | `symbol_sync_fallback` | 31.52 | 43.55 | 0.72 | 43.74 | 36.46 | 1.20 | GNU Radio symbol_sync_cc (symbol_sync_cc_impl.cc of gr-digital, TED_GARDNER, IR_MMSE_8TAP, generic compiler flags; reference does different work: an 8-tap MMSE interpolator against our 4-point Lagrange polynomial) |
 | `symbol_sync_real` | 15.66 | 15.66 | 1.00 | 21.81 | 21.81 | 1.00 | sdrk fallback |
@@ -2506,7 +2521,12 @@ Reference model `znver4`, counter-model `sapphirerapids`, mode `whole-loop`; exe
 | `symbol_demap_qam16_block` | 0.36 | 0.36 | 1.00 | 0.33 | 0.33 | 1.00 | sdrk fallback |
 | `symbol_demap_qam256_block` | 1.21 | 1.21 | 1.00 | 1.01 | 1.01 | 1.00 | sdrk fallback |
 | `symbol_demap_qam64_block` | 0.77 | 0.77 | 1.00 | 0.77 | 0.77 | 1.00 | sdrk fallback |
-| `symbol_map_block` | 1.28 | 1.28 | 1.00 | 2.17 | 2.17 | 1.00 | sdrk fallback |
+| `symbol_map_block` | 1.15 | 10.49 | 0.11 | 2.17 | 11.66 | 0.19 | GNU Radio pack_k_bits_bb + chunks_to_symbols_bc (pack_k_bits.cc of gr-blocks, chunks_to_symbols_impl.cc of gr-digital), the table of the points of the block, generic compiler flags |
+| `symbol_map_block_liquid` | 1.15 | 17.59 | 0.07 | 2.17 | 20.14 | 0.11 | liquid-dsp 1.8.3 modemcf_modulate on the arbitrary-constellation modem of the points of the block (modem_arb.proto.c), the bits packed by the wrapper |
+| `symbol_map_block_qam64` | 2.31 | 13.61 | 0.17 | 3.55 | 15.92 | 0.22 | GNU Radio pack_k_bits_bb + chunks_to_symbols_bc (pack_k_bits.cc of gr-blocks, chunks_to_symbols_impl.cc of gr-digital), the table of the points of the block, generic compiler flags |
+| `symbol_map_block_qam64_liquid` | 2.31 | 21.67 | 0.11 | 3.55 | 26.23 | 0.14 | liquid-dsp 1.8.3 modemcf_modulate on the arbitrary-constellation modem of the points of the block (modem_arb.proto.c), the bits packed by the wrapper |
+| `symbol_map_block_qpsk` | 5.20 | 7.37 | 0.71 | 5.03 | 7.40 | 0.68 | GNU Radio pack_k_bits_bb + chunks_to_symbols_bc (pack_k_bits.cc of gr-blocks, chunks_to_symbols_impl.cc of gr-digital), the table of the points of the block, generic compiler flags |
+| `symbol_map_block_qpsk_liquid` | 5.20 | 13.51 | 0.39 | 5.03 | 14.05 | 0.36 | liquid-dsp 1.8.3 modemcf_modulate on the arbitrary-constellation modem of the points of the block (modem_arb.proto.c), the bits packed by the wrapper |
 | `symbol_sync` | 28.82 | 28.82 | 1.00 | 39.81 | 39.81 | 1.00 | sdrk fallback |
 | `symbol_sync_fallback` | 28.82 | 36.87 | 0.78 | 39.57 | 36.46 | 1.09 | GNU Radio symbol_sync_cc (symbol_sync_cc_impl.cc of gr-digital, TED_GARDNER, IR_MMSE_8TAP, generic compiler flags; reference does different work: an 8-tap MMSE interpolator against our 4-point Lagrange polynomial) |
 | `symbol_sync_real` | 14.40 | 14.40 | 1.00 | 19.92 | 19.92 | 1.00 | sdrk fallback |
@@ -2804,7 +2824,12 @@ Reference model `cortex-a72`, counter-model `cortex-a76`, mode `whole-loop`; exe
 | `symbol_demap_qam16_block` | 3.04 | 3.04 | 1.00 | 2.03 | 2.03 | 1.00 | sdrk fallback |
 | `symbol_demap_qam256_block` | 6.06 | 6.06 | 1.00 | 4.29 | 4.29 | 1.00 | sdrk fallback |
 | `symbol_demap_qam64_block` | 4.55 | 4.55 | 1.00 | 3.04 | 3.04 | 1.00 | sdrk fallback |
-| `symbol_map_block` | 7.08 | 7.08 | 1.00 | 9.07 | 9.07 | 1.00 | sdrk fallback |
+| `symbol_map_block` | 7.08 | 22.59 | 0.31 | 9.07 | 21.73 | 0.42 | GNU Radio pack_k_bits_bb + chunks_to_symbols_bc (pack_k_bits.cc of gr-blocks, chunks_to_symbols_impl.cc of gr-digital), the table of the points of the block, generic compiler flags |
+| `symbol_map_block_liquid` | 7.08 | 25.31 | 0.28 | 9.07 | 26.29 | 0.35 | liquid-dsp 1.8.3 modemcf_modulate on the arbitrary-constellation modem of the points of the block (modem_arb.proto.c), the bits packed by the wrapper |
+| `symbol_map_block_qam64` | 10.09 | 29.68 | 0.34 | 12.07 | 28.81 | 0.42 | GNU Radio pack_k_bits_bb + chunks_to_symbols_bc (pack_k_bits.cc of gr-blocks, chunks_to_symbols_impl.cc of gr-digital), the table of the points of the block, generic compiler flags |
+| `symbol_map_block_qam64_liquid` | 10.09 | 29.39 | 0.34 | 12.07 | 30.36 | 0.40 | liquid-dsp 1.8.3 modemcf_modulate on the arbitrary-constellation modem of the points of the block (modem_arb.proto.c), the bits packed by the wrapper |
+| `symbol_map_block_qpsk` | 7.08 | 15.50 | 0.46 | 8.82 | 14.65 | 0.60 | GNU Radio pack_k_bits_bb + chunks_to_symbols_bc (pack_k_bits.cc of gr-blocks, chunks_to_symbols_impl.cc of gr-digital), the table of the points of the block, generic compiler flags |
+| `symbol_map_block_qpsk_liquid` | 7.08 | 21.23 | 0.33 | 8.82 | 22.22 | 0.40 | liquid-dsp 1.8.3 modemcf_modulate on the arbitrary-constellation modem of the points of the block (modem_arb.proto.c), the bits packed by the wrapper |
 | `symbol_sync` | 47.13 | 47.13 | 1.00 | 28.58 | 28.58 | 1.00 | sdrk fallback |
 | `symbol_sync_fallback` | 51.52 | 42.71 | 1.21 | 28.58 | 29.15 | 0.98 | GNU Radio symbol_sync_cc (symbol_sync_cc_impl.cc of gr-digital, TED_GARDNER, IR_MMSE_8TAP, generic compiler flags; reference does different work: an 8-tap MMSE interpolator against our 4-point Lagrange polynomial) |
 | `symbol_sync_real` | 20.41 | 20.41 | 1.00 | 12.03 | 12.03 | 1.00 | sdrk fallback |

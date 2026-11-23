@@ -34,6 +34,15 @@ mod ffi {
         ) -> *mut c_void;
         pub fn sdrk_liquid_firfilt_crcf_reset(q: *mut c_void);
         pub fn sdrk_liquid_firfilt_crcf_destroy(q: *mut c_void);
+        pub fn sdrk_liquid_modem_create(pts: *const f32, m: c_uint) -> *mut c_void;
+        pub fn sdrk_liquid_modem_destroy(q: *mut c_void);
+        pub fn sdrk_liquid_modem_map_block(
+            q: *mut c_void,
+            bits: *const u8,
+            k: c_uint,
+            n: c_uint,
+            y: *mut [f32; 2],
+        );
         pub fn sdrk_liquid_firfilt_crcf_execute_block(
             q: *mut c_void,
             x: *mut [f32; 2],
@@ -195,5 +204,75 @@ impl Drop for LiquidFirinterpCrcf {
     fn drop(&mut self) {
         // SAFETY: the object came from the constructor and is destroyed once.
         unsafe { ffi::sdrk_liquid_firinterp_crcf_destroy(self.q) }
+    }
+}
+
+/// liquid's `modemcf` as a symbol mapper (`benches/refs/liquid-modem.c`): the arbitrary
+/// constellation of the caller's points (`modemcf_create_arbitrary`) and `modemcf_modulate`
+/// per symbol, with the bits packed to the symbol by the wrapper.
+pub struct LiquidModemMap {
+    #[cfg_attr(not(has_liquidhb), allow(dead_code))]
+    q: *mut c_void,
+    k: usize,
+}
+
+// SAFETY: the C object owns its table and is used by one thread at a time.
+unsafe impl Send for LiquidModemMap {}
+
+impl LiquidModemMap {
+    /// The mapper for the table `points` (symbol order) of `2^k` entries; `None` without the
+    /// library or for another table length.
+    #[must_use]
+    pub fn new(points: &[[f32; 2]], k: usize) -> Option<Self> {
+        if k == 0 || k > 8 || points.len() != 1 << k {
+            return None;
+        }
+        #[cfg(has_liquidhb)]
+        {
+            // SAFETY: `points` holds `2^k` pairs, which the call copies.
+            let q = unsafe {
+                ffi::sdrk_liquid_modem_create(points.as_ptr().cast(), count(points.len()))
+            };
+            if q.is_null() {
+                None
+            } else {
+                Some(Self { q, k })
+            }
+        }
+        #[cfg(not(has_liquidhb))]
+        {
+            let _ = k;
+            None
+        }
+    }
+
+    /// `y.len()` symbols from `bits` (`y.len() * k` bytes of 0 or 1).
+    ///
+    /// # Panics
+    /// If `bits` is not `y.len() * k` long.
+    pub fn map(&mut self, bits: &[u8], y: &mut [[f32; 2]]) {
+        assert_eq!(bits.len(), y.len() * self.k, "liquid modem: lengths");
+        let n = count(y.len());
+        #[cfg(has_liquidhb)]
+        // SAFETY: `bits` holds `n * k` bytes and `y` `n` pairs.
+        unsafe {
+            ffi::sdrk_liquid_modem_map_block(
+                self.q,
+                bits.as_ptr(),
+                count(self.k),
+                n,
+                y.as_mut_ptr(),
+            );
+        }
+        #[cfg(not(has_liquidhb))]
+        let _ = n;
+    }
+}
+
+#[cfg(has_liquidhb)]
+impl Drop for LiquidModemMap {
+    fn drop(&mut self) {
+        // SAFETY: the object came from the constructor and is destroyed once.
+        unsafe { ffi::sdrk_liquid_modem_destroy(self.q) }
     }
 }

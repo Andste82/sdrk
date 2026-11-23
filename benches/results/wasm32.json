@@ -4907,6 +4907,29 @@
           "status": "info",
           "verdict": "info"
         },
+        "psk_demod_block": {
+          "compared_with": "GNU Radio fir_filter_ccf + symbol_sync_cc + costas_loop_cc + constellation_decoder_cb (the sum of the blocks of the receiver chain, generic compiler flags; no acquisition and no lock watches)",
+          "goal": true,
+          "informational": [
+            {
+              "compared_with": "sdrk fallback",
+              "label": "information: fallback",
+              "other_instr_per_sample": 386.32,
+              "other_snr_db": 999.0,
+              "ours_instr_per_sample": 386.32,
+              "ratio": 1.0
+            }
+          ],
+          "other_instr_per_sample": 2236.18,
+          "ours_instr_per_sample": 386.32,
+          "ratio": 0.17,
+          "snr_db": {
+            "other": 999.0,
+            "ours": 999.0
+          },
+          "status": "info",
+          "verdict": "info"
+        },
         "psk_mod_block": {
           "compared_with": "sdrk fallback",
           "goal": true,

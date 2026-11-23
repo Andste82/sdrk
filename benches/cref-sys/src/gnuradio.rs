@@ -24,6 +24,10 @@
 //! - [`GrSymbolSyncCc`]: `digital.symbol_sync_cc` with the Gardner detector and the MMSE 8-tap
 //!   interpolator (`gr-symbol-sync.c`, cfg `has_grsymsync`), the reference of the `symbol_sync`
 //!   fallback;
+//! - [`GrFirFilterCcf`], [`gr_constellation_decoder_qpsk`]: `fir_filter_ccf` and the QPSK
+//!   `constellation_decoder_cb` (`gr-psk-chain.c`, cfg `has_grsymsync`), with
+//!   [`GrSymbolSyncCc`] and [`GrCostasLoopCc`] the chain that `psk_demod_block` is counted
+//!   against;
 //! - [`GrConstellationReceiverCb`], [`GrLinearEqualizerRect`]: `digital.constellation_receiver_cb`
 //!   and `digital.linear_equalizer` with `adaptive_algorithm_nlms` on a `constellation_rect`
 //!   (`gr-constellation.c`, cfg `has_grconstellation`), the references of the QAM paths of
@@ -903,6 +907,115 @@ impl GrSymbolSyncCc {
             (0, 0)
         }
     }
+}
+
+#[cfg(has_grsymsync)]
+mod pskchain_ffi {
+    unsafe extern "C" {
+        pub fn sdrk_gr_fir_ccf_set_taps(
+            rev_taps: *mut f32,
+            taps: *const f32,
+            ntaps: core::ffi::c_uint,
+        );
+        pub fn sdrk_gr_fir_ccf_work(
+            output: *mut [f32; 2],
+            input: *const [f32; 2],
+            rev_taps: *const f32,
+            ntaps: core::ffi::c_uint,
+            n: core::ffi::c_uint,
+        );
+        pub fn sdrk_gr_constellation_decoder_qpsk(
+            out: *mut u8,
+            input: *const [f32; 2],
+            n: core::ffi::c_uint,
+        );
+    }
+}
+
+/// GNU Radio's `fir_filter_ccf` (decimation 1, `gr-psk-chain.c`, cfg `has_grsymsync`): the
+/// reversed taps and VOLK's generic `volk_32fc_32f_dot_prod_32fc` per output sample.
+pub struct GrFirFilterCcf {
+    #[cfg_attr(not(has_grsymsync), allow(dead_code))]
+    rev_taps: Vec<f32>,
+}
+
+impl GrFirFilterCcf {
+    /// The filter with `taps` (in their natural order); `None` without the library or for no
+    /// taps.
+    #[must_use]
+    pub fn new(taps: &[f32]) -> Option<Self> {
+        if !cfg!(has_grsymsync) || taps.is_empty() {
+            return None;
+        }
+        #[cfg_attr(not(has_grsymsync), allow(unused_mut))]
+        let mut rev_taps = vec![0.0f32; taps.len()];
+        #[cfg(has_grsymsync)]
+        // SAFETY: both buffers hold `taps.len()` floats and do not overlap.
+        unsafe {
+            pskchain_ffi::sdrk_gr_fir_ccf_set_taps(
+                rev_taps.as_mut_ptr(),
+                taps.as_ptr(),
+                u32::try_from(taps.len()).expect("fir_filter_ccf: too many taps"),
+            );
+        }
+        Some(GrFirFilterCcf { rev_taps })
+    }
+
+    /// The number of taps.
+    #[must_use]
+    pub fn ntaps(&self) -> usize {
+        self.rev_taps.len()
+    }
+
+    /// `filterN`: `output.len()` samples from `input`, which holds the `ntaps - 1` samples of
+    /// history first.
+    ///
+    /// # Panics
+    /// If `input` is not `output.len() + ntaps - 1` samples long.
+    pub fn work(&self, input: &[[f32; 2]], output: &mut [[f32; 2]]) {
+        assert_eq!(
+            input.len(),
+            output.len() + self.ntaps() - 1,
+            "fir_filter_ccf: length mismatch"
+        );
+        #[cfg(has_grsymsync)]
+        // SAFETY: `input` holds `n + ntaps - 1` samples and `output` `n`; they do not overlap.
+        unsafe {
+            pskchain_ffi::sdrk_gr_fir_ccf_work(
+                output.as_mut_ptr(),
+                input.as_ptr(),
+                self.rev_taps.as_ptr(),
+                u32::try_from(self.ntaps()).expect("fir_filter_ccf: too many taps"),
+                u32::try_from(output.len()).expect("fir_filter_ccf: too many samples"),
+            );
+        }
+        #[cfg(not(has_grsymsync))]
+        let _ = (input, output);
+    }
+}
+
+/// GNU Radio's `constellation_decoder_cb` with `constellation_qpsk`: `2 * (imag > 0) + (real >
+/// 0)` per symbol. Without the library nothing is written.
+///
+/// # Panics
+/// If the buffers differ in length.
+pub fn gr_constellation_decoder_qpsk(input: &[[f32; 2]], out: &mut [u8]) {
+    assert_eq!(
+        input.len(),
+        out.len(),
+        "constellation_decoder_cb: length mismatch"
+    );
+    #[cfg(has_grsymsync)]
+    // SAFETY: both buffers hold `n` elements and do not overlap.
+    unsafe {
+        pskchain_ffi::sdrk_gr_constellation_decoder_qpsk(
+            out.as_mut_ptr(),
+            input.as_ptr(),
+            u32::try_from(input.len()).expect("constellation_decoder_cb: too many symbols"),
+        );
+    }
+    #[cfg(not(has_grsymsync))]
+    let _ = out;
 }
 
 #[cfg(has_grequalizer)]

@@ -190,7 +190,10 @@ where
 
 /// The deviation limit of GNU Radio's loop: `max_deviation` is absolute there, ours a fraction of
 /// the samples per symbol.
-#[allow(clippy::cast_possible_truncation, reason = "the f32 parameters of the block")]
+#[allow(
+    clippy::cast_possible_truncation,
+    reason = "the f32 parameters of the block"
+)]
 const GR_MAX_DEVIATION: f32 = (MAX_DEVIATION * SPS_C32) as f32;
 
 fn gr_symbol_sync() -> Option<GrSymbolSyncCc> {

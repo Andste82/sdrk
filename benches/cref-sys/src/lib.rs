@@ -46,6 +46,8 @@
 //! - [`LiquidFirpfbch2`]: liquid-dsp's analysis channelizer `firpfbch2_crcf` with its SIMD dot
 //!   products and FFTW, or with its portable dot products and its own FFT (MIT), the reference of
 //!   `channelize`.
+//! - [`LiquidFftfilt`]: liquid-dsp's FFT-based FIR filter `fftfilt_cccf` with FFTW or with its own
+//!   FFT (MIT), the reference of `xcorr_fft`.
 //! - [`volk_nofma`]: VOLK 3.3.0's complex product and complex dot product without fused
 //!   multiply-add, the protokernels compiled with `-ffp-contract=off` for the levels `avx2`,
 //!   `avx512` and `neon` (LGPL-3.0-or-later).
@@ -59,6 +61,7 @@
 mod biquad;
 mod channelizer;
 pub mod cmsis_dsp;
+mod fftfilt;
 pub mod gnuradio;
 pub mod gr_dvbs2;
 mod gr_fastnoise;
@@ -72,6 +75,7 @@ pub mod volk_nofma;
 
 pub use biquad::{BIQUAD_REF_LEVEL, CmsisBiquad, KfrBiquad};
 pub use channelizer::{Firpfbch2Build, LiquidFirpfbch2};
+pub use fftfilt::{FftfiltBuild, LiquidFftfilt};
 pub use gnuradio::{
     CostasLoopState, GrConstellationReceiverCb, GrCostasLoopCc, GrCrc, GrFmDeemph,
     GrFrequencyModulatorFc, GrLinearEqualizer, GrLinearEqualizerRect, GrMpskSnrEstCc,

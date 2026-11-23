@@ -113,7 +113,8 @@ pub enum Impl {
     /// liquid-dsp: the DC blocker (`iirfilt_rrrf`/`iirfilt_crcf` `create_dc_blocker`, portable C),
     /// the halfband decimators (`resamp2`, `firhilbf`; the SIMD dot product of the level for
     /// the SIMD entries, the portable one for the fallback entries) and the channelizer
-    /// `firpfbch2_crcf` (with FFTW for the SIMD entry, with liquid's own FFT for the fallback).
+    /// `firpfbch2_crcf` (with FFTW for the SIMD entry, with liquid's own FFT for the fallback),
+    /// and the fast convolution `fftfilt_cccf` of `xcorr_fft` (the same two builds).
     Liquid,
     /// libairspy 1.0.10's real-to-complex converters (`iqconverter_float`, `iqconverter_int16`).
     Airspy,
@@ -869,12 +870,14 @@ pub fn prepare(name: &str, layout: Layout) -> Option<Box<dyn Kernel>> {
             layout,
             127,
             512,
+            512,
             name.ends_with("_fallback"),
         )),
         "xcorr_fft_n4096" | "xcorr_fft_n4096_fallback" => Box::new(xcorr_family::XcorrK::new(
             rng,
             layout,
             1023,
+            4096,
             4096,
             name.ends_with("_fallback"),
         )),

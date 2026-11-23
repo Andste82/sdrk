@@ -1640,6 +1640,29 @@
           "status": "release",
           "verdict": "pass"
         },
+        "correlate_block": {
+          "compared_with": "sdrk fallback",
+          "goal": true,
+          "informational": [
+            {
+              "compared_with": "sdrk fallback",
+              "label": "misaligned by one sample",
+              "other_instr_per_sample": 17.13,
+              "other_snr_db": null,
+              "ours_instr_per_sample": 17.13,
+              "ratio": 1.0
+            }
+          ],
+          "other_instr_per_sample": 17.13,
+          "ours_instr_per_sample": 17.13,
+          "ratio": 1.0,
+          "snr_db": {
+            "other": 999.0,
+            "ours": 999.0
+          },
+          "status": "info",
+          "verdict": "info"
+        },
         "costas": {
           "compared_with": "sdrk fallback",
           "goal": true,
@@ -6623,6 +6646,114 @@
           "snr_db": {
             "other": 151.95,
             "ours": 151.95
+          },
+          "status": "release",
+          "verdict": "pass"
+        },
+        "xcorr_fft_n4096": {
+          "compared_with": "liquid-dsp 1.8.3 fftfilt_cccf (benches/refs/liquid-fftfilt.c), FFTW 3.3.10",
+          "goal": true,
+          "informational": [
+            {
+              "compared_with": "sdrk fallback",
+              "label": "information: fallback",
+              "other_instr_per_sample": 281.48,
+              "other_snr_db": 133.22,
+              "ours_instr_per_sample": 19.76,
+              "ratio": 0.07
+            },
+            {
+              "compared_with": "liquid-dsp 1.8.3 fftfilt_cccf (benches/refs/liquid-fftfilt.c), FFTW 3.3.10",
+              "label": "misaligned by one sample",
+              "other_instr_per_sample": 242.27,
+              "other_snr_db": null,
+              "ours_instr_per_sample": 19.76,
+              "ratio": 0.08
+            }
+          ],
+          "other_instr_per_sample": 242.27,
+          "ours_instr_per_sample": 19.76,
+          "ratio": 0.08,
+          "snr_db": {
+            "other": 132.1,
+            "ours": 134.01
+          },
+          "status": "release",
+          "verdict": "pass"
+        },
+        "xcorr_fft_n4096_fallback": {
+          "compared_with": "liquid-dsp 1.8.3 fftfilt_cccf (benches/refs/liquid-fftfilt.c), liquid's own FFT",
+          "goal": true,
+          "informational": [
+            {
+              "compared_with": "liquid-dsp 1.8.3 fftfilt_cccf (benches/refs/liquid-fftfilt.c), liquid's own FFT",
+              "label": "misaligned by one sample",
+              "other_instr_per_sample": 1179.52,
+              "other_snr_db": null,
+              "ours_instr_per_sample": 281.48,
+              "ratio": 0.24
+            }
+          ],
+          "other_instr_per_sample": 1179.26,
+          "ours_instr_per_sample": 281.48,
+          "ratio": 0.24,
+          "snr_db": {
+            "other": 131.79,
+            "ours": 133.22
+          },
+          "status": "release",
+          "verdict": "pass"
+        },
+        "xcorr_fft_n512": {
+          "compared_with": "liquid-dsp 1.8.3 fftfilt_cccf (benches/refs/liquid-fftfilt.c), FFTW 3.3.10",
+          "goal": true,
+          "informational": [
+            {
+              "compared_with": "sdrk fallback",
+              "label": "information: fallback",
+              "other_instr_per_sample": 226.96,
+              "other_snr_db": 134.3,
+              "ours_instr_per_sample": 17.13,
+              "ratio": 0.08
+            },
+            {
+              "compared_with": "liquid-dsp 1.8.3 fftfilt_cccf (benches/refs/liquid-fftfilt.c), FFTW 3.3.10",
+              "label": "misaligned by one sample",
+              "other_instr_per_sample": 189.46,
+              "other_snr_db": null,
+              "ours_instr_per_sample": 17.13,
+              "ratio": 0.09
+            }
+          ],
+          "other_instr_per_sample": 189.39,
+          "ours_instr_per_sample": 17.13,
+          "ratio": 0.09,
+          "snr_db": {
+            "other": 132.73,
+            "ours": 134.92
+          },
+          "status": "release",
+          "verdict": "pass"
+        },
+        "xcorr_fft_n512_fallback": {
+          "compared_with": "liquid-dsp 1.8.3 fftfilt_cccf (benches/refs/liquid-fftfilt.c), liquid's own FFT",
+          "goal": true,
+          "informational": [
+            {
+              "compared_with": "liquid-dsp 1.8.3 fftfilt_cccf (benches/refs/liquid-fftfilt.c), liquid's own FFT",
+              "label": "misaligned by one sample",
+              "other_instr_per_sample": 835.45,
+              "other_snr_db": null,
+              "ours_instr_per_sample": 226.96,
+              "ratio": 0.27
+            }
+          ],
+          "other_instr_per_sample": 835.52,
+          "ours_instr_per_sample": 226.96,
+          "ratio": 0.27,
+          "snr_db": {
+            "other": 132.76,
+            "ours": 134.3
           },
           "status": "release",
           "verdict": "pass"

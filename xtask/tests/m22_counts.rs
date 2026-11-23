@@ -3,9 +3,9 @@
 //! `biquad_real` Q15 against our fallback (no SIMD Q15 biquad exists on our levels), and four
 //! fallback entries count our fallback against CMSIS-DSP's generic C. The entries against a
 //! reference library are `release`; the two Q15 SIMD entries are `info`, because our own fallback
-//! is no fair gate for a SIMD branch (D21). The committed result files and `benches/limits.json`
-//! must carry the entries on the platforms that were measured, and every committed record must
-//! pass or be information.
+//! is no fair gate for a SIMD branch (D21). `benches/limits.json` must carry the entries at every
+//! level, and every committed `simd128` record must pass or be information (the other levels are
+//! measured in cycles, D2700).
 
 #![allow(clippy::expect_used, clippy::indexing_slicing)]
 
@@ -69,17 +69,12 @@ fn expected(kernel: &str) -> &'static str {
 }
 
 #[test]
-fn the_measured_platforms_report_every_biquad_entry() {
+fn the_simd128_counts_report_every_biquad_entry() {
     let limits = bench_file("limits.json");
     let release = limits["_limits"]["release"]
         .as_f64()
         .expect("the release limit");
-    for (platform, levels) in [
-        ("x86_64", &["sse2", "sse4.2", "avx2"][..]),
-        ("x86_64-avx512", &["avx512"][..]),
-        ("aarch64", &["neon"][..]),
-        ("wasm32", &["simd128"][..]),
-    ] {
+    for (platform, levels) in [("wasm32", &["simd128"][..])] {
         let result = bench_file(&format!("results/{platform}.json"));
         for level in levels {
             for kernel in SIMD.into_iter().chain(FALLBACK) {

@@ -678,6 +678,42 @@ fn gnuradio_symbol_sync() {
 }
 
 #[test]
+fn gnuradio_linear_equalizer_volk_matches_the_generic_build() {
+    // The build with VOLK's dispatcher (aligned tap copies, the dot products of the machine)
+    // runs the same loop as the generic build: the outputs agree up to the order of the sums.
+    let mut taps = [[0.0f32; 2]; 11];
+    taps[5] = [1.0, 0.0];
+    let n = 600;
+    let (Some(mut generic), Some(mut volk)) = (
+        GrLinearEqualizer::new(&taps, 0.01, n),
+        GrLinearEqualizer::new_volk(&taps, 0.01, n),
+    ) else {
+        eprintln!("skipped: the dispatched GNU Radio linear_equalizer is not linked");
+        return;
+    };
+    let r = std::f64::consts::FRAC_1_SQRT_2;
+    let input: Vec<[f32; 2]> = (0..n as u32)
+        .map(|k| {
+            let b = k.wrapping_mul(2_654_435_761) >> 30;
+            let (re, im) = (
+                if b & 1 == 1 { r } else { -r },
+                if b & 2 == 2 { r } else { -r },
+            );
+            let w = f64::from(k.wrapping_mul(40_503) % 1000) / 1000.0 - 0.5;
+            [(re + 0.1 * w) as f32, (im - 0.1 * w) as f32]
+        })
+        .collect();
+    let mut a = vec![[0.0f32; 2]; n];
+    let mut b = vec![[0.0f32; 2]; n];
+    generic.work(&input, &mut a);
+    volk.work(&input, &mut b);
+    for (x, y) in a.iter().zip(&b) {
+        assert_close(f64::from(x[0]), f64::from(y[0]), 1e-3);
+        assert_close(f64::from(x[1]), f64::from(y[1]), 1e-3);
+    }
+}
+
+#[test]
 fn gnuradio_linear_equalizer() {
     let mut taps = vec![[0.0f32; 2]; 11];
     taps[5] = [1.0, 0.0];

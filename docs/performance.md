@@ -605,7 +605,6 @@ Instructions per sample of our kernel divided by those of the comparison (lower 
 | `symbol_sync_real` f32 (our fallback) | 1.00 info | 1.00 info | 1.00 info | 1.00 info | 1.00 info | 1.00 info |
 | `costas` C32 (our fallback) | 1.00 info | 1.00 info | 1.00 info | 1.00 info | 1.00 info | 1.00 info |
 | `costas_fallback` C32 (GNU Radio `costas_loop_cc`) | 0.75 | 0.73 | 0.72 | 0.70 | 0.87 | 0.87 |
-| `symbol_sync_fallback` C32 (GNU Radio `symbol_sync_cc`, information) | 0.60 | 0.57 | 0.52 | 0.49 | 0.85 | 0.88 |
 | `rds_demod_block` (our code, per input sample) | 1.00 info | 1.00 info | 1.00 info | 1.00 info | 1.00 info | 1.00 info |
 | `rds_decode_block` (our code, per input sample) | 1.00 info | 1.00 info | 1.00 info | 1.00 info | 1.00 info | 1.00 info |
 | `rds_shape` f32 (our fallback) | 1.00 info | 1.00 info | 1.00 info | 1.00 info | 1.00 info | 0.99 info |
@@ -650,7 +649,6 @@ Instructions per sample of our kernel divided by those of the comparison (lower 
 | `qam_mod_block` (our code, per output sample) | 1.00 info | 1.00 info | 1.00 info | 1.00 info | 1.00 info | 1.00 info |
 | `qam_mod_qam256_block` (our code, per output sample) | 1.00 info | 1.00 info | 1.00 info | 1.00 info | 1.00 info | 1.00 info |
 | `qam_demod_block` (our code, per input sample) | 1.00 info | 1.00 info | 1.00 info | 1.00 info | 1.00 info | 1.00 info |
-| `psk_demod_block` C32 (GNU Radio receiver chain, information) | 0.28 | 0.28 | 0.11 | 0.10 | 0.22 | 0.17 |
 | `qam_demod_qam256_block` (our code, per input sample) | 1.00 info | 1.00 info | 1.00 info | 1.00 info | 1.00 info | 1.00 info |
 | `qam_demod_search_block` (our code, per input sample) | 1.00 info | 1.00 info | 1.00 info | 1.00 info | 1.00 info | 1.00 info |
 | `frame_decode_four_block` (our code, per soft bit) | 1.00 info | 1.00 info | 1.00 info | 1.00 info | 1.00 info | 1.00 info |
@@ -894,7 +892,6 @@ Instructions per sample, ours / comparison (`avx2-runtime`: ours only, judged ag
 | `symbol_sync_real` f32 (our fallback) | 34.16 / 34.16 | 32.79 / 32.79 | 28.66 / 28.66 | 34.16 | 27.29 / 27.29 | 23.41 / 23.41 | 64.45 / 64.45 |
 | `costas` C32 (our fallback) | 114.03 / 114.03 | 111.03 / 111.03 | 99.03 / 99.03 | 114.03 | 97.03 / 97.03 | 91.03 / 91.03 | 222.04 / 222.04 |
 | `costas_fallback` C32 (GNU Radio `costas_loop_cc`) | 114.03 / 151.96 | 111.03 / 151.96 | 99.03 / 137.67 | - | 97.03 / 137.67 | 91.03 / 105.13 | 222.04 / 255.33 |
-| `symbol_sync_fallback` C32 (GNU Radio `symbol_sync_cc`, information) | 69.30 / 114.87 | 65.89 / 114.87 | 60.28 / 114.87 | - | 56.62 / 114.87 | 46.62 / 55.02 | 138.13 / 156.98 |
 | `rds_demod_block` (our code, per input sample) | 138.04 / 138.04 | 137.86 / 137.85 | 47.12 / 47.12 | 48.07 | 41.24 / 41.24 | 78.47 / 78.47 | 340.22 / 340.22 |
 | `rds_decode_block` (our code, per input sample) | 39.08 / 39.08 | 38.42 / 38.42 | 37.88 / 37.88 | 38.77 | 37.83 / 37.83 | 32.85 / 32.85 | 84.97 / 84.97 |
 | `rds_shape` f32 (our fallback) | 113.16 / 113.16 | 110.16 / 110.16 | 79.16 / 79.16 | 113.16 | 72.16 / 72.16 | 82.13 / 82.13 | 168.41 / 169.41 |
@@ -930,7 +927,6 @@ Instructions per sample, ours / comparison (`avx2-runtime`: ours only, judged ag
 | `band_pulse_detect_block` (our code, per lane value) | 138.25 / 138.25 | 136.69 / 136.69 | 128.20 / 128.20 | 136.86 | 127.50 / 127.50 | 124.69 / 124.69 | 324.05 / 324.05 |
 | `frame_decode_four_block` (our code, per soft bit) | 87.06 / 87.06 | 86.07 / 86.07 | 83.82 / 83.82 | 86.79 | 83.19 / 83.19 | 77.21 / 77.21 | 166.41 / 166.41 |
 | `qam_demod_block` (our code, per input sample) | 295.84 / 295.84 | 292.38 / 292.38 | 164.65 / 164.65 | 171.25 | 146.10 / 146.10 | 182.00 / 182.00 | 558.46 / 558.46 |
-| `psk_demod_block` C32 (GNU Radio receiver chain, information) | 216.65 / 769.74 | 214.51 / 769.74 | 86.38 / 774.36 | 93.23 | 75.11 / 774.33 | 117.45 / 535.00 | 386.32 / 2236.18 |
 | `qam_demod_qam256_block` (our code, per input sample) | 296.84 / 296.84 | 293.43 / 293.43 | 168.96 / 168.96 | 171.28 | 150.49 / 150.49 | 180.20 / 180.20 | 547.51 / 547.51 |
 | `qam_demod_search_block` (our code, per input sample) | 317.85 / 317.85 | 313.81 / 313.81 | 180.92 / 180.92 | 189.37 | 161.35 / 161.35 | 198.71 / 198.71 | 605.41 / 605.41 |
 | `qam_mod_block` (our code, per output sample) | 44.21 / 44.21 | 41.33 / 41.33 | 24.00 / 24.00 | 24.69 | 20.52 / 20.52 | 28.85 / 28.85 | 93.11 / 93.11 |
@@ -1504,15 +1500,15 @@ Reference model `skylake`, counter-model `znver2`, mode `whole-loop`; execution 
 | `crc16_x25` | 8.06 | 8.15 | 0.99 | 7.06 | 7.14 | 0.99 | GNU Radio gr::digital::crc: one 256-entry uint64_t table, a 64-bit remainder, one lookup per byte (generic compiler flags) |
 | `crc24_adsb` | 13.05 | 15.15 | 0.86 | 11.06 | 13.14 | 0.84 | GNU Radio gr::digital::crc: one 256-entry uint64_t table, a 64-bit remainder, one lookup per byte (generic compiler flags) |
 | `crc32` | 8.06 | 8.15 | 0.99 | 7.06 | 7.15 | 0.99 | GNU Radio gr::digital::crc: one 256-entry uint64_t table, a 64-bit remainder, one lookup per byte (generic compiler flags) |
-| `equalize` | 138.53 | 138.53 | 1.00 | 145.19 | 145.19 | 1.00 | sdrk fallback |
+| `equalize` | 138.53 | 355.18 | 0.39 | 145.19 | 390.36 | 0.37 | GNU Radio linear_equalizer with adaptive_algorithm_nlms (linear_equalizer_impl.cc of gr-digital, VOLK's dispatched dot products of the level with the aligned tap copies of fir_filter) |
 | `equalize_fallback` | 138.53 | 168.47 | 0.82 | 145.19 | 201.30 | 0.72 | GNU Radio linear_equalizer with adaptive_algorithm_nlms (linear_equalizer_impl.cc of gr-digital, VOLK generic dot products, generic compiler flags) |
 | `equalize_qam1024` | 162.67 | 162.67 | 1.00 | 164.32 | 164.32 | 1.00 | sdrk fallback |
 | `equalize_qam1024_fallback` | 162.67 | 191.52 | 0.85 | 164.32 | 213.78 | 0.77 | GNU Radio linear_equalizer with adaptive_algorithm_nlms on constellation_rect 1024-QAM (linear_equalizer_impl.cc and constellation.cc of gr-digital, VOLK generic dot products, generic compiler flags) |
-| `equalize_qam16` | 161.72 | 161.72 | 1.00 | 158.34 | 158.34 | 1.00 | sdrk fallback |
+| `equalize_qam16` | 161.72 | 357.76 | 0.45 | 158.33 | 396.63 | 0.40 | GNU Radio linear_equalizer with adaptive_algorithm_nlms on constellation_rect 16-QAM (linear_equalizer_impl.cc and constellation.cc of gr-digital, VOLK's dispatched dot products of the level with the aligned tap copies of fir_filter) |
 | `equalize_qam16_fallback` | 161.72 | 191.52 | 0.84 | 158.34 | 213.78 | 0.74 | GNU Radio linear_equalizer with adaptive_algorithm_nlms on constellation_rect 16-QAM (linear_equalizer_impl.cc and constellation.cc of gr-digital, VOLK generic dot products, generic compiler flags) |
 | `equalize_qam256` | 162.67 | 162.67 | 1.00 | 164.32 | 164.32 | 1.00 | sdrk fallback |
 | `equalize_qam256_fallback` | 162.67 | 191.52 | 0.85 | 164.32 | 213.78 | 0.77 | GNU Radio linear_equalizer with adaptive_algorithm_nlms on constellation_rect 256-QAM (linear_equalizer_impl.cc and constellation.cc of gr-digital, VOLK generic dot products, generic compiler flags) |
-| `equalize_qam64` | 161.72 | 161.72 | 1.00 | 158.34 | 158.34 | 1.00 | sdrk fallback |
+| `equalize_qam64` | 161.72 | 357.76 | 0.45 | 158.33 | 396.63 | 0.40 | GNU Radio linear_equalizer with adaptive_algorithm_nlms on constellation_rect 64-QAM (linear_equalizer_impl.cc and constellation.cc of gr-digital, VOLK's dispatched dot products of the level with the aligned tap copies of fir_filter) |
 | `equalize_qam64_fallback` | 161.72 | 191.52 | 0.84 | 158.34 | 213.78 | 0.74 | GNU Radio linear_equalizer with adaptive_algorithm_nlms on constellation_rect 64-QAM (linear_equalizer_impl.cc and constellation.cc of gr-digital, VOLK generic dot products, generic compiler flags) |
 | `frame_decode` | 6.20 | 6.20 | 1.00 | 8.43 | 8.43 | 1.00 | sdrk fallback |
 | `frame_decode_block` | 6.03 | 6.03 | 1.00 | 7.98 | 7.98 | 1.00 | sdrk fallback |
@@ -1799,15 +1795,15 @@ Reference model `skylake`, counter-model `znver2`, mode `whole-loop`; execution 
 | `crc16_x25` | 8.06 | 8.15 | 0.99 | 7.06 | 7.14 | 0.99 | GNU Radio gr::digital::crc: one 256-entry uint64_t table, a 64-bit remainder, one lookup per byte (generic compiler flags) |
 | `crc24_adsb` | 13.05 | 15.15 | 0.86 | 11.06 | 13.14 | 0.84 | GNU Radio gr::digital::crc: one 256-entry uint64_t table, a 64-bit remainder, one lookup per byte (generic compiler flags) |
 | `crc32` | 8.06 | 8.15 | 0.99 | 7.06 | 7.15 | 0.99 | GNU Radio gr::digital::crc: one 256-entry uint64_t table, a 64-bit remainder, one lookup per byte (generic compiler flags) |
-| `equalize` | 133.42 | 133.42 | 1.00 | 133.81 | 133.81 | 1.00 | sdrk fallback |
+| `equalize` | 133.42 | 271.02 | 0.49 | 133.80 | 292.27 | 0.46 | GNU Radio linear_equalizer with adaptive_algorithm_nlms (linear_equalizer_impl.cc of gr-digital, VOLK's dispatched dot products of the level with the aligned tap copies of fir_filter) |
 | `equalize_fallback` | 133.42 | 168.47 | 0.79 | 133.81 | 201.30 | 0.66 | GNU Radio linear_equalizer with adaptive_algorithm_nlms (linear_equalizer_impl.cc of gr-digital, VOLK generic dot products, generic compiler flags) |
 | `equalize_qam1024` | 157.16 | 157.16 | 1.00 | 157.87 | 157.87 | 1.00 | sdrk fallback |
 | `equalize_qam1024_fallback` | 157.16 | 191.52 | 0.82 | 157.87 | 213.78 | 0.74 | GNU Radio linear_equalizer with adaptive_algorithm_nlms on constellation_rect 1024-QAM (linear_equalizer_impl.cc and constellation.cc of gr-digital, VOLK generic dot products, generic compiler flags) |
-| `equalize_qam16` | 157.16 | 157.16 | 1.00 | 152.87 | 152.87 | 1.00 | sdrk fallback |
+| `equalize_qam16` | 157.16 | 273.34 | 0.57 | 152.86 | 297.71 | 0.51 | GNU Radio linear_equalizer with adaptive_algorithm_nlms on constellation_rect 16-QAM (linear_equalizer_impl.cc and constellation.cc of gr-digital, VOLK's dispatched dot products of the level with the aligned tap copies of fir_filter) |
 | `equalize_qam16_fallback` | 157.16 | 191.52 | 0.82 | 152.87 | 213.78 | 0.72 | GNU Radio linear_equalizer with adaptive_algorithm_nlms on constellation_rect 16-QAM (linear_equalizer_impl.cc and constellation.cc of gr-digital, VOLK generic dot products, generic compiler flags) |
 | `equalize_qam256` | 157.16 | 157.16 | 1.00 | 157.87 | 157.87 | 1.00 | sdrk fallback |
 | `equalize_qam256_fallback` | 157.16 | 191.52 | 0.82 | 157.87 | 213.78 | 0.74 | GNU Radio linear_equalizer with adaptive_algorithm_nlms on constellation_rect 256-QAM (linear_equalizer_impl.cc and constellation.cc of gr-digital, VOLK generic dot products, generic compiler flags) |
-| `equalize_qam64` | 157.16 | 157.16 | 1.00 | 152.86 | 152.86 | 1.00 | sdrk fallback |
+| `equalize_qam64` | 157.16 | 273.34 | 0.57 | 152.86 | 297.71 | 0.51 | GNU Radio linear_equalizer with adaptive_algorithm_nlms on constellation_rect 64-QAM (linear_equalizer_impl.cc and constellation.cc of gr-digital, VOLK's dispatched dot products of the level with the aligned tap copies of fir_filter) |
 | `equalize_qam64_fallback` | 157.16 | 191.52 | 0.82 | 152.86 | 213.78 | 0.72 | GNU Radio linear_equalizer with adaptive_algorithm_nlms on constellation_rect 64-QAM (linear_equalizer_impl.cc and constellation.cc of gr-digital, VOLK generic dot products, generic compiler flags) |
 | `frame_decode` | 6.26 | 6.27 | 1.00 | 8.52 | 8.52 | 1.00 | sdrk fallback |
 | `frame_decode_block` | 6.06 | 6.06 | 1.00 | 7.98 | 7.98 | 1.00 | sdrk fallback |
@@ -2095,15 +2091,15 @@ Reference model `znver3`, counter-model `alderlake`, mode `whole-loop`; executio
 | `crc16_x25` | 7.05 | 10.39 | 0.68 | 8.05 | 9.40 | 0.86 | GNU Radio gr::digital::crc: one 256-entry uint64_t table, a 64-bit remainder, one lookup per byte (generic compiler flags) |
 | `crc24_adsb` | 11.04 | 13.17 | 0.84 | 12.04 | 16.19 | 0.74 | GNU Radio gr::digital::crc: one 256-entry uint64_t table, a 64-bit remainder, one lookup per byte (generic compiler flags) |
 | `crc32` | 7.05 | 10.39 | 0.68 | 8.05 | 9.40 | 0.86 | GNU Radio gr::digital::crc: one 256-entry uint64_t table, a 64-bit remainder, one lookup per byte (generic compiler flags) |
-| `equalize` | 107.88 | 107.88 | 1.00 | 112.97 | 112.97 | 1.00 | sdrk fallback |
+| `equalize` | 107.88 | 1074.99 | 0.10 | 118.21 | 289.91 | 0.41 | GNU Radio linear_equalizer with adaptive_algorithm_nlms (linear_equalizer_impl.cc of gr-digital, VOLK's dispatched dot products of the level with the aligned tap copies of fir_filter) |
 | `equalize_fallback` | 107.88 | 931.83 | 0.12 | 112.97 | 220.22 | 0.51 | GNU Radio linear_equalizer with adaptive_algorithm_nlms (linear_equalizer_impl.cc of gr-digital, VOLK generic dot products, generic compiler flags) |
 | `equalize_qam1024` | 140.01 | 140.01 | 1.00 | 146.31 | 146.31 | 1.00 | sdrk fallback |
 | `equalize_qam1024_fallback` | 140.01 | 943.47 | 0.15 | 146.31 | 277.20 | 0.53 | GNU Radio linear_equalizer with adaptive_algorithm_nlms on constellation_rect 1024-QAM (linear_equalizer_impl.cc and constellation.cc of gr-digital, VOLK generic dot products, generic compiler flags) |
-| `equalize_qam16` | 116.91 | 116.91 | 1.00 | 128.30 | 128.30 | 1.00 | sdrk fallback |
+| `equalize_qam16` | 116.91 | 1088.28 | 0.11 | 132.28 | 294.41 | 0.45 | GNU Radio linear_equalizer with adaptive_algorithm_nlms on constellation_rect 16-QAM (linear_equalizer_impl.cc and constellation.cc of gr-digital, VOLK's dispatched dot products of the level with the aligned tap copies of fir_filter) |
 | `equalize_qam16_fallback` | 116.91 | 944.25 | 0.12 | 128.30 | 277.26 | 0.46 | GNU Radio linear_equalizer with adaptive_algorithm_nlms on constellation_rect 16-QAM (linear_equalizer_impl.cc and constellation.cc of gr-digital, VOLK generic dot products, generic compiler flags) |
 | `equalize_qam256` | 140.01 | 140.01 | 1.00 | 146.31 | 146.31 | 1.00 | sdrk fallback |
 | `equalize_qam256_fallback` | 140.01 | 944.25 | 0.15 | 146.31 | 277.26 | 0.53 | GNU Radio linear_equalizer with adaptive_algorithm_nlms on constellation_rect 256-QAM (linear_equalizer_impl.cc and constellation.cc of gr-digital, VOLK generic dot products, generic compiler flags) |
-| `equalize_qam64` | 120.91 | 120.91 | 1.00 | 138.30 | 138.30 | 1.00 | sdrk fallback |
+| `equalize_qam64` | 120.91 | 1088.28 | 0.11 | 140.27 | 294.41 | 0.48 | GNU Radio linear_equalizer with adaptive_algorithm_nlms on constellation_rect 64-QAM (linear_equalizer_impl.cc and constellation.cc of gr-digital, VOLK's dispatched dot products of the level with the aligned tap copies of fir_filter) |
 | `equalize_qam64_fallback` | 120.91 | 944.25 | 0.13 | 138.30 | 277.26 | 0.50 | GNU Radio linear_equalizer with adaptive_algorithm_nlms on constellation_rect 64-QAM (linear_equalizer_impl.cc and constellation.cc of gr-digital, VOLK generic dot products, generic compiler flags) |
 | `frame_decode` | 5.57 | 5.57 | 1.00 | 6.18 | 6.18 | 1.00 | sdrk fallback |
 | `frame_decode_block` | 6.91 | 6.91 | 1.00 | 5.80 | 5.80 | 1.00 | sdrk fallback |
@@ -2391,15 +2387,15 @@ Reference model `znver4`, counter-model `sapphirerapids`, mode `whole-loop`; exe
 | `crc16_x25` | 7.05 | 10.38 | 0.68 | 8.04 | 9.40 | 0.86 | GNU Radio gr::digital::crc: one 256-entry uint64_t table, a 64-bit remainder, one lookup per byte (generic compiler flags) |
 | `crc24_adsb` | 11.04 | 13.17 | 0.84 | 12.04 | 16.19 | 0.74 | GNU Radio gr::digital::crc: one 256-entry uint64_t table, a 64-bit remainder, one lookup per byte (generic compiler flags) |
 | `crc32` | 7.05 | 10.38 | 0.68 | 8.04 | 9.40 | 0.86 | GNU Radio gr::digital::crc: one 256-entry uint64_t table, a 64-bit remainder, one lookup per byte (generic compiler flags) |
-| `equalize` | 102.03 | 102.03 | 1.00 | 114.41 | 114.41 | 1.00 | sdrk fallback |
+| `equalize` | 102.05 | 1094.28 | 0.09 | 120.75 | 323.97 | 0.37 | GNU Radio linear_equalizer with adaptive_algorithm_nlms (linear_equalizer_impl.cc of gr-digital, VOLK's dispatched dot products of the level with the aligned tap copies of fir_filter) |
 | `equalize_fallback` | 102.03 | 929.60 | 0.11 | 114.41 | 220.19 | 0.52 | GNU Radio linear_equalizer with adaptive_algorithm_nlms (linear_equalizer_impl.cc of gr-digital, VOLK generic dot products, generic compiler flags) |
 | `equalize_qam1024` | 122.33 | 122.33 | 1.00 | 135.91 | 135.91 | 1.00 | sdrk fallback |
 | `equalize_qam1024_fallback` | 122.33 | 937.23 | 0.13 | 135.91 | 277.16 | 0.49 | GNU Radio linear_equalizer with adaptive_algorithm_nlms on constellation_rect 1024-QAM (linear_equalizer_impl.cc and constellation.cc of gr-digital, VOLK generic dot products, generic compiler flags) |
-| `equalize_qam16` | 119.28 | 119.28 | 1.00 | 136.95 | 136.95 | 1.00 | sdrk fallback |
+| `equalize_qam16` | 121.29 | 1099.61 | 0.11 | 140.94 | 328.54 | 0.43 | GNU Radio linear_equalizer with adaptive_algorithm_nlms on constellation_rect 16-QAM (linear_equalizer_impl.cc and constellation.cc of gr-digital, VOLK's dispatched dot products of the level with the aligned tap copies of fir_filter) |
 | `equalize_qam16_fallback` | 119.28 | 938.01 | 0.13 | 136.95 | 277.22 | 0.49 | GNU Radio linear_equalizer with adaptive_algorithm_nlms on constellation_rect 16-QAM (linear_equalizer_impl.cc and constellation.cc of gr-digital, VOLK generic dot products, generic compiler flags) |
 | `equalize_qam256` | 122.33 | 122.33 | 1.00 | 135.91 | 135.91 | 1.00 | sdrk fallback |
 | `equalize_qam256_fallback` | 122.33 | 938.01 | 0.13 | 135.91 | 277.22 | 0.49 | GNU Radio linear_equalizer with adaptive_algorithm_nlms on constellation_rect 256-QAM (linear_equalizer_impl.cc and constellation.cc of gr-digital, VOLK generic dot products, generic compiler flags) |
-| `equalize_qam64` | 119.25 | 119.25 | 1.00 | 131.93 | 131.93 | 1.00 | sdrk fallback |
+| `equalize_qam64` | 121.27 | 1098.92 | 0.11 | 140.91 | 329.07 | 0.43 | GNU Radio linear_equalizer with adaptive_algorithm_nlms on constellation_rect 64-QAM (linear_equalizer_impl.cc and constellation.cc of gr-digital, VOLK's dispatched dot products of the level with the aligned tap copies of fir_filter) |
 | `equalize_qam64_fallback` | 119.25 | 938.01 | 0.13 | 131.93 | 277.22 | 0.48 | GNU Radio linear_equalizer with adaptive_algorithm_nlms on constellation_rect 64-QAM (linear_equalizer_impl.cc and constellation.cc of gr-digital, VOLK generic dot products, generic compiler flags) |
 | `frame_decode` | 5.69 | 5.69 | 1.00 | 6.18 | 6.18 | 1.00 | sdrk fallback |
 | `frame_decode_block` | 6.90 | 6.90 | 1.00 | 5.79 | 5.79 | 1.00 | sdrk fallback |
@@ -2687,15 +2683,15 @@ Reference model `cortex-a72`, counter-model `cortex-a76`, mode `whole-loop`; exe
 | `crc16_x25` | 8.11 | 8.17 | 0.99 | 7.10 | 7.15 | 0.99 | GNU Radio gr::digital::crc: one 256-entry uint64_t table, a 64-bit remainder, one lookup per byte (generic compiler flags) |
 | `crc24_adsb` | 8.10 | 10.16 | 0.80 | 7.09 | 9.15 | 0.78 | GNU Radio gr::digital::crc: one 256-entry uint64_t table, a 64-bit remainder, one lookup per byte (generic compiler flags) |
 | `crc32` | 8.11 | 8.17 | 0.99 | 7.10 | 7.16 | 0.99 | GNU Radio gr::digital::crc: one 256-entry uint64_t table, a 64-bit remainder, one lookup per byte (generic compiler flags) |
-| `equalize` | 216.24 | 216.24 | 1.00 | 184.03 | 184.03 | 1.00 | sdrk fallback |
+| `equalize` | 227.66 | 335.12 | 0.68 | 184.03 | 359.68 | 0.51 | GNU Radio linear_equalizer with adaptive_algorithm_nlms (linear_equalizer_impl.cc of gr-digital, VOLK's dispatched dot products of the level with the aligned tap copies of fir_filter) |
 | `equalize_fallback` | 216.24 | 228.84 | 0.94 | 184.03 | 236.11 | 0.78 | GNU Radio linear_equalizer with adaptive_algorithm_nlms (linear_equalizer_impl.cc of gr-digital, VOLK generic dot products, generic compiler flags) |
 | `equalize_qam1024` | 250.54 | 250.54 | 1.00 | 185.15 | 185.15 | 1.00 | sdrk fallback |
 | `equalize_qam1024_fallback` | 250.54 | 244.41 | 1.03 | 185.15 | 243.20 | 0.76 | GNU Radio linear_equalizer with adaptive_algorithm_nlms on constellation_rect 1024-QAM (linear_equalizer_impl.cc and constellation.cc of gr-digital, VOLK generic dot products, generic compiler flags) |
-| `equalize_qam16` | 229.25 | 229.25 | 1.00 | 190.01 | 190.01 | 1.00 | sdrk fallback |
+| `equalize_qam16` | 242.69 | 362.68 | 0.67 | 190.01 | 388.90 | 0.49 | GNU Radio linear_equalizer with adaptive_algorithm_nlms on constellation_rect 16-QAM (linear_equalizer_impl.cc and constellation.cc of gr-digital, VOLK's dispatched dot products of the level with the aligned tap copies of fir_filter) |
 | `equalize_qam16_fallback` | 229.25 | 244.41 | 0.94 | 190.01 | 243.20 | 0.78 | GNU Radio linear_equalizer with adaptive_algorithm_nlms on constellation_rect 16-QAM (linear_equalizer_impl.cc and constellation.cc of gr-digital, VOLK generic dot products, generic compiler flags) |
 | `equalize_qam256` | 250.54 | 250.54 | 1.00 | 185.15 | 185.15 | 1.00 | sdrk fallback |
 | `equalize_qam256_fallback` | 250.54 | 244.41 | 1.03 | 185.15 | 243.20 | 0.76 | GNU Radio linear_equalizer with adaptive_algorithm_nlms on constellation_rect 256-QAM (linear_equalizer_impl.cc and constellation.cc of gr-digital, VOLK generic dot products, generic compiler flags) |
-| `equalize_qam64` | 243.43 | 243.43 | 1.00 | 188.08 | 188.08 | 1.00 | sdrk fallback |
+| `equalize_qam64` | 256.86 | 362.68 | 0.71 | 188.08 | 388.90 | 0.48 | GNU Radio linear_equalizer with adaptive_algorithm_nlms on constellation_rect 64-QAM (linear_equalizer_impl.cc and constellation.cc of gr-digital, VOLK's dispatched dot products of the level with the aligned tap copies of fir_filter) |
 | `equalize_qam64_fallback` | 243.43 | 244.41 | 1.00 | 188.08 | 243.20 | 0.77 | GNU Radio linear_equalizer with adaptive_algorithm_nlms on constellation_rect 64-QAM (linear_equalizer_impl.cc and constellation.cc of gr-digital, VOLK generic dot products, generic compiler flags) |
 | `frame_decode` | 8.84 | 8.84 | 1.00 | 10.38 | 10.38 | 1.00 | sdrk fallback |
 | `frame_decode_block` | 8.81 | 8.81 | 1.00 | 9.48 | 9.48 | 1.00 | sdrk fallback |

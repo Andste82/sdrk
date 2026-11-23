@@ -49,6 +49,12 @@
 #include <volk/volk_complex.h>
 #include <volk/volk_32fc_x2_conjugate_dot_prod_32fc.h>
 #include <volk/volk_32fc_x2_dot_prod_32fc.h>
+#ifdef SDRK_GR_VOLK
+#include "gr-fir-volk.h"
+#define SDRK_FREE_ALIGNED(p) volk_free(p)
+#else
+#define SDRK_FREE_ALIGNED(p) free(p)
+#endif
 
 #ifndef CMPLXF
 #define CMPLXF(x, y) __builtin_complex((float)(x), (float)(y))
@@ -294,8 +300,8 @@ void sdrk_gr_linear_equalizer_rect_free(sdrk_gr_linear_equalizer_rect* self)
 {
     if (self != NULL) {
         free(self->taps);
-        free(self->aligned);
-        free(self->buffer);
+        SDRK_FREE_ALIGNED(self->aligned);
+        SDRK_FREE_ALIGNED(self->buffer);
         free(self);
     }
 }
@@ -318,8 +324,16 @@ sdrk_gr_linear_equalizer_rect* sdrk_gr_linear_equalizer_rect_new(unsigned int nu
     self->step_size = step_size;
     self->capacity = capacity;
     self->taps = calloc(num_taps, sizeof(lv_32fc_t));
+#ifdef SDRK_GR_VOLK
+    self->aligned = fv_alloc(num_taps);
+    self->buffer = volk_malloc(((size_t)num_taps - 1 + capacity) * sizeof(lv_32fc_t), volk_get_alignment());
+    if (self->buffer != NULL) {
+        memset(self->buffer, 0, ((size_t)num_taps - 1 + capacity) * sizeof(lv_32fc_t));
+    }
+#else
     self->aligned = calloc(num_taps, sizeof(lv_32fc_t));
     self->buffer = calloc((size_t)num_taps - 1 + capacity, sizeof(lv_32fc_t));
+#endif
     if (self->taps == NULL || self->aligned == NULL || self->buffer == NULL ||
         rect_init(&self->constellation, points, arity, real_sectors, imag_sectors, width_real_sectors, width_imag_sectors) != 0) {
         sdrk_gr_linear_equalizer_rect_free(self);
@@ -328,7 +342,11 @@ sdrk_gr_linear_equalizer_rect* sdrk_gr_linear_equalizer_rect_new(unsigned int nu
     /* fir_filter::set_taps: the taps reversed, one aligned copy */
     for (unsigned int j = 0; j < num_taps; j++) {
         self->taps[j] = taps[num_taps - 1 - j];
+#ifdef SDRK_GR_VOLK
+        fv_update_tap(self->aligned, num_taps, j, self->taps[j]);
+#else
         self->aligned[j] = self->taps[j];
+#endif
     }
     self->error = lv_cmake(0.0f, 0.0f);
     self->decision = lv_cmake(0.0f, 0.0f);
@@ -347,7 +365,11 @@ static void update_taps(sdrk_gr_linear_equalizer_rect* self, lv_32fc_t* taps, co
                         unsigned int num_taps)
 {
     lv_32fc_t dp;
+#ifdef SDRK_GR_VOLK
+    volk_32fc_x2_conjugate_dot_prod_32fc(&dp, in, in, num_taps);
+#else
     volk_32fc_x2_conjugate_dot_prod_32fc_generic(&dp, in, in, num_taps);
+#endif
     float magsq = lv_creal(dp);
     float norm_step_size = self->step_size / magsq;
 
@@ -359,9 +381,13 @@ static void update_taps(sdrk_gr_linear_equalizer_rect* self, lv_32fc_t* taps, co
 /* fir_filter_ccc::filter (alignment of one sample: `al` 0) */
 static lv_32fc_t filter(const sdrk_gr_linear_equalizer_rect* self, const lv_32fc_t input[])
 {
+#ifdef SDRK_GR_VOLK
+    return fv_filter(self->aligned, self->num_taps, input);
+#else
     lv_32fc_t output;
     volk_32fc_x2_dot_prod_32fc_generic(&output, input, self->aligned, self->num_taps);
     return output;
+#endif
 }
 
 /*
@@ -387,7 +413,11 @@ void sdrk_gr_linear_equalizer_rect_work(sdrk_gr_linear_equalizer_rect* self, lv_
         update_taps(self, self->taps, &samples[j], self->error, self->num_taps);
         for (unsigned k = 0; k < self->num_taps; k++) {
             /* fir_filter::update_tap: d_taps[k] and its aligned copy */
+#ifdef SDRK_GR_VOLK
+            fv_update_tap(self->aligned, self->num_taps, k, self->taps[k]);
+#else
             self->aligned[k] = self->taps[k];
+#endif
         }
 
         j += 1;

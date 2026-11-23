@@ -1018,6 +1018,45 @@ pub fn gr_constellation_decoder_qpsk(input: &[[f32; 2]], out: &mut [u8]) {
     let _ = out;
 }
 
+#[cfg(has_grvolk)]
+mod volk_ffi {
+    unsafe extern "C" {
+        pub fn sdrk_gr_volk_linear_equalizer_init(
+            state: *mut super::LinearEqualizerState,
+            num_taps: core::ffi::c_uint,
+            step_size: f32,
+            taps: *const [f32; 2],
+            capacity: core::ffi::c_uint,
+        ) -> core::ffi::c_int;
+        pub fn sdrk_gr_volk_linear_equalizer_free(state: *mut super::LinearEqualizerState);
+        pub fn sdrk_gr_volk_linear_equalizer_work(
+            state: *mut super::LinearEqualizerState,
+            output: *mut [f32; 2],
+            input: *const [f32; 2],
+            n: core::ffi::c_uint,
+        );
+        pub fn sdrk_gr_volk_linear_equalizer_rect_new(
+            num_taps: core::ffi::c_uint,
+            step_size: f32,
+            taps: *const [f32; 2],
+            capacity: core::ffi::c_uint,
+            points: *const [f32; 2],
+            arity: core::ffi::c_uint,
+            real_sectors: core::ffi::c_uint,
+            imag_sectors: core::ffi::c_uint,
+            width_real: f32,
+            width_imag: f32,
+        ) -> *mut core::ffi::c_void;
+        pub fn sdrk_gr_volk_linear_equalizer_rect_free(state: *mut core::ffi::c_void);
+        pub fn sdrk_gr_volk_linear_equalizer_rect_work(
+            state: *mut core::ffi::c_void,
+            output: *mut [f32; 2],
+            input: *const [f32; 2],
+            n: core::ffi::c_uint,
+        );
+    }
+}
+
 #[cfg(has_grequalizer)]
 mod equalizer_ffi {
     unsafe extern "C" {
@@ -1077,6 +1116,8 @@ pub struct GrLinearEqualizer {
     #[cfg_attr(not(has_grequalizer), allow(dead_code))]
     state: Box<LinearEqualizerState>,
     capacity: usize,
+    /// The build with VOLK's dispatcher ([`GrLinearEqualizer::new_volk`]).
+    volk: bool,
 }
 
 // SAFETY: the C object owns its buffers and is used by one thread at a time.
@@ -1113,7 +1154,51 @@ impl GrLinearEqualizer {
         }
         #[cfg(not(has_grequalizer))]
         let _ = step_size;
-        Some(GrLinearEqualizer { state, capacity })
+        Some(GrLinearEqualizer {
+            state,
+            capacity,
+            volk: false,
+        })
+    }
+
+    /// As [`GrLinearEqualizer::new`], with the dot products of VOLK's dispatcher (the aligned
+    /// tap copies and `volk_32fc_x2_dot_prod_32fc_a` of `fir_filter` on a machine with SIMD);
+    /// the implementation is the one the `volk_config` of the run selects. `None` without the
+    /// library.
+    #[must_use]
+    pub fn new_volk(taps: &[[f32; 2]], step_size: f32, capacity: usize) -> Option<Self> {
+        #[cfg(has_grvolk)]
+        {
+            if taps.is_empty() {
+                return None;
+            }
+            let mut state = Box::new(LinearEqualizerState::default());
+            let n = u32::try_from(taps.len()).ok()?;
+            let c = u32::try_from(capacity).ok()?;
+            // SAFETY: `taps` holds `n` pairs; the state is the C object, initialized here.
+            let r = unsafe {
+                volk_ffi::sdrk_gr_volk_linear_equalizer_init(
+                    &raw mut *state,
+                    n,
+                    step_size,
+                    taps.as_ptr(),
+                    c,
+                )
+            };
+            if r != 0 {
+                return None;
+            }
+            Some(GrLinearEqualizer {
+                state,
+                capacity,
+                volk: true,
+            })
+        }
+        #[cfg(not(has_grvolk))]
+        {
+            let _ = (taps, step_size, capacity);
+            None
+        }
     }
 
     /// `work` over `input` (at most the capacity of [`GrLinearEqualizer::new`]).
@@ -1131,6 +1216,19 @@ impl GrLinearEqualizer {
             "linear_equalizer: above the capacity"
         );
         let n = u32::try_from(input.len()).expect("linear_equalizer: too many samples");
+        #[cfg(has_grvolk)]
+        if self.volk {
+            // SAFETY: as below, for the state of `new_volk`.
+            unsafe {
+                volk_ffi::sdrk_gr_volk_linear_equalizer_work(
+                    &raw mut *self.state,
+                    output.as_mut_ptr(),
+                    input.as_ptr(),
+                    n,
+                );
+            }
+            return;
+        }
         #[cfg(has_grequalizer)]
         // SAFETY: both buffers hold `n` pairs (at most the capacity) and do not overlap; the
         // state was initialized by `new`.
@@ -1149,6 +1247,14 @@ impl GrLinearEqualizer {
 
 impl Drop for GrLinearEqualizer {
     fn drop(&mut self) {
+        #[cfg(has_grvolk)]
+        if self.volk {
+            // SAFETY: the state was initialized by `new_volk` and is freed once.
+            unsafe {
+                volk_ffi::sdrk_gr_volk_linear_equalizer_free(&raw mut *self.state);
+            }
+            return;
+        }
         #[cfg(has_grequalizer)]
         // SAFETY: the state was initialized by `new` and is freed once.
         unsafe {
@@ -1327,6 +1433,8 @@ pub struct GrLinearEqualizerRect {
     #[cfg_attr(not(has_grconstellation), allow(dead_code))]
     object: *mut core::ffi::c_void,
     capacity: usize,
+    /// The build with VOLK's dispatcher ([`GrLinearEqualizerRect::new_volk`]).
+    volk: bool,
 }
 
 // SAFETY: the C object owns its buffers and is used by one thread at a time.
@@ -1369,11 +1477,63 @@ impl GrLinearEqualizerRect {
             if object.is_null() {
                 return None;
             }
-            Some(GrLinearEqualizerRect { object, capacity })
+            Some(GrLinearEqualizerRect {
+                object,
+                capacity,
+                volk: false,
+            })
         }
         #[cfg(not(has_grconstellation))]
         {
             let _ = (step_size, capacity, rect);
+            None
+        }
+    }
+
+    /// As [`GrLinearEqualizerRect::new`], with the dot products of VOLK's dispatcher (see
+    /// [`GrLinearEqualizer::new_volk`]). `None` without the library.
+    #[must_use]
+    pub fn new_volk(
+        taps: &[[f32; 2]],
+        step_size: f32,
+        capacity: usize,
+        rect: GrRect<'_>,
+    ) -> Option<Self> {
+        #[cfg(has_grvolk)]
+        {
+            if taps.is_empty() {
+                return None;
+            }
+            let n = u32::try_from(taps.len()).ok()?;
+            let c = u32::try_from(capacity).ok()?;
+            let arity = u32::try_from(rect.points.len()).ok()?;
+            // SAFETY: `taps` holds `n` pairs, `points` `arity` pairs; the C side copies both.
+            let object = unsafe {
+                volk_ffi::sdrk_gr_volk_linear_equalizer_rect_new(
+                    n,
+                    step_size,
+                    taps.as_ptr(),
+                    c,
+                    rect.points.as_ptr(),
+                    arity,
+                    rect.real_sectors,
+                    rect.imag_sectors,
+                    rect.width_real,
+                    rect.width_imag,
+                )
+            };
+            if object.is_null() {
+                return None;
+            }
+            Some(GrLinearEqualizerRect {
+                object,
+                capacity,
+                volk: true,
+            })
+        }
+        #[cfg(not(has_grvolk))]
+        {
+            let _ = (taps, step_size, capacity, rect);
             None
         }
     }
@@ -1393,6 +1553,19 @@ impl GrLinearEqualizerRect {
             "linear_equalizer: above the capacity"
         );
         let n = u32::try_from(input.len()).expect("linear_equalizer: too many samples");
+        #[cfg(has_grvolk)]
+        if self.volk {
+            // SAFETY: as below, for the object of `new_volk`.
+            unsafe {
+                volk_ffi::sdrk_gr_volk_linear_equalizer_rect_work(
+                    self.object,
+                    output.as_mut_ptr(),
+                    input.as_ptr(),
+                    n,
+                );
+            }
+            return;
+        }
         #[cfg(has_grconstellation)]
         // SAFETY: both buffers hold `n` pairs (at most the capacity) and do not overlap; the
         // object was created by `new`.
@@ -1411,6 +1584,14 @@ impl GrLinearEqualizerRect {
 
 impl Drop for GrLinearEqualizerRect {
     fn drop(&mut self) {
+        #[cfg(has_grvolk)]
+        if self.volk {
+            // SAFETY: the object was created by `new_volk` and is freed once.
+            unsafe {
+                volk_ffi::sdrk_gr_volk_linear_equalizer_rect_free(self.object);
+            }
+            return;
+        }
         #[cfg(has_grconstellation)]
         // SAFETY: the object was created by `new` and is freed once.
         unsafe {

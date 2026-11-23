@@ -814,13 +814,13 @@ impl Kernel for EqualizeQamK {
 /// The samples per symbol of the block entries `qam_mod_block`, `qam_demod_block`,
 /// `qam_mod_qam256_block` and `qam_demod_qam256_block`: the flows of M44 §5 and M44.2 §5 (25 kBd
 /// at 200 kHz).
-const BLOCK_SPS: usize = 8;
+pub(crate) const BLOCK_SPS: usize = 8;
 
-fn block_rate(hz: u64) -> Rate {
+pub(crate) fn block_rate(hz: u64) -> Rate {
     Rate::hz(hz).expect("rate")
 }
 
-fn leaked_arena(bytes: usize) -> ArenaStorage<'static> {
+pub(crate) fn leaked_arena(bytes: usize) -> ArenaStorage<'static> {
     // The block lives as long as the measurement binary; its arena is leaked once.
     let mem: &'static mut [u8] = Box::leak(vec![0u8; bytes + 16].into_boxed_slice());
     ArenaStorage::new(mem)

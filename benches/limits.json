@@ -5388,6 +5388,36 @@
       "waiver": "`qam_demod_block` is not accelerated: the run-time-detection build runs the block code compiled for the baseline x86-64 target, the `avx2` build the same code compiled for AVX2, so their counts differ by code generation only; reported as information"
     }
   },
+  "psk_demod_block": {
+    "sse2": {
+      "status": "info",
+      "waiver": "`psk_demod_block` is the block `psk_demod` (M40, M44.1 §8) with coherent QPSK at 8 samples per symbol and its defaults (no equalizer): the kernels `fir`, `symbol_sync` and `costas` and the soft bits of `symbol_demap`, each with its own entry. No library has the same block: GNU Radio's receiver is a flowgraph, so the entry is counted against the sum of its blocks on the same input (`fir_filter_ccf` + `symbol_sync_cc` + `costas_loop_cc` + `constellation_decoder_cb`, issue #169, D2541), as information: the chain has no acquisition and no lock watches, its timing loop interpolates with an 8-tap MMSE filter against our cubic Lagrange polynomial (D2539), and it decodes symbols where the block gives soft bits"
+    },
+    "sse4.2": {
+      "status": "info",
+      "waiver": "`psk_demod_block` is the block `psk_demod` (M40, M44.1 §8) with coherent QPSK at 8 samples per symbol and its defaults (no equalizer): the kernels `fir`, `symbol_sync` and `costas` and the soft bits of `symbol_demap`, each with its own entry. No library has the same block: GNU Radio's receiver is a flowgraph, so the entry is counted against the sum of its blocks on the same input (`fir_filter_ccf` + `symbol_sync_cc` + `costas_loop_cc` + `constellation_decoder_cb`, issue #169, D2541), as information: the chain has no acquisition and no lock watches, its timing loop interpolates with an 8-tap MMSE filter against our cubic Lagrange polynomial (D2539), and it decodes symbols where the block gives soft bits"
+    },
+    "avx2": {
+      "status": "info",
+      "waiver": "`psk_demod_block` is the block `psk_demod` (M40, M44.1 §8) with coherent QPSK at 8 samples per symbol and its defaults (no equalizer): the kernels `fir`, `symbol_sync` and `costas` and the soft bits of `symbol_demap`, each with its own entry. No library has the same block: GNU Radio's receiver is a flowgraph, so the entry is counted against the sum of its blocks on the same input (`fir_filter_ccf` + `symbol_sync_cc` + `costas_loop_cc` + `constellation_decoder_cb`, issue #169, D2541), as information: the chain has no acquisition and no lock watches, its timing loop interpolates with an 8-tap MMSE filter against our cubic Lagrange polynomial (D2539), and it decodes symbols where the block gives soft bits"
+    },
+    "avx512": {
+      "status": "info",
+      "waiver": "`psk_demod_block` is the block `psk_demod` (M40, M44.1 §8) with coherent QPSK at 8 samples per symbol and its defaults (no equalizer): the kernels `fir`, `symbol_sync` and `costas` and the soft bits of `symbol_demap`, each with its own entry. No library has the same block: GNU Radio's receiver is a flowgraph, so the entry is counted against the sum of its blocks on the same input (`fir_filter_ccf` + `symbol_sync_cc` + `costas_loop_cc` + `constellation_decoder_cb`, issue #169, D2541), as information: the chain has no acquisition and no lock watches, its timing loop interpolates with an 8-tap MMSE filter against our cubic Lagrange polynomial (D2539), and it decodes symbols where the block gives soft bits"
+    },
+    "neon": {
+      "status": "info",
+      "waiver": "`psk_demod_block` is the block `psk_demod` (M40, M44.1 §8) with coherent QPSK at 8 samples per symbol and its defaults (no equalizer): the kernels `fir`, `symbol_sync` and `costas` and the soft bits of `symbol_demap`, each with its own entry. No library has the same block: GNU Radio's receiver is a flowgraph, so the entry is counted against the sum of its blocks on the same input (`fir_filter_ccf` + `symbol_sync_cc` + `costas_loop_cc` + `constellation_decoder_cb`, issue #169, D2541), as information: the chain has no acquisition and no lock watches, its timing loop interpolates with an 8-tap MMSE filter against our cubic Lagrange polynomial (D2539), and it decodes symbols where the block gives soft bits"
+    },
+    "simd128": {
+      "status": "info",
+      "waiver": "`psk_demod_block` is the block `psk_demod` (M40, M44.1 §8) with coherent QPSK at 8 samples per symbol and its defaults (no equalizer): the kernels `fir`, `symbol_sync` and `costas` and the soft bits of `symbol_demap`, each with its own entry. No library has the same block: GNU Radio's receiver is a flowgraph, so the entry is counted against the sum of its blocks on the same input (`fir_filter_ccf` + `symbol_sync_cc` + `costas_loop_cc` + `constellation_decoder_cb`, issue #169, D2541), as information: the chain has no acquisition and no lock watches, its timing loop interpolates with an 8-tap MMSE filter against our cubic Lagrange polynomial (D2539), and it decodes symbols where the block gives soft bits"
+    },
+    "avx2-runtime": {
+      "status": "info",
+      "waiver": "`psk_demod_block` is not accelerated: the run-time-detection build runs the block code compiled for the baseline x86-64 target, the `avx2` build the same code compiled for AVX2, so their counts differ by code generation only; reported as information"
+    }
+  },
   "qam_demod_qam256_block": {
     "sse2": {
       "status": "info",

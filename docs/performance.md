@@ -650,6 +650,7 @@ Instructions per sample of our kernel divided by those of the comparison (lower 
 | `qam_mod_block` (our code, per output sample) | 1.00 info | 1.00 info | 1.00 info | 1.00 info | 1.00 info | 1.00 info |
 | `qam_mod_qam256_block` (our code, per output sample) | 1.00 info | 1.00 info | 1.00 info | 1.00 info | 1.00 info | 1.00 info |
 | `qam_demod_block` (our code, per input sample) | 1.00 info | 1.00 info | 1.00 info | 1.00 info | 1.00 info | 1.00 info |
+| `psk_demod_block` C32 (GNU Radio receiver chain, information) | 0.28 | 0.28 | 0.11 | 0.10 | 0.22 | 0.17 |
 | `qam_demod_qam256_block` (our code, per input sample) | 1.00 info | 1.00 info | 1.00 info | 1.00 info | 1.00 info | 1.00 info |
 | `qam_demod_search_block` (our code, per input sample) | 1.00 info | 1.00 info | 1.00 info | 1.00 info | 1.00 info | 1.00 info |
 | `frame_decode_four_block` (our code, per soft bit) | 1.00 info | 1.00 info | 1.00 info | 1.00 info | 1.00 info | 1.00 info |
@@ -929,6 +930,7 @@ Instructions per sample, ours / comparison (`avx2-runtime`: ours only, judged ag
 | `band_pulse_detect_block` (our code, per lane value) | 138.25 / 138.25 | 136.69 / 136.69 | 128.20 / 128.20 | 136.86 | 127.50 / 127.50 | 124.69 / 124.69 | 324.05 / 324.05 |
 | `frame_decode_four_block` (our code, per soft bit) | 87.06 / 87.06 | 86.07 / 86.07 | 83.82 / 83.82 | 86.79 | 83.19 / 83.19 | 77.21 / 77.21 | 166.41 / 166.41 |
 | `qam_demod_block` (our code, per input sample) | 295.84 / 295.84 | 292.38 / 292.38 | 164.65 / 164.65 | 171.25 | 146.10 / 146.10 | 182.00 / 182.00 | 558.46 / 558.46 |
+| `psk_demod_block` C32 (GNU Radio receiver chain, information) | 216.65 / 769.74 | 214.51 / 769.74 | 86.38 / 774.36 | 93.23 | 75.11 / 774.33 | 117.45 / 535.00 | 386.32 / 2236.18 |
 | `qam_demod_qam256_block` (our code, per input sample) | 296.84 / 296.84 | 293.43 / 293.43 | 168.96 / 168.96 | 171.28 | 150.49 / 150.49 | 180.20 / 180.20 | 547.51 / 547.51 |
 | `qam_demod_search_block` (our code, per input sample) | 317.85 / 317.85 | 313.81 / 313.81 | 180.92 / 180.92 | 189.37 | 161.35 / 161.35 | 198.71 / 198.71 | 605.41 / 605.41 |
 | `qam_mod_block` (our code, per output sample) | 44.21 / 44.21 | 41.33 / 41.33 | 24.00 / 24.00 | 24.69 | 20.52 / 20.52 | 28.85 / 28.85 | 93.11 / 93.11 |
@@ -1226,6 +1228,7 @@ Accuracy (SNR in dB against the f64 reference), ours / comparison:
 | `qam_mod_block` (our code, per output sample) | 143.7 / 143.7 | 143.7 / 143.7 | 143.9 / 143.9 | 143.9 / 143.9 | 143.9 / 143.9 | 143.7 / 143.7 |
 | `qam_mod_qam256_block` (our code, per output sample) | 144.0 / 144.0 | 144.0 / 144.0 | 144.3 / 144.3 | 144.3 / 144.3 | 144.3 / 144.3 | 144.0 / 144.0 |
 | `qam_demod_block` (our code, per input sample; every symbol decided right) | exact | exact | exact | exact | exact | exact |
+| `psk_demod_block` C32 (GNU Radio receiver chain; every symbol decided right on both sides) | exact | exact | exact | exact | exact | exact |
 | `qam_demod_qam256_block` (our code, per input sample; every symbol decided right) | exact | exact | exact | exact | exact | exact |
 | `qam_demod_search_block` (our code, per input sample; no estimate taken from the noise) | exact | exact | exact | exact | exact | exact |
 | `frame_decode_four_block` (our code, per soft bit) | exact | exact | exact | exact | exact | exact |
@@ -1545,6 +1548,7 @@ Reference model `skylake`, counter-model `znver2`, mode `whole-loop`; execution 
 | `preemph_limit` | 16.10 | 16.10 | 1.00 | 11.93 | 11.93 | 1.00 | sdrk fallback |
 | `preemph_limit_q15` | 51.64 | 51.64 | 1.00 | 43.84 | 43.84 | 1.00 | sdrk fallback |
 | `preemph_limit_stereo` | 21.13 | 21.13 | 1.00 | 22.70 | 22.70 | 1.00 | sdrk fallback |
+| `psk_demod_block` | 81.22 | 451.08 | 0.18 | 70.68 | 370.98 | 0.19 | GNU Radio fir_filter_ccf + symbol_sync_cc + costas_loop_cc + constellation_decoder_cb (the sum of the blocks of the receiver chain, generic compiler flags; no acquisition and no lock watches) |
 | `psk_mod_block` | 8.98 | 8.98 | 1.00 | 11.40 | 11.40 | 1.00 | sdrk fallback |
 | `pulse_match_block` | 42.97 | 42.97 | 1.00 | 38.69 | 38.69 | 1.00 | sdrk fallback |
 | `pulse_shape_block` | 8.15 | 8.15 | 1.00 | 10.37 | 10.37 | 1.00 | sdrk fallback |
@@ -1839,6 +1843,7 @@ Reference model `skylake`, counter-model `znver2`, mode `whole-loop`; execution 
 | `preemph_limit` | 16.10 | 16.10 | 1.00 | 11.44 | 11.44 | 1.00 | sdrk fallback |
 | `preemph_limit_q15` | 51.64 | 51.64 | 1.00 | 43.84 | 43.84 | 1.00 | sdrk fallback |
 | `preemph_limit_stereo` | 20.85 | 20.85 | 1.00 | 21.65 | 21.65 | 1.00 | sdrk fallback |
+| `psk_demod_block` | 81.27 | 451.08 | 0.18 | 70.04 | 370.98 | 0.19 | GNU Radio fir_filter_ccf + symbol_sync_cc + costas_loop_cc + constellation_decoder_cb (the sum of the blocks of the receiver chain, generic compiler flags; no acquisition and no lock watches) |
 | `psk_mod_block` | 8.64 | 8.64 | 1.00 | 10.62 | 10.62 | 1.00 | sdrk fallback |
 | `pulse_match_block` | 42.97 | 42.97 | 1.00 | 38.69 | 38.69 | 1.00 | sdrk fallback |
 | `pulse_shape_block` | 7.80 | 7.80 | 1.00 | 9.59 | 9.59 | 1.00 | sdrk fallback |
@@ -2134,6 +2139,7 @@ Reference model `znver3`, counter-model `alderlake`, mode `whole-loop`; executio
 | `preemph_limit` | 15.37 | 15.37 | 1.00 | 13.18 | 13.18 | 1.00 | sdrk fallback |
 | `preemph_limit_q15` | 27.62 | 27.62 | 1.00 | 18.69 | 18.69 | 1.00 | sdrk fallback |
 | `preemph_limit_stereo` | 16.71 | 16.71 | 1.00 | 22.32 | 22.32 | 1.00 | sdrk fallback |
+| `psk_demod_block` | 39.53 | 1166.49 | 0.03 | 45.81 | 417.25 | 0.11 | GNU Radio fir_filter_ccf + symbol_sync_cc + costas_loop_cc + constellation_decoder_cb (the sum of the blocks of the receiver chain, generic compiler flags; no acquisition and no lock watches) |
 | `psk_mod_block` | 4.36 | 4.36 | 1.00 | 4.24 | 4.24 | 1.00 | sdrk fallback |
 | `pulse_match_block` | 12.41 | 12.41 | 1.00 | 11.36 | 11.36 | 1.00 | sdrk fallback |
 | `pulse_shape_block` | 3.56 | 3.56 | 1.00 | 3.51 | 3.51 | 1.00 | sdrk fallback |
@@ -2429,6 +2435,7 @@ Reference model `znver4`, counter-model `sapphirerapids`, mode `whole-loop`; exe
 | `preemph_limit` | 19.13 | 19.13 | 1.00 | 12.17 | 12.17 | 1.00 | sdrk fallback |
 | `preemph_limit_q15` | 26.71 | 26.71 | 1.00 | 18.69 | 18.69 | 1.00 | sdrk fallback |
 | `preemph_limit_stereo` | 15.64 | 15.64 | 1.00 | 13.07 | 13.07 | 1.00 | sdrk fallback |
+| `psk_demod_block` | 36.33 | 1160.84 | 0.03 | 41.50 | 417.14 | 0.10 | GNU Radio fir_filter_ccf + symbol_sync_cc + costas_loop_cc + constellation_decoder_cb (the sum of the blocks of the receiver chain, generic compiler flags; no acquisition and no lock watches) |
 | `psk_mod_block` | 4.65 | 4.65 | 1.00 | 3.57 | 3.57 | 1.00 | sdrk fallback |
 | `pulse_match_block` | 11.00 | 11.00 | 1.00 | 6.23 | 6.23 | 1.00 | sdrk fallback |
 | `pulse_shape_block` | 3.91 | 3.91 | 1.00 | 2.86 | 2.86 | 1.00 | sdrk fallback |
@@ -2724,6 +2731,7 @@ Reference model `cortex-a72`, counter-model `cortex-a76`, mode `whole-loop`; exe
 | `preemph_limit` | 15.43 | 15.43 | 1.00 | 15.41 | 15.41 | 1.00 | sdrk fallback |
 | `preemph_limit_q15` | 55.11 | 55.11 | 1.00 | 40.70 | 40.70 | 1.00 | sdrk fallback |
 | `preemph_limit_stereo` | 24.12 | 24.12 | 1.00 | 22.90 | 22.90 | 1.00 | sdrk fallback |
+| `psk_demod_block` | 92.51 | 363.00 | 0.25 | 59.41 | 274.03 | 0.22 | GNU Radio fir_filter_ccf + symbol_sync_cc + costas_loop_cc + constellation_decoder_cb (the sum of the blocks of the receiver chain, generic compiler flags; no acquisition and no lock watches) |
 | `psk_mod_block` | 13.98 | 13.98 | 1.00 | 13.05 | 13.05 | 1.00 | sdrk fallback |
 | `pulse_match_block` | 48.91 | 48.91 | 1.00 | 31.64 | 31.64 | 1.00 | sdrk fallback |
 | `pulse_shape_block` | 12.99 | 12.99 | 1.00 | 11.83 | 11.83 | 1.00 | sdrk fallback |

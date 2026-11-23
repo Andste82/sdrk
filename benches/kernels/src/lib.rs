@@ -55,6 +55,7 @@ mod math_family;
 mod morse_family;
 mod noise_family;
 mod proto_family;
+mod psk_family;
 mod qam_family;
 mod rds_family;
 mod rds_tx_family;
@@ -369,7 +370,7 @@ pub trait Kernel {
 /// are appended; a `<kernel>_fallback`, `<kernel>_airspy`, `<kernel>_fastnoise`,
 /// `<kernel>_ziggurat`, `<kernel>_dvbs2` or `<kernel>_svr` entry takes the seed of `<kernel>`, so
 /// that both entries filter the same input.
-pub const KERNELS: [&str; 287] = [
+pub const KERNELS: [&str; 288] = [
     "convert_cs8",
     "convert_cs16",
     "convert_out_cs16",
@@ -592,6 +593,7 @@ pub const KERNELS: [&str; 287] = [
     "equalize_qam16_fallback",
     "qam_mod_block",
     "qam_demod_block",
+    "psk_demod_block",
     "frame_decode_four_block",
     "qam_soft_bits_qam16",
     "qam_soft_bits_qam64",
@@ -1000,16 +1002,25 @@ pub fn prepare(name: &str, layout: Layout) -> Option<Box<dyn Kernel>> {
             Box::new(scramble_family::ScrambleCq15K::new(rng, layout, 8, entry))
         }
         "scramble_block" => Box::new(scramble_family::ScrambleBlockK::new(rng, layout)),
-        "snr_estimate_block" => Box::new(snr_estimate_family::SnrEstimateBlockK::new(rng, layout, false)),
-        "snr_estimate_block_svr" => Box::new(snr_estimate_family::SnrEstimateBlockK::new(rng, layout, true)),
-        "bit_scramble_block" => Box::new(bit_scramble_family::ScrambleBlockK::new(rng, layout, false)),
-        "bit_descramble_block" => Box::new(bit_scramble_family::ScrambleBlockK::new(rng, layout, true)),
-        "bit_scramble_in_place_block" => Box::new(
-            bit_scramble_family::ScrambleBlockK::new(rng, layout, false).in_place(),
-        ),
-        "bit_descramble_in_place_block" => Box::new(
-            bit_scramble_family::ScrambleBlockK::new(rng, layout, true).in_place(),
-        ),
+        "snr_estimate_block" => Box::new(snr_estimate_family::SnrEstimateBlockK::new(
+            rng, layout, false,
+        )),
+        "snr_estimate_block_svr" => Box::new(snr_estimate_family::SnrEstimateBlockK::new(
+            rng, layout, true,
+        )),
+        "bit_scramble_block" => {
+            Box::new(bit_scramble_family::ScrambleBlockK::new(rng, layout, false))
+        }
+        "bit_descramble_block" => {
+            Box::new(bit_scramble_family::ScrambleBlockK::new(rng, layout, true))
+        }
+        "bit_scramble_in_place_block" => {
+            Box::new(bit_scramble_family::ScrambleBlockK::new(rng, layout, false).in_place())
+        }
+        "bit_descramble_in_place_block" => {
+            Box::new(bit_scramble_family::ScrambleBlockK::new(rng, layout, true).in_place())
+        }
+        "psk_demod_block" => Box::new(psk_family::PskDemodBlockK::new(rng, layout)),
         "qam_demod_block" => Box::new(qam_family::QamDemodBlockK::new(
             rng,
             layout,

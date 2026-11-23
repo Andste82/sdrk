@@ -77,9 +77,10 @@ pub use biquad::{BIQUAD_REF_LEVEL, CmsisBiquad, KfrBiquad};
 pub use channelizer::{Firpfbch2Build, LiquidFirpfbch2};
 pub use fftfilt::{FftfiltBuild, LiquidFftfilt};
 pub use gnuradio::{
-    CostasLoopState, GR_MMSE_STEPS, GrConstellationReceiverCb, GrCostasLoopCc, GrCrc, GrFmDeemph,
-    GrFrequencyModulatorFc, GrLinearEqualizer, GrLinearEqualizerRect, GrMpskSnrEstCc,
-    GrQuadratureDemodCf, GrRect, GrRotator, GrScrambler, GrSymbolSyncCc,
+    CostasLoopState, GR_MMSE_STEPS, GrConstellationReceiverCb, GrCostasLoopCc, GrCrc,
+    GrFirFilterCcf, GrFmDeemph, GrFrequencyModulatorFc, GrLinearEqualizer, GrLinearEqualizerRect,
+    GrMpskSnrEstCc, GrQuadratureDemodCf, GrRect, GrRotator, GrScrambler, GrSymbolSyncCc,
+    gr_constellation_decoder_qpsk,
 };
 pub use gr_fastnoise::{GR_FASTNOISE_POOL, GrFastnoiseSourceC, GrFastnoiseSourceF};
 pub use halfband::{

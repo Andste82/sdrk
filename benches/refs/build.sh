@@ -17,7 +17,7 @@
 # | VOLK without FMA | 3.3.0 (the protokernels of `volk_32fc_x2_multiply_32fc` and `volk_32fc_x2_dot_prod_32fc` without fused operations: `u_avx` on x86_64, `neon` on aarch64), see volk-nofma.c | LGPL-3.0-or-later | x86_64 (`avx2`, `avx512`), aarch64 (`neon`) (static, one library per level) | information for `mul` `C32` (its gate from D287 until D326) and the gate of `dot_complex` (D821) at the levels where VOLK's dispatcher picks a fused implementation |
 # | GNU Radio `agc_cc` | main at ec1bf15 (agc.h of gr-analog), see gr-agc.c | GPL-3.0-or-later | all (static, one object file) | the reference of the `C32` `agc` |
 # | GNU Radio `costas_loop_cc` | main at ec1bf15 (costas_loop_cc_impl.cc of gr-digital, control_loop of gr-blocks), see gr-costas.c | GPL-3.0-or-later | x86_64, aarch64, wasm32 (static, one object file) | the reference of `costas_fallback` |
-# | GNU Radio `symbol_sync_cc` | main at ec1bf15 (symbol_sync_cc_impl.cc, clock_tracking_loop.cc and .h, the Gardner detector of timing_error_detector.cc and .h, interpolating_resampler.cc with the MMSE 8-tap interpolator and its table of gr-filter, VOLK's generic `volk_32fc_32f_dot_prod_32fc`), see gr-symbol-sync.c | GPL-3.0-or-later | x86_64, aarch64, wasm32 (static, one object file) | the reference of `symbol_sync_fallback` (reference does different work: an 8-tap MMSE interpolator against our 4-point Lagrange polynomial) |
+# | GNU Radio `symbol_sync_cc` | main at ec1bf15 (symbol_sync_cc_impl.cc, clock_tracking_loop.cc and .h, the Gardner detector of timing_error_detector.cc and .h, interpolating_resampler.cc with the MMSE 8-tap interpolator and its table of gr-filter, VOLK's generic `volk_32fc_32f_dot_prod_32fc`), see gr-symbol-sync.c | GPL-3.0-or-later | x86_64, aarch64, wasm32 (static, one object file) | the reference of `symbol_sync_fallback` (reference does different work: an 8-tap MMSE interpolator against our 4-point Lagrange polynomial); with `fir_filter_ccf` and the QPSK `constellation_decoder_cb` of gr-psk-chain.c the chain `psk_demod_block` is counted against, as information |
 # | GNU Radio `linear_equalizer` | main at ec1bf15 (linear_equalizer_impl.cc and the NLMS of adaptive_algorithm_nlms.h of gr-digital, the decision of constellation_qpsk, fir_filter_ccc of gr-filter, VOLK's generic dot products), see gr-equalizer.c | GPL-3.0-or-later | x86_64, aarch64, wasm32 (static, one object file) | the reference of `equalize_fallback` (D838) |
 # | GNU Radio `constellation_receiver_cb` and `linear_equalizer` on a `constellation_rect` | main at ec1bf15 (constellation_receiver_cb_impl.cc, the `constellation_rect` decision and `decision_maker_pe` of constellation.cc, linear_equalizer_impl.cc with adaptive_algorithm_nlms.h of gr-digital, control_loop of gr-blocks, VOLK's generic dot products), see gr-constellation.c | GPL-3.0-or-later | x86_64, aarch64, wasm32 (static, one object file) | the references of `costas_qam16_fallback`, `equalize_qam16_fallback`, `costas_qam64_fallback`, `equalize_qam64_fallback`, `costas_qam256_fallback` and `equalize_qam256_fallback` (D1210, D1601, D1524) |
 # | GNU Radio `fastnoise_source_f` and `fastnoise_source_c` | main at ec1bf15 (fastnoise_source_impl.cc of gr-analog, xoroshiro128p.h of gnuradio-runtime; the pool filled by a stand-in for `gr::random::gasdev`), see gr-fastnoise.c | GPL-3.0-or-later | x86_64, aarch64, wasm32 (static, one object file) | the information reference of `gauss_noise` (reference does less work: one copy from a precomputed pool per sample) |
@@ -163,7 +163,7 @@ stamp="$prefix/refs.stamp"
 want=$( (cat "${BASH_SOURCE[0]}" "$here/volk-wasm.c" "$here/gr-agc.c" "$here/gr-squelch.c" "$here/kfr-biquad.cpp" "$here/cmsis-biquad.c" "$here/cmsis-m4-heap.c" \
     "$here/cmsis-dsp.c" "$here/gr-rotator.c" "$here/gr-fm-mod.c" "$here/gr-quad-demod.c" "$here/gr-fast-atan2f.c" "$here/gr-deemph.c" "$here/gr-crc.c" "$here/gr-scrambler.c" "$here/gr-snr-est.c" \
     "$here/liquid-dotprod.c" "$here/liquid-dcblock.c" "$here/liquid-halfband.c" "$here/liquid-nco.c" "$here/liquid-ampmodem.c" "$here/liquid-randn.c" "$here/gr-fastnoise.c" "$here/gr-dvbs2-plscramble.c" "$here/airspy-iqconv.c" \
-    "$here/volk-nofma.c" "$here/volk-generic.c" "$here/gr-costas.c" "$here/gr-equalizer.c" "$here/gr-constellation.c" "$here/liquid-channelizer.c" "$here/liquid-fftfilt.c" "$here/gr-symbol-sync.c"; echo "$platform|$cc_version|$cxx_version|$kfr_cxx_version") | sha256sum | cut -d ' ' -f 1)
+    "$here/volk-nofma.c" "$here/volk-generic.c" "$here/gr-costas.c" "$here/gr-equalizer.c" "$here/gr-constellation.c" "$here/liquid-channelizer.c" "$here/liquid-fftfilt.c" "$here/gr-symbol-sync.c" "$here/gr-psk-chain.c"; echo "$platform|$cc_version|$cxx_version|$kfr_cxx_version") | sha256sum | cut -d ' ' -f 1)
 if [ -f "$stamp" ] && [ "$(cat "$stamp")" = "$want" ]; then
     exit 0
 fi
@@ -302,10 +302,13 @@ build_gr_fallback() {
 }
 
 # The loop of GNU Radio's symbol_sync_cc (Gardner, MMSE 8-tap), compiled with the same generic
-# flags as agc_cc: the reference of the symbol_sync fallback.
+# flags as agc_cc: the reference of the symbol_sync fallback; with it fir_filter_ccf and the QPSK
+# constellation_decoder_cb (gr-psk-chain.c), the other blocks of the receiver chain that
+# psk_demod_block is counted against.
 build_gr_symbol_sync() {
     $cc $GR_AGC_FLAGS -c "$here/gr-symbol-sync.c" -o "$work/gr-symbol-sync.o"
-    $ar rcs "$prefix/lib/libgrsymsync.a" "$work/gr-symbol-sync.o"
+    $cc $GR_AGC_FLAGS -c "$here/gr-psk-chain.c" -o "$work/gr-psk-chain.o"
+    $ar rcs "$prefix/lib/libgrsymsync.a" "$work/gr-symbol-sync.o" "$work/gr-psk-chain.o"
 }
 
 # The loop of GNU Radio's costas_loop_cc, compiled with the same generic flags as agc_cc: the
@@ -867,7 +870,7 @@ esac
             grsquelch) entry="\"gnuradio_pwr_squelch_cc\": { \"version\": \"main at ec1bf15\", \"sha256\": \"$(sha256sum "$here/gr-squelch.c" | cut -d ' ' -f 1)\", \"build\": \"$GR_AGC_FLAGS\" }" ;;
             grfallback) entry="\"gnuradio_fallback_references\": { \"version\": \"main at ec1bf15\", \"sha256\": \"$(cat "$here/gr-rotator.c" "$here/gr-fm-mod.c" "$here/gr-quad-demod.c" "$here/gr-fast-atan2f.c" "$here/gr-deemph.c" | sha256sum | cut -d ' ' -f 1)\", \"build\": \"gr-rotator.c gr-fm-mod.c gr-quad-demod.c gr-fast-atan2f.c gr-deemph.c (VOLK $VOLK_VERSION generic multiply_conjugate): $GR_AGC_FLAGS\" }" ;;
             grcostas) entry="\"gnuradio_costas_loop_cc\": { \"version\": \"main at ec1bf15\", \"sha256\": \"$(sha256sum "$here/gr-costas.c" | cut -d ' ' -f 1)\", \"build\": \"gr-costas.c (costas_loop_cc, order 2 and 4, use_snr false): $GR_AGC_FLAGS\" }" ;;
-            grsymsync) entry="\"gnuradio_symbol_sync_cc\": { \"version\": \"main at ec1bf15\", \"sha256\": \"$(sha256sum "$here/gr-symbol-sync.c" | cut -d ' ' -f 1)\", \"build\": \"gr-symbol-sync.c (symbol_sync_cc, TED_GARDNER, IR_MMSE_8TAP, one output per symbol, no tags): $GR_AGC_FLAGS\" }" ;;
+            grsymsync) entry="\"gnuradio_symbol_sync_cc\": { \"version\": \"main at ec1bf15\", \"sha256\": \"$(cat "$here/gr-symbol-sync.c" "$here/gr-psk-chain.c" | sha256sum | cut -d ' ' -f 1)\", \"build\": \"gr-symbol-sync.c (symbol_sync_cc, TED_GARDNER, IR_MMSE_8TAP, one output per symbol, no tags) and gr-psk-chain.c (fir_filter_ccf, constellation_decoder_cb with constellation_qpsk): $GR_AGC_FLAGS\" }" ;;
             grequalizer) entry="\"gnuradio_linear_equalizer\": { \"version\": \"main at ec1bf15\", \"sha256\": \"$(sha256sum "$here/gr-equalizer.c" | cut -d ' ' -f 1)\", \"build\": \"gr-equalizer.c (linear_equalizer with adaptive_algorithm_nlms, QPSK, decision-directed, VOLK $VOLK_VERSION generic dot products): $GR_AGC_FLAGS\" }" ;;
             grconstellation) entry="\"gnuradio_constellation\": { \"version\": \"main at ec1bf15\", \"sha256\": \"$(sha256sum "$here/gr-constellation.c" | cut -d ' ' -f 1)\", \"build\": \"gr-constellation.c (constellation_receiver_cb and linear_equalizer with adaptive_algorithm_nlms on a constellation_rect, VOLK $VOLK_VERSION generic dot products): $GR_AGC_FLAGS\" }" ;;
             grscrambler) entry="\"gnuradio_scrambler\": { \"version\": \"main at ec1bf15\", \"sha256\": \"$(sha256sum "$here/gr-scrambler.c" | cut -d ' ' -f 1)\", \"build\": \"gr-scrambler.c (gr::digital::scrambler_bb, descrambler_bb): $GR_AGC_FLAGS\" }" ;;

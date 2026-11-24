@@ -166,6 +166,16 @@ pub enum Family {
     RealFft,
     /// No established library: our fallback.
     Own,
+    /// A SIMD entry whose loop is the fallback's (every backend runs it, D841) and whose fair
+    /// library comparison is a block of GNU Radio with VOLK's dispatched dot products of the
+    /// level (`equalize`, `equalize_qam16`, `equalize_qam64`, issue #169): the gate where VOLK
+    /// has SIMD implementations, our fallback as information. In the wasm32 build of VOLK
+    /// (the `generic` protokernels only) our fallback is the comparison.
+    OwnVsGnuRadioSimd,
+    /// A block whose pulse filter is compared with liquid-dsp's filter (`firinterp_crcf`,
+    /// `firfilt_crcf`) with its dot products of the level (the portable loop in the wasm32
+    /// build): the gate, our fallback as information (issue #169).
+    OwnVsLiquid,
     /// A workload of an own-kernel comparison ([`Reference::OwnKernel`], D69): measured as
     /// [`Family::Own`], but not a kernel of the library, so it has no entry at a level that is
     /// judged against another build of ours (`avx2-runtime`: the workload runs a kernel whose
@@ -454,7 +464,7 @@ const fn fft(name: &'static str, family: Family, samples: u64) -> KernelSpec {
 }
 
 /// The kernels of the benchmark table, in report order.
-pub static KERNELS: [KernelSpec; 286] = [
+pub static KERNELS: [KernelSpec; 306] = [
     spec("convert_cs8", Family::Volk, true),
     spec("convert_cs16", Family::Volk, true),
     spec("convert_cu8", Family::VolkAndOwn, true),
@@ -702,21 +712,22 @@ pub static KERNELS: [KernelSpec; 286] = [
     proto("frame_decode_block", Family::Own),
     spec("symbol_sync", Family::Own, false),
     spec("symbol_sync_real", Family::Own, false),
+    spec("symbol_sync_fallback", Family::FallbackVsGnuRadio, false),
     spec("costas", Family::Own, false),
     spec("costas_fallback", Family::FallbackVsGnuRadio, false),
     proto("rds_demod_block", Family::Own),
     proto("rds_decode_block", Family::Own),
     spec("dot_complex", Family::VolkNoFmaGate, true),
     spec("dot_complex_fallback", Family::FallbackVsCmsis, false),
-    spec("equalize", Family::Own, false),
+    spec("equalize", Family::OwnVsGnuRadioSimd, false),
     spec("equalize_fallback", Family::FallbackVsGnuRadio, false),
     spec("costas_qam16", Family::Own, false),
     spec("costas_qam16_fallback", Family::FallbackVsGnuRadio, false),
-    spec("equalize_qam16", Family::Own, false),
+    spec("equalize_qam16", Family::OwnVsGnuRadioSimd, false),
     spec("equalize_qam16_fallback", Family::FallbackVsGnuRadio, false),
     spec("costas_qam64", Family::Own, false),
     spec("costas_qam64_fallback", Family::FallbackVsGnuRadio, false),
-    spec("equalize_qam64", Family::Own, false),
+    spec("equalize_qam64", Family::OwnVsGnuRadioSimd, false),
     spec("equalize_qam64_fallback", Family::FallbackVsGnuRadio, false),
     spec("rds_shape", Family::Own, false),
     spec("stereo_encode_rds", Family::Own, false),
@@ -729,8 +740,12 @@ pub static KERNELS: [KernelSpec; 286] = [
     proto("channel_bank_channelize", Family::Own),
     proto("channel_bank_ddc", Family::Own),
     proto("band_pulse_detect_block", Family::Own),
-    spec("qam_soft_bits_qam16", Family::Own, false),
-    spec("qam_soft_bits_qam64", Family::Own, false),
+    spec("qam_soft_bits_qam16", Family::GnuRadio, false),
+    spec("qam_soft_bits_qam16_lut", Family::GnuRadio, false),
+    spec("qam_soft_bits_qam16_liquid", Family::OwnVsLiquid, false),
+    spec("qam_soft_bits_qam64", Family::GnuRadio, false),
+    spec("qam_soft_bits_qam64_lut", Family::GnuRadio, false),
+    spec("qam_soft_bits_qam64_liquid", Family::OwnVsLiquid, false),
     spec("qam_soft_bits_qpsk", Family::Own, false),
     spec("qam_soft_bits_qam256", Family::Own, false),
     spec("qam_soft_bits_qam1024", Family::Own, false),
@@ -756,22 +771,37 @@ pub static KERNELS: [KernelSpec; 286] = [
     proto("bit_descramble_in_place_block", Family::GnuRadio),
     proto("snr_estimate_block", Family::GnuRadio),
     proto("snr_estimate_block_svr", Family::GnuRadio),
-    proto("symbol_demap_qam16_block", Family::Own),
-    proto("symbol_demap_qam64_block", Family::Own),
+    proto("symbol_demap_qam16_block", Family::GnuRadio),
+    proto("symbol_demap_qam16_block_lut", Family::GnuRadio),
+    proto("symbol_demap_qam16_block_liquid", Family::OwnVsLiquid),
+    proto("symbol_demap_qam64_block", Family::GnuRadio),
+    proto("symbol_demap_qam64_block_lut", Family::GnuRadio),
+    proto("symbol_demap_qam64_block_liquid", Family::OwnVsLiquid),
     proto("symbol_demap_qam256_block", Family::Own),
-    proto("qam_mod_block", Family::Own),
-    proto("qam_mod_qam256_block", Family::Own),
-    proto("qam_demod_block", Family::Own),
+    proto("qam_mod_block", Family::GnuRadio),
+    proto("qam_mod_block_liquid", Family::OwnVsLiquid),
+    proto("qam_mod_qam256_block", Family::GnuRadio),
+    proto("qam_mod_qam256_block_liquid", Family::OwnVsLiquid),
+    proto("qam_demod_block", Family::GnuRadio),
+    proto("psk_demod_block", Family::GnuRadio),
     proto("qam_demod_qam256_block", Family::Own),
     proto("qam_demod_search_block", Family::Own),
-    proto("psk_mod_block", Family::Own),
-    proto("symbol_map_block", Family::Own),
+    proto("psk_mod_block", Family::GnuRadio),
+    proto("psk_mod_block_liquid", Family::OwnVsLiquid),
+    proto("symbol_map_block", Family::GnuRadio),
+    proto("symbol_map_block_liquid", Family::OwnVsLiquid),
+    proto("symbol_map_block_qpsk", Family::GnuRadio),
+    proto("symbol_map_block_qpsk_liquid", Family::OwnVsLiquid),
+    proto("symbol_map_block_qam64", Family::GnuRadio),
+    proto("symbol_map_block_qam64_liquid", Family::OwnVsLiquid),
     proto("iq_offset_block", Family::Own),
     proto("qam_acquire_block", Family::Own),
     proto("qam_frame_encode_block", Family::Own),
     proto("qam_frame_decode_block", Family::Own),
-    proto("pulse_shape_block", Family::Own),
-    proto("pulse_match_block", Family::Own),
+    proto("pulse_shape_block", Family::GnuRadio),
+    proto("pulse_match_block", Family::GnuRadio),
+    proto("pulse_shape_block_liquid", Family::OwnVsLiquid),
+    proto("pulse_match_block_liquid", Family::OwnVsLiquid),
     proto("frame_decode_four_block", Family::Own),
     spec("gauss_noise_c32", Family::LiquidDifferentWork, false),
     spec("gauss_noise_f32", Family::LiquidDifferentWork, false),
@@ -1175,7 +1205,9 @@ pub fn comparisons(plan: &LevelPlan, spec: &KernelSpec) -> (Reference, Vec<Refer
 
 fn family_comparisons(plan: &LevelPlan, spec: &KernelSpec) -> (Reference, Vec<Reference>) {
     match spec.family {
-        Family::VolkNative if plan.refs == "wasm32" => (Reference::Fallback, Vec::new()),
+        Family::VolkNative | Family::OwnVsGnuRadioSimd if plan.refs == "wasm32" => {
+            (Reference::Fallback, Vec::new())
+        }
         Family::VolkNoFma if matches!(plan.level, "avx2" | "avx512" | "neon") => {
             (Reference::Volk, vec![Reference::VolkNoFma])
         }
@@ -1194,7 +1226,10 @@ fn family_comparisons(plan: &LevelPlan, spec: &KernelSpec) -> (Reference, Vec<Re
             };
             (Reference::Volk, extras)
         }
-        Family::GnuRadio => (Reference::GnuRadio, vec![Reference::Fallback]),
+        Family::GnuRadio | Family::OwnVsGnuRadioSimd => {
+            (Reference::GnuRadio, vec![Reference::Fallback])
+        }
+        Family::OwnVsLiquid => (Reference::Liquid, vec![Reference::Fallback]),
         Family::FftC32 => (plan.fft_c32.0, plan.fft_c32.1.to_vec()),
         Family::FftCq15 => (Reference::KissFft, plan.fft_cq15_extra.to_vec()),
         Family::RealFft => (plan.rfft.0, plan.rfft.1.to_vec()),
@@ -2839,7 +2874,59 @@ mod tests {
         let kernel = |k: &str| KERNELS.iter().find(|s| s.name == k).unwrap();
         let names = ["noise_blank", "noise_blank_cq15", "auto_notch"];
         for level in ["sse2", "sse4.2", "avx2", "avx512", "neon", "simd128"] {
-            for k in names {
+            // The receiver blocks against the sum of GNU Radio's blocks on the same input
+        // (issue #169, D2541, D2545): information, the chain has no acquisition and no lock watches.
+        for k in [
+            "psk_demod_block",
+            "qam_demod_block",
+            "qam_mod_block",
+            "qam_mod_qam256_block",
+            "psk_mod_block",
+            "pulse_shape_block",
+            "pulse_match_block",
+            "symbol_map_block",
+            "symbol_map_block_qpsk",
+            "symbol_map_block_qam64",
+            "symbol_demap_qam16_block",
+            "symbol_demap_qam16_block_lut",
+            "symbol_demap_qam64_block",
+            "symbol_demap_qam64_block_lut",
+            "qam_soft_bits_qam16_lut",
+            "qam_soft_bits_qam64_lut",
+        ] {
+            for level in ["sse2", "sse4.2", "avx2", "avx512", "neon", "simd128"] {
+                assert_eq!(
+                    comparisons(plan(level), kernel(k)),
+                    (Reference::GnuRadio, vec![Reference::Fallback]),
+                    "{k} at {level}"
+                );
+            }
+        }
+        // The pulse filters of the blocks against liquid-dsp's `firinterp_crcf` and
+        // `firfilt_crcf` with the dot products of the level (issue #169, D2546).
+        for k in [
+            "pulse_shape_block_liquid",
+            "pulse_match_block_liquid",
+            "qam_mod_block_liquid",
+            "qam_mod_qam256_block_liquid",
+            "psk_mod_block_liquid",
+            "symbol_map_block_liquid",
+            "symbol_map_block_qpsk_liquid",
+            "symbol_map_block_qam64_liquid",
+            "symbol_demap_qam16_block_liquid",
+            "symbol_demap_qam64_block_liquid",
+            "qam_soft_bits_qam16_liquid",
+            "qam_soft_bits_qam64_liquid",
+        ] {
+            for level in ["sse2", "sse4.2", "avx2", "avx512", "neon", "simd128"] {
+                assert_eq!(
+                    comparisons(plan(level), kernel(k)),
+                    (Reference::Liquid, vec![Reference::Fallback]),
+                    "{k} at {level}"
+                );
+            }
+        }
+        for k in names {
                 assert_eq!(
                     comparisons(plan(level), kernel(k)),
                     (Reference::Fallback, Vec::new()),
@@ -2926,23 +3013,14 @@ mod tests {
             "channel_bank_channelize",
             "channel_bank_ddc",
             "band_pulse_detect_block",
-            "symbol_demap_qam16_block",
-            "symbol_demap_qam64_block",
             "symbol_demap_qam256_block",
-            "qam_mod_block",
-            "qam_mod_qam256_block",
-            "qam_demod_block",
             "qam_demod_qam256_block",
             "qam_demod_search_block",
             "frame_decode_four_block",
-            "psk_mod_block",
-            "symbol_map_block",
             "iq_offset_block",
             "qam_acquire_block",
             "qam_frame_encode_block",
             "qam_frame_decode_block",
-            "pulse_shape_block",
-            "pulse_match_block",
             "noise_block",
             "scramble_block",
         ];
@@ -3005,10 +3083,19 @@ mod tests {
             );
             assert!(kernel(k).family.measured_at(plan("avx2-runtime")), "{k}");
             assert!(kernel(k).misaligned && !kernel(k).small_n, "{k}");
-            // Not accelerated: no `_fallback` entry next to the facade entry.
+            // Not accelerated: the fallback entry exists only where a library runs a loop
+            // that does related work (`symbol_sync_fallback` against GNU Radio's
+            // `symbol_sync_cc`, issue #169, D2539).
             let fallback = format!("{k}_fallback");
-            assert!(KERNELS.iter().all(|s| s.name != fallback), "{fallback}");
+            assert_eq!(
+                KERNELS.iter().any(|s| s.name == fallback),
+                k == "symbol_sync",
+                "{fallback}"
+            );
         }
+        // `symbol_sync_fallback` against GNU Radio's `symbol_sync_cc`, information on every
+        // level (the reference does different work, D2539).
+        assert_eq!(kernel("symbol_sync_fallback").family.measured(), "fallback");
         // `qam_soft_bits` (I44-1, D1412): the SIMD paths against our own fallback (no library
         // computes the same soft bits, D1201), misaligned as the other kernels.
         for k in [
@@ -3019,11 +3106,14 @@ mod tests {
             "qam_soft_bits_qam1024",
         ] {
             for level in ["sse2", "sse4.2", "avx2", "avx512", "neon", "simd128"] {
-                assert_eq!(
-                    comparisons(plan(level), kernel(k)),
-                    (Reference::Fallback, Vec::new()),
-                    "{k} at {level}"
-                );
+                // Issue #169 (D2549): `qam16` and `qam64` are judged against GNU Radio's
+                // `calc_soft_dec` (its table and liquid-dsp have entries of their own).
+                let want = if matches!(k, "qam_soft_bits_qam16" | "qam_soft_bits_qam64") {
+                    (Reference::GnuRadio, vec![Reference::Fallback])
+                } else {
+                    (Reference::Fallback, Vec::new())
+                };
+                assert_eq!(comparisons(plan(level), kernel(k)), want, "{k} at {level}");
             }
             assert_eq!(
                 comparisons(plan("avx2-runtime"), kernel(k)).0,
@@ -3042,7 +3132,11 @@ mod tests {
                 .map(|s| s.name)
                 .eq([
                     "symbol_demap_qam16_block",
+                    "symbol_demap_qam16_block_lut",
+                    "symbol_demap_qam16_block_liquid",
                     "symbol_demap_qam64_block",
+                    "symbol_demap_qam64_block_lut",
+                    "symbol_demap_qam64_block_liquid",
                     "symbol_demap_qam256_block"
                 ])
         );
@@ -3094,9 +3188,18 @@ mod tests {
             ("equalize_qam1024", "equalize_qam1024_fallback"),
         ] {
             for level in ["sse2", "sse4.2", "avx2", "avx512", "neon", "simd128"] {
+                // The SIMD entries `equalize_qam16` and `equalize_qam64` are judged against
+                // GNU Radio with VOLK's dispatcher where VOLK has SIMD (issue #169); the
+                // others, and `simd128`, against our own fallback.
+                let want =
+                    if matches!(simd, "equalize_qam16" | "equalize_qam64") && level != "simd128" {
+                        (Reference::GnuRadio, vec![Reference::Fallback])
+                    } else {
+                        (Reference::Fallback, Vec::new())
+                    };
                 assert_eq!(
                     comparisons(plan(level), kernel(simd)),
-                    (Reference::Fallback, Vec::new()),
+                    want,
                     "{simd} at {level}"
                 );
                 assert_eq!(
@@ -3190,11 +3293,15 @@ mod tests {
                 (Reference::Cmsis, Vec::new()),
                 "dot_complex_fallback at {level}"
             );
-            assert_eq!(
-                comparisons(plan(level), eq),
-                (Reference::Fallback, Vec::new()),
-                "equalize at {level}"
-            );
+            // Issue #169: GNU Radio with VOLK's dispatcher is the comparison where VOLK has SIMD
+            // implementations, our fallback is information; in the wasm32 build of VOLK (the
+            // generic protokernels only) our fallback is the comparison.
+            let want = if level == "simd128" {
+                (Reference::Fallback, Vec::new())
+            } else {
+                (Reference::GnuRadio, vec![Reference::Fallback])
+            };
+            assert_eq!(comparisons(plan(level), eq), want, "equalize at {level}");
             assert_eq!(
                 comparisons(plan(level), eq_fallback).0,
                 Reference::GnuRadio,

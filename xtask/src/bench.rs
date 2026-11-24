@@ -3449,8 +3449,11 @@ mod tests {
         ] {
             for level in ["sse2", "sse4.2", "avx2", "avx512", "neon", "simd128"] {
                 let limit = limits.get(name, level).unwrap();
+                // `scramble_c32_b8` at `avx512` is `dev` in cycles (open item I13.1-8, D2746).
                 let want = if info.contains(&level) {
                     Status::Info
+                } else if (name, level) == ("scramble_c32_b8", "avx512") {
+                    Status::Dev
                 } else {
                     Status::Release
                 };

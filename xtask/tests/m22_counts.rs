@@ -53,9 +53,18 @@ fn every_biquad_entry_has_its_status_at_every_level() {
                 assert!(entry["waiver"].is_string(), "{kernel}/{level}");
             }
         }
-        // avx2-runtime follows the run-time rule (no entry); the fallback entries are not
-        // measured there.
-        assert!(limits[kernel]["avx2-runtime"].is_null(), "{kernel}");
+        // avx2-runtime follows the run-time rule (no entry), except `biquad_real_q15`, which is
+        // above 1.02 of `avx2` in cycles (`dev`, open item I13.1-5, D2746); the fallback entries
+        // are not measured there.
+        if kernel == "biquad_real_q15" {
+            assert_eq!(
+                limits[kernel]["avx2-runtime"]["status"].as_str(),
+                Some("dev"),
+                "{kernel}"
+            );
+        } else {
+            assert!(limits[kernel]["avx2-runtime"].is_null(), "{kernel}");
+        }
     }
 }
 

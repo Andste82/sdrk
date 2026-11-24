@@ -24,7 +24,16 @@
 //!   `avx2-runtime` (the run-time detection of the level, on the models of `avx2`) is compared
 //!   with our own entry in the fixed `avx2` build (D2702).
 //!
-//! The result is printed as tables and written to `target/measure/<kernel>.json`.
+//! The result is printed as tables and written to `target/measure/<kernel>.json`
+//! (`target/measure/all.json` with `--all`, which selects every entry and golden kernel).
+//!
+//! **Committed results** (D2704): `--merge` writes the records of the measured entries into
+//! `benches/results/cycles/<platform>.json` and keeps every other record of the file; `--all`
+//! without `--level` writes the files of the measured platforms anew. Both measure the branches
+//! too (`--branches`), only in the judged mode `whole-loop` and with the counts of the profiler
+//! of each level, and refuse an `llvm-mca` without the corrections of D942
+//! ([`crate::cycle_results`]). `benches/cycle_tables.py` writes the cycle tables of
+//! `docs/performance.md` from these files.
 #![allow(clippy::print_stdout, clippy::print_stderr)]
 
 use std::collections::BTreeMap;
@@ -37,7 +46,7 @@ use serde_json::{Value, json};
 
 use crate::bench::{KERNELS, PLANS};
 
-const USAGE: &str = "usage: cargo xtask measure <kernel> [--platform P]... [--level L]... [--no-golden] [--no-cycles] [--cycle-mode whole-loop|per-block] [--cycle-counter sde] [--branches] [--json]";
+const USAGE: &str = "usage: cargo xtask measure <kernel>|--all [--platform P]... [--level L]... [--no-golden] [--no-cycles] [--cycle-mode whole-loop|per-block] [--cycle-counter sde] [--branches] [--merge] [--json]";
 
 /// The command line of `cargo xtask measure`.
 #[allow(
@@ -46,8 +55,14 @@ const USAGE: &str = "usage: cargo xtask measure <kernel> [--platform P]... [--le
 )]
 #[derive(Clone, Debug, Default, PartialEq, Eq)]
 pub struct Options {
-    /// The kernel name (a prefix, see the module documentation).
+    /// The kernel name (a prefix, see the module documentation); `all` with `--all`.
     pub kernel: String,
+    /// `--all`: every entry and every golden kernel instead of a kernel name; without
+    /// `--level` the results files of the measured platforms are written anew.
+    pub all: bool,
+    /// `--merge`: write the records of the measured entries into the results files and keep
+    /// every other record (implies `--branches`).
+    pub merge: bool,
     /// `--platform` (repeatable); empty: the platform of the host.
     pub platforms: Vec<String>,
     /// `--level` (repeatable): only these levels.
@@ -105,16 +120,53 @@ impl Options {
                         })?);
                 }
                 "--branches" => o.branches = true,
+                "--all" => o.all = true,
+                "--merge" => o.merge = true,
                 "--json" => o.json = true,
                 other if other.starts_with("--") => bail!("unknown option `{other}`; {USAGE}"),
                 name if o.kernel.is_empty() => o.kernel = name.to_string(),
                 extra => bail!("only one kernel, got `{}` and `{extra}`; {USAGE}", o.kernel),
             }
         }
-        if o.kernel.is_empty() {
+        if o.all {
+            if !o.kernel.is_empty() {
+                bail!("`--all` or a kernel name, not both; {USAGE}");
+            }
+            o.kernel = "all".to_string();
+        } else if o.kernel.is_empty() {
             bail!("{USAGE}");
         }
+        if o.writes() {
+            if !o.cycles {
+                bail!("the results are cycles: `--no-cycles` cannot write them");
+            }
+            if o.cycle_mode != crate::cycle_results::MODE {
+                bail!(
+                    "the results are judged in the mode {}; `--cycle-mode` does not write them",
+                    crate::cycle_results::MODE.name()
+                );
+            }
+            if o.cycle_counter.is_some() {
+                bail!(
+                    "the results take the counts of the profiler of each level; `--cycle-counter` does not write them"
+                );
+            }
+            if o.all && !o.merge && !o.levels.is_empty() {
+                bail!(
+                    "`--all` writes every level of a platform anew; with `--level` use `--merge`"
+                );
+            }
+            o.branches = true;
+        }
         Ok(o)
+    }
+}
+
+impl Options {
+    /// Whether the run writes the committed results (`--merge`, or `--all`).
+    #[must_use]
+    pub fn writes(&self) -> bool {
+        self.merge || self.all
     }
 }
 
@@ -137,7 +189,8 @@ pub fn count_entries(kernel: &str) -> Vec<String> {
         .collect()
 }
 
-/// The golden kernels (directories of `tests/golden/vectors`) selected by `kernel`.
+/// The golden kernels (directories of `tests/golden/vectors`) selected by `kernel`; every one
+/// for `None` (`--all`).
 ///
 /// # Errors
 /// The directory cannot be read.
@@ -145,7 +198,7 @@ pub fn count_entries(kernel: &str) -> Vec<String> {
     clippy::large_stack_frames,
     reason = "the Windows file system calls are large; xtask is a host tool"
 )]
-pub fn golden_kernels(root: &Path, kernel: &str) -> anyhow::Result<Vec<String>> {
+pub fn golden_kernels(root: &Path, kernel: Option<&str>) -> anyhow::Result<Vec<String>> {
     let dir = root.join("tests").join("golden").join("vectors");
     let mut out = Vec::new();
     for entry in
@@ -154,7 +207,7 @@ pub fn golden_kernels(root: &Path, kernel: &str) -> anyhow::Result<Vec<String>> 
         let entry = entry?;
         if entry.file_type()?.is_dir()
             && let Some(name) = entry.file_name().to_str()
-            && selects(kernel, name)
+            && kernel.is_none_or(|k| selects(k, name))
         {
             out.push(name.to_string());
         }
@@ -717,7 +770,9 @@ fn measure_branches(root: &Path, o: &Options, entries: &[String], cycles: Option
                                 value.insert(kernel, v);
                             }
                             Err(err) => {
-                                part.ok = false;
+                                // An entry that is not measured at the level is no failure, as
+                                // in the cycles.
+                                part.ok &= err.to_string().starts_with("not measured at the level");
                                 let note = format!("not counted: {err:#}");
                                 let _ = writeln!(part.table, "{kernel:<26} {note}");
                                 value.insert(kernel, json!({ "note": note }));
@@ -878,8 +933,17 @@ fn measure_golden(root: &Path, report: &Path, golden: &[String]) -> anyhow::Resu
 )]
 pub fn run(root: &Path, args: &[&str]) -> anyhow::Result<bool> {
     let o = Options::parse(args)?;
-    let entries = count_entries(&o.kernel);
-    let golden = golden_kernels(root, &o.kernel)?;
+    let (entries, golden) = if o.all {
+        (
+            KERNELS.iter().map(|s| s.name.to_string()).collect(),
+            golden_kernels(root, None)?,
+        )
+    } else {
+        (
+            count_entries(&o.kernel),
+            golden_kernels(root, Some(&o.kernel))?,
+        )
+    };
     if entries.is_empty() && golden.is_empty() {
         let mut names: Vec<&str> = KERNELS.iter().map(|k| k.name).collect();
         names.sort_unstable();
@@ -891,6 +955,10 @@ pub fn run(root: &Path, args: &[&str]) -> anyhow::Result<bool> {
     }
     let out_dir = root.join("target").join("measure");
     std::fs::create_dir_all(&out_dir)?;
+    // Checked before the long runs: an uncorrected llvm-mca fails at once.
+    if o.writes() && !entries.is_empty() {
+        crate::cycle_results::require_corrected_llvm_mca()?;
+    }
     let cycles = (o.cycles && !entries.is_empty()).then(|| measure_cycles(root, &o, &entries));
     let branches = (o.branches && !entries.is_empty())
         .then(|| measure_branches(root, &o, &entries, cycles.as_ref().map(|p| &p.doc)));
@@ -914,6 +982,29 @@ pub fn run(root: &Path, args: &[&str]) -> anyhow::Result<bool> {
     let mut text = serde_json::to_string_pretty(&doc)?;
     text.push('\n');
     std::fs::write(&path, &text)?;
+    let mut written = Vec::new();
+    if let Some(cycles) = cycles.as_ref().filter(|_| o.writes()) {
+        let platforms = if o.platforms.is_empty() {
+            default_platforms(std::env::consts::ARCH)
+        } else {
+            o.platforms.clone()
+        };
+        for platform in &platforms {
+            // After the runs: the manifest of the C references exists once they are built.
+            let tools = crate::cycle_results::tools(root, platform)?;
+            let measured = crate::cycle_results::levels_of(
+                field(&cycles.doc, platform),
+                branches.as_ref().map(|b| field(&b.doc, platform)),
+            )?;
+            written.push(crate::cycle_results::write(
+                root,
+                platform,
+                &tools,
+                &measured,
+                o.all && !o.merge,
+            )?);
+        }
+    }
     if o.json {
         print!("{text}");
     } else {
@@ -922,6 +1013,9 @@ pub fn run(root: &Path, args: &[&str]) -> anyhow::Result<bool> {
             print!("{}", part.table);
         }
         println!("\nwritten to {}", path.display());
+        for p in &written {
+            println!("results in {}", p.display());
+        }
     }
     Ok(cycles
         .iter()
@@ -981,6 +1075,22 @@ mod tests {
         assert!(Options::parse(&["fir", "--cycle-counter", "pin"]).is_err());
         assert!(!o.branches);
         assert!(Options::parse(&["fir", "--branches"]).unwrap().branches);
+    }
+
+    #[test]
+    fn writing_the_results_needs_the_judged_measurement() {
+        let o = Options::parse(&["fir", "--merge"]).unwrap();
+        assert!(o.writes() && o.branches && !o.all);
+        let o = Options::parse(&["--all", "--no-golden"]).unwrap();
+        assert!(o.all && o.writes() && o.branches);
+        assert_eq!(o.kernel, "all");
+        assert!(!Options::parse(&["fir"]).unwrap().writes());
+        assert!(Options::parse(&["--all", "fir"]).is_err());
+        assert!(Options::parse(&["--all", "--level", "avx2"]).is_err());
+        assert!(Options::parse(&["--all", "--level", "avx2", "--merge"]).is_ok());
+        assert!(Options::parse(&["fir", "--merge", "--no-cycles"]).is_err());
+        assert!(Options::parse(&["fir", "--merge", "--cycle-mode", "per-block"]).is_err());
+        assert!(Options::parse(&["fir", "--merge", "--cycle-counter", "sde"]).is_err());
     }
 
     #[test]

@@ -178,6 +178,10 @@ pub fn unreleased(changelog: &str) -> std::ops::Range<usize> {
 ///
 /// # Errors
 /// A file cannot be read, or `benches/limits.json` cannot be parsed.
+#[allow(
+    clippy::large_stack_frames,
+    reason = "the Windows file system calls and the records are large; xtask is a host tool"
+)]
 pub fn check(root: &Path) -> anyhow::Result<Vec<Finding>> {
     let read = |p: &Path| {
         std::fs::read_to_string(root.join(p))

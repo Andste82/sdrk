@@ -575,3 +575,35 @@ mod against_the_reference {
         }
     }
 }
+
+/// The PSK detectors are limited to `[-1, 1]` before the loop filter (D2554): one outlier
+/// from a fresh loop moves the integrator by exactly `ki` and the phase by `ki + kp` with the
+/// sign of the detector, however large the sample.
+fn outlier_step<B: Costas>(backend: &B) {
+    let cases = [
+        (CostasConstellation::Bpsk, C32::new(3.0, 3.0), 1.0f32),
+        (CostasConstellation::Bpsk, C32::new(-40.0, 25.0), -1.0),
+        (CostasConstellation::Qpsk, C32::new(0.1, 5.0), 1.0),
+        (CostasConstellation::Qpsk, C32::new(7.0, 0.2), -1.0),
+        (CostasConstellation::Psk8, C32::new(0.0, 5.0), -1.0),
+        (CostasConstellation::Psk8, C32::new(1e30, 2e29), -1.0),
+    ];
+    for (c, x, sign) in cases {
+        let mut st = CostasState::new(c, 0.02, DAMP, 0.05).unwrap();
+        let g = st.gains();
+        let mut out = [C32::default()];
+        backend.costas(&mut st, &[x], &mut out).unwrap();
+        let freq = sign * g.ki;
+        assert_eq!(st.frequency(), f64::from(freq), "{c:?} {x:?}");
+        let step = freq + sign * g.kp;
+        let want = (f64::from(step) * 4_294_967_296.0 + 0.5).floor() as i64 as u32;
+        assert_eq!(st.phase(), want, "{c:?} {x:?}");
+    }
+}
+
+#[test]
+fn an_outlier_moves_the_psk_loops_by_the_limit_of_the_detector() {
+    outlier_step(&Fallback);
+    #[cfg(feature = "reference")]
+    outlier_step(&sdrk_core::Reference);
+}

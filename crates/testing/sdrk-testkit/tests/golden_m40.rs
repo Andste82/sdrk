@@ -393,6 +393,8 @@ fn costas_f64(case: &GoldenCase, input: &[C32]) -> Vec<Complex64> {
                 (yi * dr - yr * di).atan2(yr * dr + yi * di)
             }
         };
+        // The PSK detectors are limited to [-1, 1] (D2554).
+        let e = if constellation.qam().is_some() { e } else { e.clamp(-1.0, 1.0) };
         freq = (freq + ki * e).clamp(-mx, mx);
         phase = phase.wrapping_add(((freq + kp * e) * 4_294_967_296.0 + 0.5).floor() as i64 as u32);
     }

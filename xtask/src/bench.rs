@@ -2875,58 +2875,58 @@ mod tests {
         let names = ["noise_blank", "noise_blank_cq15", "auto_notch"];
         for level in ["sse2", "sse4.2", "avx2", "avx512", "neon", "simd128"] {
             // The receiver blocks against the sum of GNU Radio's blocks on the same input
-        // (issue #169, D2541, D2545): information, the chain has no acquisition and no lock watches.
-        for k in [
-            "psk_demod_block",
-            "qam_demod_block",
-            "qam_mod_block",
-            "qam_mod_qam256_block",
-            "psk_mod_block",
-            "pulse_shape_block",
-            "pulse_match_block",
-            "symbol_map_block",
-            "symbol_map_block_qpsk",
-            "symbol_map_block_qam64",
-            "symbol_demap_qam16_block",
-            "symbol_demap_qam16_block_lut",
-            "symbol_demap_qam64_block",
-            "symbol_demap_qam64_block_lut",
-            "qam_soft_bits_qam16_lut",
-            "qam_soft_bits_qam64_lut",
-        ] {
-            for level in ["sse2", "sse4.2", "avx2", "avx512", "neon", "simd128"] {
-                assert_eq!(
-                    comparisons(plan(level), kernel(k)),
-                    (Reference::GnuRadio, vec![Reference::Fallback]),
-                    "{k} at {level}"
-                );
+            // (issue #169, D2541, D2545): information, the chain has no acquisition and no lock watches.
+            for k in [
+                "psk_demod_block",
+                "qam_demod_block",
+                "qam_mod_block",
+                "qam_mod_qam256_block",
+                "psk_mod_block",
+                "pulse_shape_block",
+                "pulse_match_block",
+                "symbol_map_block",
+                "symbol_map_block_qpsk",
+                "symbol_map_block_qam64",
+                "symbol_demap_qam16_block",
+                "symbol_demap_qam16_block_lut",
+                "symbol_demap_qam64_block",
+                "symbol_demap_qam64_block_lut",
+                "qam_soft_bits_qam16_lut",
+                "qam_soft_bits_qam64_lut",
+            ] {
+                for level in ["sse2", "sse4.2", "avx2", "avx512", "neon", "simd128"] {
+                    assert_eq!(
+                        comparisons(plan(level), kernel(k)),
+                        (Reference::GnuRadio, vec![Reference::Fallback]),
+                        "{k} at {level}"
+                    );
+                }
             }
-        }
-        // The pulse filters of the blocks against liquid-dsp's `firinterp_crcf` and
-        // `firfilt_crcf` with the dot products of the level (issue #169, D2546).
-        for k in [
-            "pulse_shape_block_liquid",
-            "pulse_match_block_liquid",
-            "qam_mod_block_liquid",
-            "qam_mod_qam256_block_liquid",
-            "psk_mod_block_liquid",
-            "symbol_map_block_liquid",
-            "symbol_map_block_qpsk_liquid",
-            "symbol_map_block_qam64_liquid",
-            "symbol_demap_qam16_block_liquid",
-            "symbol_demap_qam64_block_liquid",
-            "qam_soft_bits_qam16_liquid",
-            "qam_soft_bits_qam64_liquid",
-        ] {
-            for level in ["sse2", "sse4.2", "avx2", "avx512", "neon", "simd128"] {
-                assert_eq!(
-                    comparisons(plan(level), kernel(k)),
-                    (Reference::Liquid, vec![Reference::Fallback]),
-                    "{k} at {level}"
-                );
+            // The pulse filters of the blocks against liquid-dsp's `firinterp_crcf` and
+            // `firfilt_crcf` with the dot products of the level (issue #169, D2546).
+            for k in [
+                "pulse_shape_block_liquid",
+                "pulse_match_block_liquid",
+                "qam_mod_block_liquid",
+                "qam_mod_qam256_block_liquid",
+                "psk_mod_block_liquid",
+                "symbol_map_block_liquid",
+                "symbol_map_block_qpsk_liquid",
+                "symbol_map_block_qam64_liquid",
+                "symbol_demap_qam16_block_liquid",
+                "symbol_demap_qam64_block_liquid",
+                "qam_soft_bits_qam16_liquid",
+                "qam_soft_bits_qam64_liquid",
+            ] {
+                for level in ["sse2", "sse4.2", "avx2", "avx512", "neon", "simd128"] {
+                    assert_eq!(
+                        comparisons(plan(level), kernel(k)),
+                        (Reference::Liquid, vec![Reference::Fallback]),
+                        "{k} at {level}"
+                    );
+                }
             }
-        }
-        for k in names {
+            for k in names {
                 assert_eq!(
                     comparisons(plan(level), kernel(k)),
                     (Reference::Fallback, Vec::new()),

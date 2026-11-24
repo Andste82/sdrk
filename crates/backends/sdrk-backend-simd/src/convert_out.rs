@@ -54,11 +54,19 @@ use crate::level::dispatch;
 use crate::util;
 
 /// The vector-path kind of a real format, if it has one: the per-value encodings of
-/// [`fast_kind`] with one value per sample (`RS16`, and the real `U8` and `I8` formats).
+/// [`fast_kind`] with one value per sample (`RS16`, and the real `U8` and `I8` formats). As in
+/// [`fast_kind`], the three well-known formats are recognised by one comparison each before the
+/// field-by-field test (D2823).
 #[inline(always)]
 fn real_kind(format: &SampleFormat) -> Option<Kind> {
     if *format == formats::RS16 {
         return Some(Kind::I16);
+    }
+    if *format == formats::RS8 {
+        return Some(Kind::I8);
+    }
+    if *format == formats::RU8 {
+        return Some(Kind::U8);
     }
     if format.layout() != Layout::Real
         || format.full_scale() != FullScale::PowerOfTwo

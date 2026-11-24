@@ -353,4 +353,8 @@ pub mod formats {
     pub const RF32: SampleFormat = mk(Container::F32, 32, true, Layout::Real, Align::Lsb);
     /// PCM audio: real signed 16-bit.
     pub const RS16: SampleFormat = mk(Container::I16, 16, true, Layout::Real, Align::Lsb);
+    /// Real signed 8-bit.
+    pub const RS8: SampleFormat = mk(Container::I8, 8, true, Layout::Real, Align::Lsb);
+    /// Real unsigned 8-bit, zero at 127.5 (the real form of [`CU8`]).
+    pub const RU8: SampleFormat = mk(Container::U8, 8, false, Layout::Real, Align::Lsb);
 }

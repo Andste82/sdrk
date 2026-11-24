@@ -36,8 +36,8 @@ use sdrk_core::RealSample;
 use volk_sys::{lv_16sc_t, lv_32fc_t};
 
 use super::{
-    Aligned, BiquadEntry, Impl, Kernel, Layout, Pcg32, c32s, cq15s, describe_cmsis, describe_kfr_ops,
-    dot_scale_supports, noise_c32, snr_db,
+    Aligned, BiquadEntry, Impl, Kernel, Layout, Pcg32, c32s, cq15s, describe_cmsis,
+    describe_kfr_ops, describe_sleef, describe_volk_generic, dot_scale_supports, noise_c32, snr_db,
 };
 
 /// The operation of an arithmetic entry.
@@ -250,6 +250,12 @@ impl Kernel for RealQ15K {
                         n,
                     );
                 },
+                // KFR's `satadd` on `int16_t` of the level (D2900).
+                Impl::Kfr if self.op == Op::Add => cref_sys::kfr_ops::satadd_i16(
+                    q15_raw(&self.a),
+                    q15_raw(&self.b),
+                    q15_raw_mut(&mut self.out),
+                ),
                 Impl::Cmsis => match self.op {
                     Op::Add => add_q15(
                         q15_raw(&self.a),
@@ -289,11 +295,17 @@ impl Kernel for RealQ15K {
     }
 
     fn supports(&self, which: Impl) -> bool {
+        if which == Impl::Kfr {
+            return self.entry == BiquadEntry::Simd
+                && self.op == Op::Add
+                && cref_sys::kfr_ops::AVAILABLE;
+        }
         dot_scale_supports(self.entry, which, volk_sys::FULL && self.op == Op::Add)
     }
 
     fn describe(&self, which: Impl) -> &'static str {
         match (which, self.op) {
+            (Impl::Kfr, _) => describe_kfr_ops("satadd(a, b) on int16_t"),
             (Impl::Volk, _) => "volk_16i_x2_add_saturated_16i",
             (Impl::Cmsis, Op::Add) => describe_cmsis("arm_add_q15"),
             (Impl::Cmsis, Op::Mul) => describe_cmsis("arm_mult_q15 (truncating)"),
@@ -384,6 +396,14 @@ impl Kernel for ComplexC32K {
                         pairs_mut(&mut self.out),
                     );
                 }
+                // KFR's sum on the `2 n` floats of the level (D2900).
+                Impl::Kfr if self.op == Op::Add => {
+                    cref_sys::kfr_ops::add_f32(
+                        floats(&self.a),
+                        floats(&self.b),
+                        floats_mut(&mut self.out),
+                    );
+                }
                 // KFR's complex product of the level (D2785).
                 Impl::Kfr if self.op == Op::Mul => {
                     cref_sys::kfr_ops::complex_mul(
@@ -429,9 +449,7 @@ impl Kernel for ComplexC32K {
                 && cref_sys::volk_nofma::AVAILABLE;
         }
         if which == Impl::Kfr {
-            return self.entry == BiquadEntry::Simd
-                && self.op == Op::Mul
-                && cref_sys::kfr_ops::AVAILABLE;
+            return self.entry == BiquadEntry::Simd && cref_sys::kfr_ops::AVAILABLE;
         }
         dot_scale_supports(self.entry, which, volk_sys::FULL)
     }
@@ -451,7 +469,8 @@ impl Kernel for ComplexC32K {
                     "VOLK 3.3.0 volk_32fc_x2_multiply_32fc without FMA (benches/refs/volk-nofma.c)"
                 }
             },
-            (Impl::Kfr, _) => describe_kfr_ops("a * b on complex<float>"),
+            (Impl::Kfr, Op::Add) => describe_kfr_ops("a + b on the 2 n floats"),
+            (Impl::Kfr, Op::Mul) => describe_kfr_ops("a * b on complex<float>"),
             (Impl::Cmsis, Op::Add) => describe_cmsis("arm_add_f32 on the 2 n floats"),
             (Impl::Cmsis, Op::Mul) => describe_cmsis("arm_cmplx_mult_cmplx_f32"),
             (Impl::Fallback, _) => "sdrk fallback",
@@ -531,6 +550,12 @@ impl Kernel for ComplexCq15K {
                         2 * n,
                     );
                 },
+                // KFR's `satadd` on the `2 n` `int16_t` values of the level (D2900).
+                Impl::Kfr if self.op == Op::Add => cref_sys::kfr_ops::satadd_i16(
+                    shorts(&self.a),
+                    shorts(&self.b),
+                    shorts_mut(&mut self.out),
+                ),
                 Impl::Cmsis => match self.op {
                     Op::Add => add_q15(shorts(&self.a), shorts(&self.b), shorts_mut(&mut self.out)),
                     Op::Mul => {
@@ -571,11 +596,17 @@ impl Kernel for ComplexCq15K {
     }
 
     fn supports(&self, which: Impl) -> bool {
+        if which == Impl::Kfr {
+            return self.entry == BiquadEntry::Simd
+                && self.op == Op::Add
+                && cref_sys::kfr_ops::AVAILABLE;
+        }
         dot_scale_supports(self.entry, which, volk_sys::FULL && self.op == Op::Add)
     }
 
     fn describe(&self, which: Impl) -> &'static str {
         match (which, self.op) {
+            (Impl::Kfr, _) => describe_kfr_ops("satadd(a, b) on the 2 n int16_t values"),
             (Impl::Volk, _) => "volk_16i_x2_add_saturated_16i on the 2 n values",
             (Impl::Cmsis, Op::Add) => describe_cmsis("arm_add_q15 on the 2 n values"),
             (Impl::Cmsis, Op::Mul) => {
@@ -636,27 +667,16 @@ impl SplitC32K {
 }
 
 /// The implementations an `interleave` or `deinterleave` entry runs: the SIMD entry ours, our
-/// fallback and VOLK (if `volk`); the fallback entry our fallback and VOLK's `generic`
-/// protokernel.
+/// fallback, VOLK (if `volk`) and KFR's `make_complex` / `real`, `imag` of the level (D2900,
+/// D2901); the fallback entry our fallback and VOLK's `generic` protokernel.
 fn split_supports(entry: BiquadEntry, which: Impl, volk: bool) -> bool {
     match (entry, which) {
         (_, Impl::Fallback) | (BiquadEntry::Simd, Impl::Ours) => true,
         (BiquadEntry::Simd, Impl::Volk) => volk,
+        (BiquadEntry::Simd, Impl::Kfr) => cref_sys::kfr_ops::AVAILABLE,
         (BiquadEntry::Fallback, Impl::VolkGeneric) => volk_generic::AVAILABLE,
         _ => false,
     }
-}
-
-/// The description of VOLK's `generic` protokernel `function` (with its suffix) as built for
-/// this level.
-fn describe_volk_generic(function: &str) -> &'static str {
-    Box::leak(
-        format!(
-            "VOLK 3.3.0 {function}, benches/refs/volk-generic.c (-O3 -ffp-contract=off, {})",
-            cref_sys::BIQUAD_REF_LEVEL
-        )
-        .into_boxed_str(),
-    )
 }
 
 #[inline(never)]
@@ -715,6 +735,11 @@ impl Kernel for SplitC32K {
                 (Impl::VolkGeneric, false) => {
                     volk_generic::interleave_32fc(&self.re, &self.im, pairs_mut(&mut self.packed));
                 }
+                (Impl::Kfr, false) => cref_sys::kfr_ops::interleave_f32(
+                    &self.re,
+                    &self.im,
+                    floats_mut(&mut self.packed),
+                ),
                 (Impl::VolkGeneric, true) => {
                     volk_generic::deinterleave_32fc(
                         pairs(&self.packed),
@@ -753,11 +778,15 @@ impl Kernel for SplitC32K {
     }
 
     fn supports(&self, which: Impl) -> bool {
+        if which == Impl::Kfr && self.deinterleave {
+            return false;
+        }
         split_supports(self.entry, which, volk_sys::FULL)
     }
 
     fn describe(&self, which: Impl) -> &'static str {
         match (which, self.deinterleave) {
+            (Impl::Kfr, _) => describe_kfr_ops("make_complex(re, im) on float"),
             (Impl::Volk, false) => "volk_32f_x2_interleave_32fc",
             (Impl::Volk, true) => "volk_32fc_deinterleave_32f_x2",
             (Impl::VolkGeneric, false) => {
@@ -840,6 +869,16 @@ impl Kernel for SplitCq15K {
                         n,
                     );
                 },
+                (Impl::Kfr, false) => cref_sys::kfr_ops::interleave_i16(
+                    q15_raw(&self.re),
+                    q15_raw(&self.im),
+                    shorts_mut(&mut self.packed),
+                ),
+                (Impl::Kfr, true) => cref_sys::kfr_ops::deinterleave_i16(
+                    shorts(&self.packed),
+                    q15_raw_mut(&mut self.re),
+                    q15_raw_mut(&mut self.im),
+                ),
                 (Impl::VolkGeneric, false) => {
                     volk_generic::interleave_16ic(
                         q15_raw(&self.re),
@@ -888,6 +927,8 @@ impl Kernel for SplitCq15K {
 
     fn describe(&self, which: Impl) -> &'static str {
         match (which, self.deinterleave) {
+            (Impl::Kfr, false) => describe_kfr_ops("make_complex(re, im) on int16_t"),
+            (Impl::Kfr, true) => describe_kfr_ops("real(c), imag(c) of complex<int16_t>"),
             (Impl::Volk, _) => "volk_16ic_deinterleave_16i_x2",
             (Impl::VolkGeneric, false) => describe_volk_generic(
                 "volk_32f_x2_interleave_32fc_generic on int16 (VOLK has no 16-bit interleave)",
@@ -985,6 +1026,14 @@ impl Kernel for OscC32K {
                 Impl::Ours => oscillate_call(&Sdrk, &mut self.out),
                 Impl::Fallback => oscillate_call(&Fallback, &mut self.out),
                 Impl::Cmsis => cmsis_oscillate_c32(&mut self.out),
+                // SLEEF's `sincosf` of the level over the phases of the counter (D2903).
+                Impl::Sleef => {
+                    black_box(cref_sys::sleef::oscillate_32fc(
+                        floats_mut(&mut self.out),
+                        0,
+                        OSC_INC,
+                    ));
+                }
                 other => unreachable!("oscillate has no {other:?}"),
             }
             black_box(&self.out);
@@ -1007,12 +1056,16 @@ impl Kernel for OscC32K {
         match (self.entry, which) {
             (_, Impl::Fallback) | (BiquadEntry::Simd, Impl::Ours) => true,
             (BiquadEntry::Fallback, Impl::Cmsis) => cmsis_dsp::AVAILABLE,
+            (BiquadEntry::Simd, Impl::Sleef) => cref_sys::sleef::AVAILABLE,
             _ => false,
         }
     }
 
     fn describe(&self, which: Impl) -> &'static str {
         match which {
+            Impl::Sleef => describe_sleef(
+                "sincosf_u10 of the angle (int32_t) p * 2 pi / 2^32 of a uint32_t phase counter, interleaved",
+            ),
             Impl::Cmsis => describe_cmsis(
                 "arm_sin_cos_f32 of the angle in degrees per sample (512-entry sine table, cubic Hermite interpolation)",
             ),

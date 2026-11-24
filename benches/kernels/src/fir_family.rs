@@ -23,7 +23,14 @@
 //! - `resample` by 3/2: CMSIS-DSP has no rational resampler. `arm_fir_interpolate_*` by 3 on
 //!   `n / 3` samples gives `n - 1` outputs of the same 192 taps, each a 64-tap branch dot
 //!   product, the work of one output of ours; the selection of every second output (ours
-//!   skips the others) is not part of it. The comparison is per output sample.
+//!   skips the others) is not part of it. The comparison is per output sample, information
+//!   next to liquid-dsp.
+//!
+//! `resample_fallback` and `resample_real_fallback` are judged against liquid-dsp 1.8.3's
+//! rational-rate resamplers `rresamp_crcf` / `rresamp_rrrf` with the portable dot product
+//! (D2904): `rresamp_*_create(3, 2, 32, h)` with the same 192 taps, `Q = 2` inputs to `P = 3`
+//! outputs per block, a filter bank of three 64-tap branches over liquid's window buffer, from
+//! zero history. 1365 blocks give 4095 of the 4096 outputs of ours (0.02 % less work).
 
 use std::hint::black_box;
 
@@ -472,6 +479,9 @@ pub(crate) struct FirFamK<T: FamSample> {
     /// The planar channels of the CMSIS-DSP input, and its outputs.
     planar_in: Vec<Aligned<T::Raw>>,
     planar_out: Vec<Aligned<T::Raw>>,
+    /// A copy of the input for liquid-dsp's resampler, which takes it mutably (and only reads
+    /// it), made once.
+    liquid_in: Vec<T>,
 }
 
 impl<T: FamSample> FirFamK<T> {
@@ -509,7 +519,16 @@ impl<T: FamSample> FirFamK<T> {
             entry,
             planar_in,
             planar_out,
+            liquid_in: Vec::new(),
         }
+        .with_liquid_input(lead)
+    }
+
+    fn with_liquid_input(mut self, lead: usize) -> Self {
+        if self.mode == Mode::Resample && self.entry == Entry::Fallback {
+            self.liquid_in = self.buf[lead..].to_vec();
+        }
+        self
     }
 
     fn cmsis_filters(&self) -> Option<Vec<CmsisRun<T::Raw>>> {
@@ -521,9 +540,14 @@ impl<T: FamSample> FirFamK<T> {
     }
 }
 
-impl<T: FamSample> Kernel for FirFamK<T> {
+impl<T: LiquidResample> Kernel for FirFamK<T> {
     fn run(&mut self, which: Impl, k: usize) {
         let mut cmsis = (which == Impl::Cmsis).then(|| self.cmsis_filters().expect("cmsis"));
+        let mut liquid = (which == Impl::Liquid).then(|| {
+            let (up, down) = self.mode.ratio();
+            T::rresamp(&self.taps, up, down).expect("liquid")
+        });
+        let liquid_len = liquid_outputs(self.mode, self.out.len());
         let input = &self.buf[self.mode.lead()..];
         for _ in 0..k {
             match which {
@@ -539,6 +563,10 @@ impl<T: FamSample> Kernel for FirFamK<T> {
                         f(i, o);
                         black_box(&*o);
                     }
+                }
+                Impl::Liquid => {
+                    let f = liquid.as_mut().expect("liquid");
+                    f(black_box(&mut self.liquid_in), &mut self.out[..liquid_len]);
                 }
                 other => unreachable!("the FIR family has no {other:?}"),
             }
@@ -567,7 +595,12 @@ impl<T: FamSample> Kernel for FirFamK<T> {
         self.state = T::state(self.mode, &self.taps, up, down);
         self.run(which, 1);
         let want = T::reference(&self.taps, up, down, &self.buf[lead..], self.out.len());
-        let len = want.len().min(self.out.len());
+        let produced = if which == Impl::Liquid {
+            liquid_outputs(self.mode, self.out.len())
+        } else {
+            self.out.len()
+        };
+        let len = want.len().min(produced);
         snr_db(&T::values(&want[..len]), &T::values(&self.out[..len]))
     }
 
@@ -575,17 +608,73 @@ impl<T: FamSample> Kernel for FirFamK<T> {
         match (self.entry, which) {
             (_, Impl::Fallback) | (Entry::Simd, Impl::Ours) => true,
             (Entry::Fallback, Impl::Cmsis) => self.cmsis_filters().is_some(),
+            (Entry::Fallback, Impl::Liquid) => {
+                let (up, down) = self.mode.ratio();
+                self.mode == Mode::Resample && T::rresamp(&self.taps, up, down).is_some()
+            }
             _ => false,
         }
     }
 
     fn describe(&self, which: Impl) -> &'static str {
         match which {
+            Impl::Liquid if T::CHANNELS == 2 => {
+                "liquid-dsp 1.8.3 rresamp_crcf_create(3, 2, 32, h) and rresamp_crcf_execute_block (firpfb of 3 branches of 64 taps, portable dot product, benches/refs/liquid-rresamp.c, -O3 -ffp-contract=off; 4095 of the 4096 outputs)"
+            }
+            Impl::Liquid => {
+                "liquid-dsp 1.8.3 rresamp_rrrf_create(3, 2, 32, h) and rresamp_rrrf_execute_block (firpfb of 3 branches of 64 taps, portable dot product, benches/refs/liquid-rresamp.c, -O3 -ffp-contract=off; 4095 of the 4096 outputs)"
+            }
             Impl::Cmsis => describe_cmsis(self.mode.cmsis_name(is_q15::<T>())),
             Impl::Fallback => "sdrk fallback",
             _ => "sdrk",
         }
     }
+}
+
+/// liquid-dsp's resampler of a run: the input (read only), the outputs.
+type LiquidRun<T> = Box<dyn FnMut(&mut [T], &mut [T])>;
+
+/// The rational-rate resampler of liquid-dsp for a sample type (D2904): `rresamp_crcf` for
+/// `C32`, `rresamp_rrrf` for `f32`, none for the `Q15` types.
+pub(crate) trait LiquidResample: FamSample {
+    /// The resampler by `up / down` with `taps` (`2 up m` of them), `None` without it.
+    fn rresamp(taps: &[Self::Tap], up: usize, down: usize) -> Option<LiquidRun<Self>>;
+}
+
+impl LiquidResample for C32 {
+    fn rresamp(taps: &[f32], up: usize, down: usize) -> Option<LiquidRun<C32>> {
+        let mut q = cref_sys::LiquidRresampCrcf::new(taps, up, down, taps.len() / (2 * up))?;
+        Some(Box::new(move |x: &mut [C32], y: &mut [C32]| {
+            q.execute(super::c32_pairs(x), super::c32_pairs(y));
+        }))
+    }
+}
+
+impl LiquidResample for f32 {
+    fn rresamp(taps: &[f32], up: usize, down: usize) -> Option<LiquidRun<f32>> {
+        let mut q = cref_sys::LiquidRresampRrrf::new(taps, up, down, taps.len() / (2 * up))?;
+        Some(Box::new(move |x: &mut [f32], y: &mut [f32]| {
+            q.execute(x, y)
+        }))
+    }
+}
+
+impl LiquidResample for CQ15 {
+    fn rresamp(_: &[Q15], _: usize, _: usize) -> Option<LiquidRun<CQ15>> {
+        None
+    }
+}
+
+impl LiquidResample for Q15 {
+    fn rresamp(_: &[Q15], _: usize, _: usize) -> Option<LiquidRun<Q15>> {
+        None
+    }
+}
+
+/// The outputs liquid's resampler produces for `n` outputs of ours: whole blocks of `up`.
+fn liquid_outputs(mode: Mode, n: usize) -> usize {
+    let (up, _) = mode.ratio();
+    n / up * up
 }
 
 /// Whether CMSIS-DSP runs its Q15 functions for `T`.

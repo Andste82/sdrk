@@ -4159,61 +4159,61 @@
   "mul_cq15": {
     "sse2": {
       "status": "info",
-      "waiver": "provisional"
+      "waiver": "no SIMD library has the `CQ15` complex product with the rounding and saturation of `q15_mul` (D2908): VOLK's `volk_16ic_x2_multiply_16ic` multiplies the 16-bit integers without the shift by 15 (the low halves of the products wrap, another function), KFR's `int16_t` product wraps in the same way and has no fixed-point complex product, and CMSIS-DSP's `arm_cmplx_mult_cmplx_q15` is generic C with a Q3.13 output (information of `mul_cq15_fallback`); so the comparison is our own fallback, which is no gate for a SIMD branch (D32), and the branch is judged by its efficiency"
     },
     "sse4.2": {
       "status": "info",
-      "waiver": "provisional"
+      "waiver": "no SIMD library has the `CQ15` complex product with the rounding and saturation of `q15_mul` (D2908): VOLK's `volk_16ic_x2_multiply_16ic` multiplies the 16-bit integers without the shift by 15 (the low halves of the products wrap, another function), KFR's `int16_t` product wraps in the same way and has no fixed-point complex product, and CMSIS-DSP's `arm_cmplx_mult_cmplx_q15` is generic C with a Q3.13 output (information of `mul_cq15_fallback`); so the comparison is our own fallback, which is no gate for a SIMD branch (D32), and the branch is judged by its efficiency"
     },
     "avx2": {
       "status": "info",
-      "waiver": "provisional"
+      "waiver": "no SIMD library has the `CQ15` complex product with the rounding and saturation of `q15_mul` (D2908): VOLK's `volk_16ic_x2_multiply_16ic` multiplies the 16-bit integers without the shift by 15 (the low halves of the products wrap, another function), KFR's `int16_t` product wraps in the same way and has no fixed-point complex product, and CMSIS-DSP's `arm_cmplx_mult_cmplx_q15` is generic C with a Q3.13 output (information of `mul_cq15_fallback`); so the comparison is our own fallback, which is no gate for a SIMD branch (D32), and the branch is judged by its efficiency"
     },
     "avx2-runtime": {
       "status": "info",
-      "waiver": "no reference library at `avx2`: the comparison of the `avx2` record is our own fallback, so the entry is information at `avx2-runtime` as at `avx2` and judged by its efficiency (D32, D2764); its cycles against our fixed `avx2` build are information as well. The reason at `avx2`: provisional"
+      "waiver": "no reference library at `avx2`: the comparison of the `avx2` record is our own fallback, so the entry is information at `avx2-runtime` as at `avx2` and judged by its efficiency (D32, D2764); its cycles against our fixed `avx2` build are information as well. The reason at `avx2`: no SIMD library has the `CQ15` complex product with the rounding and saturation of `q15_mul` (D2908): VOLK's `volk_16ic_x2_multiply_16ic` multiplies the 16-bit integers without the shift by 15 (the low halves of the products wrap, another function), KFR's `int16_t` product wraps in the same way and has no fixed-point complex product, and CMSIS-DSP's `arm_cmplx_mult_cmplx_q15` is generic C with a Q3.13 output (information of `mul_cq15_fallback`); so the comparison is our own fallback, which is no gate for a SIMD branch (D32), and the branch is judged by its efficiency"
     },
     "avx512": {
       "status": "info",
-      "waiver": "provisional"
+      "waiver": "no SIMD library has the `CQ15` complex product with the rounding and saturation of `q15_mul` (D2908): VOLK's `volk_16ic_x2_multiply_16ic` multiplies the 16-bit integers without the shift by 15 (the low halves of the products wrap, another function), KFR's `int16_t` product wraps in the same way and has no fixed-point complex product, and CMSIS-DSP's `arm_cmplx_mult_cmplx_q15` is generic C with a Q3.13 output (information of `mul_cq15_fallback`); so the comparison is our own fallback, which is no gate for a SIMD branch (D32), and the branch is judged by its efficiency"
     },
     "neon": {
       "status": "info",
-      "waiver": "provisional"
+      "waiver": "no SIMD library has the `CQ15` complex product with the rounding and saturation of `q15_mul` (D2908): VOLK's `volk_16ic_x2_multiply_16ic` multiplies the 16-bit integers without the shift by 15 (the low halves of the products wrap, another function), KFR's `int16_t` product wraps in the same way and has no fixed-point complex product, and CMSIS-DSP's `arm_cmplx_mult_cmplx_q15` is generic C with a Q3.13 output (information of `mul_cq15_fallback`); so the comparison is our own fallback, which is no gate for a SIMD branch (D32), and the branch is judged by its efficiency"
     },
     "simd128": {
       "status": "info",
-      "waiver": "provisional"
+      "waiver": "no SIMD library has the `CQ15` complex product with the rounding and saturation of `q15_mul` (D2908): VOLK's `volk_16ic_x2_multiply_16ic` multiplies the 16-bit integers without the shift by 15 (the low halves of the products wrap, another function), KFR's `int16_t` product wraps in the same way and has no fixed-point complex product, and CMSIS-DSP's `arm_cmplx_mult_cmplx_q15` is generic C with a Q3.13 output (information of `mul_cq15_fallback`); so the comparison is our own fallback, which is no gate for a SIMD branch (D32), and the branch is judged by its efficiency"
     }
   },
   "mul_real_q15": {
     "sse2": {
       "status": "info",
-      "waiver": "provisional"
+      "waiver": "no SIMD library has the `Q15` product with the rounding and saturation of `q15_mul` (D2908): VOLK has no 16-bit real product, KFR's `int16_t` product wraps (no shift by 15, another function), and CMSIS-DSP's `arm_mult_q15` is generic C that truncates (information of `mul_real_q15_fallback`); so the comparison is our own fallback, which is no gate for a SIMD branch (D32), and the branch is judged by its efficiency"
     },
     "sse4.2": {
       "status": "info",
-      "waiver": "provisional"
+      "waiver": "no SIMD library has the `Q15` product with the rounding and saturation of `q15_mul` (D2908): VOLK has no 16-bit real product, KFR's `int16_t` product wraps (no shift by 15, another function), and CMSIS-DSP's `arm_mult_q15` is generic C that truncates (information of `mul_real_q15_fallback`); so the comparison is our own fallback, which is no gate for a SIMD branch (D32), and the branch is judged by its efficiency"
     },
     "avx2": {
       "status": "info",
-      "waiver": "provisional"
+      "waiver": "no SIMD library has the `Q15` product with the rounding and saturation of `q15_mul` (D2908): VOLK has no 16-bit real product, KFR's `int16_t` product wraps (no shift by 15, another function), and CMSIS-DSP's `arm_mult_q15` is generic C that truncates (information of `mul_real_q15_fallback`); so the comparison is our own fallback, which is no gate for a SIMD branch (D32), and the branch is judged by its efficiency"
     },
     "avx512": {
       "status": "info",
-      "waiver": "provisional"
+      "waiver": "no SIMD library has the `Q15` product with the rounding and saturation of `q15_mul` (D2908): VOLK has no 16-bit real product, KFR's `int16_t` product wraps (no shift by 15, another function), and CMSIS-DSP's `arm_mult_q15` is generic C that truncates (information of `mul_real_q15_fallback`); so the comparison is our own fallback, which is no gate for a SIMD branch (D32), and the branch is judged by its efficiency"
     },
     "neon": {
       "status": "info",
-      "waiver": "provisional"
+      "waiver": "no SIMD library has the `Q15` product with the rounding and saturation of `q15_mul` (D2908): VOLK has no 16-bit real product, KFR's `int16_t` product wraps (no shift by 15, another function), and CMSIS-DSP's `arm_mult_q15` is generic C that truncates (information of `mul_real_q15_fallback`); so the comparison is our own fallback, which is no gate for a SIMD branch (D32), and the branch is judged by its efficiency"
     },
     "simd128": {
       "status": "info",
-      "waiver": "provisional"
+      "waiver": "no SIMD library has the `Q15` product with the rounding and saturation of `q15_mul` (D2908): VOLK has no 16-bit real product, KFR's `int16_t` product wraps (no shift by 15, another function), and CMSIS-DSP's `arm_mult_q15` is generic C that truncates (information of `mul_real_q15_fallback`); so the comparison is our own fallback, which is no gate for a SIMD branch (D32), and the branch is judged by its efficiency"
     },
     "avx2-runtime": {
       "status": "info",
-      "waiver": "no reference library at `avx2`: the comparison of the `avx2` record is our own fallback, so the entry is information at `avx2-runtime` as at `avx2` and judged by its efficiency (D32, D2764); its cycles against our fixed `avx2` build are information as well. The reason at `avx2`: provisional"
+      "waiver": "no reference library at `avx2`: the comparison of the `avx2` record is our own fallback, so the entry is information at `avx2-runtime` as at `avx2` and judged by its efficiency (D32, D2764); its cycles against our fixed `avx2` build are information as well. The reason at `avx2`: no SIMD library has the `Q15` product with the rounding and saturation of `q15_mul` (D2908): VOLK has no 16-bit real product, KFR's `int16_t` product wraps (no shift by 15, another function), and CMSIS-DSP's `arm_mult_q15` is generic C that truncates (information of `mul_real_q15_fallback`); so the comparison is our own fallback, which is no gate for a SIMD branch (D32), and the branch is judged by its efficiency"
     }
   },
   "interleave_cq15": {
@@ -4273,37 +4273,37 @@
     },
     "simd128": {
       "status": "info",
-      "waiver": "provisional"
+      "waiver": "SLEEF 3.9.0, the SIMD reference of `oscillate` at the other levels (D2903), has no WebAssembly SIMD extension, VOLK's wasm32 build holds only its `generic` protokernels (D12) and has no oscillator, and KFR generates no phasors from a phase counter; so the comparison is our own fallback, information, and the entry is judged by its efficiency (D32)"
     }
   },
   "oscillate_cq15": {
     "sse2": {
       "status": "info",
-      "waiver": "provisional"
+      "waiver": "no library generates `CQ15` phasors from a `u32` phase counter (D2908): VOLK has no oscillator (`rotator2` rotates `C32` input), KFR's and SLEEF's sine and cosine are `float` only (a `float` phasor converted to `Q15` is other work in another accuracy class), and CMSIS-DSP's `arm_cos_q15` / `arm_sin_q15` are generic C table lookups (information of `oscillate_cq15_fallback`); so the comparison is our own fallback, which is no gate for a SIMD branch (D32), and the branch is judged by its efficiency"
     },
     "sse4.2": {
       "status": "info",
-      "waiver": "provisional"
+      "waiver": "no library generates `CQ15` phasors from a `u32` phase counter (D2908): VOLK has no oscillator (`rotator2` rotates `C32` input), KFR's and SLEEF's sine and cosine are `float` only (a `float` phasor converted to `Q15` is other work in another accuracy class), and CMSIS-DSP's `arm_cos_q15` / `arm_sin_q15` are generic C table lookups (information of `oscillate_cq15_fallback`); so the comparison is our own fallback, which is no gate for a SIMD branch (D32), and the branch is judged by its efficiency"
     },
     "avx2": {
       "status": "info",
-      "waiver": "provisional"
+      "waiver": "no library generates `CQ15` phasors from a `u32` phase counter (D2908): VOLK has no oscillator (`rotator2` rotates `C32` input), KFR's and SLEEF's sine and cosine are `float` only (a `float` phasor converted to `Q15` is other work in another accuracy class), and CMSIS-DSP's `arm_cos_q15` / `arm_sin_q15` are generic C table lookups (information of `oscillate_cq15_fallback`); so the comparison is our own fallback, which is no gate for a SIMD branch (D32), and the branch is judged by its efficiency"
     },
     "avx2-runtime": {
       "status": "info",
-      "waiver": "no reference library at `avx2`: the comparison of the `avx2` record is our own fallback, so the entry is information at `avx2-runtime` as at `avx2` and judged by its efficiency (D32, D2764); its cycles against our fixed `avx2` build are information as well. The reason at `avx2`: provisional"
+      "waiver": "no reference library at `avx2`: the comparison of the `avx2` record is our own fallback, so the entry is information at `avx2-runtime` as at `avx2` and judged by its efficiency (D32, D2764); its cycles against our fixed `avx2` build are information as well. The reason at `avx2`: no library generates `CQ15` phasors from a `u32` phase counter (D2908): VOLK has no oscillator (`rotator2` rotates `C32` input), KFR's and SLEEF's sine and cosine are `float` only (a `float` phasor converted to `Q15` is other work in another accuracy class), and CMSIS-DSP's `arm_cos_q15` / `arm_sin_q15` are generic C table lookups (information of `oscillate_cq15_fallback`); so the comparison is our own fallback, which is no gate for a SIMD branch (D32), and the branch is judged by its efficiency"
     },
     "avx512": {
       "status": "info",
-      "waiver": "provisional"
+      "waiver": "no library generates `CQ15` phasors from a `u32` phase counter (D2908): VOLK has no oscillator (`rotator2` rotates `C32` input), KFR's and SLEEF's sine and cosine are `float` only (a `float` phasor converted to `Q15` is other work in another accuracy class), and CMSIS-DSP's `arm_cos_q15` / `arm_sin_q15` are generic C table lookups (information of `oscillate_cq15_fallback`); so the comparison is our own fallback, which is no gate for a SIMD branch (D32), and the branch is judged by its efficiency"
     },
     "neon": {
       "status": "info",
-      "waiver": "provisional"
+      "waiver": "no library generates `CQ15` phasors from a `u32` phase counter (D2908): VOLK has no oscillator (`rotator2` rotates `C32` input), KFR's and SLEEF's sine and cosine are `float` only (a `float` phasor converted to `Q15` is other work in another accuracy class), and CMSIS-DSP's `arm_cos_q15` / `arm_sin_q15` are generic C table lookups (information of `oscillate_cq15_fallback`); so the comparison is our own fallback, which is no gate for a SIMD branch (D32), and the branch is judged by its efficiency"
     },
     "simd128": {
       "status": "info",
-      "waiver": "provisional"
+      "waiver": "no library generates `CQ15` phasors from a `u32` phase counter (D2908): VOLK has no oscillator (`rotator2` rotates `C32` input), KFR's and SLEEF's sine and cosine are `float` only (a `float` phasor converted to `Q15` is other work in another accuracy class), and CMSIS-DSP's `arm_cos_q15` / `arm_sin_q15` are generic C table lookups (information of `oscillate_cq15_fallback`); so the comparison is our own fallback, which is no gate for a SIMD branch (D32), and the branch is judged by its efficiency"
     }
   },
   "noise_blank": {

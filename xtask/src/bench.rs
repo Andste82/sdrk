@@ -94,6 +94,9 @@ pub enum Reference {
     /// `rand_distr`'s `StandardNormal` (Ziggurat) over rand's `SmallRng`, the informational
     /// Ziggurat row of `gauss_noise` (M48 §5, `gauss_noise_f32_ziggurat`).
     RandDistr,
+    /// SLEEF 3.9.0's vectorized `log10f`, `atan2f` and `sincosf` (`_u10`) of the level, built per
+    /// level (`benches/refs/sleef-ops.c`, D2903).
+    Sleef,
     /// Our own fallback, where no established library exists.
     Fallback,
     /// Our own numbers of another level (run-time detection against that fixed level).
@@ -123,6 +126,7 @@ impl Reference {
             Reference::Liquid => "liquid",
             Reference::Libairspy => "airspy",
             Reference::RandDistr => "rand-distr",
+            Reference::Sleef => "sleef",
             Reference::Fallback => "fallback",
             Reference::OwnLevel(_) | Reference::OwnKernel(_) => "ours",
         }
@@ -148,7 +152,8 @@ impl Reference {
             | Reference::Cmsis
             | Reference::Liquid
             | Reference::Libairspy
-            | Reference::RandDistr => ComparisonKind::Library,
+            | Reference::RandDistr
+            | Reference::Sleef => ComparisonKind::Library,
         }
     }
 }
@@ -1353,9 +1358,15 @@ pub fn reference_level(
     let wasm = plan.refs == "wasm32";
     Some(match reference {
         Reference::Fallback | Reference::OwnLevel(_) | Reference::OwnKernel(_) => return None,
+        // The protokernel without fused operations at `avx512` is VOLK's `u_avx` (the AVX code
+        // of `avx2`, compiled for `avx512`): a lower level (D2900).
+        Reference::VolkNoFma if plan.level == "avx512" => SimdLevel::Level("avx2"),
         // VOLK's machine of the level (the pinned `volk_config`); on wasm32 only the generic
-        // protokernels. The protokernel without fused operations is compiled for the level.
-        Reference::Volk | Reference::VolkNoFma if !wasm => level,
+        // protokernels. The protokernel without fused operations is compiled for the level. The
+        // records refine VOLK per kernel by the protokernel that runs ([`volk_protokernel`],
+        // `check_volk_protokernels`, D2785, D2900). SLEEF's vector extension of the level (sse2,
+        // sse4, avx2, avx512f, advsimd; D2903).
+        Reference::Volk | Reference::VolkNoFma | Reference::Sleef if !wasm => level,
         // rustfft has no planner below SSE4.1 (D3); elsewhere it runs its planner of the CPU.
         Reference::RustFft if plan.level != "sse2" => level,
         // FFTW per level on x86-64 (D2780), the NEON codelets on aarch64; none on wasm32.
@@ -1395,7 +1406,8 @@ pub fn reference_level(
         | Reference::Cmsis
         | Reference::Liquid
         | Reference::Libairspy
-        | Reference::RandDistr => SimdLevel::Scalar,
+        | Reference::RandDistr
+        | Reference::Sleef => SimdLevel::Scalar,
     })
 }
 
@@ -1413,26 +1425,122 @@ pub fn comparisons(plan: &LevelPlan, spec: &KernelSpec) -> (Reference, Vec<Refer
 }
 
 /// The entries whose VOLK function runs a `generic` protokernel in VOLK's machine of `sse2`
-/// (`VOLK_SSE2_CONFIG`: the int8 conversions start at SSE4.1, the complex product at SSE3, the
-/// base-2 logarithm at SSE4.1): at `sse2` KFR's element-wise expressions compiled for the level
-/// (`benches/refs/kfr-ops.cpp`) are the judged comparison and VOLK is information (the
-/// maintainer's decision on I13.1-11, D2785).
-pub const KFR_AT_SSE2: [&str; 6] = [
+/// (`VOLK_SSE2_CONFIG`: the int8 conversions start at SSE4.1, the complex product and the complex
+/// dot product at SSE3, the base-2 logarithm at SSE4.1): at `sse2` KFR's element-wise expressions
+/// compiled for the level (`benches/refs/kfr-ops.cpp`) are the judged comparison and VOLK is
+/// information (the maintainer's decision on I13.1-11, D2785; `dot_complex` and
+/// `scramble_c32_b2` by the library audit, D2901).
+pub const KFR_AT_SSE2: [&str; 8] = [
     "convert_cs8",
     "convert_cu8",
     "convert_cq15_cs8",
     "convert_cq15_cu8",
     "mul",
     "power_db",
+    "dot_complex",
+    "scramble_c32_b2",
 ];
 
+/// The entries whose VOLK functions run a protokernel below `avx512` in VOLK's machine of the
+/// level ([`VOLK_AVX512_DISPATCH`]: the best of `volk_32fc_x2_add_32fc`,
+/// `volk_32f_x2_interleave_32fc`, `volk_32fc_magnitude_squared_32f`,
+/// `volk_32fc_x2_multiply_32fc`, `volk_32fc_32f_multiply_32fc`, `volk_32f_s32f_multiply_32f`,
+/// `volk_32f_s32f_add_32f`, `volk_16ic_deinterleave_16i_x2`, `volk_16ic_magnitude_16i`,
+/// `volk_32fc_x2_dot_prod_32fc`, `volk_32fc_x2_multiply_conjugate_32fc` and
+/// `volk_32f_s32f_x2_convert_8u` is AVX or AVX2; the AVX-512BW protokernels of
+/// `volk_8i_convert_16i` and `volk_16i_x2_add_saturated_16i` are in no machine of VOLK 3.3.0), or
+/// whose comparison is VOLK's `u_avx` protokernel without FMA: at `avx512` KFR's element-wise
+/// expressions compiled for the level are the judged comparison, VOLK information (the
+/// maintainer's order of 2026-11-24, D2900).
+pub const KFR_AT_AVX512: [&str; 20] = [
+    "add",
+    "add_cq15",
+    "add_real_q15",
+    "convert_cq15_cs8",
+    "convert_cq15_cu8",
+    "convert_out_cu8",
+    "convert_out_real_ru8",
+    "deinterleave_cq15",
+    "dot_complex",
+    "interleave",
+    "mag_q15",
+    "mag_sq",
+    "mul",
+    "quad_demod",
+    "scale",
+    "scramble_c32_b1",
+    "scramble_c32_b2",
+    "scramble_c32_b8",
+    "stereo_matrix",
+    "window",
+];
+
+/// The comparisons of the library audit of 2026-11-24 (the maintainer's order, D2900 to D2907)
+/// that the families of the entries do not give:
+///
+/// - the `convert_out` fallbacks: VOLK's `generic` protokernels of the conversions (clamp, then
+///   `rintf`, the rounding of ours; D2905), CMSIS-DSP's truncating conversions as information;
+/// - `resample_fallback`, `resample_real_fallback`: liquid-dsp's `rresamp_crcf` /
+///   `rresamp_rrrf` with the portable dot product (D2904), CMSIS-DSP's interpolator as
+///   information;
+/// - `quad_demod_fallback`: VOLK's `generic` conjugate product and `atan2f` of libm (D2906), GNU
+///   Radio's `quadrature_demod_cf` (`fast_atan2f`) and CMSIS-DSP as information;
+/// - `dc_block`, `dc_block_real`, `deemphasis` and `interleave_cq15` at every level (KFR is
+///   built for each, on wasm32 in its Emscripten configuration, D29): KFR's one-section `iir`
+///   (D2902) and KFR's 16-bit `make_complex` (D2901), our fallback as information;
+/// - `stereo_matrix_cq15`: KFR's `satadd` / `satsub` composition as information (it saturates
+///   `2 d` before the sum, ours the exact `s +- 2 d` once: other bits, D2907);
+/// - `power_db` at `sse4.2`, `avx2`, `avx512` and `neon`, `quad_demod` at `sse2` and `sse4.2`
+///   and `oscillate` at every level but `simd128`: SLEEF's `_u10` functions of the level (D2903),
+///   VOLK (or our fallback for `oscillate`) as information.
+fn audit_comparisons(plan: &LevelPlan, spec: &KernelSpec) -> Option<(Reference, Vec<Reference>)> {
+    let wasm = plan.refs == "wasm32";
+    Some(match spec.name {
+        "convert_out_cs16_fallback"
+        | "convert_out_cs8_fallback"
+        | "convert_out_cu8_fallback"
+        | "convert_out_real_rs16_fallback"
+        | "convert_out_real_rs8_fallback"
+        | "convert_out_real_ru8_fallback" => (Reference::VolkGeneric, vec![Reference::Cmsis]),
+        "resample_fallback" | "resample_real_fallback" => {
+            (Reference::Liquid, vec![Reference::Cmsis])
+        }
+        "quad_demod_fallback" => (
+            Reference::VolkGeneric,
+            vec![Reference::GnuRadio, Reference::Cmsis],
+        ),
+        "dc_block" | "dc_block_real" | "deemphasis" | "interleave_cq15" => {
+            (Reference::Kfr, vec![Reference::Fallback])
+        }
+        "stereo_matrix_cq15" => (Reference::Fallback, vec![Reference::Cmsis, Reference::Kfr]),
+        "power_db" if matches!(plan.level, "sse4.2" | "avx2" | "avx512" | "neon") => {
+            (Reference::Sleef, vec![Reference::Volk])
+        }
+        "quad_demod" if matches!(plan.level, "sse2" | "sse4.2") => {
+            (Reference::Sleef, vec![Reference::Volk])
+        }
+        "oscillate" if !wasm => (Reference::Sleef, vec![Reference::Fallback]),
+        _ => return None,
+    })
+}
+
 fn family_comparisons(plan: &LevelPlan, spec: &KernelSpec) -> (Reference, Vec<Reference>) {
-    if plan.level == "sse2" && plan.baseline.is_none() && KFR_AT_SSE2.contains(&spec.name) {
+    let kfr_level = (plan.level == "sse2" && KFR_AT_SSE2.contains(&spec.name))
+        || (plan.level == "avx512" && KFR_AT_AVX512.contains(&spec.name));
+    if kfr_level && plan.baseline.is_none() {
         let mut extras = vec![Reference::Volk];
+        if plan.level == "avx512"
+            && matches!(spec.family, Family::VolkNoFma | Family::VolkNoFmaGate)
+        {
+            extras.push(Reference::VolkNoFma);
+        }
         if spec.family == Family::VolkAndOwn {
             extras.push(Reference::Fallback);
         }
         return (Reference::Kfr, extras);
+    }
+    if let Some(c) = audit_comparisons(plan, spec) {
+        return c;
     }
     match spec.family {
         Family::VolkNative | Family::OwnVsGnuRadioSimd if plan.refs == "wasm32" => {
@@ -1632,19 +1740,61 @@ volk_16i_x2_add_saturated_16i neonv8 neonv8
 volk_16ic_deinterleave_16i_x2 neonv8 neonv8
 ";
 
+/// The default dispatch of VOLK 3.3.0 at `avx512` (no `volk_config`): SDE's Sapphire Rapids CPU
+/// selects the `avx512dq` machine (`generic`, `sse` ... `sse4_2`, `avx`, `fma`, `avx2`,
+/// `avx512f`, `avx512dq`; no `avx512bw`, which no machine of VOLK 3.3.0 has, and no ORC in the
+/// build), and `volk_rank_archs` takes the implementation with the largest requirement mask, the
+/// aligned one where one exists. Derived from the protokernels of the pinned release (D2900):
+/// twelve functions have nothing above AVX or AVX2 (`volk_32fc_x2_add_32fc`,
+/// `volk_32f_x2_interleave_32fc`, `volk_32fc_magnitude_squared_32f`, `volk_32fc_x2_multiply_32fc`,
+/// `volk_32fc_32f_multiply_32fc`, `volk_32f_s32f_multiply_32f`, `volk_32f_s32f_add_32f`,
+/// `volk_16ic_deinterleave_16i_x2`, `volk_16ic_magnitude_16i`, `volk_32fc_x2_dot_prod_32fc`,
+/// `volk_32fc_x2_multiply_conjugate_32fc`, `volk_32f_s32f_x2_convert_8u`), and the AVX-512BW
+/// protokernels of `volk_8i_convert_16i` and `volk_16i_x2_add_saturated_16i` are compiled into no
+/// machine, so those two run their AVX2 protokernels as well.
+const VOLK_AVX512_DISPATCH: &str = "\
+volk_8i_s32f_convert_32f a_avx512 u_avx512
+volk_16i_s32f_convert_32f a_avx512 u_avx512
+volk_8i_convert_16i a_avx2 u_avx2
+volk_32f_s32f_convert_16i a_avx512 u_avx512
+volk_32f_s32f_convert_8i a_avx512 u_avx512
+volk_32f_s32f_x2_convert_8u a_avx2_fma u_avx2_fma
+volk_32fc_s32fc_x2_rotator2_32fc a_avx512f u_avx512f
+volk_32fc_32f_dot_prod_32fc a_avx512f u_avx512f
+volk_32fc_magnitude_squared_32f a_avx u_avx
+volk_32fc_magnitude_32f a_avx512f u_avx512f
+volk_16ic_magnitude_16i a_avx2 u_avx2
+volk_32fc_x2_multiply_conjugate_32fc a_avx u_avx
+volk_32fc_s32f_atan2_32f a_avx512dq u_avx512dq
+volk_32fc_32f_multiply_32fc a_avx generic
+volk_32f_log2_32f a_avx512dq u_avx512dq
+volk_32f_s32f_multiply_32f a_avx u_avx
+volk_32f_s32f_add_32f a_avx u_avx
+volk_32f_x2_dot_prod_32f a_avx512f u_avx512f
+volk_32fc_x2_dot_prod_32fc a_avx_fma u_avx_fma
+volk_32fc_deinterleave_32f_x2 a_avx512f u_avx512f
+volk_32f_x2_add_32f a_avx512f u_avx512f
+volk_32f_x2_subtract_32f a_avx512f u_avx512f
+volk_32f_x2_interleave_32fc a_avx u_avx
+volk_32fc_x2_add_32fc a_avx u_avx
+volk_32f_x2_multiply_32f a_avx512f u_avx512f
+volk_32fc_x2_multiply_32fc a_avx2_fma u_avx2_fma
+volk_16i_x2_add_saturated_16i a_avx2 u_avx2
+volk_16ic_deinterleave_16i_x2 a_avx2 u_avx2
+";
+
 /// The protokernel that VOLK runs for `function` at `plan`'s level (D2785): the aligned (`a_`,
 /// the first column) or unaligned implementation of the pinned `volk_config` of the level, from
-/// VOLK's machine tables (`VOLK_SSE2_CONFIG` ... `VOLK_NEON_CONFIG`). `avx512` dispatches over
-/// VOLK's `avx512` machine, which holds every implementation of the `avx2` pin and picks one at
-/// least as high, so the `avx2` pin bounds it from below; on wasm32 only the `generic`
-/// protokernels exist. `None` for a function that the level's pin does not name.
+/// VOLK's machine tables (`VOLK_SSE2_CONFIG` ... `VOLK_NEON_CONFIG`), and at `avx512` of VOLK's
+/// default dispatch there ([`VOLK_AVX512_DISPATCH`], D2900); on wasm32 only the `generic`
+/// protokernels exist. `None` for a function that the level's table does not name.
 #[must_use]
 pub fn volk_protokernel(plan: &LevelPlan, function: &str, aligned: bool) -> Option<&'static str> {
     let config = match plan.volk_pin {
         VolkPin::Default if plan.refs == "wasm32" => {
             return VOLK_FUNCTIONS.contains(&function).then_some("generic");
         }
-        VolkPin::Default => VOLK_AVX2_CONFIG,
+        VolkPin::Default => VOLK_AVX512_DISPATCH,
         pin => pin.config(),
     };
     config.lines().find_map(|line| {
@@ -1653,6 +1803,28 @@ pub fn volk_protokernel(plan: &LevelPlan, function: &str, aligned: bool) -> Opti
         let (a, u) = (it.next()?, it.next()?);
         Some(if aligned { a } else { u })
     })
+}
+
+/// The SIMD level whose code a VOLK protokernel is (D2900, the protokernel refinement of G7):
+/// `generic` is [`SimdLevel::Scalar`]; the SSE protokernels (`sse` ... `sse4_2`, VOLK's 128-bit
+/// x86 code, which its machines of `sse2` and `sse4.2` choose by what the CPU has) are the level
+/// `sse4.2`, so that they count as like with like at `sse2` and `sse4.2`; the AVX and AVX2
+/// protokernels (`avx`, `avx_fma`, `avx2`, `avx2_fma`, the 256-bit code) are `avx2`; the AVX-512
+/// ones `avx512`; the NEON ones `neon`. A VOLK comparison whose protokernel is of a lower level
+/// than the code an entry measures is no like-with-like reference of that level.
+#[must_use]
+pub fn volk_protokernel_level(protokernel: &str) -> SimdLevel {
+    if protokernel == "generic" {
+        SimdLevel::Scalar
+    } else if protokernel.contains("avx512") {
+        SimdLevel::Level("avx512")
+    } else if protokernel.contains("avx") {
+        SimdLevel::Level("avx2")
+    } else if protokernel.contains("sse") {
+        SimdLevel::Level("sse4.2")
+    } else {
+        SimdLevel::Level("neon")
+    }
 }
 
 /// The VOLK functions that a comparison names (`compared_with` of a record), each with whether
@@ -3076,13 +3248,20 @@ mod tests {
         for level in ["sse2", "sse4.2", "avx2", "avx512", "neon", "simd128"] {
             // The VOLK composition gates `stereo_matrix` at every level (generic kernels on
             // `simd128`).
+            // KFR at `avx512`, where VOLK's interleave is AVX (D2900).
             let (gate, extras) = comparisons(plan(level), kernel("stereo_matrix"));
-            assert_eq!(gate, Reference::Volk, "{level}");
-            assert_eq!(extras, Vec::new(), "{level}");
-            // No library has a SIMD CQ15 matrix: our fallback, CMSIS-DSP as information.
+            if level == "avx512" {
+                assert_eq!(gate, Reference::Kfr, "{level}");
+                assert_eq!(extras, vec![Reference::Volk], "{level}");
+            } else {
+                assert_eq!(gate, Reference::Volk, "{level}");
+                assert_eq!(extras, Vec::new(), "{level}");
+            }
+            // No library has the CQ15 matrix of our contract: our fallback, CMSIS-DSP and KFR's
+            // doubly saturating composition as information (D2907).
             assert_eq!(
                 comparisons(plan(level), kernel("stereo_matrix_cq15")),
-                (Reference::Fallback, vec![Reference::Cmsis]),
+                (Reference::Fallback, vec![Reference::Cmsis, Reference::Kfr]),
                 "{level}"
             );
             // The fallbacks: CMSIS-DSP on planar data; liquid-dsp's NCO for the f32 loop.
@@ -3137,10 +3316,14 @@ mod tests {
                 comparisons(plan(level), kernel("deemphasis_fallback")),
                 (Reference::GnuRadio, vec![Reference::Cmsis])
             );
-            assert_eq!(
-                comparisons(plan(level), kernel("deemphasis")),
-                (Reference::Fallback, Vec::new())
-            );
+            // KFR's one-section `iir` (D2902).
+            for k in ["deemphasis", "dc_block", "dc_block_real"] {
+                assert_eq!(
+                    comparisons(plan(level), kernel(k)),
+                    (Reference::Kfr, vec![Reference::Fallback]),
+                    "{k} at {level}"
+                );
+            }
         }
         assert_eq!(kernel("deemphasis_fallback").family.measured(), "fallback");
         assert!(
@@ -3601,18 +3784,23 @@ mod tests {
         let kernel = |k: &str| KERNELS.iter().find(|s| s.name == k).unwrap();
         // `dot_complex`: VOLK's protokernel without FMA where VOLK's dispatch fuses (D821), with
         // the dispatch as information; VOLK's dispatch elsewhere.
-        for level in ["avx2", "avx512"] {
+        for level in ["avx2", "neon"] {
             assert_eq!(
                 comparisons(plan(level), kernel("dot_complex")),
                 (Reference::VolkNoFma, vec![Reference::Volk]),
                 "dot_complex at {level}"
             );
         }
+        // KFR where VOLK's protokernel is `generic` (`sse2`) or AVX (`avx512`, D2900, D2901).
         assert_eq!(
-            comparisons(plan("neon"), kernel("dot_complex")),
-            (Reference::VolkNoFma, vec![Reference::Volk])
+            comparisons(plan("sse2"), kernel("dot_complex")),
+            (Reference::Kfr, vec![Reference::Volk])
         );
-        for level in ["sse2", "sse4.2", "simd128"] {
+        assert_eq!(
+            comparisons(plan("avx512"), kernel("dot_complex")),
+            (Reference::Kfr, vec![Reference::Volk, Reference::VolkNoFma])
+        );
+        for level in ["sse4.2", "simd128"] {
             assert_eq!(
                 comparisons(plan(level), kernel("dot_complex")),
                 (Reference::Volk, Vec::new()),
@@ -3782,18 +3970,26 @@ mod tests {
         let limits = Limits::parse(include_str!("../../benches/limits.json")).unwrap();
         // `C32`: the phasor lookup plus VOLK's product without FMA where the level has FMA, VOLK's
         // dispatcher elsewhere (M49 §5); the fallbacks against VOLK's generic product.
+        // KFR at `avx512` (the protokernel without FMA is AVX code, D2900) and for `b2` at `sse2`
+        // (VOLK's product is `generic` there, D2901).
         for name in ["scramble_c32_b2", "scramble_c32_b8"] {
-            for level in ["avx2", "avx512", "neon"] {
+            for level in ["avx2", "neon"] {
                 assert_eq!(
                     comparisons(plan(level), kernel(name)).0,
                     Reference::VolkNoFma,
                     "{name} at {level}"
                 );
             }
+            assert_eq!(comparisons(plan("avx512"), kernel(name)).0, Reference::Kfr);
             for level in ["sse2", "sse4.2", "simd128"] {
+                let want = if (name, level) == ("scramble_c32_b2", "sse2") {
+                    Reference::Kfr
+                } else {
+                    Reference::Volk
+                };
                 assert_eq!(
                     comparisons(plan(level), kernel(name)).0,
-                    Reference::Volk,
+                    want,
                     "{name} at {level}"
                 );
             }
@@ -3881,13 +4077,15 @@ mod tests {
         // protokernel. With `scramble_c32_b8` the rows are fair and gated at every level with a
         // SIMD reference (D2092 revised); `sse2` (b8: no SSE2 product in VOLK) and `simd128`
         // (D12) stay information.
+        // At `avx512` VOLK's best protokernel is AVX: KFR gates there (D2900).
         let b1 = kernel("scramble_c32_b1");
         for level in ["sse2", "sse4.2", "avx2", "avx512", "neon", "simd128"] {
-            assert_eq!(
-                comparisons(plan(level), b1).0,
-                Reference::Volk,
-                "b1 at {level}"
-            );
+            let want = if level == "avx512" {
+                Reference::Kfr
+            } else {
+                Reference::Volk
+            };
+            assert_eq!(comparisons(plan(level), b1).0, want, "b1 at {level}");
             assert_eq!(
                 comparisons(plan(level), kernel("scramble_c32_b1_fallback")),
                 (Reference::VolkGeneric, Vec::new()),
@@ -4095,11 +4293,99 @@ mod tests {
     }
 
     #[test]
+    fn the_library_audit_comparisons_of_d2900_to_d2907() {
+        let plan = |l: &str| PLANS.iter().find(|p| p.level == l).unwrap();
+        let kernel = |k: &str| KERNELS.iter().find(|s| s.name == k).unwrap();
+        let levels = ["sse2", "sse4.2", "avx2", "avx512", "neon", "simd128"];
+        for level in levels {
+            for f in ["cs16", "cs8", "cu8", "real_rs16", "real_rs8", "real_ru8"] {
+                let name = format!("convert_out_{f}_fallback");
+                assert_eq!(
+                    comparisons(plan(level), kernel(&name)),
+                    (Reference::VolkGeneric, vec![Reference::Cmsis]),
+                    "{name} at {level}"
+                );
+            }
+            for k in ["resample_fallback", "resample_real_fallback"] {
+                assert_eq!(
+                    comparisons(plan(level), kernel(k)),
+                    (Reference::Liquid, vec![Reference::Cmsis]),
+                    "{k} at {level}"
+                );
+            }
+            assert_eq!(
+                comparisons(plan(level), kernel("quad_demod_fallback")),
+                (
+                    Reference::VolkGeneric,
+                    vec![Reference::GnuRadio, Reference::Cmsis]
+                )
+            );
+            let power_db = match level {
+                "sse2" => (Reference::Kfr, vec![Reference::Volk]),
+                "simd128" => (Reference::Volk, Vec::new()),
+                _ => (Reference::Sleef, vec![Reference::Volk]),
+            };
+            assert_eq!(
+                comparisons(plan(level), kernel("power_db")),
+                power_db,
+                "power_db at {level}"
+            );
+            let quad = match level {
+                "sse2" | "sse4.2" => (Reference::Sleef, vec![Reference::Volk]),
+                "avx512" => (Reference::Kfr, vec![Reference::Volk]),
+                _ => (Reference::Volk, Vec::new()),
+            };
+            assert_eq!(
+                comparisons(plan(level), kernel("quad_demod")),
+                quad,
+                "quad_demod at {level}"
+            );
+        }
+        // KFR's 16-bit `make_complex` (D2901) and SLEEF's `sincosf` where SLEEF has a vector
+        // extension (D2903), our fallback as information.
+        for level in levels {
+            assert_eq!(
+                comparisons(plan(level), kernel("interleave_cq15")),
+                (Reference::Kfr, vec![Reference::Fallback]),
+                "interleave_cq15 at {level}"
+            );
+            let want = if level == "simd128" {
+                (Reference::Fallback, Vec::new())
+            } else {
+                (Reference::Sleef, vec![Reference::Fallback])
+            };
+            assert_eq!(
+                comparisons(plan(level), kernel("oscillate")),
+                want,
+                "oscillate at {level}"
+            );
+        }
+        // Every entry of `KFR_AT_AVX512` that VOLK would judge runs a VOLK protokernel below
+        // `avx512` there (or VOLK's AVX protokernel without FMA).
+        for name in KFR_AT_AVX512 {
+            let spec = kernel(name);
+            assert!(spec.family.measured_at(plan("avx512")), "{name}");
+            assert_eq!(
+                comparisons(plan("avx512"), spec).0,
+                Reference::Kfr,
+                "{name}"
+            );
+        }
+        assert_eq!(Reference::Sleef.implementation(), "sleef");
+        assert_eq!(Reference::Sleef.kind(), ComparisonKind::Library);
+        assert_eq!(
+            reference_level(Reference::VolkNoFma, plan("avx512"), kernel("mul")),
+            Some(SimdLevel::Level("avx2"))
+        );
+    }
+
+    #[test]
     fn the_m30_entries_have_the_comparisons_of_their_decisions() {
         let plan = |l: &str| PLANS.iter().find(|p| p.level == l).unwrap();
         let kernel = |k: &str| KERNELS.iter().find(|s| s.name == k).unwrap();
         let levels = ["sse2", "sse4.2", "avx2", "avx512", "neon", "simd128"];
-        // VOLK has the function: the gate at every level.
+        // VOLK has the function: the gate at every level, but KFR at `avx512` where VOLK's best
+        // protokernel is of a lower level (D2900).
         for k in [
             "add",
             "add_cq15",
@@ -4111,11 +4397,12 @@ mod tests {
             "deinterleave_cq15",
         ] {
             for level in levels {
-                assert_eq!(
-                    comparisons(plan(level), kernel(k)).0,
-                    Reference::Volk,
-                    "{k} at {level}"
-                );
+                let want = if level == "avx512" && KFR_AT_AVX512.contains(&k) {
+                    (Reference::Kfr, vec![Reference::Volk])
+                } else {
+                    (Reference::Volk, Vec::new())
+                };
+                assert_eq!(comparisons(plan(level), kernel(k)), want, "{k} at {level}");
             }
         }
         // `mul`: VOLK's dispatch, fused where ours is (D326); its protokernel without FMA as
@@ -4126,7 +4413,14 @@ mod tests {
             comparisons(plan("sse2"), kernel("mul")),
             (Reference::Kfr, vec![Reference::Volk])
         );
-        for level in levels.into_iter().filter(|l| *l != "sse2") {
+        assert_eq!(
+            comparisons(plan("avx512"), kernel("mul")),
+            (Reference::Kfr, vec![Reference::Volk, Reference::VolkNoFma])
+        );
+        for level in levels
+            .into_iter()
+            .filter(|l| !matches!(*l, "sse2" | "avx512"))
+        {
             let (gate, extras) = comparisons(plan(level), kernel("mul"));
             assert_eq!(gate, Reference::Volk, "mul at {level}");
             if matches!(level, "avx2" | "avx512" | "neon") {
@@ -4139,14 +4433,8 @@ mod tests {
                 assert!(!extras.contains(&Reference::VolkNoFma), "mul at {level}");
             }
         }
-        // No library has the function: our fallback, as information.
-        for k in [
-            "mul_cq15",
-            "mul_real_q15",
-            "interleave_cq15",
-            "oscillate",
-            "oscillate_cq15",
-        ] {
+        // No library has the function: our fallback, as information (D2908).
+        for k in ["mul_cq15", "mul_real_q15", "oscillate_cq15"] {
             for level in levels {
                 assert_eq!(
                     comparisons(plan(level), kernel(k)),

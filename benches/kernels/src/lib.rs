@@ -123,6 +123,8 @@ pub enum Impl {
     /// rand_distr's `StandardNormal` (the Ziggurat method) over rand's `SmallRng`: the
     /// informational Ziggurat row of `gauss_noise` (M48).
     RandDistr,
+    /// SLEEF 3.9.0's vectorized `log10f`, `atan2f` and `sincosf` of the level (D2903).
+    Sleef,
     /// Only the copy that restores the input of an in-place transform before every call. Its
     /// count is the baseline that xtask subtracts from every FFT comparison.
     Restore,
@@ -130,7 +132,7 @@ pub enum Impl {
 
 impl Impl {
     /// All implementations, in the order of `count info`.
-    pub const ALL: [Impl; 17] = [
+    pub const ALL: [Impl; 18] = [
         Impl::Ours,
         Impl::Fallback,
         Impl::Volk,
@@ -147,6 +149,7 @@ impl Impl {
         Impl::Liquid,
         Impl::Airspy,
         Impl::RandDistr,
+        Impl::Sleef,
         Impl::Restore,
     ];
 
@@ -169,6 +172,7 @@ impl Impl {
             Impl::Liquid => "liquid",
             Impl::Airspy => "airspy",
             Impl::RandDistr => "rand-distr",
+            Impl::Sleef => "sleef",
             Impl::Restore => "restore",
         }
     }
@@ -2034,6 +2038,50 @@ impl Kernel for ConvertOutK {
                         },
                     }
                 }
+                // VOLK's `generic` protokernel of the format, compiled for the level (D2905).
+                Impl::VolkGeneric => {
+                    let values = self.values();
+                    // SAFETY: the input holds `values` floats.
+                    let input = unsafe { std::slice::from_raw_parts(self.input_ptr(), values) };
+                    let out = &mut self.out[..values * self.format.component_bytes()];
+                    match self.format {
+                        OutFormat::Cs16 => {
+                            // SAFETY: the output holds `values` `i16` values (kept 2-byte
+                            // aligned by the even skew).
+                            let out = unsafe {
+                                std::slice::from_raw_parts_mut(out.as_mut_ptr().cast(), values)
+                            };
+                            cref_sys::volk_generic::convert_16i(input, scale as f32, out);
+                        }
+                        OutFormat::Cs8 => {
+                            // SAFETY: the output holds `values` bytes.
+                            let out = unsafe {
+                                std::slice::from_raw_parts_mut(out.as_mut_ptr().cast(), values)
+                            };
+                            cref_sys::volk_generic::convert_8i(input, scale as f32, out);
+                        }
+                        OutFormat::Cu8 => {
+                            cref_sys::volk_generic::convert_8u(
+                                input,
+                                scale as f32,
+                                offset as f32,
+                                out,
+                            );
+                        }
+                    }
+                }
+                // KFR's `clamp(round(x * scale + bias), 0, 255)` of the level (D2900).
+                Impl::Kfr => {
+                    let values = self.values();
+                    // SAFETY: the input holds `values` floats.
+                    let input = unsafe { std::slice::from_raw_parts(self.input_ptr(), values) };
+                    cref_sys::kfr_ops::f32_to_u8(
+                        input,
+                        &mut self.out[..values],
+                        scale as f32,
+                        offset as f32,
+                    );
+                }
                 Impl::Cmsis => {
                     let input = self.input_ptr();
                     match self.format {
@@ -2083,11 +2131,27 @@ impl Kernel for ConvertOutK {
     }
 
     fn supports(&self, which: Impl) -> bool {
-        convert_supports(self.entry, which, volk_sys::AVAILABLE)
+        match which {
+            Impl::VolkGeneric => {
+                self.entry == BiquadEntry::Fallback && cref_sys::volk_generic::AVAILABLE
+            }
+            Impl::Kfr => {
+                self.entry == BiquadEntry::Simd
+                    && self.format == OutFormat::Cu8
+                    && cref_sys::kfr_ops::AVAILABLE
+            }
+            _ => convert_supports(self.entry, which, volk_sys::AVAILABLE),
+        }
     }
 
     fn describe(&self, which: Impl) -> &'static str {
         match which {
+            Impl::VolkGeneric => describe_volk_generic(match self.format {
+                OutFormat::Cs16 => "volk_32f_s32f_convert_16i_generic",
+                OutFormat::Cs8 => "volk_32f_s32f_convert_8i_generic",
+                OutFormat::Cu8 => "volk_32f_s32f_x2_convert_8u_generic",
+            }),
+            Impl::Kfr => describe_kfr_ops("clamp(round(x * scale + bias), 0, 255) to uint8_t"),
             Impl::Cmsis => describe_cmsis(match self.format {
                 OutFormat::Cs16 => "arm_float_to_q15 (truncating, saturating)",
                 OutFormat::Cs8 => "arm_float_to_q7 (truncating, saturating)",
@@ -3146,6 +3210,8 @@ impl Kernel for MagSqK {
                     c32_pairs_ref(&self.input),
                     &mut self.out,
                 ),
+                // KFR's `cabssqr` of the level (D2900).
+                Impl::Kfr => cref_sys::kfr_ops::mag_sq(c32_floats(&self.input), &mut self.out),
                 other => unreachable!("mag_sq has no {other:?}"),
             }
             black_box(&self.out);
@@ -3163,11 +3229,15 @@ impl Kernel for MagSqK {
     }
 
     fn supports(&self, which: Impl) -> bool {
+        if which == Impl::Kfr {
+            return self.entry == BiquadEntry::Simd && cref_sys::kfr_ops::AVAILABLE;
+        }
         spectrum_supports(self.entry, which, volk_sys::AVAILABLE)
     }
 
     fn describe(&self, which: Impl) -> &'static str {
         match which {
+            Impl::Kfr => describe_kfr_ops("cabssqr(c)"),
             Impl::Volk => "volk_32fc_magnitude_squared_32f",
             Impl::Cmsis => describe_cmsis("arm_cmplx_mag_squared_f32"),
             Impl::Fallback => "sdrk fallback",
@@ -3241,6 +3311,13 @@ impl Kernel for MagSqQ15K {
             _ => "sdrk",
         }
     }
+}
+
+/// Whether the conjugate product of the SLEEF composition of `quad_demod` is KFR's: at `sse2`,
+/// where VOLK's machine runs the `generic` protokernel of `volk_32fc_x2_multiply_conjugate_32fc`
+/// (D2903); elsewhere it is VOLK's dispatch.
+fn quad_sleef_kfr() -> bool {
+    cref_sys::BIQUAD_REF_LEVEL == "sse2"
 }
 
 /// `quad_demod` `C32`. Two entries on the same input: `quad_demod` (our kernel against VOLK) and
@@ -3345,6 +3422,50 @@ impl Kernel for QuadK {
                 Impl::Cmsis => {
                     cmsis_quad_demod_c32(&self.input, &mut self.conj, &mut self.tmp, &mut self.out);
                 }
+                // KFR's `carg(a cconj(b)) * gain` of the level (D2900).
+                Impl::Kfr => cref_sys::kfr_ops::quad_demod(
+                    c32_floats(&self.input[1..]),
+                    c32_floats(&self.input[..n]),
+                    &mut self.out,
+                    QUAD_GAIN,
+                ),
+                // The conjugate product of a SIMD library of the level (KFR's at `sse2`, where
+                // VOLK's is `generic`; VOLK's dispatch elsewhere), then SLEEF's `atan2f` of the
+                // level (D2903).
+                Impl::Sleef => {
+                    if quad_sleef_kfr() {
+                        cref_sys::kfr_ops::multiply_conjugate(
+                            c32_floats(&self.input[1..]),
+                            c32_floats(&self.input[..n]),
+                            c32_floats_mut(&mut self.tmp),
+                        );
+                    } else {
+                        // SAFETY: all buffers hold `n` samples (the input one more).
+                        unsafe {
+                            volk_sys::volk_32fc_x2_multiply_conjugate_32fc(
+                                self.tmp.as_mut_ptr().cast(),
+                                self.input.as_ptr().add(1).cast(),
+                                self.input.as_ptr().cast(),
+                                n as u32,
+                            );
+                        }
+                    }
+                    cref_sys::sleef::atan2_32fc(c32_floats(&self.tmp), &mut self.out, QUAD_GAIN);
+                }
+                // VOLK's `generic` conjugate product and `atan2f` of libm, compiled for the
+                // level (D2906).
+                Impl::VolkGeneric => {
+                    cref_sys::volk_generic::multiply_conjugate(
+                        c32_pairs_ref(&self.input[1..]),
+                        c32_pairs_ref(&self.input[..n]),
+                        c32_pairs(&mut self.tmp),
+                    );
+                    cref_sys::volk_generic::atan2(
+                        c32_pairs_ref(&self.tmp),
+                        1.0 / QUAD_GAIN,
+                        &mut self.out,
+                    );
+                }
                 other => unreachable!("quad_demod has no {other:?}"),
             }
             black_box(&self.out);
@@ -3370,14 +3491,34 @@ impl Kernel for QuadK {
         match (self.fallback_entry, which) {
             (false, Impl::Ours) | (_, Impl::Fallback) => true,
             (false, Impl::Volk) => volk_sys::AVAILABLE,
+            (false, Impl::Kfr) => cref_sys::kfr_ops::AVAILABLE,
+            (false, Impl::Sleef) => {
+                cref_sys::sleef::AVAILABLE
+                    && (if quad_sleef_kfr() {
+                        cref_sys::kfr_ops::AVAILABLE
+                    } else {
+                        volk_sys::AVAILABLE
+                    })
+            }
             (true, Impl::GnuRadio) => GrQuadratureDemodCf::new(QUAD_GAIN).is_some(),
             (true, Impl::Cmsis) => cmsis_dsp::AVAILABLE,
+            (true, Impl::VolkGeneric) => cref_sys::volk_generic::AVAILABLE,
             _ => false,
         }
     }
 
     fn describe(&self, which: Impl) -> &'static str {
         match which {
+            Impl::Kfr => describe_kfr_ops("carg(a * cconj(b)) * gain"),
+            Impl::Sleef if quad_sleef_kfr() => describe_sleef(
+                "atan2f_u10 of the conjugate product of KFR 7.2.0 (a * cconj(b), benches/refs/kfr-ops.cpp), * gain",
+            ),
+            Impl::Sleef => describe_sleef(
+                "atan2f_u10 of the conjugate product of VOLK's dispatch (volk_32fc_x2_multiply_conjugate_32fc), * gain",
+            ),
+            Impl::VolkGeneric => describe_volk_generic(
+                "volk_32fc_x2_multiply_conjugate_32fc_generic + volk_32fc_s32f_atan2_32f_generic (atan2f of libm)",
+            ),
             Impl::Volk => "volk_32fc_x2_multiply_conjugate_32fc + volk_32fc_s32f_atan2_32f",
             Impl::GnuRadio => {
                 "GNU Radio quadrature_demod_cf (gr-analog, fast_atan2f, generic compiler flags)"
@@ -3904,6 +4045,36 @@ impl Kernel for SquelchK<CQ15> {
 fn c32_pairs(x: &mut [C32]) -> &mut [[f32; 2]] {
     // SAFETY: `C32` is `repr(C)` of two `f32`, so the slice has the layout of `[[f32; 2]]`.
     unsafe { std::slice::from_raw_parts_mut(x.as_mut_ptr().cast(), x.len()) }
+}
+
+/// `x` as `2 x.len()` floats.
+pub(crate) fn c32_floats(x: &[C32]) -> &[f32] {
+    // SAFETY: `C32` is two `f32` (`repr(C)`); the slice borrows `x`.
+    unsafe { std::slice::from_raw_parts(x.as_ptr().cast(), 2 * x.len()) }
+}
+
+/// `x` as `2 x.len()` floats, mutably.
+pub(crate) fn c32_floats_mut(x: &mut [C32]) -> &mut [f32] {
+    // SAFETY: as in `c32_floats`; the slice borrows `x` mutably.
+    unsafe { std::slice::from_raw_parts_mut(x.as_mut_ptr().cast(), 2 * x.len()) }
+}
+
+/// `x` as `2 x.len()` `i16` values.
+fn cq15_shorts(x: &[CQ15]) -> &[i16] {
+    // SAFETY: `CQ15` is two `i16` (`repr(C)`); the slice borrows `x`.
+    unsafe { std::slice::from_raw_parts(x.as_ptr().cast(), 2 * x.len()) }
+}
+
+/// The description of VOLK's `generic` protokernel `function` (with its suffix) as built for
+/// this level.
+pub(crate) fn describe_volk_generic(function: &str) -> &'static str {
+    Box::leak(
+        format!(
+            "VOLK 3.3.0 {function}, benches/refs/volk-generic.c (-O3 -ffp-contract=off, {})",
+            cref_sys::BIQUAD_REF_LEVEL
+        )
+        .into_boxed_str(),
+    )
 }
 
 /// Shared form of [`c32_pairs`].
@@ -4457,6 +4628,10 @@ impl Kernel for MagQ15K {
                     cq15_pairs(&self.input),
                     q15_raw_mut(&mut self.out),
                 ),
+                // KFR's `round(sqrt(re^2 + im^2))` in `float` of the level (D2900).
+                Impl::Kfr => {
+                    cref_sys::kfr_ops::mag_i16(cq15_shorts(&self.input), q15_raw_mut(&mut self.out))
+                }
                 other => unreachable!("mag_q15 has no {other:?}"),
             }
             black_box(&self.out);
@@ -4477,11 +4652,17 @@ impl Kernel for MagQ15K {
     }
 
     fn supports(&self, which: Impl) -> bool {
+        if which == Impl::Kfr {
+            return self.entry == BiquadEntry::Simd && cref_sys::kfr_ops::AVAILABLE;
+        }
         spectrum_supports(self.entry, which, volk_sys::AVAILABLE)
     }
 
     fn describe(&self, which: Impl) -> &'static str {
         match which {
+            Impl::Kfr => {
+                describe_kfr_ops("round(sqrt(re^2 + im^2)) in float of complex<int16_t>, saturated")
+            }
             Impl::Volk => "volk_16ic_magnitude_16i",
             Impl::Cmsis => describe_cmsis("arm_cmplx_mag_q15 (Q2.14, arm_sqrt_q31)"),
             Impl::Fallback => "sdrk fallback",
@@ -4554,6 +4735,12 @@ impl Kernel for WindowK {
                     &self.w,
                     c32_pairs(&mut self.out),
                 ),
+                // KFR's complex-by-real product of the level (D2900).
+                Impl::Kfr => cref_sys::kfr_ops::complex_mul_real(
+                    c32_floats(&self.input),
+                    &self.w,
+                    c32_floats_mut(&mut self.out),
+                ),
                 other => unreachable!("window has no {other:?}"),
             }
             black_box(&self.out);
@@ -4575,11 +4762,15 @@ impl Kernel for WindowK {
     }
 
     fn supports(&self, which: Impl) -> bool {
+        if which == Impl::Kfr {
+            return self.entry == BiquadEntry::Simd && cref_sys::kfr_ops::AVAILABLE;
+        }
         spectrum_supports(self.entry, which, volk_sys::FULL)
     }
 
     fn describe(&self, which: Impl) -> &'static str {
         match which {
+            Impl::Kfr => describe_kfr_ops("x * w on complex<float> times float"),
             Impl::Volk => "volk_32fc_32f_multiply_32fc",
             Impl::Cmsis => describe_cmsis("arm_cmplx_mult_real_f32"),
             Impl::Fallback => "sdrk fallback",
@@ -4756,7 +4947,13 @@ impl Kernel for PowerDbK {
                     volk_sys::native::volk_32f_s32f_add_32f(out, out, POWER_DB_OFFSET, n);
                 },
                 // KFR's `10 log10(x) + offset` of the level (D2785).
-                Impl::Kfr => cref_sys::kfr_ops::power_db(&self.input, &mut self.out, POWER_DB_OFFSET),
+                Impl::Kfr => {
+                    cref_sys::kfr_ops::power_db(&self.input, &mut self.out, POWER_DB_OFFSET)
+                }
+                // SLEEF's `log10f` of the level (D2903).
+                Impl::Sleef => {
+                    cref_sys::sleef::power_db(&self.input, &mut self.out, POWER_DB_OFFSET)
+                }
                 Impl::Cmsis => cmsis_power_db(&self.input, &mut self.out),
                 other => unreachable!("power_db has no {other:?}"),
             }
@@ -4778,12 +4975,16 @@ impl Kernel for PowerDbK {
         if which == Impl::Kfr {
             return self.entry == BiquadEntry::Simd && cref_sys::kfr_ops::AVAILABLE;
         }
+        if which == Impl::Sleef {
+            return self.entry == BiquadEntry::Simd && cref_sys::sleef::AVAILABLE;
+        }
         spectrum_supports(self.entry, which, volk_sys::FULL)
     }
 
     fn describe(&self, which: Impl) -> &'static str {
         match which {
             Impl::Kfr => describe_kfr_ops("10 * log10(x) + offset"),
+            Impl::Sleef => describe_sleef("log10f_u10 * 10 + offset"),
             Impl::Volk => "volk_32f_log2_32f + volk_32f_s32f_multiply_32f + volk_32f_s32f_add_32f",
             Impl::Cmsis => describe_cmsis("arm_vlog_f32 + arm_scale_f32 (+ offset loop)"),
             Impl::Fallback => "sdrk fallback",
@@ -5184,10 +5385,19 @@ where
         let mut liquid = T::as_f32(&[T::pole()])
             .filter(|_| which == Impl::Liquid)
             .and_then(|r| liquid_dc_real(r[0]));
+        let mut kfr = T::as_f32(&[T::pole()])
+            .filter(|_| which == Impl::Kfr)
+            .and_then(|r| kfr_dc_block(r[0]));
         for _ in 0..k {
             match which {
                 Impl::Ours => dc_block_real(&Sdrk, &mut state, &self.input, &mut self.out),
                 Impl::Fallback => dc_block_real(&Fallback, &mut state, &self.input, &mut self.out),
+                // KFR's one-section `iir` (D2902).
+                Impl::Kfr => {
+                    let input = T::as_f32(&self.input).expect("f32");
+                    let out = T::as_f32_mut(&mut self.out).expect("f32");
+                    kfr.as_mut().expect("kfr").run(black_box(input), out);
+                }
                 Impl::Liquid => {
                     let input = T::as_f32(&self.input).expect("f32");
                     let out = T::as_f32_mut(&mut self.out).expect("f32");
@@ -5215,12 +5425,17 @@ where
     }
 
     fn supports(&self, which: Impl) -> bool {
+        if which == Impl::Kfr {
+            return self.entry == BiquadEntry::Simd
+                && T::as_f32(&[T::pole()]).is_some_and(|r| kfr_dc_block(r[0]).is_some());
+        }
         let has = T::as_f32(&[T::pole()]).is_some_and(|r| liquid_dc_real(r[0]).is_some());
         recursion_supports(self.entry, which, Impl::Liquid, has)
     }
 
     fn describe(&self, which: Impl) -> &'static str {
         match which {
+            Impl::Kfr => describe_kfr_iir1("[1, -1, 0; -r, 0]"),
             Impl::Fallback => "sdrk fallback",
             Impl::Liquid => {
                 "liquid-dsp 1.8.3 iirfilt_rrrf_create_dc_blocker (direct form II, portable dot product, -O3)"
@@ -5298,6 +5513,13 @@ impl<T: RealNoise> DeemphasisK<T> {
         DeemphasisState::new(DEEMPH_TAU, Rate::hz(DEEMPH_FS as u64).expect("rate"))
             .expect("deemphasis")
     }
+
+    /// KFR's one-section `iir` of the one-pole `y = alpha x + (1 - alpha) y1` with the `f32`
+    /// `alpha` of our state (D2902); `None` for `Q15` or without KFR.
+    fn kfr() -> Option<cref_sys::KfrIir1> {
+        let alpha = *T::as_f32(&[Self::state().alpha()])?.first()?;
+        cref_sys::KfrIir1::new([alpha, 0.0, 0.0, alpha - 1.0, 0.0])
+    }
 }
 
 #[inline(never)]
@@ -5319,10 +5541,17 @@ where
     fn run(&mut self, which: Impl, k: usize) {
         let mut state = Self::state();
         let mut gr = (which == Impl::GnuRadio).then(gr_deemph).flatten();
+        let mut kfr = (which == Impl::Kfr).then(Self::kfr).flatten();
         for _ in 0..k {
             match which {
                 Impl::Ours => deemphasis(&Sdrk, &mut state, &self.input, &mut self.out),
                 Impl::Fallback => deemphasis(&Fallback, &mut state, &self.input, &mut self.out),
+                // KFR's one-section `iir` (D2902).
+                Impl::Kfr => {
+                    let input = T::as_f32(&self.input).expect("f32");
+                    let out = T::as_f32_mut(&mut self.out).expect("f32");
+                    kfr.as_mut().expect("kfr").run(black_box(input), out);
+                }
                 Impl::GnuRadio => {
                     let input = T::as_f32(&self.input).expect("f32");
                     let out = T::as_f32_mut(&mut self.out).expect("f32");
@@ -5356,12 +5585,16 @@ where
     }
 
     fn supports(&self, which: Impl) -> bool {
+        if which == Impl::Kfr {
+            return self.entry == BiquadEntry::Simd && Self::kfr().is_some();
+        }
         let has = T::as_f32(&self.input).is_some() && gr_deemph().is_some();
         recursion_supports(self.entry, which, Impl::GnuRadio, has)
     }
 
     fn describe(&self, which: Impl) -> &'static str {
         match which {
+            Impl::Kfr => describe_kfr_iir1("[alpha, 0, 0; alpha - 1, 0]"),
             Impl::Fallback => "sdrk fallback",
             Impl::GnuRadio => {
                 "GNU Radio fm_deemph: iir_filter_ffd with the bilinear taps of fm_emph.py (double taps and accumulator, generic compiler flags)"
@@ -5539,6 +5772,15 @@ struct DcBlockK<T: DcNoise> {
     input: Aligned<T>,
     out: Aligned<T>,
     entry: BiquadEntry,
+    /// The planar `re` and `im` of a `C32` input for KFR (prepared once, not counted, as for the
+    /// biquads), and KFR's planar outputs; empty for `CQ15`.
+    planar_in: [Aligned<f32>; 2],
+    planar_out: [Aligned<f32>; 2],
+}
+
+/// KFR's one-section `iir` of the DC blocker with the pole `r` (`y = x - x1 + r y1`, D2902).
+fn kfr_dc_block(r: f32) -> Option<cref_sys::KfrIir1> {
+    cref_sys::KfrIir1::new([1.0, -1.0, 0.0, -r, 0.0])
 }
 
 impl<T: DcNoise> DcBlockK<T> {
@@ -5547,10 +5789,28 @@ impl<T: DcNoise> DcBlockK<T> {
         for s in input.iter_mut() {
             *s = T::noise(rng, 0.2);
         }
+        let (planar_in, planar_out) = match T::as_f32(&input) {
+            Some(x) => {
+                let (re, im) = planar_of(layout.n, layout.skew(4), x.iter().map(|v| (v[0], v[1])));
+                (
+                    [re, im],
+                    [
+                        Aligned::skewed(layout.n, layout.skew(4)),
+                        Aligned::skewed(layout.n, layout.skew(4)),
+                    ],
+                )
+            }
+            None => (
+                [Aligned::new(0), Aligned::new(0)],
+                [Aligned::new(0), Aligned::new(0)],
+            ),
+        };
         DcBlockK {
             input,
             out: Aligned::skewed(layout.n, layout.skew(core::mem::size_of::<T>())),
             entry,
+            planar_in,
+            planar_out,
         }
     }
 
@@ -5580,10 +5840,25 @@ where
         let mut liquid = T::as_f32(&self.input)
             .filter(|_| which == Impl::Liquid)
             .and_then(|_| liquid_dc_complex(T::pole_f32()));
+        let mut kfr = (which == Impl::Kfr)
+            .then(|| [kfr_dc_block(T::pole_f32()), kfr_dc_block(T::pole_f32())]);
         for _ in 0..k {
             match which {
                 Impl::Ours => dc_block(&Sdrk, &mut state, &self.input, &mut self.out),
                 Impl::Fallback => dc_block(&Fallback, &mut state, &self.input, &mut self.out),
+                // KFR's one-section `iir` on the planar `re` and `im` (D2902).
+                Impl::Kfr => {
+                    for ((f, i), o) in kfr
+                        .as_mut()
+                        .expect("kfr")
+                        .iter_mut()
+                        .zip(&self.planar_in)
+                        .zip(&mut self.planar_out)
+                    {
+                        f.as_mut().expect("kfr").run(black_box(i), o);
+                        black_box(&*o);
+                    }
+                }
                 Impl::Liquid => {
                     let input = T::as_f32(&self.input).expect("cf32");
                     let out = T::as_f32_mut(&mut self.out).expect("cf32");
@@ -5602,7 +5877,16 @@ where
         self.run(which, 1);
         if let Some(x) = T::as_f32(&self.input) {
             let x: &[f32] = x.as_flattened();
-            return snr_db(&dc_block_model(T::pole_f32(), x, 2), &T::flat(&self.out));
+            let got: Vec<f64> = if which == Impl::Kfr {
+                self.planar_out[0]
+                    .iter()
+                    .zip(self.planar_out[1].iter())
+                    .flat_map(|(&r, &i)| [f64::from(r), f64::from(i)])
+                    .collect()
+            } else {
+                T::flat(&self.out)
+            };
+            return snr_db(&dc_block_model(T::pole_f32(), x, 2), &got);
         }
         let mut want = vec![self.out[0]; self.out.len()];
         let _ = Reference.dc_block(&mut Self::state(), &self.input, &mut want);
@@ -5610,12 +5894,20 @@ where
     }
 
     fn supports(&self, which: Impl) -> bool {
+        if which == Impl::Kfr {
+            return self.entry == BiquadEntry::Simd
+                && T::as_f32(&self.input).is_some()
+                && kfr_dc_block(T::pole_f32()).is_some();
+        }
         let has = T::as_f32(&self.input).is_some() && liquid_dc_complex(T::pole_f32()).is_some();
         recursion_supports(self.entry, which, Impl::Liquid, has)
     }
 
     fn describe(&self, which: Impl) -> &'static str {
         match which {
+            Impl::Kfr => describe_kfr_iir1(
+                "[1, -1, 0; -r, 0] on the planar re and im (two calls), the planar copies prepared once",
+            ),
             Impl::Fallback => "sdrk fallback",
             Impl::Liquid => {
                 "liquid-dsp 1.8.3 iirfilt_crcf_create_dc_blocker (direct form II, portable dot product, -O3)"
@@ -5792,12 +6084,35 @@ fn describe_kfr(layout: &str) -> &'static str {
     )
 }
 
+/// The text of [`Kernel::describe`] for KFR's one-section `iir` (D2902): `section` is
+/// `[b0, b1, b2; a1, a2]`.
+fn describe_kfr_iir1(section: &str) -> &'static str {
+    let arch = KfrBiquad::arch().unwrap_or("?");
+    Box::leak(
+        format!(
+            "KFR 7.2.0 kfr::iir, iir_state<float, 1>, one section {section} (benches/refs/kfr-biquad.cpp, {arch}, -ffp-contract=off)"
+        )
+        .into_boxed_str(),
+    )
+}
+
 /// The text of [`Kernel::describe`] for KFR's element-wise expressions (D2785).
 pub(crate) fn describe_kfr_ops(expression: &str) -> &'static str {
     let arch = KfrBiquad::arch().unwrap_or("?");
     Box::leak(
         format!("KFR 7.2.0 {expression} (benches/refs/kfr-ops.cpp, {arch}, -ffp-contract=off)")
             .into_boxed_str(),
+    )
+}
+
+/// The text of [`Kernel::describe`] for SLEEF's vectorized functions (D2903).
+pub(crate) fn describe_sleef(what: &str) -> &'static str {
+    let ext = cref_sys::sleef::level().unwrap_or("?");
+    Box::leak(
+        format!(
+            "SLEEF 3.9.0 Sleef_{what} ({ext}, benches/refs/sleef-ops.c, -O3 -ffp-contract=off)"
+        )
+        .into_boxed_str(),
     )
 }
 
@@ -6633,6 +6948,12 @@ impl Kernel for ScaleK {
                         2 * self.input.len() as u32,
                     );
                 },
+                // KFR's `x * scale` on the `2 n` floats of the level (D2900).
+                Impl::Kfr => cref_sys::kfr_ops::scale_f32(
+                    c32_floats(&self.input),
+                    c32_floats_mut(&mut self.out),
+                    SCALE_GAIN,
+                ),
                 other => unreachable!("scale has no {other:?}"),
             }
             black_box(&self.out);
@@ -6647,11 +6968,15 @@ impl Kernel for ScaleK {
     }
 
     fn supports(&self, which: Impl) -> bool {
+        if which == Impl::Kfr {
+            return self.entry == BiquadEntry::Simd && cref_sys::kfr_ops::AVAILABLE;
+        }
         dot_scale_supports(self.entry, which, volk_sys::NATIVE)
     }
 
     fn describe(&self, which: Impl) -> &'static str {
         match which {
+            Impl::Kfr => describe_kfr_ops("x * scale on the 2 n floats"),
             Impl::Volk => "volk_32f_s32f_multiply_32f",
             Impl::Cmsis => describe_cmsis("arm_scale_f32 on the 2 n floats"),
             Impl::Fallback => "sdrk fallback",

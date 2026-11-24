@@ -133,3 +133,4 @@ Found with short `llvm-mca` looks at the loops (the corrected tool, stand-alone 
 
 - 2026-11-24: planned; target table and causes above.
 - 2026-11-24: group A done (D2810, D2811): the four FFT fallbacks at `sse2` and `sse4.2` are `release`, 0.54 to 0.99 of CMSIS-DSP on both models (CI run 45479384022); the x86 stage pairs run on two samples per vector where no infinity or NaN can arise, bit for bit the scalar stages. `channelize_fallback` 4.5 to 7.6 % slower on x86 (information, still at most 0.38 of liquid-dsp). No open item.
+- 2026-11-24: group B, first part (D2820 to D2822): `scramble_c32_b8`, `convert_out_cu8` and `convert_out_real_ru8` at `avx512` are `release` (CI run 45502697595): the gathers of `scramble` no longer wait on each other in the `sapphirerapids` model, and the `CU8` output of AVX-512 packs four vectors and bounds the bytes once.

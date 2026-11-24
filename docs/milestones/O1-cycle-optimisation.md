@@ -132,3 +132,4 @@ Found with short `llvm-mca` looks at the loops (the corrected tool, stand-alone 
 ## Status
 
 - 2026-11-24: planned; target table and causes above.
+- 2026-11-24: group A done (D2810, D2811): the four FFT fallbacks at `sse2` and `sse4.2` are `release`, 0.54 to 0.99 of CMSIS-DSP on both models (CI run 45479384022); the x86 stage pairs run on two samples per vector where no infinity or NaN can arise, bit for bit the scalar stages. `channelize_fallback` 4.5 to 7.6 % slower on x86 (information, still at most 0.38 of liquid-dsp). No open item.

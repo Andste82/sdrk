@@ -1,5 +1,5 @@
 //! M20: `mag` is accelerated and counted against VOLK, the `C32` `agc` is counted against the
-//! `agc_cc` loop of GNU Radio, and `agc_cq15` and `dc_block_real` are counted as information on
+//! `agc_cc` loop of GNU Radio (information, D2768, D2769), and `agc_cq15` and `dc_block_real` are counted as information on
 //! every platform (`agc_cq15` and `dc_block_real` `Q15` are not accelerated; `dc_block_real`
 //! `f32` runs the block scan of the SIMD backend, which no SIMD library has). `benches/limits.json`
 //! must carry the entries at every level, the committed `simd128` counts must agree with it (the
@@ -65,11 +65,7 @@ fn every_platform_counts_mag_against_volk() {
             ] {
                 let entry = &result["levels"][*level]["kernels"][kernel];
                 let status = entry["status"].as_str();
-                assert_eq!(
-                    status,
-                    Some("release"),
-                    "{platform}/{level}/{kernel}: {entry}"
-                );
+                assert_eq!(status, Some("info"), "{platform}/{level}/{kernel}: {entry}");
                 assert!(
                     entry.to_string().contains(volk),
                     "{platform}/{level}/{kernel} is not compared with {volk}"
@@ -87,7 +83,7 @@ fn every_platform_counts_agc_against_gnu_radio() {
             let entry = &result["levels"][*level]["kernels"]["agc"];
             assert_eq!(
                 entry["status"].as_str(),
-                Some("release"),
+                Some("info"),
                 "{platform}/{level}: {entry}"
             );
             assert!(
@@ -99,19 +95,24 @@ fn every_platform_counts_agc_against_gnu_radio() {
 }
 
 #[test]
-fn the_limits_file_judges_agc_against_gnu_radio_at_every_level() {
+fn the_limits_file_reports_agc_against_gnu_radio_as_information_at_every_level() {
+    // GNU Radio's `agc_cc` is a scalar loop with the generic flags: no like-with-like gate of the
+    // SIMD path (D2769) and no SIMD reference at `simd128` (D2768), so `agc` is `info` with the
+    // efficiency verdict at every level; its fallback is judged by `agc_fallback`.
     let limits = bench_file("limits.json");
-    for level in ["sse2", "sse4.2", "avx2", "avx512", "simd128"] {
-        assert_eq!(limits["agc"][level]["status"].as_str(), Some("release"));
+    for level in LEVELS {
+        assert_eq!(
+            limits["agc"][level]["status"].as_str(),
+            Some("info"),
+            "{level}"
+        );
+        assert!(
+            limits["agc"][level]["waiver"]
+                .as_str()
+                .is_some_and(|w| w.contains("D2768") || w.contains("D2769")),
+            "{level}"
+        );
     }
-    // `neon` runs the fallback (D335); in cycles it is within the release limit (D2746).
-    assert_eq!(limits["agc"]["neon"]["status"].as_str(), Some("release"));
-    // The run-time detection is judged against GNU Radio as every level (D2764): 0.45 / 0.54
-    // of `agc_cc` in cycles (D2765).
-    assert_eq!(
-        limits["agc"]["avx2-runtime"]["status"].as_str(),
-        Some("release")
-    );
 }
 
 #[test]
@@ -144,10 +145,16 @@ fn the_limits_file_judges_mag_at_every_level() {
             Some("release")
         );
     }
-    for level in ["avx512", "neon", "simd128"] {
+    for level in ["avx512", "neon"] {
         assert_eq!(limits["mag"][level]["status"].as_str(), Some("release"));
         assert_eq!(limits["mag_q15"][level]["status"].as_str(), Some("release"));
     }
+    // VOLK's wasm32 build has only its `generic` protokernels: information (D2768).
+    assert_eq!(limits["mag"]["simd128"]["status"].as_str(), Some("info"));
+    assert_eq!(
+        limits["mag_q15"]["simd128"]["status"].as_str(),
+        Some("info")
+    );
 }
 
 #[test]

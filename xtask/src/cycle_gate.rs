@@ -52,6 +52,7 @@ use std::path::{Path, PathBuf};
 use anyhow::{Context, anyhow, bail};
 use serde_json::Value;
 
+use crate::bench::{ComparisonKind, KERNELS, PLANS, comparisons};
 use crate::count::{Caps, Limits, Status};
 use crate::scan::Finding;
 
@@ -148,6 +149,11 @@ pub struct Record {
     pub file: PathBuf,
     /// The comparison.
     pub compared_with: String,
+    /// What the comparison is (`comparison_kind`, D2767; `None`: the record does not say).
+    pub comparison_kind: Option<ComparisonKind>,
+    /// At `avx2-runtime`: the comparison that the gate judges the record against, the library
+    /// of the `avx2` record, and its kind (`judged_against`, D2764, D2767).
+    pub judged_against: Option<(String, Option<ComparisonKind>)>,
     /// The reference model.
     pub reference: Model,
     /// The counter-model.
@@ -214,15 +220,38 @@ pub fn add_results(file: &Path, text: &str, into: &mut Results) -> anyhow::Resul
                     file.display()
                 );
             };
+            let kind = |v: &Value| -> anyhow::Result<Option<ComparisonKind>> {
+                match v.get("comparison_kind") {
+                    None => Ok(None),
+                    Some(k) => k
+                        .as_str()
+                        .and_then(ComparisonKind::parse)
+                        .map(Some)
+                        .ok_or_else(|| {
+                            anyhow!(
+                                "{}: `{entry}` at `{level}` has an unknown `comparison_kind` {k}",
+                                file.display()
+                            )
+                        }),
+                }
+            };
+            let text = |v: &Value| {
+                v.get("compared_with")
+                    .and_then(Value::as_str)
+                    .unwrap_or_default()
+                    .to_string()
+            };
+            let judged_against = match r.get("judged_against") {
+                Some(j) => Some((text(j), kind(j)?)),
+                None => None,
+            };
             records.insert(
                 entry.clone(),
                 Some(Record {
                     file: file.to_path_buf(),
-                    compared_with: r
-                        .get("compared_with")
-                        .and_then(Value::as_str)
-                        .unwrap_or_default()
-                        .to_string(),
+                    compared_with: text(r),
+                    comparison_kind: kind(r)?,
+                    judged_against,
                     reference,
                     counter,
                     snr: r.get("snr_db").and_then(|v| {
@@ -580,6 +609,23 @@ fn judge_accuracy(
     }
 }
 
+/// Why the judged comparison of `r` is not a foreign library (D32, D2764, D2767): it is our own
+/// code, or the record does not say what it is. `None` for a library.
+fn own_comparison(r: &Record) -> Option<String> {
+    match r.comparison_kind {
+        Some(ComparisonKind::Library) => None,
+        Some(kind) => Some(format!(
+            "the comparison `{}` is `{}`",
+            r.compared_with,
+            kind.name()
+        )),
+        None => Some(format!(
+            "the record does not say what its comparison `{}` is (no `comparison_kind`)",
+            r.compared_with
+        )),
+    }
+}
+
 /// Judges one simulated entry and level by its limit (`None`: not listed): the cycles against
 /// the cap of its status, the accuracy (D34) and an accuracy trade (D2760). At `avx2-runtime`
 /// `r` is the record against the library ([`against_library`]).
@@ -617,6 +663,11 @@ pub fn judge_record(
         Status::Dev => caps.dev,
     };
     let status = status_name(limit.status);
+    if let Some(why) = own_comparison(r) {
+        return Verdict::Fail(format!(
+            "{status} judged against our own code (D32, D2764): {why}; the entry is `info` (judged by its efficiency) until a foreign library is its comparison"
+        ));
+    }
     let worst = r.reference.ratio.max(r.counter.ratio);
     let against = format!("`{}`", r.compared_with);
     let (mut failing, mut waived, mut traded, mut notes) =
@@ -652,9 +703,13 @@ pub fn judge_record(
                 }
             }
             (None, None) => failing.push(text),
-            (None, Some(w)) => match valid_waiver(w, open_items) {
-                Ok(()) => waived.push(format!("{text} (waiver: {w})")),
-                Err(missing) => failing.push(format!(
+            (None, Some(w)) => match (
+                crate::count::waiver_above_cap(caps, limit.status, worst, w),
+                valid_waiver(w, open_items),
+            ) {
+                (Err(why), _) => failing.push(format!("{text}; {why} (waiver: {w})")),
+                (Ok(()), Ok(())) => waived.push(format!("{text} (waiver: {w})")),
+                (Ok(()), Err(missing)) => failing.push(format!(
                     "{text}; the waiver names open items that docs/open-items.md does not have: {missing}"
                 )),
             },
@@ -759,6 +814,8 @@ pub fn against_library(rt: &Record, avx2: &Record) -> Result<Record, String> {
     Ok(Record {
         file: rt.file.clone(),
         compared_with: avx2.compared_with.clone(),
+        comparison_kind: avx2.comparison_kind,
+        judged_against: None,
         reference: model(&rt.reference, &avx2.reference)?,
         counter: model(&rt.counter, &avx2.counter)?,
         snr: rt.snr.zip(avx2.snr).map(|(ours, lib)| Snr {
@@ -771,15 +828,18 @@ pub fn against_library(rt: &Record, avx2: &Record) -> Result<Record, String> {
 /// The record that the release gate judges for `entry` at `level`: `r` itself, or at
 /// `avx2-runtime` the record against the library of the `avx2` record (from `results`, else
 /// from `committed`), D2764. `Err` says why there is none; `None` for an `info` entry without
-/// one (it is not judged).
+/// one (it is not judged). A judged `avx2-runtime` entry needs a library at `avx2` and a judged
+/// status there (`info` at `avx2` is `info` at `avx2-runtime`, D2765), and its record must name
+/// that library in `judged_against` (D2767).
 fn judged_record(
     results: &Results,
     committed: Option<&Results>,
-    limit: Option<&crate::count::Limit>,
+    limits: &Limits,
     entry: &str,
     level: &str,
     r: &Record,
 ) -> Result<Option<Record>, String> {
+    let limit = limits.get(entry, level);
     // Not listed: `judge_record` reports the missing entry.
     let (true, Some(limit)) = (level == RUNTIME_LEVEL, limit) else {
         return Ok(Some(r.clone()));
@@ -798,10 +858,37 @@ fn judged_record(
             Ok(None)
         };
     };
-    if judged && avx2.compared_with == OWN_FALLBACK {
-        return Err(format!(
-            "the comparison at `{RUNTIME_LIBRARY_LEVEL}` is our own fallback, not a library: the entry is `info` at `{RUNTIME_LEVEL}` as at `{RUNTIME_LIBRARY_LEVEL}` (D2764)"
-        ));
+    if judged {
+        if let Some(why) = own_comparison(avx2) {
+            return Err(format!(
+                "{} judged against our own code (D32, D2764): at `{RUNTIME_LIBRARY_LEVEL}` {why}, not a library: the entry is `info` at `{RUNTIME_LEVEL}` as at `{RUNTIME_LIBRARY_LEVEL}`",
+                status_name(limit.status)
+            ));
+        }
+        let base = limits.get(entry, RUNTIME_LIBRARY_LEVEL).map(|l| l.status);
+        if !matches!(base, Some(Status::Release | Status::Dev)) {
+            return Err(format!(
+                "{} at `{RUNTIME_LEVEL}` but {} at `{RUNTIME_LIBRARY_LEVEL}`, whose comparison judges it: an entry that is not judged at `{RUNTIME_LIBRARY_LEVEL}` is `info` at `{RUNTIME_LEVEL}` too (D2765)",
+                status_name(limit.status),
+                base.map_or("not listed", |s| status_name(s))
+            ));
+        }
+        match &r.judged_against {
+            Some((name, Some(ComparisonKind::Library))) if *name == avx2.compared_with => {}
+            Some((name, kind)) => {
+                return Err(format!(
+                    "the record names `{name}` ({}) as the comparison it is judged against, the `{RUNTIME_LIBRARY_LEVEL}` record `{}`: measure it again (D2767)",
+                    kind.map_or("no `comparison_kind`", ComparisonKind::name),
+                    avx2.compared_with
+                ));
+            }
+            None => {
+                return Err(format!(
+                    "the record does not name the library it is judged against (`judged_against`, the `{RUNTIME_LIBRARY_LEVEL}` record `{}`), so it reads as a comparison with our own build (D2767)",
+                    avx2.compared_with
+                ));
+            }
+        }
     }
     against_library(r, avx2).map(Some)
 }
@@ -829,7 +916,7 @@ pub fn judge_release(
         for (entry, r) in rows {
             let Some(r) = r else { continue };
             let limit = limits.get(entry, level);
-            let (verdict, judged) = match judged_record(results, committed, limit, entry, level, r)
+            let (verdict, judged) = match judged_record(results, committed, limits, entry, level, r)
             {
                 Ok(Some(j)) => (judge_record(caps, limit, open_items, &j), Some(j)),
                 Ok(None) => (Verdict::Info, None),
@@ -837,7 +924,11 @@ pub fn judge_release(
             };
             if verdict != Verdict::Info {
                 out.judged += 1;
-                if judged.is_some_and(|j| j.reference.ratio.max(j.counter.ratio) <= caps.goal) {
+                // The goal is a figure against a library only (D2767).
+                if judged.is_some_and(|j| {
+                    own_comparison(&j).is_none()
+                        && j.reference.ratio.max(j.counter.ratio) <= caps.goal
+                }) {
                     out.goal += 1;
                 }
             }
@@ -894,6 +985,142 @@ pub fn judge_release(
                     "`{entry}` at `{level}` has an entry but no record in the cycle results; measure it (`cargo measure {entry} --merge`) or remove the entry"
                 ),
             }),
+        }
+    }
+    out
+}
+
+/// The static check of the measurement plan against `benches/limits.json`, independent of any
+/// results (D2767): for every level of [`PLANS`] and every entry of [`KERNELS`] measured there,
+/// a `release` or `dev` entry whose judged comparison ([`comparisons`]) is our own code (our
+/// fallback, our build of another level, our kernel) is a finding. A level with a baseline
+/// (`avx2-runtime`) is judged against the library of the baseline level's record (D2764): there
+/// the baseline level's judged comparison must be a library and the entry must be judged at
+/// the baseline level as well (an entry that is `info` at `avx2` is `info` at `avx2-runtime`,
+/// D2765).
+#[must_use]
+#[allow(
+    clippy::large_stack_frames,
+    reason = "the plan table and the findings are large; xtask is a host tool"
+)]
+pub fn check_comparisons(limits: &Limits) -> Vec<Finding> {
+    let path = PathBuf::from("benches/limits.json");
+    let mut out = Vec::new();
+    for plan in &PLANS {
+        for spec in KERNELS.iter().filter(|s| s.family.measured_at(plan)) {
+            let Some(limit) = limits.get(spec.name, plan.level) else {
+                continue;
+            };
+            if limit.status == Status::Info {
+                continue;
+            }
+            let status = status_name(limit.status);
+            let mut fail = |why: String| {
+                out.push(Finding {
+                    path: path.clone(),
+                    line: 0,
+                    message: format!(
+                        "`{}` at `{}` is `{status}` but {why}: a comparison of our code with our own code is information only and decides no status (D32, D2764, D2767); make the entry `info`",
+                        spec.name, plan.level
+                    ),
+                });
+            };
+            let Some(base) = plan.baseline else {
+                let (gate, _) = comparisons(plan, spec);
+                if gate.kind().is_own() {
+                    fail(format!(
+                        "its judged comparison is our own code (`{}`)",
+                        gate.kind().name()
+                    ));
+                }
+                continue;
+            };
+            let Some(base_plan) = PLANS
+                .iter()
+                .find(|p| p.platform == plan.platform && p.level == base)
+            else {
+                fail(format!("the platform has no baseline level `{base}`"));
+                continue;
+            };
+            let (lib, _) = comparisons(base_plan, spec);
+            let base_status = limits.get(spec.name, base).map(|l| l.status);
+            if lib.kind().is_own() {
+                fail(format!(
+                    "it is judged against the comparison of `{base}`, which is our own code (`{}`)",
+                    lib.kind().name()
+                ));
+            } else if !matches!(base_status, Some(Status::Release | Status::Dev)) {
+                fail(format!(
+                    "it is judged against the comparison of `{base}`, where the entry is {} (D2765)",
+                    base_status.map_or("not listed", status_name)
+                ));
+            }
+        }
+    }
+    out
+}
+
+/// The comparison kinds of the records of `results` against the measurement plan (D2767): every
+/// record of a level of [`PLANS`] must carry the `comparison_kind` of its judged comparison
+/// ([`comparisons`]), and a record of a level with a baseline the `judged_against` kind of the
+/// baseline level's comparison, so that no record claims a library where the plan compares with
+/// our own code (or the reverse). Levels and entries that the plan does not know are findings.
+#[must_use]
+pub fn check_record_kinds(results: &Results) -> Vec<Finding> {
+    let mut out = Vec::new();
+    for (level, rows) in results {
+        let Some(plan) = PLANS.iter().find(|p| p.level == level) else {
+            out.push(Finding {
+                path: PathBuf::from("benches/results/cycles"),
+                line: 0,
+                message: format!("the level `{level}` is not a level of the measurement plan"),
+            });
+            continue;
+        };
+        for (entry, r) in rows {
+            let Some(r) = r else { continue };
+            let mut fail = |message: String| {
+                out.push(Finding {
+                    path: r.file.clone(),
+                    line: 0,
+                    message: format!("`{entry}` at `{level}`: {message} (D2767)"),
+                });
+            };
+            let Some(spec) = KERNELS.iter().find(|s| s.name == entry) else {
+                fail("not an entry of the benchmark table".into());
+                continue;
+            };
+            let expected = comparisons(plan, spec).0.kind();
+            if r.comparison_kind != Some(expected) {
+                fail(format!(
+                    "`comparison_kind` is {}, the plan compares with `{}` (`{}`)",
+                    r.comparison_kind
+                        .map_or("missing".to_string(), |k| format!("`{}`", k.name())),
+                    r.compared_with,
+                    expected.name()
+                ));
+            }
+            let base = plan.baseline.and_then(|base| {
+                PLANS
+                    .iter()
+                    .find(|p| p.platform == plan.platform && p.level == base)
+            });
+            match (base, &r.judged_against) {
+                (None, None) => {}
+                (None, Some(_)) => {
+                    fail("`judged_against` on a level without a baseline".into());
+                }
+                (Some(b), j) => {
+                    let lib = comparisons(b, spec).0.kind();
+                    if j.as_ref().and_then(|j| j.1) != Some(lib) {
+                        fail(format!(
+                            "`judged_against` must name the comparison of `{}` (`{}`)",
+                            b.level,
+                            lib.name()
+                        ));
+                    }
+                }
+            }
         }
     }
     out
@@ -966,6 +1193,14 @@ pub fn check(root: &Path, o: &Options) -> anyhow::Result<Vec<Finding>> {
     let open_items = read("docs/open-items.md")?;
     let fallbacks = judge_fallbacks(&results, &limits_json, &open_items, o.partial)?;
     let limits = Limits::parse(&limits_json)?;
+    // No status decided by our own code, from the plan alone and from the records (D2767).
+    let plan_findings = check_comparisons(&limits);
+    let kind_findings = check_record_kinds(&results);
+    println!(
+        "check cycles: the judged comparison of every release and dev entry is a foreign library: {} findings; the comparison kinds of the records follow the plan: {} findings (D2767)",
+        plan_findings.len(),
+        kind_findings.len()
+    );
     // Other results (a measurement of a selection of levels) take the library's cycles of
     // `avx2-runtime` from the committed `avx2` records where they lack them (D2764).
     let committed = match &o.results {
@@ -1013,6 +1248,8 @@ pub fn check(root: &Path, o: &Options) -> anyhow::Result<Vec<Finding>> {
         println!("  warn: {w}");
     }
     let mut findings = fallbacks.findings;
+    findings.extend(plan_findings);
+    findings.extend(kind_findings);
     findings.extend(gate.findings);
     Ok(findings)
 }
@@ -1037,10 +1274,16 @@ mod tests {
                         "ratio": o / c,
                     })
                 };
+                let kind = match *comp {
+                    OWN_FALLBACK => "own_fallback",
+                    "ours at avx2" => "own_build",
+                    _ => "library",
+                };
                 (
                     (*name).to_string(),
                     serde_json::json!({
                         "compared_with": comp,
+                        "comparison_kind": kind,
                         "reference_model": m("skylake", *or, *cr),
                         "counter_model": m("znver2", *oc, *cc),
                         "snr_db": { "ours": 100.0, "comparison": 100.0 },
@@ -1227,20 +1470,26 @@ mod tests {
 
     #[test]
     fn a_waiver_covers_an_exceedance_only_with_existing_open_items() {
-        let slow = results(&[("k", 1.3, 1.0, 1.0, 1.0, "volk")], "sse2");
+        // A `dev` entry above the dev limit, awaiting the maintainer's decision (D2779).
+        let slow = results(&[("k", 1.6, 1.0, 1.0, 1.0, "volk")], "sse2");
         let w = |t: &str| {
             limits_with(&format!(
-                r#""k": {{"sse2": {{"status": "release", "waiver": "{t}"}}}}"#
+                r#""k": {{"sse2": {{"status": "dev", "waiver": "{t}, awaiting the maintainer's decision"}}}}"#
             ))
         };
         let g = gate(&slow, &w("slow loads, open item I30-9"));
-        assert_eq!((g.findings.len(), g.waived.len()), (0, 1));
+        assert_eq!(
+            (g.findings.len(), g.waived.len()),
+            (0, 1),
+            "{:?}",
+            g.findings
+        );
         let g = gate(&slow, &w("slow loads, open item I30-8"));
         assert_eq!(g.findings.len(), 1);
         assert!(g.findings[0].message.contains("I30-8"));
-        // A waiver that states its reason without an open item, as release-check accepts.
+        // A waiver without an open item keeps no entry above its cap.
         let g = gate(&slow, &w("the reference computes in f64"));
-        assert_eq!((g.findings.len(), g.waived.len()), (0, 1));
+        assert_eq!((g.findings.len(), g.waived.len()), (1, 0));
         // A waiver of an entry within its limit is reported, not failed.
         let fast = results(&[("k", 1.0, 1.0, 1.0, 1.0, "volk")], "sse2");
         let g = gate(&fast, &w("open item I30-9"));
@@ -1253,10 +1502,15 @@ mod tests {
     /// build at 0.90.
     fn run_time(ours: (f64, f64), avx2_comparison: &str) -> Results {
         let mut r = results(&[("k", 0.9, 1.0, 0.9, 1.0, avx2_comparison)], "avx2");
-        r.extend(results(
+        let mut rt = results(
             &[("k", ours.0, 0.9, ours.1, 0.9, "ours at avx2")],
             RUNTIME_LEVEL,
-        ));
+        );
+        if let Some(Some(k)) = rt.get_mut(RUNTIME_LEVEL).and_then(|rows| rows.get_mut("k")) {
+            let lib = r["avx2"]["k"].as_ref().unwrap();
+            k.judged_against = Some((lib.compared_with.clone(), lib.comparison_kind));
+        }
+        r.extend(rt);
         r
     }
 
@@ -1309,10 +1563,10 @@ mod tests {
     #[test]
     fn the_run_time_level_takes_the_accuracy_of_the_library_from_the_avx2_record() {
         let l = limits_with(
-            r#""k": {"avx2": {"status": "info"}, "avx2-runtime": {"status": "release"}}"#,
+            r#""k": {"avx2": {"status": "release"}, "avx2-runtime": {"status": "release"}}"#,
         );
         let r = |lib: f64| {
-            let r = with_snr(run_time((1.0, 1.0), "volk"), "avx2", "k", Some((90.0, lib)));
+            let r = with_snr(run_time((1.0, 1.0), "volk"), "avx2", "k", Some((lib, lib)));
             with_snr(r, RUNTIME_LEVEL, "k", Some((100.0, 100.0)))
         };
         // Ours 100 dB at the run-time level against 101 dB of the library passes, 101.5 fails
@@ -1323,7 +1577,7 @@ mod tests {
         assert!(g.findings[0].message.contains("101.5 dB"));
         // An accuracy trade holds at the run-time level as at every level.
         let trade = limits_with(
-            r#""k": {"avx2": {"status": "info"}, "avx2-runtime": {"status": "release", "accuracy_trade": "exact against 82.6 dB"}}"#,
+            r#""k": {"avx2": {"status": "release"}, "avx2-runtime": {"status": "release", "accuracy_trade": "exact against 82.6 dB"}}"#,
         );
         let r = with_snr(
             with_snr(
@@ -1359,7 +1613,9 @@ mod tests {
             assert!(
                 g.findings[0]
                     .message
-                    .contains("our own fallback, not a library")
+                    .contains("judged against our own code"),
+                "{}",
+                g.findings[0].message
             );
         }
         let g = gate(&r, &rt("info"));
@@ -1368,7 +1624,9 @@ mod tests {
 
     #[test]
     fn the_run_time_level_takes_the_avx2_record_from_the_committed_results() {
-        let l = limits_with(r#""k": {"avx2-runtime": {"status": "release"}}"#);
+        let l = limits_with(
+            r#""k": {"avx2": {"status": "release"}, "avx2-runtime": {"status": "release"}}"#,
+        );
         let both = run_time((1.0, 1.0), "volk");
         let mut alone = both.clone();
         alone.remove("avx2");
@@ -1596,6 +1854,223 @@ mod tests {
             g.findings
                 .iter()
                 .any(|f| f.message.contains("below the comparison"))
+        );
+    }
+
+    #[test]
+    fn release_and_dev_against_our_own_fallback_fail_at_every_level() {
+        for level in ["sse2", "sse4.2", "avx2", "avx512", "neon"] {
+            for status in ["release", "dev"] {
+                let l = limits_with(&format!(r#""k": {{"{level}": {{"status": "{status}"}}}}"#));
+                // Ours at 1.00 of our own fallback (a delegated level) would pass any cap.
+                let r = results(&[("k", 1.0, 1.0, 1.0, 1.0, OWN_FALLBACK)], level);
+                let g = gate(&r, &l);
+                assert_eq!(g.findings.len(), 1, "{level} {status}");
+                let m = &g.findings[0].message;
+                assert!(
+                    m.contains("judged against our own code") && m.contains("own_fallback"),
+                    "{m}"
+                );
+                assert_eq!(g.goal, 0, "no goal against our own code");
+                // `info` against our own fallback is information.
+                let info = limits_with(&format!(r#""k": {{"{level}": {{"status": "info"}}}}"#));
+                assert_eq!(gate(&r, &info).findings.len(), 0);
+            }
+        }
+        // A record that does not say what its comparison is fails as well.
+        let mut r = results(&[("k", 1.0, 1.0, 1.0, 1.0, "volk")], "sse2");
+        if let Some(Some(k)) = r.get_mut("sse2").and_then(|rows| rows.get_mut("k")) {
+            k.comparison_kind = None;
+        }
+        let g = gate(&r, &limits_with(r#""k": {"sse2": {"status": "release"}}"#));
+        assert!(g.findings[0].message.contains("no `comparison_kind`"));
+    }
+
+    #[test]
+    fn the_run_time_level_against_our_avx2_build_fails() {
+        let l = limits_with(
+            r#""k": {"avx2": {"status": "release"}, "avx2-runtime": {"status": "release"}}"#,
+        );
+        // The record itself compares with our own build: judged directly it fails.
+        let r = run_time((1.0, 1.0), "volk");
+        let rt = r[RUNTIME_LEVEL]["k"].as_ref().unwrap();
+        let limits = Limits::parse(&l).unwrap();
+        assert!(matches!(
+            judge_record(&limits.caps, limits.get("k", RUNTIME_LEVEL), OPEN, rt),
+            Verdict::Fail(t) if t.contains("judged against our own code") && t.contains("own_build")
+        ));
+        // Without `judged_against`, or naming another comparison than the avx2 record, it fails.
+        let mut without = r.clone();
+        if let Some(Some(k)) = without
+            .get_mut(RUNTIME_LEVEL)
+            .and_then(|rows| rows.get_mut("k"))
+        {
+            k.judged_against = None;
+        }
+        assert!(
+            gate(&without, &l).findings[0]
+                .message
+                .contains("does not name the library")
+        );
+        let mut stale = r.clone();
+        if let Some(Some(k)) = stale
+            .get_mut(RUNTIME_LEVEL)
+            .and_then(|rows| rows.get_mut("k"))
+        {
+            k.judged_against = Some(("ours at avx2".into(), Some(ComparisonKind::OwnBuild)));
+        }
+        assert!(
+            gate(&stale, &l).findings[0]
+                .message
+                .contains("measure it again")
+        );
+        // `info` at avx2 (whatever the comparison) makes a judged avx2-runtime entry fail (D2765).
+        for avx2 in ["info", "missing"] {
+            let text = if avx2 == "missing" {
+                limits_with(r#""k": {"avx2-runtime": {"status": "release"}}"#)
+            } else {
+                limits_with(
+                    r#""k": {"avx2": {"status": "info"}, "avx2-runtime": {"status": "release"}}"#,
+                )
+            };
+            let g = gate(&r, &text);
+            assert!(
+                g.findings
+                    .iter()
+                    .any(|f| f.message.contains("is `info` at `avx2-runtime` too")),
+                "{avx2}: {:?}",
+                g.findings
+            );
+        }
+    }
+
+    #[test]
+    fn a_waiver_keeps_no_release_entry_above_the_release_limit() {
+        let open = "| M1 | I1-1: slow | why | what |\n";
+        let r = results(&[("k", 1.2, 1.0, 1.0, 1.0, "volk")], "sse2");
+        let release =
+            limits_with(r#""k": {"sse2": {"status": "release", "waiver": "open item I1-1"}}"#);
+        let g = judge_release(&r, None, &Limits::parse(&release).unwrap(), open, false);
+        assert!(
+            g.findings[0]
+                .message
+                .contains("a waiver cannot keep a `release` entry")
+        );
+        let dev = limits_with(r#""k": {"sse2": {"status": "dev", "waiver": "open item I1-1"}}"#);
+        let g = judge_release(&r, None, &Limits::parse(&dev).unwrap(), open, false);
+        assert_eq!(g.findings.len(), 0, "{:?}", g.findings);
+        // Above the dev limit only while awaiting the maintainer's decision.
+        let r = results(&[("k", 1.6, 1.0, 1.0, 1.0, "volk")], "sse2");
+        let g = judge_release(&r, None, &Limits::parse(&dev).unwrap(), open, false);
+        assert_eq!(g.findings.len(), 1);
+        let awaiting = limits_with(
+            r#""k": {"sse2": {"status": "dev", "waiver": "open item I1-1: awaiting the maintainer's decision"}}"#,
+        );
+        let g = judge_release(&r, None, &Limits::parse(&awaiting).unwrap(), open, false);
+        assert_eq!(
+            (g.findings.len(), g.waived.len()),
+            (0, 1),
+            "{:?}",
+            g.findings
+        );
+    }
+
+    /// The entry of the table at `level`, with its judged comparison.
+    fn plan_entry(
+        level: &str,
+        pick: impl Fn(&crate::bench::KernelSpec, crate::bench::Reference) -> bool,
+    ) -> &'static str {
+        let plan = PLANS.iter().find(|p| p.level == level).unwrap();
+        KERNELS
+            .iter()
+            .find(|s| s.family.measured_at(plan) && pick(s, comparisons(plan, s).0))
+            .unwrap()
+            .name
+    }
+
+    #[test]
+    fn the_static_check_finds_a_status_judged_against_our_own_code() {
+        let root = Path::new(env!("CARGO_MANIFEST_DIR")).parent().unwrap();
+        let real = std::fs::read_to_string(root.join("benches/limits.json")).unwrap();
+        assert_eq!(
+            check_comparisons(&Limits::parse(&real).unwrap()),
+            Vec::new()
+        );
+        // An entry whose judged comparison is our own fallback, release at sse2 and dev at simd128.
+        let own = plan_entry("sse2", |_, r| r.kind() == ComparisonKind::OwnFallback);
+        let own_wasm = plan_entry("simd128", |_, r| r.kind() == ComparisonKind::OwnFallback);
+        let lib = plan_entry("avx2", |s, r| {
+            r.kind() == ComparisonKind::Library && s.family.measured_at(&PLANS[3])
+        });
+        let own_avx2 = plan_entry("avx2", |s, r| {
+            r.kind() == ComparisonKind::OwnFallback && s.family.measured_at(&PLANS[3])
+        });
+        let mut doc = serde_json::Map::new();
+        for (entry, level, status) in [
+            (own, "sse2", "release"),
+            (own_wasm, "simd128", "dev"),
+            (lib, "avx2", "info"),
+            (lib, "avx2-runtime", "release"),
+            (own_avx2, "avx2", "info"),
+            (own_avx2, "avx2-runtime", "dev"),
+        ] {
+            doc.entry(entry)
+                .or_insert_with(|| serde_json::json!({}))
+                .as_object_mut()
+                .unwrap()
+                .insert(level.into(), serde_json::json!({ "status": status }));
+        }
+        let text = Value::Object(doc).to_string();
+        let f = check_comparisons(&Limits::parse(&text).unwrap());
+        let messages: Vec<&str> = f.iter().map(|f| f.message.as_str()).collect();
+        assert_eq!(f.len(), 4, "{messages:#?}");
+        assert!(
+            messages[..]
+                .iter()
+                .any(|m| m.contains(&format!("`{own}` at `sse2` is `release`"))
+                    && m.contains("own_fallback"))
+        );
+        assert!(
+            messages
+                .iter()
+                .any(|m| m.contains(&format!("`{own_wasm}` at `simd128` is `dev`")))
+        );
+        assert!(
+            messages
+                .iter()
+                .any(|m| m.contains(&format!("`{lib}` at `avx2-runtime`"))
+                    && m.contains("where the entry is info"))
+        );
+        assert!(
+            messages
+                .iter()
+                .any(|m| m.contains(&format!("`{own_avx2}` at `avx2-runtime`"))
+                    && m.contains("our own code"))
+        );
+        // The same entries as `info` pass.
+        let info = text
+            .replace("\"release\"", "\"info\"")
+            .replace("\"dev\"", "\"info\"");
+        assert_eq!(
+            check_comparisons(&Limits::parse(&info).unwrap()),
+            Vec::new()
+        );
+    }
+
+    #[test]
+    fn the_comparison_kinds_of_the_records_follow_the_plan() {
+        let root = Path::new(env!("CARGO_MANIFEST_DIR")).parent().unwrap();
+        let committed = load(&crate::cycle_results::dir(root)).unwrap();
+        assert_eq!(check_record_kinds(&committed), Vec::new());
+        // A record that claims a library where the plan compares with our own fallback.
+        let own = plan_entry("sse2", |_, r| r.kind() == ComparisonKind::OwnFallback);
+        let r = results(&[(own, 1.0, 1.0, 1.0, 1.0, "a library")], "sse2");
+        let f = check_record_kinds(&r);
+        assert_eq!(f.len(), 1);
+        assert!(
+            f[0].message.contains("`library`") && f[0].message.contains("own_fallback"),
+            "{}",
+            f[0].message
         );
     }
 

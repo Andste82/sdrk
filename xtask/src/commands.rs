@@ -9,7 +9,7 @@ use anyhow::{Context, bail};
 use crate::layers;
 use crate::scan::Finding;
 
-const USAGE: &str = "usage: cargo xtask <check [layers|heap|global-state|names|cycles [--results DIR] [--partial]|docs] | bare-metal | schema [--check] | release-check <version> | test-all | emu [options] | count --platform <p> | measure <kernel> [options] | results <merge|compare|repro> ... | sde-cpuid <sse2|sse4.2> <file> | wasm-pkg [--relaxed] | wasm-test [--env e] [--variant v]>";
+const USAGE: &str = "usage: cargo xtask <check [layers|heap|global-state|names|cycles [--results DIR] [--partial]|counts|own-code|docs] | bare-metal | schema [--check] | release-check <version> | test-all | emu [options] | count --platform <p> | measure <kernel> [options] | results <merge|compare|repro> ... | sde-cpuid <sse2|sse4.2> <file> | wasm-pkg [--relaxed] | wasm-test [--env e] [--variant v]>";
 
 /// The bare-metal target used to prove that heap-free crates need no allocator.
 pub const BARE_METAL_TARGET: &str = "thumbv7em-none-eabihf";
@@ -34,6 +34,8 @@ pub fn run(root: &Path, args: &[String]) -> anyhow::Result<bool> {
             &crate::cycle_gate::check(root, &crate::cycle_gate::Options::parse(rest)?)?,
         )),
         ["check", "docs"] => check_docs(root),
+        ["check", "own-code"] => Ok(print_findings("own-code", &crate::own_code::check(root)?)),
+        ["check", "counts"] => Ok(print_findings("counts", &crate::count::check_counts(root)?)),
         ["bare-metal"] => bare_metal(root),
         ["schema"] => schema(root, false),
         ["schema", "--check"] => schema(root, true),
@@ -73,6 +75,8 @@ fn check_all(root: &Path) -> anyhow::Result<bool> {
         "cycles",
         &crate::cycle_gate::check(root, &crate::cycle_gate::Options::default())?,
     );
+    ok &= print_findings("counts", &crate::count::check_counts(root)?);
+    ok &= print_findings("own-code", &crate::own_code::check(root)?);
     ok &= check_docs(root)?;
     Ok(ok)
 }

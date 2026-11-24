@@ -1306,7 +1306,7 @@ impl SimdLevel {
 }
 
 /// The entries whose measured side runs no SIMD code at any level: the protocol entries of
-/// `sdrk-proto` (no backends, [`proto`]) that a scalar library judges, and `squelch` `C32`
+/// `sdrk-proto` (no backends, `proto` of the kernel table) that a scalar library judges, and `squelch` `C32`
 /// (the SIMD backend has no squelch; ours runs the fallback at every level). A scalar library
 /// is like with like for them (D2782). `the_scalar_entries_have_no_simd_backend` keeps the list
 /// true.
@@ -1340,7 +1340,7 @@ pub fn measured_level(plan: &LevelPlan, spec: &KernelSpec) -> SimdLevel {
 /// runs the library's SIMD code of that level (FFTW's codelets up to the level, VOLK's machine
 /// of the level, liquid-dsp's dot product of the level, KFR's architecture of the level,
 /// rustfft's planner of the CPU, Ne10's NEON transform), `scalar` where it runs portable C
-/// (CMSIS-DSP's generic C, the GNU Radio loops, KissFFT, VOLK's `generic` protokernels,
+/// (CMSIS-DSP's generic C, the GNU Radio loops, `KissFFT`, VOLK's `generic` protokernels,
 /// liquid-dsp's portable dot product and its own FFT, libairspy's int16 converter,
 /// `rand_distr`). `None` for our own code.
 #[must_use]

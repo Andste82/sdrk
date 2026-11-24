@@ -70,6 +70,21 @@ pub(crate) fn integrate(t: f32, limit: f32) -> f32 {
     }
 }
 
+/// The limit of the PSK detectors, `e.clamp(-1, 1)` for a finite `e` (D2554): within the
+/// limit (a running loop, and every `-0.0`) it is `e` after one well-predicted branch, so the
+/// limit stays off the chain from symbol to symbol; beyond it the sign of `e` with magnitude 1,
+/// out of line.
+#[inline]
+fn limit_error(e: f32) -> f32 {
+    if libm::fabsf(e) <= 1.0 { e } else { limit_cold(e) }
+}
+
+#[cold]
+#[inline(never)]
+fn limit_cold(e: f32) -> f32 {
+    libm::copysignf(1.0, e)
+}
+
 /// `sign(x) * y` of the order-4 detector without the multiplication on the chain: `1 y` is `y`
 /// and `-1 y` is `-y`, the sign of `y` turned by the sign bit of `x`; `0 y` (zero and NaN `x`)
 /// is computed as `0.0 * y` beside it; one comparison `|x| > 0` selects (D1100).
@@ -220,6 +235,7 @@ fn run<const CODE: u8>(s: &mut CostasState, input: &[C32], output: &mut [C32]) -
         } else {
             detector(CODE, y)
         };
+        let e = if CODE >= QAM16 { e } else { limit_error(e) };
         freq = integrate(freq + ki * e, max);
         phase = phase.wrapping_add(phase_step_f32(freq + kp * e));
         if let Some(m) = lock_metric(CODE, y) {
@@ -277,7 +293,7 @@ mod tests {
 
     use super::{
         TURN, atan2f_inline, clamp_f32, detector_qam, detector4, flush_clamp, integrate,
-        phase_step_f32,
+        limit_error, phase_step_f32,
     };
     use crate::fallback::modulate::phase_step;
     use crate::kernels::costas::{QAM16, QAM64, QAM256, QAM1024, QPSK, detector};
@@ -459,6 +475,24 @@ mod tests {
                     "{re:e} {im:e}: {got:e} against {want:e}"
                 );
             }
+        }
+    }
+
+    #[test]
+    fn limit_of_the_detector_equals_the_clamp() {
+        // Every finite value the detectors give: the specials and random bit patterns.
+        let mut s = specials();
+        let mut seed = 0x9E37_79B9_7F4A_7C15u64;
+        for _ in 0..2000 {
+            seed ^= seed << 13;
+            seed ^= seed >> 7;
+            seed ^= seed << 17;
+            s.push(f32::from_bits(seed as u32));
+        }
+        s.extend([1.0, -1.0, 1.0 + f32::EPSILON, -1.0 - f32::EPSILON, 0.0, -0.0]);
+        for &e in s.iter().filter(|v| v.is_finite()) {
+            let (got, want) = (limit_error(e), e.clamp(-1.0, 1.0));
+            assert_eq!(got.to_bits(), want.to_bits(), "{e:e}");
         }
     }
 }

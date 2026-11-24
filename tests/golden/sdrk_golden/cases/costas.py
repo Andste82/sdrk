@@ -170,6 +170,12 @@ def costas_f32(x, order, kp64, ki64, max64):
             e = atan2f(fm.sub(fm.mul(yi, dr), fm.mul(yr, di)), r)
         if not fm.is_finite(e):
             e = ZERO
+        if order in (2, 4, 8):
+            # The PSK detectors are limited to [-1, 1] (D2554).
+            if e > ONE:
+                e = ONE
+            elif e < -ONE:
+                e = -ONE
         freq = fm.flush_denormal(fm.add(freq, fm.mul(ki, e)))
         if freq > mx:
             freq = mx
@@ -231,6 +237,8 @@ def costas_f64(x, order, kp, ki, mx):
         else:
             dr, di = qam_decide_f64(order, yr), qam_decide_f64(order, yi)
             e = math.atan2(yi * dr - yr * di, yr * dr + yi * di)
+        if order in (2, 4, 8):
+            e = min(max(e, -1.0), 1.0)
         freq = min(max(freq + ki * e, -mx), mx)
         phase = (phase + int(math.floor((freq + kp * e) * 4294967296.0 + 0.5))) & MASK
     return out

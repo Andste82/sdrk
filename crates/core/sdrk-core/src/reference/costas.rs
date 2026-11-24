@@ -144,6 +144,13 @@ fn phase_error(c: CostasConstellation, y: C32) -> f32 {
     if e.is_finite() { e } else { 0.0 }
 }
 
+/// The PSK detectors are limited to `[-1, 1]` before the loop filter (D2554, the
+/// `branchless_clip(error, 1.0)` of GNU Radio's `costas_loop_cc`); the QAM detector, an angle in
+/// radians, is not.
+fn limit_error(c: CostasConstellation, e: f32) -> f32 {
+    if c.qam().is_some() { e } else { e.clamp(-1.0, 1.0) }
+}
+
 fn metric(c: CostasConstellation, y: C32) -> f32 {
     let re2 = y.re * y.re;
     let im2 = y.im * y.im;
@@ -212,6 +219,7 @@ impl Costas for Reference {
             let y = rotate_back(x, c, sn);
             *o = y;
             let e = phase_error(s.constellation, y);
+            let e = limit_error(s.constellation, e);
             let integrated = flush_denormal(s.freq + s.ki * e);
             s.freq = integrated.clamp(-s.max, s.max);
             let step = s.kp * e;

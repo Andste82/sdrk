@@ -148,7 +148,11 @@ fn phase_error(c: CostasConstellation, y: C32) -> f32 {
 /// `branchless_clip(error, 1.0)` of GNU Radio's `costas_loop_cc`); the QAM detector, an angle in
 /// radians, is not.
 fn limit_error(c: CostasConstellation, e: f32) -> f32 {
-    if c.qam().is_some() { e } else { e.clamp(-1.0, 1.0) }
+    if c.qam().is_some() {
+        e
+    } else {
+        e.clamp(-1.0, 1.0)
+    }
 }
 
 fn metric(c: CostasConstellation, y: C32) -> f32 {

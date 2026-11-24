@@ -2,7 +2,7 @@
 
 **Software-defined radio building blocks in Rust: fast, exact, and the same everywhere — from a microcontroller to the browser.**
 
-SDRk (pronounced like the German word *stark*, "strong") is a library of signal-processing kernels and blocks for receiving and transmitting radio signals: mixers, filters, resamplers, synchronizers and complete modulators and demodulators. You wire them together as a JSON flow or directly in Rust, push in samples from a file, an SDR dongle or a WebSocket, and read out audio, spectra, bits or decoded packets.
+SDRk (pronounced like the German word *stark* [ʃtaʁk], "strong") is a library of signal-processing kernels and blocks for receiving and transmitting radio signals: mixers, filters, resamplers, synchronizers and complete modulators and demodulators. You wire them together as a JSON flow or directly in Rust, push in samples from a file, an SDR dongle or a WebSocket, and read out audio, spectra, bits or decoded packets.
 
 ```text
   IQ samples ──► ddc ──► fm_demod ──► audio

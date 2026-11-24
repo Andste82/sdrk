@@ -1,5 +1,5 @@
 {
-  "_comment": "Release state per kernel and level (decision D14, judged in simulated cycles per sample since M13.1, D2708). On every level with a core model (`sse2`, `sse4.2`, `avx2`, `avx2-runtime`, `avx512`, `neon`) `cargo xtask check cycles` judges the committed results benches/results/cycles: `release` entries must stay within `_limits.release` times the cycles per sample of the comparison on both the reference model and the counter-model of the level, `dev` entries within `_limits.dev`; a ratio above `_limits.warn` and a `dev` entry within it (ready for `release`) are reported, and `_limits.goal` is reported per entry. At `simd128` (no core model) `cargo xtask count --platform wasm32` judges the instructions per sample the same way. `info` entries are reported and never judged; their `waiver` text says why the comparison is not fair. A `waiver` on a `release` or `dev` entry names the open item in docs/open-items.md that tracks a limit that is not met yet; it never hides the numbers. The level `avx2-runtime` is judged like every level against the reference library and needs its own entries (the maintainer's decision D2764): the gate takes the library's cycles and SNR from the `avx2` record of the entry (the same workload on the same models); an entry whose `avx2` comparison is our own fallback is `info`, as at `avx2`. The ratio of the run-time-detection build to our own fixed `avx2` build is information, never a status. D321 is a check, never a status; a `cycle_waiver` on a SIMD entry and level exempts it from that check (`cargo xtask check cycles`: the entry must not be slower than its `_fallback` entry on the reference model or the counter-model); its text gives the reason and names the open item in docs/open-items.md, and the check fails on a waiver whose gap is closed. Every entry was re-judged in cycles once with the full measurement of the CI measurement job (D2745, D2746): an entry over its cap went from `release` to `dev` only with an open item that names its numbers (I13.1-7, I13.1-8, I24-3; `avx2-runtime` re-judged against the library by D2765), never with a relaxed limit, and a `dev` entry within the release limit became `release`. Every judged record carries the SNR of ours and of the comparison against the f64 reference (`snr_db`, D2749): ours more than 1 dB below the comparison fails unless an `accuracy_waiver` gives the reason or the open item (D34). An `accuracy_trade` keeps a `release` entry above `_limits.release` at `release` while ours is at least 3 dB more accurate than the comparison, the comparison is below 100 dB (where accuracy is scarce; above it a few dB more have no practical effect) and ours is at most 1.20 times the comparison on both models (the maintainer's decision D2760: 3 dB better must not mean that we may be slow); its text names both SNR figures and the ratios. See docs/performance.md.",
+  "_comment": "Release state per kernel and level (decision D14, judged in simulated cycles per sample since M13.1, D2708). On every level with a core model (`sse2`, `sse4.2`, `avx2`, `avx2-runtime`, `avx512`, `neon`) `cargo xtask check cycles` judges the committed results benches/results/cycles: `release` entries must stay within `_limits.release` times the cycles per sample of the comparison on both the reference model and the counter-model of the level, `dev` entries within `_limits.dev`; a ratio above `_limits.warn` and a `dev` entry within it (ready for `release`) are reported, and `_limits.goal` is reported per entry against a library only. At `simd128` (no core model) `cargo xtask count --platform wasm32` judges the instructions per sample the same way. `info` entries are reported and never judged; their `waiver` text says why the comparison is not fair. A `waiver` on a `release` or `dev` entry names the open item in docs/open-items.md that tracks a limit that is not met yet; it never hides the numbers. The level `avx2-runtime` is judged like every level against the reference library and needs its own entries (the maintainer's decision D2764): the gate takes the library's cycles and SNR from the `avx2` record of the entry (the same workload on the same models); an entry whose `avx2` comparison is our own fallback, or that is `info` at `avx2`, is `info` (D2765). The ratio of the run-time-detection build to our own fixed `avx2` build is information, never a status. D321 is a check, never a status; a `cycle_waiver` on a SIMD entry and level exempts it from that check (`cargo xtask check cycles`: the entry must not be slower than its `_fallback` entry on the reference model or the counter-model); its text gives the reason and names the open item in docs/open-items.md, and the check fails on a waiver whose gap is closed. Every entry was re-judged in cycles once with the full measurement of the CI measurement job (D2745, D2746): an entry over its cap went from `release` to `dev` only with an open item that names its numbers (I13.1-7, I13.1-8, I24-3; `avx2-runtime` re-judged against the library by D2765), never with a relaxed limit, and a `dev` entry within the release limit became `release`. Every judged record carries the SNR of ours and of the comparison against the f64 reference (`snr_db`, D2749): ours more than 1 dB below the comparison fails unless an `accuracy_waiver` gives the reason or the open item (D34). An `accuracy_trade` keeps a `release` entry above `_limits.release` at `release` while ours is at least 3 dB more accurate than the comparison, the comparison is below 100 dB (where accuracy is scarce; above it a few dB more have no practical effect) and ours is at most 1.20 times the comparison on both models (the maintainer's decision D2760: 3 dB better must not mean that we may be slow); its text names both SNR figures and the ratios. No status is ever decided by a comparison of our code with our own code (our fallback, our build of another level, our kernel): a `release` or `dev` entry whose judged comparison is not a library fails `cargo xtask check`, from the plan and from the `comparison_kind` of the records (D2767). A plain `waiver` keeps no `release` entry above `_limits.release` and a `dev` entry above `_limits.dev` only while it names its open item and says \"awaiting the maintainer's decision\" (D2779). See docs/performance.md.",
   "_limits": {
     "release": 1.1,
     "dev": 1.5,
@@ -26,7 +26,8 @@
       "status": "release"
     },
     "simd128": {
-      "status": "release"
+      "status": "info",
+      "waiver": "VOLK's wasm32 build holds only its portable `generic` protokernels (D12), compiled with `-msimd128`: no SIMD reference of the level (D32), so the comparison is information and the entry is judged by its efficiency, as `channelize` and `xcorr_fft` at this level (the maintainer's decision D2623; the maintainer's measurement order of 2026-11-24, D2768)"
     }
   },
   "convert_cs16": {
@@ -49,7 +50,8 @@
       "status": "release"
     },
     "simd128": {
-      "status": "release"
+      "status": "info",
+      "waiver": "VOLK's wasm32 build holds only its portable `generic` protokernels (D12), compiled with `-msimd128`: no SIMD reference of the level (D32), so the comparison is information and the entry is judged by its efficiency, as `channelize` and `xcorr_fft` at this level (the maintainer's decision D2623; the maintainer's measurement order of 2026-11-24, D2768)"
     }
   },
   "convert_cu8": {
@@ -72,7 +74,8 @@
       "status": "release"
     },
     "simd128": {
-      "status": "release"
+      "status": "info",
+      "waiver": "VOLK's wasm32 build holds only its portable `generic` protokernels (D12), compiled with `-msimd128`: no SIMD reference of the level (D32), so the comparison is information and the entry is judged by its efficiency, as `channelize` and `xcorr_fft` at this level (the maintainer's decision D2623; the maintainer's measurement order of 2026-11-24, D2768)"
     }
   },
   "convert_real_rs16": {
@@ -95,7 +98,8 @@
       "status": "release"
     },
     "simd128": {
-      "status": "release"
+      "status": "info",
+      "waiver": "VOLK's wasm32 build holds only its portable `generic` protokernels (D12), compiled with `-msimd128`: no SIMD reference of the level (D32), so the comparison is information and the entry is judged by its efficiency, as `channelize` and `xcorr_fft` at this level (the maintainer's decision D2623; the maintainer's measurement order of 2026-11-24, D2768)"
     }
   },
   "convert_cq15_cs8": {
@@ -115,7 +119,8 @@
       "status": "release"
     },
     "simd128": {
-      "status": "release"
+      "status": "info",
+      "waiver": "VOLK's wasm32 build holds only its portable `generic` protokernels (D12), compiled with `-msimd128`: no SIMD reference of the level (D32), so the comparison is information and the entry is judged by its efficiency, as `channelize` and `xcorr_fft` at this level (the maintainer's decision D2623; the maintainer's measurement order of 2026-11-24, D2768)"
     },
     "avx2-runtime": {
       "status": "release"
@@ -138,7 +143,8 @@
       "status": "release"
     },
     "simd128": {
-      "status": "release"
+      "status": "info",
+      "waiver": "VOLK's wasm32 build holds only its portable `generic` protokernels (D12), compiled with `-msimd128`: no SIMD reference of the level (D32), so the comparison is information and the entry is judged by its efficiency, as `channelize` and `xcorr_fft` at this level (the maintainer's decision D2623; the maintainer's measurement order of 2026-11-24, D2768)"
     },
     "avx2-runtime": {
       "status": "release"
@@ -164,7 +170,8 @@
       "status": "release"
     },
     "simd128": {
-      "status": "release"
+      "status": "info",
+      "waiver": "VOLK's wasm32 build holds only its portable `generic` protokernels (D12), compiled with `-msimd128`: no SIMD reference of the level (D32), so the comparison is information and the entry is judged by its efficiency, as `channelize` and `xcorr_fft` at this level (the maintainer's decision D2623; the maintainer's measurement order of 2026-11-24, D2768)"
     }
   },
   "convert_out_cs8": {
@@ -187,7 +194,8 @@
       "status": "release"
     },
     "simd128": {
-      "status": "release"
+      "status": "info",
+      "waiver": "VOLK's wasm32 build holds only its portable `generic` protokernels (D12), compiled with `-msimd128`: no SIMD reference of the level (D32), so the comparison is information and the entry is judged by its efficiency, as `channelize` and `xcorr_fft` at this level (the maintainer's decision D2623; the maintainer's measurement order of 2026-11-24, D2768)"
     }
   },
   "convert_out_cu8": {
@@ -210,7 +218,8 @@
       "status": "release"
     },
     "simd128": {
-      "status": "release"
+      "status": "info",
+      "waiver": "VOLK's wasm32 build holds only its portable `generic` protokernels (D12), compiled with `-msimd128`: no SIMD reference of the level (D32), so the comparison is information and the entry is judged by its efficiency, as `channelize` and `xcorr_fft` at this level (the maintainer's decision D2623; the maintainer's measurement order of 2026-11-24, D2768)"
     }
   },
   "convert_out_real_rs16": {
@@ -233,7 +242,8 @@
       "status": "release"
     },
     "simd128": {
-      "status": "release"
+      "status": "info",
+      "waiver": "VOLK's wasm32 build holds only its portable `generic` protokernels (D12), compiled with `-msimd128`: no SIMD reference of the level (D32), so the comparison is information and the entry is judged by its efficiency, as `channelize` and `xcorr_fft` at this level (the maintainer's decision D2623; the maintainer's measurement order of 2026-11-24, D2768)"
     }
   },
   "convert_out_real_rs8": {
@@ -256,7 +266,8 @@
       "status": "release"
     },
     "simd128": {
-      "status": "release"
+      "status": "info",
+      "waiver": "VOLK's wasm32 build holds only its portable `generic` protokernels (D12), compiled with `-msimd128`: no SIMD reference of the level (D32), so the comparison is information and the entry is judged by its efficiency, as `channelize` and `xcorr_fft` at this level (the maintainer's decision D2623; the maintainer's measurement order of 2026-11-24, D2768)"
     }
   },
   "convert_out_real_ru8": {
@@ -279,7 +290,8 @@
       "status": "dev"
     },
     "simd128": {
-      "status": "release"
+      "status": "info",
+      "waiver": "VOLK's wasm32 build holds only its portable `generic` protokernels (D12), compiled with `-msimd128`: no SIMD reference of the level (D32), so the comparison is information and the entry is judged by its efficiency, as `channelize` and `xcorr_fft` at this level (the maintainer's decision D2623; the maintainer's measurement order of 2026-11-24, D2768)"
     }
   },
   "rotate": {
@@ -746,7 +758,8 @@
       "status": "release"
     },
     "simd128": {
-      "status": "release"
+      "status": "info",
+      "waiver": "VOLK's wasm32 build holds only its portable `generic` protokernels (D12), compiled with `-msimd128`: no SIMD reference of the level (D32), so the comparison is information and the entry is judged by its efficiency, as `channelize` and `xcorr_fft` at this level (the maintainer's decision D2623; the maintainer's measurement order of 2026-11-24, D2768)"
     }
   },
   "mag_sq_q15": {
@@ -1285,71 +1298,92 @@
   },
   "fft_cq15_1024": {
     "sse2": {
-      "status": "release"
+      "status": "info",
+      "waiver": "KissFFT (`FIXED_POINT=16`) is scalar C, while ours runs the SIMD path of the level: no like-with-like comparison of the level (D32), so the comparison is information and the entry is judged by its efficiency, as `fm_mod` against GNU Radio's scalar loop (D58) (the maintainer's measurement order of 2026-11-24, D2769)"
     },
     "sse4.2": {
-      "status": "release"
+      "status": "info",
+      "waiver": "KissFFT (`FIXED_POINT=16`) is scalar C, while ours runs the SIMD path of the level: no like-with-like comparison of the level (D32), so the comparison is information and the entry is judged by its efficiency, as `fm_mod` against GNU Radio's scalar loop (D58) (the maintainer's measurement order of 2026-11-24, D2769)"
     },
     "avx2": {
-      "status": "release"
+      "status": "info",
+      "waiver": "KissFFT (`FIXED_POINT=16`) is scalar C, while ours runs the SIMD path of the level: no like-with-like comparison of the level (D32), so the comparison is information and the entry is judged by its efficiency, as `fm_mod` against GNU Radio's scalar loop (D58) (the maintainer's measurement order of 2026-11-24, D2769)"
     },
     "avx512": {
-      "status": "release"
+      "status": "info",
+      "waiver": "KissFFT (`FIXED_POINT=16`) is scalar C, while ours runs the SIMD path of the level: no like-with-like comparison of the level (D32), so the comparison is information and the entry is judged by its efficiency, as `fm_mod` against GNU Radio's scalar loop (D58) (the maintainer's measurement order of 2026-11-24, D2769)"
     },
     "neon": {
-      "status": "release"
+      "status": "info",
+      "waiver": "KissFFT (`FIXED_POINT=16`) is scalar C, while ours runs the SIMD path of the level: no like-with-like comparison of the level (D32), so the comparison is information and the entry is judged by its efficiency, as `fm_mod` against GNU Radio's scalar loop (D58) (the maintainer's measurement order of 2026-11-24, D2769)"
     },
     "simd128": {
-      "status": "release"
+      "status": "info",
+      "waiver": "KissFFT (`FIXED_POINT=16`) is portable scalar C, compiled with `-msimd128`: no SIMD reference of the level (D32), so the comparison is information and the entry is judged by its efficiency, as `channelize` and `xcorr_fft` at this level (the maintainer's decision D2623; the maintainer's measurement order of 2026-11-24, D2768)"
     },
     "avx2-runtime": {
-      "status": "release"
+      "status": "info",
+      "waiver": "KissFFT (`FIXED_POINT=16`) is scalar C, while ours runs the SIMD path of the level: no like-with-like comparison of the level (D32), so the comparison is information and the entry is judged by its efficiency, as `fm_mod` against GNU Radio's scalar loop (D58) (the maintainer's measurement order of 2026-11-24, D2769)"
     }
   },
   "fft_cq15_1024_default": {
     "sse2": {
-      "status": "release"
+      "status": "info",
+      "waiver": "KissFFT (`FIXED_POINT=16`) is scalar C, while ours runs the SIMD path of the level: no like-with-like comparison of the level (D32), so the comparison is information and the entry is judged by its efficiency, as `fm_mod` against GNU Radio's scalar loop (D58) (the maintainer's measurement order of 2026-11-24, D2769)"
     },
     "sse4.2": {
-      "status": "release"
+      "status": "info",
+      "waiver": "KissFFT (`FIXED_POINT=16`) is scalar C, while ours runs the SIMD path of the level: no like-with-like comparison of the level (D32), so the comparison is information and the entry is judged by its efficiency, as `fm_mod` against GNU Radio's scalar loop (D58) (the maintainer's measurement order of 2026-11-24, D2769)"
     },
     "avx2": {
-      "status": "release"
+      "status": "info",
+      "waiver": "KissFFT (`FIXED_POINT=16`) is scalar C, while ours runs the SIMD path of the level: no like-with-like comparison of the level (D32), so the comparison is information and the entry is judged by its efficiency, as `fm_mod` against GNU Radio's scalar loop (D58) (the maintainer's measurement order of 2026-11-24, D2769)"
     },
     "avx512": {
-      "status": "release"
+      "status": "info",
+      "waiver": "KissFFT (`FIXED_POINT=16`) is scalar C, while ours runs the SIMD path of the level: no like-with-like comparison of the level (D32), so the comparison is information and the entry is judged by its efficiency, as `fm_mod` against GNU Radio's scalar loop (D58) (the maintainer's measurement order of 2026-11-24, D2769)"
     },
     "neon": {
-      "status": "release"
+      "status": "info",
+      "waiver": "KissFFT (`FIXED_POINT=16`) is scalar C, while ours runs the SIMD path of the level: no like-with-like comparison of the level (D32), so the comparison is information and the entry is judged by its efficiency, as `fm_mod` against GNU Radio's scalar loop (D58) (the maintainer's measurement order of 2026-11-24, D2769)"
     },
     "simd128": {
-      "status": "release"
+      "status": "info",
+      "waiver": "KissFFT (`FIXED_POINT=16`) is portable scalar C, compiled with `-msimd128`: no SIMD reference of the level (D32), so the comparison is information and the entry is judged by its efficiency, as `channelize` and `xcorr_fft` at this level (the maintainer's decision D2623; the maintainer's measurement order of 2026-11-24, D2768)"
     },
     "avx2-runtime": {
-      "status": "release"
+      "status": "info",
+      "waiver": "KissFFT (`FIXED_POINT=16`) is scalar C, while ours runs the SIMD path of the level: no like-with-like comparison of the level (D32), so the comparison is information and the entry is judged by its efficiency, as `fm_mod` against GNU Radio's scalar loop (D58) (the maintainer's measurement order of 2026-11-24, D2769)"
     }
   },
   "fft_cq15_1024_full_scale": {
     "sse2": {
-      "status": "release"
+      "status": "info",
+      "waiver": "KissFFT (`FIXED_POINT=16`) is scalar C, while ours runs the SIMD path of the level: no like-with-like comparison of the level (D32), so the comparison is information and the entry is judged by its efficiency, as `fm_mod` against GNU Radio's scalar loop (D58) (the maintainer's measurement order of 2026-11-24, D2769)"
     },
     "sse4.2": {
-      "status": "release"
+      "status": "info",
+      "waiver": "KissFFT (`FIXED_POINT=16`) is scalar C, while ours runs the SIMD path of the level: no like-with-like comparison of the level (D32), so the comparison is information and the entry is judged by its efficiency, as `fm_mod` against GNU Radio's scalar loop (D58) (the maintainer's measurement order of 2026-11-24, D2769)"
     },
     "avx2": {
-      "status": "release"
+      "status": "info",
+      "waiver": "KissFFT (`FIXED_POINT=16`) is scalar C, while ours runs the SIMD path of the level: no like-with-like comparison of the level (D32), so the comparison is information and the entry is judged by its efficiency, as `fm_mod` against GNU Radio's scalar loop (D58) (the maintainer's measurement order of 2026-11-24, D2769)"
     },
     "avx2-runtime": {
-      "status": "release"
+      "status": "info",
+      "waiver": "KissFFT (`FIXED_POINT=16`) is scalar C, while ours runs the SIMD path of the level: no like-with-like comparison of the level (D32), so the comparison is information and the entry is judged by its efficiency, as `fm_mod` against GNU Radio's scalar loop (D58) (the maintainer's measurement order of 2026-11-24, D2769)"
     },
     "avx512": {
-      "status": "release"
+      "status": "info",
+      "waiver": "KissFFT (`FIXED_POINT=16`) is scalar C, while ours runs the SIMD path of the level: no like-with-like comparison of the level (D32), so the comparison is information and the entry is judged by its efficiency, as `fm_mod` against GNU Radio's scalar loop (D58) (the maintainer's measurement order of 2026-11-24, D2769)"
     },
     "neon": {
-      "status": "release"
+      "status": "info",
+      "waiver": "KissFFT (`FIXED_POINT=16`) is scalar C, while ours runs the SIMD path of the level: no like-with-like comparison of the level (D32), so the comparison is information and the entry is judged by its efficiency, as `fm_mod` against GNU Radio's scalar loop (D58) (the maintainer's measurement order of 2026-11-24, D2769)"
     },
     "simd128": {
-      "status": "release"
+      "status": "info",
+      "waiver": "KissFFT (`FIXED_POINT=16`) is portable scalar C, compiled with `-msimd128`: no SIMD reference of the level (D32), so the comparison is information and the entry is judged by its efficiency, as `channelize` and `xcorr_fft` at this level (the maintainer's decision D2623; the maintainer's measurement order of 2026-11-24, D2768)"
     }
   },
   "rfft_1024": {
@@ -1449,7 +1483,8 @@
       "cycle_waiver": "a tie with its own fallback in simulated cycles, accepted by the maintainer (decision D333): 8.58 / 8.56 cycles per sample of the fallback on `cortex-a72` (8.576 / 8.562, 1.002; 1.77 / 1.77 on `cortex-a76`, 1.769 / 1.774), both loops bound by the throughput of the vector square root on that model; kept with open item I30-4"
     },
     "simd128": {
-      "status": "release"
+      "status": "info",
+      "waiver": "VOLK's wasm32 build holds only its portable `generic` protokernels (D12), compiled with `-msimd128`: no SIMD reference of the level (D32), so the comparison is information and the entry is judged by its efficiency, as `channelize` and `xcorr_fft` at this level (the maintainer's decision D2623; the maintainer's measurement order of 2026-11-24, D2768)"
     }
   },
   "mag_q15": {
@@ -1473,30 +1508,38 @@
       "cycle_waiver": "a tie with its own fallback in simulated cycles, accepted by the maintainer (decision D333): 9.95 / 9.94 cycles per sample of the fallback on `cortex-a72` (9.952 / 9.943, 1.001; 3.79 / 4.07 on `cortex-a76`), both loops bound by the throughput of the vector square root on that model; kept with open item I30-4"
     },
     "simd128": {
-      "status": "release"
+      "status": "info",
+      "waiver": "VOLK's wasm32 build holds only its portable `generic` protokernels (D12), compiled with `-msimd128`: no SIMD reference of the level (D32), so the comparison is information and the entry is judged by its efficiency, as `channelize` and `xcorr_fft` at this level (the maintainer's decision D2623; the maintainer's measurement order of 2026-11-24, D2768)"
     }
   },
   "agc": {
     "sse2": {
-      "status": "release"
+      "status": "info",
+      "waiver": "GNU Radio's `agc_cc` loop is scalar C compiled with the generic flags of GNU Radio's build, while ours runs the SIMD path of the level: no like-with-like comparison of the level (D32), so the comparison is information and the entry is judged by its efficiency, as `fm_mod` against GNU Radio's scalar loop (D58) (the maintainer's measurement order of 2026-11-24, D2769)"
     },
     "sse4.2": {
-      "status": "release"
+      "status": "info",
+      "waiver": "GNU Radio's `agc_cc` loop is scalar C compiled with the generic flags of GNU Radio's build, while ours runs the SIMD path of the level: no like-with-like comparison of the level (D32), so the comparison is information and the entry is judged by its efficiency, as `fm_mod` against GNU Radio's scalar loop (D58) (the maintainer's measurement order of 2026-11-24, D2769)"
     },
     "avx2": {
-      "status": "release"
+      "status": "info",
+      "waiver": "GNU Radio's `agc_cc` loop is scalar C compiled with the generic flags of GNU Radio's build, while ours runs the SIMD path of the level: no like-with-like comparison of the level (D32), so the comparison is information and the entry is judged by its efficiency, as `fm_mod` against GNU Radio's scalar loop (D58) (the maintainer's measurement order of 2026-11-24, D2769)"
     },
     "avx512": {
-      "status": "release"
+      "status": "info",
+      "waiver": "GNU Radio's `agc_cc` loop is scalar C compiled with the generic flags of GNU Radio's build, while ours runs the SIMD path of the level: no like-with-like comparison of the level (D32), so the comparison is information and the entry is judged by its efficiency, as `fm_mod` against GNU Radio's scalar loop (D58) (the maintainer's measurement order of 2026-11-24, D2769)"
     },
     "neon": {
-      "status": "release"
+      "status": "info",
+      "waiver": "GNU Radio's `agc_cc` loop is scalar C compiled with the generic flags of GNU Radio's build, while ours runs the SIMD path of the level: no like-with-like comparison of the level (D32), so the comparison is information and the entry is judged by its efficiency, as `fm_mod` against GNU Radio's scalar loop (D58) (the maintainer's measurement order of 2026-11-24, D2769)"
     },
     "simd128": {
-      "status": "release"
+      "status": "info",
+      "waiver": "GNU Radio's `agc_cc` loop is portable C with the generic flags of GNU Radio's build, compiled with `-msimd128`: no SIMD reference of the level (D32), so the comparison is information and the entry is judged by its efficiency, as `channelize` and `xcorr_fft` at this level (the maintainer's decision D2623; the maintainer's measurement order of 2026-11-24, D2768)"
     },
     "avx2-runtime": {
-      "status": "release"
+      "status": "info",
+      "waiver": "GNU Radio's `agc_cc` loop is scalar C compiled with the generic flags of GNU Radio's build, while ours runs the SIMD path of the level: no like-with-like comparison of the level (D32), so the comparison is information and the entry is judged by its efficiency, as `fm_mod` against GNU Radio's scalar loop (D58) (the maintainer's measurement order of 2026-11-24, D2769)"
     }
   },
   "agc_cq15": {
@@ -1965,11 +2008,11 @@
   "fir_decimate_cq15_fallback": {
     "sse2": {
       "status": "dev",
-      "waiver": "CMSIS-DSP sums in `q63_t` as we do (exact 64-bit sums, one saturation per output; it truncates with `>> 15` where we round, one add per output), so the gap is not the accuracy class but our code generation: CMSIS-DSP's tap loop per output is a reduction that the C compiler vectorizes (widening multiplies into 64-bit lanes), while our outputs, whose windows lie `M` samples apart (one slice per output, 16 `i64` accumulators per group), compile to scalar 64-bit multiply-adds; simulated in CI (D2745, whole-loop): 30.40 / 45.20 cycles per sample against 24.93 / 25.79 of the comparison on `skylake` / `znver2` (1.22 / 1.75); tracked in issue #134 (a vectorizable `Q15` form of the strided group) and open item I13.1-7"
+      "waiver": "CMSIS-DSP sums in `q63_t` as we do (exact 64-bit sums, one saturation per output; it truncates with `>> 15` where we round, one add per output), so the gap is not the accuracy class but our code generation: CMSIS-DSP's tap loop per output is a reduction that the C compiler vectorizes (widening multiplies into 64-bit lanes), while our outputs, whose windows lie `M` samples apart (one slice per output, 16 `i64` accumulators per group), compile to scalar 64-bit multiply-adds; simulated in CI (D2745, whole-loop): 30.40 / 45.20 cycles per sample against 24.93 / 25.79 of the comparison on `skylake` / `znver2` (1.22 / 1.75); tracked in issue #134 (a vectorizable `Q15` form of the strided group) and open item I13.1-7; above the `dev` limit 1.50, awaiting the maintainer's decision (D2779)"
     },
     "sse4.2": {
       "status": "dev",
-      "waiver": "CMSIS-DSP sums in `q63_t` as we do (exact 64-bit sums, one saturation per output; it truncates with `>> 15` where we round, one add per output), so the gap is not the accuracy class but our code generation: CMSIS-DSP's tap loop per output is a reduction that the C compiler vectorizes (widening multiplies into 64-bit lanes), while our outputs, whose windows lie `M` samples apart (one slice per output, 16 `i64` accumulators per group), compile to scalar 64-bit multiply-adds; simulated in CI (D2745, whole-loop): 30.40 / 45.20 cycles per sample against 27.95 / 22.79 of the comparison on `skylake` / `znver2` (1.09 / 1.98); tracked in issue #134 (a vectorizable `Q15` form of the strided group) and open item I13.1-7"
+      "waiver": "CMSIS-DSP sums in `q63_t` as we do (exact 64-bit sums, one saturation per output; it truncates with `>> 15` where we round, one add per output), so the gap is not the accuracy class but our code generation: CMSIS-DSP's tap loop per output is a reduction that the C compiler vectorizes (widening multiplies into 64-bit lanes), while our outputs, whose windows lie `M` samples apart (one slice per output, 16 `i64` accumulators per group), compile to scalar 64-bit multiply-adds; simulated in CI (D2745, whole-loop): 30.40 / 45.20 cycles per sample against 27.95 / 22.79 of the comparison on `skylake` / `znver2` (1.09 / 1.98); tracked in issue #134 (a vectorizable `Q15` form of the strided group) and open item I13.1-7; above the `dev` limit 1.50, awaiting the maintainer's decision (D2779)"
     },
     "avx2": {
       "status": "dev"
@@ -1979,7 +2022,7 @@
     },
     "neon": {
       "status": "dev",
-      "waiver": "CMSIS-DSP sums in `q63_t` as we do (exact 64-bit sums, one saturation per output; it truncates with `>> 15` where we round, one add per output), so the gap is not the accuracy class but our code generation: CMSIS-DSP's tap loop per output is a reduction that the C compiler vectorizes (widening multiplies into 64-bit lanes), while our outputs, whose windows lie `M` samples apart (one slice per output, 16 `i64` accumulators per group), compile to scalar 64-bit multiply-adds; simulated in CI (D2745, whole-loop): 29.57 / 27.63 cycles per sample against 16.40 / 16.90 of the comparison on `cortex-a72` / `cortex-a76` (1.80 / 1.63); tracked in issue #134 (a vectorizable `Q15` form of the strided group) and open item I13.1-7"
+      "waiver": "CMSIS-DSP sums in `q63_t` as we do (exact 64-bit sums, one saturation per output; it truncates with `>> 15` where we round, one add per output), so the gap is not the accuracy class but our code generation: CMSIS-DSP's tap loop per output is a reduction that the C compiler vectorizes (widening multiplies into 64-bit lanes), while our outputs, whose windows lie `M` samples apart (one slice per output, 16 `i64` accumulators per group), compile to scalar 64-bit multiply-adds; simulated in CI (D2745, whole-loop): 29.57 / 27.63 cycles per sample against 16.40 / 16.90 of the comparison on `cortex-a72` / `cortex-a76` (1.80 / 1.63); tracked in issue #134 (a vectorizable `Q15` form of the strided group) and open item I13.1-7; above the `dev` limit 1.50, awaiting the maintainer's decision (D2779)"
     },
     "simd128": {
       "status": "release"
@@ -2023,7 +2066,7 @@
     },
     "simd128": {
       "status": "dev",
-      "waiver": "open item I44-10: the short-branch form of `fir_interpolate` in the fallback (D1420, bit-exact with the one-at-a-time sum) counts 176.00 against 127.10 instructions per output sample of CMSIS-DSP's `arm_fir_interpolate_f32` by 8 compiled for `simd128` (1.38); the SIMD backend runs its own form at `simd128` (`fir_interpolate_short` 74.26 instructions), so the fallback runs there only without the SIMD backend. The maintainer decides on a form of the fallback that the compiler vectorizes better (I44-10)"
+      "waiver": "open item I44-10: the short-branch form of `fir_interpolate` in the fallback (D1420, bit-exact with the one-at-a-time sum) counts 176.00 against 127.10 instructions per output sample of CMSIS-DSP's `arm_fir_interpolate_f32` by 8 compiled for `simd128` (1.38), within the `dev` limit. The maintainer decides on a form of the fallback that the compiler vectorizes better (I44-10)"
     }
   },
   "fir_interpolate_cq15_fallback": {
@@ -2443,27 +2486,27 @@
   "deemphasis_fallback": {
     "sse2": {
       "status": "dev",
-      "accuracy_waiver": "GNU Radio's `fm_deemph` computes in double precision (double taps and accumulator, the input and output in float) and is another filter (the bilinear transform adds a zero at z = -1), so its SNR against its own f64 model (about 152 dB) is not the accuracy class of our `f32` fallback, the contract loop `y += alpha (x - y)` in `f32` (145.4 dB against the f64 golden); the SIMD backend reaches the optimum (about 152 dB)"
+      "accuracy_waiver": "GNU Radio's `fm_deemph` computes in double precision (double taps and accumulator, the input and output in float) and is another filter (the bilinear transform adds a zero at z = -1), so its SNR against its own f64 model (about 152 dB) is not the accuracy class of our `f32` fallback, the contract loop `y += alpha (x - y)` in `f32` (145.4 dB against the f64 golden)"
     },
     "sse4.2": {
       "status": "dev",
-      "accuracy_waiver": "GNU Radio's `fm_deemph` computes in double precision (double taps and accumulator, the input and output in float) and is another filter (the bilinear transform adds a zero at z = -1), so its SNR against its own f64 model (about 152 dB) is not the accuracy class of our `f32` fallback, the contract loop `y += alpha (x - y)` in `f32` (145.4 dB against the f64 golden); the SIMD backend reaches the optimum (about 152 dB)"
+      "accuracy_waiver": "GNU Radio's `fm_deemph` computes in double precision (double taps and accumulator, the input and output in float) and is another filter (the bilinear transform adds a zero at z = -1), so its SNR against its own f64 model (about 152 dB) is not the accuracy class of our `f32` fallback, the contract loop `y += alpha (x - y)` in `f32` (145.4 dB against the f64 golden)"
     },
     "avx2": {
       "status": "release",
-      "accuracy_waiver": "GNU Radio's `fm_deemph` computes in double precision (double taps and accumulator, the input and output in float) and is another filter (the bilinear transform adds a zero at z = -1), so its SNR against its own f64 model (about 152 dB) is not the accuracy class of our `f32` fallback, the contract loop `y += alpha (x - y)` in `f32` (145.4 dB against the f64 golden); the SIMD backend reaches the optimum (about 152 dB)"
+      "accuracy_waiver": "GNU Radio's `fm_deemph` computes in double precision (double taps and accumulator, the input and output in float) and is another filter (the bilinear transform adds a zero at z = -1), so its SNR against its own f64 model (about 152 dB) is not the accuracy class of our `f32` fallback, the contract loop `y += alpha (x - y)` in `f32` (145.4 dB against the f64 golden)"
     },
     "avx512": {
       "status": "release",
-      "accuracy_waiver": "GNU Radio's `fm_deemph` computes in double precision (double taps and accumulator, the input and output in float) and is another filter (the bilinear transform adds a zero at z = -1), so its SNR against its own f64 model (about 152 dB) is not the accuracy class of our `f32` fallback, the contract loop `y += alpha (x - y)` in `f32` (145.4 dB against the f64 golden); the SIMD backend reaches the optimum (about 152 dB)"
+      "accuracy_waiver": "GNU Radio's `fm_deemph` computes in double precision (double taps and accumulator, the input and output in float) and is another filter (the bilinear transform adds a zero at z = -1), so its SNR against its own f64 model (about 152 dB) is not the accuracy class of our `f32` fallback, the contract loop `y += alpha (x - y)` in `f32` (145.4 dB against the f64 golden)"
     },
     "neon": {
       "status": "release",
-      "accuracy_waiver": "GNU Radio's `fm_deemph` computes in double precision (double taps and accumulator, the input and output in float) and is another filter (the bilinear transform adds a zero at z = -1), so its SNR against its own f64 model (about 152 dB) is not the accuracy class of our `f32` fallback, the contract loop `y += alpha (x - y)` in `f32` (145.4 dB against the f64 golden); the SIMD backend reaches the optimum (about 152 dB)"
+      "accuracy_waiver": "GNU Radio's `fm_deemph` computes in double precision (double taps and accumulator, the input and output in float) and is another filter (the bilinear transform adds a zero at z = -1), so its SNR against its own f64 model (about 152 dB) is not the accuracy class of our `f32` fallback, the contract loop `y += alpha (x - y)` in `f32` (145.4 dB against the f64 golden)"
     },
     "simd128": {
       "status": "release",
-      "accuracy_waiver": "GNU Radio's `fm_deemph` computes in double precision (double taps and accumulator, the input and output in float) and is another filter (the bilinear transform adds a zero at z = -1), so its SNR against its own f64 model (about 152 dB) is not the accuracy class of our `f32` fallback, the contract loop `y += alpha (x - y)` in `f32` (145.4 dB against the f64 golden); the SIMD backend reaches the optimum (about 152 dB)"
+      "accuracy_waiver": "GNU Radio's `fm_deemph` computes in double precision (double taps and accumulator, the input and output in float) and is another filter (the bilinear transform adds a zero at z = -1), so its SNR against its own f64 model (about 152 dB) is not the accuracy class of our `f32` fallback, the contract loop `y += alpha (x - y)` in `f32` (145.4 dB against the f64 golden)"
     }
   },
   "dc_block_fallback": {
@@ -3011,48 +3054,40 @@
   },
   "halfband_decimate": {
     "sse2": {
-      "status": "release",
-      "own_target": 0.6
+      "status": "release"
     },
     "sse4.2": {
-      "status": "release",
-      "own_target": 0.6
+      "status": "release"
     },
     "avx2": {
-      "status": "release",
-      "own_target": 0.6
+      "status": "release"
     },
     "avx2-runtime": {
       "status": "release"
     },
     "avx512": {
-      "status": "release",
-      "own_target": 0.6
+      "status": "release"
     },
     "neon": {
-      "status": "release",
-      "own_target": 0.6
+      "status": "release"
     },
     "simd128": {
-      "status": "release",
-      "own_target": 0.6
+      "status": "info",
+      "waiver": "liquid-dsp has no SIMD dot product for WebAssembly: its portable dot product, compiled with `-msimd128`: no SIMD reference of the level (D32), so the comparison is information and the entry is judged by its efficiency, as `channelize` and `xcorr_fft` at this level (the maintainer's decision D2623; the maintainer's measurement order of 2026-11-24, D2768)"
     }
   },
   "halfband_decimate_cq15": {
     "sse2": {
       "status": "info",
-      "waiver": "no established library has a SIMD halfband decimator for `CQ15` on our levels (liquid-dsp's `resamp2` is float only, CMSIS-DSP has no halfband decimator and its `arm_fir_q15` is generic C); the comparison is our own fallback, reported as information, and the branch is judged by its efficiency (D32, D21); the fallback itself is gated against the CMSIS-DSP composition in `halfband_decimate_cq15_fallback` (D69)",
-      "own_target": 0.6
+      "waiver": "no established library has a SIMD halfband decimator for `CQ15` on our levels (liquid-dsp's `resamp2` is float only, CMSIS-DSP has no halfband decimator and its `arm_fir_q15` is generic C); the comparison is our own fallback, reported as information, and the branch is judged by its efficiency (D32, D21); the fallback itself is gated against the CMSIS-DSP composition in `halfband_decimate_cq15_fallback` (D69)"
     },
     "sse4.2": {
       "status": "info",
-      "waiver": "no established library has a SIMD halfband decimator for `CQ15` on our levels (liquid-dsp's `resamp2` is float only, CMSIS-DSP has no halfband decimator and its `arm_fir_q15` is generic C); the comparison is our own fallback, reported as information, and the branch is judged by its efficiency (D32, D21); the fallback itself is gated against the CMSIS-DSP composition in `halfband_decimate_cq15_fallback` (D69)",
-      "own_target": 0.6
+      "waiver": "no established library has a SIMD halfband decimator for `CQ15` on our levels (liquid-dsp's `resamp2` is float only, CMSIS-DSP has no halfband decimator and its `arm_fir_q15` is generic C); the comparison is our own fallback, reported as information, and the branch is judged by its efficiency (D32, D21); the fallback itself is gated against the CMSIS-DSP composition in `halfband_decimate_cq15_fallback` (D69)"
     },
     "avx2": {
       "status": "info",
-      "waiver": "no established library has a SIMD halfband decimator for `CQ15` on our levels (liquid-dsp's `resamp2` is float only, CMSIS-DSP has no halfband decimator and its `arm_fir_q15` is generic C); the comparison is our own fallback, reported as information, and the branch is judged by its efficiency (D32, D21); the fallback itself is gated against the CMSIS-DSP composition in `halfband_decimate_cq15_fallback` (D69)",
-      "own_target": 0.6
+      "waiver": "no established library has a SIMD halfband decimator for `CQ15` on our levels (liquid-dsp's `resamp2` is float only, CMSIS-DSP has no halfband decimator and its `arm_fir_q15` is generic C); the comparison is our own fallback, reported as information, and the branch is judged by its efficiency (D32, D21); the fallback itself is gated against the CMSIS-DSP composition in `halfband_decimate_cq15_fallback` (D69)"
     },
     "avx2-runtime": {
       "status": "info",
@@ -3060,23 +3095,21 @@
     },
     "avx512": {
       "status": "info",
-      "waiver": "no established library has a SIMD halfband decimator for `CQ15` on our levels (liquid-dsp's `resamp2` is float only, CMSIS-DSP has no halfband decimator and its `arm_fir_q15` is generic C); the comparison is our own fallback, reported as information, and the branch is judged by its efficiency (D32, D21); the fallback itself is gated against the CMSIS-DSP composition in `halfband_decimate_cq15_fallback` (D69)",
-      "own_target": 0.6
+      "waiver": "no established library has a SIMD halfband decimator for `CQ15` on our levels (liquid-dsp's `resamp2` is float only, CMSIS-DSP has no halfband decimator and its `arm_fir_q15` is generic C); the comparison is our own fallback, reported as information, and the branch is judged by its efficiency (D32, D21); the fallback itself is gated against the CMSIS-DSP composition in `halfband_decimate_cq15_fallback` (D69)"
     },
     "neon": {
       "status": "info",
-      "waiver": "no established library has a SIMD halfband decimator for `CQ15` on our levels (liquid-dsp's `resamp2` is float only, CMSIS-DSP has no halfband decimator and its `arm_fir_q15` is generic C); the comparison is our own fallback, reported as information, and the branch is judged by its efficiency (D32, D21); the fallback itself is gated against the CMSIS-DSP composition in `halfband_decimate_cq15_fallback` (D69)",
-      "own_target": 0.6
+      "waiver": "no established library has a SIMD halfband decimator for `CQ15` on our levels (liquid-dsp's `resamp2` is float only, CMSIS-DSP has no halfband decimator and its `arm_fir_q15` is generic C); the comparison is our own fallback, reported as information, and the branch is judged by its efficiency (D32, D21); the fallback itself is gated against the CMSIS-DSP composition in `halfband_decimate_cq15_fallback` (D69)"
     },
     "simd128": {
       "status": "info",
-      "waiver": "no established library has a SIMD halfband decimator for `CQ15` on our levels (liquid-dsp's `resamp2` is float only, CMSIS-DSP has no halfband decimator and its `arm_fir_q15` is generic C); the comparison is our own fallback, reported as information, and the branch is judged by its efficiency (D32, D21); the fallback itself is gated against the CMSIS-DSP composition in `halfband_decimate_cq15_fallback` (D69)",
-      "own_target": 0.6
+      "waiver": "no established library has a SIMD halfband decimator for `CQ15` on our levels (liquid-dsp's `resamp2` is float only, CMSIS-DSP has no halfband decimator and its `arm_fir_q15` is generic C); the comparison is our own fallback, reported as information, and the branch is judged by its efficiency (D32, D21); the fallback itself is gated against the CMSIS-DSP composition in `halfband_decimate_cq15_fallback` (D69)"
     }
   },
   "halfband_decimate_real": {
     "sse2": {
-      "status": "release"
+      "status": "info",
+      "waiver": "liquid-dsp's `resamp2_rrrf` runs its portable dot product at this level (its SSE loop of `dotprod_rrrf` needs SSE3, D69), while ours runs the SIMD path of the level: no like-with-like comparison of the level (D32), so the comparison is information and the entry is judged by its efficiency, as `fm_mod` against GNU Radio's scalar loop (D58) (the maintainer's measurement order of 2026-11-24, D2769)"
     },
     "sse4.2": {
       "status": "release"
@@ -3091,7 +3124,8 @@
       "status": "release"
     },
     "simd128": {
-      "status": "release"
+      "status": "info",
+      "waiver": "liquid-dsp has no SIMD dot product for WebAssembly: its portable dot product, compiled with `-msimd128`: no SIMD reference of the level (D32), so the comparison is information and the entry is judged by its efficiency, as `channelize` and `xcorr_fft` at this level (the maintainer's decision D2623; the maintainer's measurement order of 2026-11-24, D2768)"
     },
     "avx2-runtime": {
       "status": "release"
@@ -3129,28 +3163,24 @@
   },
   "real_to_complex": {
     "sse2": {
-      "status": "release",
-      "own_target": 1.1
+      "status": "info",
+      "waiver": "liquid-dsp's `firhilbf` runs its portable dot product at this level (its SSE loop of `dotprod_rrrf` needs SSE3, D69), while ours runs the SIMD path of the level: no like-with-like comparison of the level (D32), so the comparison is information and the entry is judged by its efficiency, as `fm_mod` against GNU Radio's scalar loop (D58) (the maintainer's measurement order of 2026-11-24, D2769)"
     },
     "sse4.2": {
-      "status": "release",
-      "own_target": 1.1
+      "status": "release"
     },
     "avx2": {
-      "status": "release",
-      "own_target": 1.1
+      "status": "release"
     },
     "avx512": {
-      "status": "release",
-      "own_target": 1.1
+      "status": "release"
     },
     "neon": {
-      "status": "release",
-      "own_target": 1.1
+      "status": "release"
     },
     "simd128": {
-      "status": "release",
-      "own_target": 1.1
+      "status": "info",
+      "waiver": "liquid-dsp has no SIMD dot product for WebAssembly: its portable dot product, compiled with `-msimd128`: no SIMD reference of the level (D32), so the comparison is information and the entry is judged by its efficiency, as `channelize` and `xcorr_fft` at this level (the maintainer's decision D2623; the maintainer's measurement order of 2026-11-24, D2768)"
     },
     "avx2-runtime": {
       "status": "release"
@@ -3164,18 +3194,15 @@
   "real_to_complex_cq15": {
     "sse2": {
       "status": "info",
-      "waiver": "provisional (D70, open item I23-1): libairspy 1.0.10's `iqconverter_int16` is the only established `CQ15` `real_to_complex` but a lower accuracy class (truncating `>> 15`, a 32-bit accumulator, the odd samples halved, the centre tap fixed at 0.5); whether the entry is `release` with an accuracy waiver (as D58) or `info` (as D56) is the maintainer's decision, `info` until then; the measured numbers are in docs/open-items.md",
-      "own_target": 1.1
+      "waiver": "provisional (D70, open item I23-1): libairspy 1.0.10's `iqconverter_int16` is the only established `CQ15` `real_to_complex` but a lower accuracy class (truncating `>> 15`, a 32-bit accumulator, the odd samples halved, the centre tap fixed at 0.5); whether the entry is `release` with an accuracy waiver (as D58) or `info` (as D56) is the maintainer's decision, `info` until then; the measured numbers are in docs/open-items.md"
     },
     "sse4.2": {
       "status": "info",
-      "waiver": "provisional (D70, open item I23-1): libairspy 1.0.10's `iqconverter_int16` is the only established `CQ15` `real_to_complex` but a lower accuracy class (truncating `>> 15`, a 32-bit accumulator, the odd samples halved, the centre tap fixed at 0.5); whether the entry is `release` with an accuracy waiver (as D58) or `info` (as D56) is the maintainer's decision, `info` until then; the measured numbers are in docs/open-items.md",
-      "own_target": 1.1
+      "waiver": "provisional (D70, open item I23-1): libairspy 1.0.10's `iqconverter_int16` is the only established `CQ15` `real_to_complex` but a lower accuracy class (truncating `>> 15`, a 32-bit accumulator, the odd samples halved, the centre tap fixed at 0.5); whether the entry is `release` with an accuracy waiver (as D58) or `info` (as D56) is the maintainer's decision, `info` until then; the measured numbers are in docs/open-items.md"
     },
     "avx2": {
       "status": "info",
-      "waiver": "provisional (D70, open item I23-1): libairspy 1.0.10's `iqconverter_int16` is the only established `CQ15` `real_to_complex` but a lower accuracy class (truncating `>> 15`, a 32-bit accumulator, the odd samples halved, the centre tap fixed at 0.5); whether the entry is `release` with an accuracy waiver (as D58) or `info` (as D56) is the maintainer's decision, `info` until then; the measured numbers are in docs/open-items.md",
-      "own_target": 1.1
+      "waiver": "provisional (D70, open item I23-1): libairspy 1.0.10's `iqconverter_int16` is the only established `CQ15` `real_to_complex` but a lower accuracy class (truncating `>> 15`, a 32-bit accumulator, the odd samples halved, the centre tap fixed at 0.5); whether the entry is `release` with an accuracy waiver (as D58) or `info` (as D56) is the maintainer's decision, `info` until then; the measured numbers are in docs/open-items.md"
     },
     "avx2-runtime": {
       "status": "info",
@@ -3183,18 +3210,15 @@
     },
     "avx512": {
       "status": "info",
-      "waiver": "provisional (D70, open item I23-1): libairspy 1.0.10's `iqconverter_int16` is the only established `CQ15` `real_to_complex` but a lower accuracy class (truncating `>> 15`, a 32-bit accumulator, the odd samples halved, the centre tap fixed at 0.5); whether the entry is `release` with an accuracy waiver (as D58) or `info` (as D56) is the maintainer's decision, `info` until then; the measured numbers are in docs/open-items.md",
-      "own_target": 1.1
+      "waiver": "provisional (D70, open item I23-1): libairspy 1.0.10's `iqconverter_int16` is the only established `CQ15` `real_to_complex` but a lower accuracy class (truncating `>> 15`, a 32-bit accumulator, the odd samples halved, the centre tap fixed at 0.5); whether the entry is `release` with an accuracy waiver (as D58) or `info` (as D56) is the maintainer's decision, `info` until then; the measured numbers are in docs/open-items.md"
     },
     "neon": {
       "status": "info",
-      "waiver": "provisional (D70, open item I23-1): libairspy 1.0.10's `iqconverter_int16` is the only established `CQ15` `real_to_complex` but a lower accuracy class (truncating `>> 15`, a 32-bit accumulator, the odd samples halved, the centre tap fixed at 0.5); whether the entry is `release` with an accuracy waiver (as D58) or `info` (as D56) is the maintainer's decision, `info` until then; the measured numbers are in docs/open-items.md",
-      "own_target": 1.1
+      "waiver": "provisional (D70, open item I23-1): libairspy 1.0.10's `iqconverter_int16` is the only established `CQ15` `real_to_complex` but a lower accuracy class (truncating `>> 15`, a 32-bit accumulator, the odd samples halved, the centre tap fixed at 0.5); whether the entry is `release` with an accuracy waiver (as D58) or `info` (as D56) is the maintainer's decision, `info` until then; the measured numbers are in docs/open-items.md"
     },
     "simd128": {
       "status": "info",
-      "waiver": "provisional (D70, open item I23-1): libairspy 1.0.10's `iqconverter_int16` is the only established `CQ15` `real_to_complex` but a lower accuracy class (truncating `>> 15`, a 32-bit accumulator, the odd samples halved, the centre tap fixed at 0.5); whether the entry is `release` with an accuracy waiver (as D58) or `info` (as D56) is the maintainer's decision, `info` until then; the measured numbers are in docs/open-items.md",
-      "own_target": 1.1
+      "waiver": "provisional (D70, open item I23-1): libairspy 1.0.10's `iqconverter_int16` is the only established `CQ15` `real_to_complex` but a lower accuracy class (truncating `>> 15`, a 32-bit accumulator, the odd samples halved, the centre tap fixed at 0.5); whether the entry is `release` with an accuracy waiver (as D58) or `info` (as D56) is the maintainer's decision, `info` until then; the measured numbers are in docs/open-items.md"
     }
   },
   "halfband_decimate_fallback": {
@@ -3448,7 +3472,8 @@
       "status": "release"
     },
     "simd128": {
-      "status": "release"
+      "status": "info",
+      "waiver": "VOLK's wasm32 build holds only its portable `generic` protokernels (D12), compiled with `-msimd128`: no SIMD reference of the level (D32), so the comparison is information and the entry is judged by its efficiency, as `channelize` and `xcorr_fft` at this level (the maintainer's decision D2623; the maintainer's measurement order of 2026-11-24, D2768)"
     }
   },
   "stereo_matrix_cq15": {
@@ -3483,15 +3508,14 @@
   },
   "stereo_matrix_fallback": {
     "sse2": {
-      "status": "release",
-      "waiver": "open item I24-3 (D146): LLVM compiles the loop over interleaved `(s, d)` pairs to scalar code for baseline x86-64 while CMSIS-DSP's planar loop is vectorized; simulated in CI (D2745, whole-loop): 1.55 / 1.67 cycles per sample against 1.07 / 1.38 of the comparison on `skylake` / `znver2` (1.45 / 1.21); the limit 1.10 is not relaxed (M24 amendment of 2026-10-31, D110); the SIMD branch serves every x86-64 level, so the fallback only runs where no vector level exists"
+      "status": "dev"
     },
     "sse4.2": {
       "status": "dev"
     },
     "avx2": {
       "status": "dev",
-      "waiver": "open item I24-3: simulated in CI (D2745, whole-loop): 0.63 / 0.86 cycles per sample against 0.60 / 0.53 of the comparison on `znver3` / `alderlake` (1.06 / 1.61), above the `dev` limit"
+      "waiver": "open item I24-3: simulated in CI (D2745, whole-loop): 0.63 / 0.86 cycles per sample against 0.60 / 0.53 of the comparison on `znver3` / `alderlake` (1.06 / 1.61), above the `dev` limit; awaiting the maintainer's decision (D2779)"
     },
     "avx512": {
       "status": "release"
@@ -3525,16 +3549,14 @@
   },
   "stereo_pll_fallback": {
     "sse2": {
-      "status": "release",
-      "waiver": "accepted (D947): liquid-dsp's `nco_crcf` is of a lower accuracy class, so the entry is a trade of speed for accuracy (light green), not a gap to close: a 1024-entry table (error 4.7e-6 against 2.9e-7), a `double` modulo in every phase and frequency adjustment, and no lock detector or integrator limit; it reaches 9.46 dB (x86) and 23.44 dB (`neon`, `simd128`) against 57.02 dB for ours (SNR of the difference channel against the ideal oscillator), 33.6 dB to 47.6 dB less error for ours. Instructions per sample (D143, D144): 90.2, 88.2 and 78.4 against 67.9 at `sse2`, `sse4.2` and `avx2`, 68.8 against 59.9 at `neon`, 190.1 against 143.9 at `simd128`; simulated cycles per sample ours / liquid with the corrected `llvm-mca` (D942), reference / counter model: 88.89 / 71.63 and 77.84 / 63.55 at `sse2`, 88.29 / 71.63 and 77.34 / 63.55 at `sse4.2`, 63.32 / 57.06 and 79.41 / 78.06 at `avx2`, 84.51 / 86.93 and 56.44 / 57.23 at `neon`"
+      "status": "dev"
     },
     "sse4.2": {
-      "status": "release",
-      "waiver": "accepted (D947): liquid-dsp's `nco_crcf` is of a lower accuracy class, so the entry is a trade of speed for accuracy (light green), not a gap to close: a 1024-entry table (error 4.7e-6 against 2.9e-7), a `double` modulo in every phase and frequency adjustment, and no lock detector or integrator limit; it reaches 9.46 dB (x86) and 23.44 dB (`neon`, `simd128`) against 57.02 dB for ours (SNR of the difference channel against the ideal oscillator), 33.6 dB to 47.6 dB less error for ours. Instructions per sample (D143, D144): 90.2, 88.2 and 78.4 against 67.9 at `sse2`, `sse4.2` and `avx2`, 68.8 against 59.9 at `neon`, 190.1 against 143.9 at `simd128`; simulated cycles per sample ours / liquid with the corrected `llvm-mca` (D942), reference / counter model: 88.89 / 71.63 and 77.84 / 63.55 at `sse2`, 88.29 / 71.63 and 77.34 / 63.55 at `sse4.2`, 63.32 / 57.06 and 79.41 / 78.06 at `avx2`, 84.51 / 86.93 and 56.44 / 57.23 at `neon`"
+      "status": "dev"
     },
     "avx2": {
       "status": "release",
-      "waiver": "accepted (D947): liquid-dsp's `nco_crcf` is of a lower accuracy class, so the entry is a trade of speed for accuracy (light green), not a gap to close: a 1024-entry table (error 4.7e-6 against 2.9e-7), a `double` modulo in every phase and frequency adjustment, and no lock detector or integrator limit; it reaches 9.46 dB (x86) and 23.44 dB (`neon`, `simd128`) against 57.02 dB for ours (SNR of the difference channel against the ideal oscillator), 33.6 dB to 47.6 dB less error for ours. Instructions per sample (D143, D144): 90.2, 88.2 and 78.4 against 67.9 at `sse2`, `sse4.2` and `avx2`, 68.8 against 59.9 at `neon`, 190.1 against 143.9 at `simd128`; simulated cycles per sample ours / liquid with the corrected `llvm-mca` (D942), reference / counter model: 88.89 / 71.63 and 77.84 / 63.55 at `sse2`, 88.29 / 71.63 and 77.34 / 63.55 at `sse4.2`, 63.32 / 57.06 and 79.41 / 78.06 at `avx2`, 84.51 / 86.93 and 56.44 / 57.23 at `neon`"
+      "accuracy_trade": "SNR 57.02 dB against 9.46 dB of liquid-dsp's `nco_crcf` (47.56 dB more accurate, the comparison below 100 dB) at 1.110 / 1.017 of its cycles (CI run 45395683515, `znver3` / `alderlake`; D2760, D2770)"
     },
     "avx512": {
       "status": "release"
@@ -3543,8 +3565,7 @@
       "status": "release"
     },
     "simd128": {
-      "status": "release",
-      "waiver": "accepted (D947): liquid-dsp's `nco_crcf` is of a lower accuracy class, so the entry is a trade of speed for accuracy (light green), not a gap to close: a 1024-entry table (error 4.7e-6 against 2.9e-7), a `double` modulo in every phase and frequency adjustment, and no lock detector or integrator limit; it reaches 9.46 dB (x86) and 23.44 dB (`neon`, `simd128`) against 57.02 dB for ours (SNR of the difference channel against the ideal oscillator), 33.6 dB to 47.6 dB less error for ours. Instructions per sample (D143, D144): 90.2, 88.2 and 78.4 against 67.9 at `sse2`, `sse4.2` and `avx2`, 68.8 against 59.9 at `neon`, 190.1 against 143.9 at `simd128`; simulated cycles per sample ours / liquid with the corrected `llvm-mca` (D942), reference / counter model: 88.89 / 71.63 and 77.84 / 63.55 at `sse2`, 88.29 / 71.63 and 77.34 / 63.55 at `sse4.2`, 63.32 / 57.06 and 79.41 / 78.06 at `avx2`, 84.51 / 86.93 and 56.44 / 57.23 at `neon`"
+      "status": "dev"
     }
   },
   "stereo_pll_q15_fallback": {
@@ -3650,7 +3671,8 @@
       "status": "release"
     },
     "simd128": {
-      "status": "release"
+      "status": "info",
+      "waiver": "VOLK's wasm32 build holds only its portable `generic` protokernels (D12), compiled with `-msimd128`: no SIMD reference of the level (D32), so the comparison is information and the entry is judged by its efficiency, as `channelize` and `xcorr_fft` at this level (the maintainer's decision D2623; the maintainer's measurement order of 2026-11-24, D2768)"
     },
     "avx2-runtime": {
       "status": "release"
@@ -3673,7 +3695,8 @@
       "status": "release"
     },
     "simd128": {
-      "status": "release"
+      "status": "info",
+      "waiver": "VOLK's wasm32 build holds only its portable `generic` protokernels (D12), compiled with `-msimd128`: no SIMD reference of the level (D32), so the comparison is information and the entry is judged by its efficiency, as `channelize` and `xcorr_fft` at this level (the maintainer's decision D2623; the maintainer's measurement order of 2026-11-24, D2768)"
     },
     "avx2-runtime": {
       "status": "release"
@@ -3696,7 +3719,8 @@
       "status": "release"
     },
     "simd128": {
-      "status": "release"
+      "status": "info",
+      "waiver": "VOLK's wasm32 build holds only its portable `generic` protokernels (D12), compiled with `-msimd128`: no SIMD reference of the level (D32), so the comparison is information and the entry is judged by its efficiency, as `channelize` and `xcorr_fft` at this level (the maintainer's decision D2623; the maintainer's measurement order of 2026-11-24, D2768)"
     },
     "avx2-runtime": {
       "status": "release"
@@ -3719,7 +3743,8 @@
       "status": "release"
     },
     "simd128": {
-      "status": "release"
+      "status": "info",
+      "waiver": "VOLK's wasm32 build holds only its portable `generic` protokernels (D12), compiled with `-msimd128`: no SIMD reference of the level (D32), so the comparison is information and the entry is judged by its efficiency, as `channelize` and `xcorr_fft` at this level (the maintainer's decision D2623; the maintainer's measurement order of 2026-11-24, D2768)"
     },
     "avx2-runtime": {
       "status": "release"
@@ -3745,7 +3770,8 @@
       "status": "release"
     },
     "simd128": {
-      "status": "release"
+      "status": "info",
+      "waiver": "VOLK's wasm32 build holds only its portable `generic` protokernels (D12), compiled with `-msimd128`: no SIMD reference of the level (D32), so the comparison is information and the entry is judged by its efficiency, as `channelize` and `xcorr_fft` at this level (the maintainer's decision D2623; the maintainer's measurement order of 2026-11-24, D2768)"
     }
   },
   "mul_real": {
@@ -3765,7 +3791,8 @@
       "status": "release"
     },
     "simd128": {
-      "status": "release"
+      "status": "info",
+      "waiver": "VOLK's wasm32 build holds only its portable `generic` protokernels (D12), compiled with `-msimd128`: no SIMD reference of the level (D32), so the comparison is information and the entry is judged by its efficiency, as `channelize` and `xcorr_fft` at this level (the maintainer's decision D2623; the maintainer's measurement order of 2026-11-24, D2768)"
     },
     "avx2-runtime": {
       "status": "release"
@@ -3791,7 +3818,8 @@
       "status": "release"
     },
     "simd128": {
-      "status": "release"
+      "status": "info",
+      "waiver": "VOLK's wasm32 build holds only its portable `generic` protokernels (D12), compiled with `-msimd128`: no SIMD reference of the level (D32), so the comparison is information and the entry is judged by its efficiency, as `channelize` and `xcorr_fft` at this level (the maintainer's decision D2623; the maintainer's measurement order of 2026-11-24, D2768)"
     }
   },
   "deinterleave": {
@@ -3814,7 +3842,8 @@
       "status": "release"
     },
     "simd128": {
-      "status": "release"
+      "status": "info",
+      "waiver": "VOLK's wasm32 build holds only its portable `generic` protokernels (D12), compiled with `-msimd128`: no SIMD reference of the level (D32), so the comparison is information and the entry is judged by its efficiency, as `channelize` and `xcorr_fft` at this level (the maintainer's decision D2623; the maintainer's measurement order of 2026-11-24, D2768)"
     }
   },
   "deinterleave_cq15": {
@@ -3837,7 +3866,8 @@
       "status": "release"
     },
     "simd128": {
-      "status": "release"
+      "status": "info",
+      "waiver": "VOLK's wasm32 build holds only its portable `generic` protokernels (D12), compiled with `-msimd128`: no SIMD reference of the level (D32), so the comparison is information and the entry is judged by its efficiency, as `channelize` and `xcorr_fft` at this level (the maintainer's decision D2623; the maintainer's measurement order of 2026-11-24, D2768)"
     }
   },
   "add_fallback": {
@@ -4429,11 +4459,11 @@
   "am_mod_fallback": {
     "sse2": {
       "status": "dev",
-      "waiver": "liquid-dsp's `ampmodem` (DSB with the carrier) does less work than the `am_mod` contract: `x * mod_index + 1` without the clamp to [-1, 1], the NaN rule and the carrier product; simulated in CI (D2745, whole-loop): 1.09 / 1.16 cycles per sample against 0.59 / 0.72 of the comparison on `skylake` / `znver2` (1.84 / 1.61); accepted by the maintainer (D586): the extra work keeps the output bounded and finite for inputs beyond full scale and NaN, where liquid's loop overmodulates or passes NaN on"
+      "waiver": "liquid-dsp's `ampmodem` (DSB with the carrier) does less work than the `am_mod` contract: `x * mod_index + 1` without the clamp to [-1, 1], the NaN rule and the carrier product; simulated in CI (D2745, whole-loop): 1.09 / 1.16 cycles per sample against 0.59 / 0.72 of the comparison on `skylake` / `znver2` (1.84 / 1.61); accepted by the maintainer (D586): the extra work keeps the output bounded and finite for inputs beyond full scale and NaN, where liquid's loop overmodulates or passes NaN on; open item I13.1-7; above the `dev` limit 1.50, awaiting the maintainer's decision (D2779)"
     },
     "sse4.2": {
       "status": "dev",
-      "waiver": "liquid-dsp's `ampmodem` (DSB with the carrier) does less work than the `am_mod` contract: `x * mod_index + 1` without the clamp to [-1, 1], the NaN rule and the carrier product; simulated in CI (D2745, whole-loop): 1.09 / 1.16 cycles per sample against 0.59 / 0.72 of the comparison on `skylake` / `znver2` (1.84 / 1.61); accepted by the maintainer (D586): the extra work keeps the output bounded and finite for inputs beyond full scale and NaN, where liquid's loop overmodulates or passes NaN on"
+      "waiver": "liquid-dsp's `ampmodem` (DSB with the carrier) does less work than the `am_mod` contract: `x * mod_index + 1` without the clamp to [-1, 1], the NaN rule and the carrier product; simulated in CI (D2745, whole-loop): 1.09 / 1.16 cycles per sample against 0.59 / 0.72 of the comparison on `skylake` / `znver2` (1.84 / 1.61); accepted by the maintainer (D586): the extra work keeps the output bounded and finite for inputs beyond full scale and NaN, where liquid's loop overmodulates or passes NaN on; open item I13.1-7; above the `dev` limit 1.50, awaiting the maintainer's decision (D2779)"
     },
     "avx2": {
       "status": "dev"
@@ -4443,7 +4473,7 @@
     },
     "neon": {
       "status": "dev",
-      "waiver": "liquid-dsp's `ampmodem` (DSB with the carrier) does less work than the `am_mod` contract: `x * mod_index + 1` without the clamp to [-1, 1], the NaN rule and the carrier product; simulated in CI (D2745, whole-loop): 2.91 / 1.52 cycles per sample against 1.28 / 1.03 of the comparison on `cortex-a72` / `cortex-a76` (2.27 / 1.48); accepted by the maintainer (D586): the extra work keeps the output bounded and finite for inputs beyond full scale and NaN, where liquid's loop overmodulates or passes NaN on",
+      "waiver": "liquid-dsp's `ampmodem` (DSB with the carrier) does less work than the `am_mod` contract: `x * mod_index + 1` without the clamp to [-1, 1], the NaN rule and the carrier product; simulated in CI (D2745, whole-loop): 2.91 / 1.52 cycles per sample against 1.28 / 1.03 of the comparison on `cortex-a72` / `cortex-a76` (2.27 / 1.48); accepted by the maintainer (D586): the extra work keeps the output bounded and finite for inputs beyond full scale and NaN, where liquid's loop overmodulates or passes NaN on; open item I13.1-7; above the `dev` limit 1.50, awaiting the maintainer's decision (D2779)",
       "accuracy_waiver": "150.8 dB against 152.1 dB for liquid-dsp's `ampmodem` on the count input (SNR against the f64 model): GCC contracts liquid's `x * mod_index + 1` into `fmla` on AArch64 (one rounding fewer), while the numeric contract of `am_mod` forbids FMA in the fallback (R6.5); at the x86 levels, where liquid has no FMA, both are at 150.8 dB; accepted by the maintainer (D586): the extra work keeps the output bounded and finite for inputs beyond full scale and NaN, where liquid's loop overmodulates or passes NaN on"
     },
     "simd128": {
@@ -7209,25 +7239,32 @@
   },
   "scramble_cq15_b2": {
     "sse2": {
-      "status": "release"
+      "status": "info",
+      "waiver": "CMSIS-DSP's `arm_cmplx_mult_cmplx_q15` (with the phasor lookup) is its generic C, while ours runs the SIMD path of the level: no like-with-like comparison of the level (D32), so the comparison is information and the entry is judged by its efficiency, as `fm_mod` against GNU Radio's scalar loop (D58) (the maintainer's measurement order of 2026-11-24, D2769)"
     },
     "sse4.2": {
-      "status": "release"
+      "status": "info",
+      "waiver": "CMSIS-DSP's `arm_cmplx_mult_cmplx_q15` (with the phasor lookup) is its generic C, while ours runs the SIMD path of the level: no like-with-like comparison of the level (D32), so the comparison is information and the entry is judged by its efficiency, as `fm_mod` against GNU Radio's scalar loop (D58) (the maintainer's measurement order of 2026-11-24, D2769)"
     },
     "avx2": {
-      "status": "release"
+      "status": "info",
+      "waiver": "CMSIS-DSP's `arm_cmplx_mult_cmplx_q15` (with the phasor lookup) is its generic C, while ours runs the SIMD path of the level: no like-with-like comparison of the level (D32), so the comparison is information and the entry is judged by its efficiency, as `fm_mod` against GNU Radio's scalar loop (D58) (the maintainer's measurement order of 2026-11-24, D2769)"
     },
     "avx512": {
-      "status": "release"
+      "status": "info",
+      "waiver": "CMSIS-DSP's `arm_cmplx_mult_cmplx_q15` (with the phasor lookup) is its generic C, while ours runs the SIMD path of the level: no like-with-like comparison of the level (D32), so the comparison is information and the entry is judged by its efficiency, as `fm_mod` against GNU Radio's scalar loop (D58) (the maintainer's measurement order of 2026-11-24, D2769)"
     },
     "neon": {
-      "status": "release"
+      "status": "info",
+      "waiver": "CMSIS-DSP's `arm_cmplx_mult_cmplx_q15` (with the phasor lookup) is its generic C, while ours runs the SIMD path of the level: no like-with-like comparison of the level (D32), so the comparison is information and the entry is judged by its efficiency, as `fm_mod` against GNU Radio's scalar loop (D58) (the maintainer's measurement order of 2026-11-24, D2769)"
     },
     "simd128": {
-      "status": "release"
+      "status": "info",
+      "waiver": "CMSIS-DSP's `arm_cmplx_mult_cmplx_q15` is its generic C, compiled with `-msimd128`: no SIMD reference of the level (D32), so the comparison is information and the entry is judged by its efficiency, as `channelize` and `xcorr_fft` at this level (the maintainer's decision D2623; the maintainer's measurement order of 2026-11-24, D2768)"
     },
     "avx2-runtime": {
-      "status": "release"
+      "status": "info",
+      "waiver": "CMSIS-DSP's `arm_cmplx_mult_cmplx_q15` (with the phasor lookup) is its generic C, while ours runs the SIMD path of the level: no like-with-like comparison of the level (D32), so the comparison is information and the entry is judged by its efficiency, as `fm_mod` against GNU Radio's scalar loop (D58) (the maintainer's measurement order of 2026-11-24, D2769)"
     }
   },
   "scramble_cq15_b8": {

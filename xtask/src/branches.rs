@@ -34,10 +34,14 @@ impl Branches {
         self.conditional_mispredicted + self.indirect_mispredicted
     }
 
-    /// `self - empty`, field by field: the branches of the counted calls.
+    /// `self - empty`, field by field: the branches of the counted calls. The mispredictions
+    /// saturate at zero (D2744): the predictor's tables are indexed by address and history, so
+    /// the run without the counted calls can mispredict a few more of the shared code than the
+    /// run with them (`fft_64` against its restore-only run in CI); the counted calls then add
+    /// no measurable mispredictions. The executed branches are exact and must not decrease.
     ///
     /// # Errors
-    /// A field of `empty` is larger than the one of `self`.
+    /// An executed-branch field of `empty` is larger than the one of `self`.
     pub fn minus(&self, empty: &Branches) -> anyhow::Result<Branches> {
         let sub = |a: u64, b: u64, what: &str| {
             a.checked_sub(b)
@@ -45,17 +49,13 @@ impl Branches {
         };
         Ok(Branches {
             conditional: sub(self.conditional, empty.conditional, "conditional branches")?,
-            conditional_mispredicted: sub(
-                self.conditional_mispredicted,
-                empty.conditional_mispredicted,
-                "conditional mispredictions",
-            )?,
+            conditional_mispredicted: self
+                .conditional_mispredicted
+                .saturating_sub(empty.conditional_mispredicted),
             indirect: sub(self.indirect, empty.indirect, "indirect branches")?,
-            indirect_mispredicted: sub(
-                self.indirect_mispredicted,
-                empty.indirect_mispredicted,
-                "indirect mispredictions",
-            )?,
+            indirect_mispredicted: self
+                .indirect_mispredicted
+                .saturating_sub(empty.indirect_mispredicted),
         })
     }
 }
@@ -188,6 +188,13 @@ summary: 123456 7890 456 12 3
         };
         assert_eq!(b.minus(&empty).unwrap().mispredicted(), 400);
         assert!(empty.minus(&b).is_err());
+        // More mispredictions without the counted calls (the predictor's aliasing): zero.
+        let noisy = Branches {
+            conditional_mispredicted: 500,
+            ..empty
+        };
+        let d = b.minus(&noisy).unwrap();
+        assert_eq!((d.conditional, d.conditional_mispredicted), (7000, 0));
     }
 
     #[test]

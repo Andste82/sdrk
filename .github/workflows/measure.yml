@@ -59,8 +59,12 @@ env:
   # The packages per job (as the count jobs had them): the build of llvm-mca, the x86-64
   # levels (Valgrind, the VOLK build), aarch64 (the cross compilers, clang for KFR, the QEMU
   # build). Fewer packages also mean fewer downloads from the snapshot service, which can be
-  # slow.
-  LLVM_MCA_PACKAGES: git ca-certificates curl xz-utils patch build-essential cmake ninja-build python3 clang lld
+  # slow. Every list has zstd: actions/cache compresses with zstd where it finds it and with gzip
+  # otherwise, and a cache saved with one is not found by a job that has the other (run
+  # 45345601777: the llvm-mca saved without zstd was missing in the job reproduction).
+  LLVM_MCA_PACKAGES: >-
+    git ca-certificates curl xz-utils zstd patch build-essential cmake ninja-build python3
+    clang lld
   X86_PACKAGES: >-
     git ca-certificates curl xz-utils zstd build-essential cmake ninja-build pkg-config
     python3 python3-mako valgrind

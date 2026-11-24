@@ -1314,8 +1314,8 @@
       "waiver": "KissFFT (`FIXED_POINT=16`) is scalar C, while ours runs the SIMD path of the level: no like-with-like comparison of the level (D32), so the comparison is information and the entry is judged by its efficiency, as `fm_mod` against GNU Radio's scalar loop (D58) (the maintainer's measurement order of 2026-11-24, D2769)"
     },
     "neon": {
-      "status": "info",
-      "waiver": "KissFFT (`FIXED_POINT=16`) is scalar C, while ours runs the SIMD path of the level: no like-with-like comparison of the level (D32), so the comparison is information and the entry is judged by its efficiency, as `fm_mod` against GNU Radio's scalar loop (D58) (the maintainer's measurement order of 2026-11-24, D2769)"
+      "status": "dev",
+      "waiver": "1.320 / 1.009 of Ne10's int16 NEON transform ne10_fft_c2c_1d_int16_neon (11.77 / 10.10 against 8.91 / 10.01 cycles per sample on cortex-a72 / cortex-a76, CI run 45456013770): above 1.10 on cortex-a72; ours (block float, 63.54 dB) is 18.75 dB more accurate than Ne10 (44.79 dB), but above 1.20 the accuracy trade of D2760 does not hold; judged against Ne10 since D2781 (open item I13.1-12)"
     },
     "simd128": {
       "status": "info",
@@ -1344,8 +1344,8 @@
       "waiver": "KissFFT (`FIXED_POINT=16`) is scalar C, while ours runs the SIMD path of the level: no like-with-like comparison of the level (D32), so the comparison is information and the entry is judged by its efficiency, as `fm_mod` against GNU Radio's scalar loop (D58) (the maintainer's measurement order of 2026-11-24, D2769)"
     },
     "neon": {
-      "status": "info",
-      "waiver": "KissFFT (`FIXED_POINT=16`) is scalar C, while ours runs the SIMD path of the level: no like-with-like comparison of the level (D32), so the comparison is information and the entry is judged by its efficiency, as `fm_mod` against GNU Radio's scalar loop (D58) (the maintainer's measurement order of 2026-11-24, D2769)"
+      "status": "release",
+      "accuracy_trade": "SNR 47.98 dB against 44.64 dB of Ne10 ne10_fft_c2c_1d_int16_neon (3.34 dB more accurate, the comparison below 100 dB) at 1.142 / 0.847 of its cycles (10.18 / 8.48 against 8.91 / 10.01 cycles per sample on cortex-a72 / cortex-a76, CI run 45456013770); release by the accuracy trade of D2760, judged against Ne10 since D2781 (D2783)"
     },
     "simd128": {
       "status": "info",
@@ -1378,8 +1378,8 @@
       "waiver": "KissFFT (`FIXED_POINT=16`) is scalar C, while ours runs the SIMD path of the level: no like-with-like comparison of the level (D32), so the comparison is information and the entry is judged by its efficiency, as `fm_mod` against GNU Radio's scalar loop (D58) (the maintainer's measurement order of 2026-11-24, D2769)"
     },
     "neon": {
-      "status": "info",
-      "waiver": "KissFFT (`FIXED_POINT=16`) is scalar C, while ours runs the SIMD path of the level: no like-with-like comparison of the level (D32), so the comparison is information and the entry is judged by its efficiency, as `fm_mod` against GNU Radio's scalar loop (D58) (the maintainer's measurement order of 2026-11-24, D2769)"
+      "status": "dev",
+      "waiver": "1.227 / 0.900 of Ne10's int16 NEON transform ne10_fft_c2c_1d_int16_neon (10.93 / 9.01 against 8.91 / 10.01 cycles per sample on cortex-a72 / cortex-a76, CI run 45456013770): above 1.10 on cortex-a72; ours 59.88 dB against 56.90 dB of Ne10 (2.98 dB, below the 3 dB of the accuracy trade of D2760, and above 1.20); judged against Ne10 since D2781 (open item I13.1-12)"
     },
     "simd128": {
       "status": "info",

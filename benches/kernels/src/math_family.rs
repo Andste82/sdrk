@@ -36,7 +36,7 @@ use sdrk_core::RealSample;
 use volk_sys::{lv_16sc_t, lv_32fc_t};
 
 use super::{
-    Aligned, BiquadEntry, Impl, Kernel, Layout, Pcg32, c32s, cq15s, describe_cmsis,
+    Aligned, BiquadEntry, Impl, Kernel, Layout, Pcg32, c32s, cq15s, describe_cmsis, describe_kfr_ops,
     dot_scale_supports, noise_c32, snr_db,
 };
 
@@ -384,6 +384,14 @@ impl Kernel for ComplexC32K {
                         pairs_mut(&mut self.out),
                     );
                 }
+                // KFR's complex product of the level (D2785).
+                Impl::Kfr if self.op == Op::Mul => {
+                    cref_sys::kfr_ops::complex_mul(
+                        floats(&self.a),
+                        floats(&self.b),
+                        floats_mut(&mut self.out),
+                    );
+                }
                 Impl::Cmsis => match self.op {
                     Op::Add => add_f32(floats(&self.a), floats(&self.b), floats_mut(&mut self.out)),
                     Op::Mul => {
@@ -420,6 +428,11 @@ impl Kernel for ComplexC32K {
                 && self.op == Op::Mul
                 && cref_sys::volk_nofma::AVAILABLE;
         }
+        if which == Impl::Kfr {
+            return self.entry == BiquadEntry::Simd
+                && self.op == Op::Mul
+                && cref_sys::kfr_ops::AVAILABLE;
+        }
         dot_scale_supports(self.entry, which, volk_sys::FULL)
     }
 
@@ -438,6 +451,7 @@ impl Kernel for ComplexC32K {
                     "VOLK 3.3.0 volk_32fc_x2_multiply_32fc without FMA (benches/refs/volk-nofma.c)"
                 }
             },
+            (Impl::Kfr, _) => describe_kfr_ops("a * b on complex<float>"),
             (Impl::Cmsis, Op::Add) => describe_cmsis("arm_add_f32 on the 2 n floats"),
             (Impl::Cmsis, Op::Mul) => describe_cmsis("arm_cmplx_mult_cmplx_f32"),
             (Impl::Fallback, _) => "sdrk fallback",

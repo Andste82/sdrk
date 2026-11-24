@@ -1468,6 +1468,19 @@ fn floats(out: &mut [C32], values: usize) -> &mut [f32] {
     unsafe { std::slice::from_raw_parts_mut(out.as_mut_ptr().cast::<f32>(), values) }
 }
 
+/// `x` as signed bytes.
+fn i8s(x: &[u8]) -> &[i8] {
+    // SAFETY: `i8` and `u8` have the same size and alignment; the slice borrows `x`.
+    unsafe { std::slice::from_raw_parts(x.as_ptr().cast(), x.len()) }
+}
+
+/// `x` as `2 x.len()` interleaved `i16` values.
+fn i16s_mut(x: &mut [CQ15]) -> &mut [i16] {
+    // SAFETY: `CQ15` is `repr(C)` of two `repr(transparent)` `i16`; the slice borrows `x`
+    // mutably.
+    unsafe { std::slice::from_raw_parts_mut(x.as_mut_ptr().cast(), 2 * x.len()) }
+}
+
 /// The raw input of `n` samples of `format`, and for `CU8` the bytes with the sign bit flipped
 /// (`u - 128` as `i8`), the input of the VOLK comparisons.
 fn convert_input(rng: &mut Pcg32, layout: Layout, format: InFormat) -> (Aligned<u8>, Aligned<u8>) {
@@ -1578,6 +1591,21 @@ impl Kernel for ConvertIn {
                         },
                     }
                 }
+                // KFR's expression `in * (1 / 128)` from the signed bytes (D2785); for CU8 on the
+                // flipped bytes, as for VOLK.
+                Impl::Kfr => {
+                    let input = if self.format == InFormat::Cu8 {
+                        &self.signed
+                    } else {
+                        &self.raw
+                    };
+                    let values = values as usize;
+                    cref_sys::kfr_ops::i8_to_f32(
+                        i8s(&input[..values]),
+                        &mut floats(&mut self.out, self.n)[..values],
+                        1.0 / 128.0,
+                    );
+                }
                 Impl::Cmsis => {
                     let out = self.out.as_mut_ptr().cast::<f32>();
                     match self.format {
@@ -1615,7 +1643,7 @@ impl Kernel for ConvertIn {
 
     fn accuracy(&mut self, which: Impl) -> f64 {
         self.run(which, 1);
-        if matches!(which, Impl::Volk | Impl::Cmsis) && self.format == InFormat::Cu8 {
+        if matches!(which, Impl::Volk | Impl::Cmsis | Impl::Kfr) && self.format == InFormat::Cu8 {
             for v in self.out.iter_mut() {
                 *v = C32::new(v.re + 0.5 / 128.0, v.im + 0.5 / 128.0);
             }
@@ -1628,6 +1656,11 @@ impl Kernel for ConvertIn {
     }
 
     fn supports(&self, which: Impl) -> bool {
+        if which == Impl::Kfr {
+            return self.entry == BiquadEntry::Simd
+                && matches!(self.format, InFormat::Cs8 | InFormat::Cu8)
+                && cref_sys::kfr_ops::AVAILABLE;
+        }
         convert_supports(self.entry, which, volk_sys::AVAILABLE)
     }
 
@@ -1637,6 +1670,10 @@ impl Kernel for ConvertIn {
                 describe_cmsis_convert("arm_q7_to_float", self.format)
             }
             (Impl::Cmsis, _) => describe_cmsis_convert("arm_q15_to_float", self.format),
+            (Impl::Kfr, InFormat::Cu8) => describe_kfr_ops(
+                "in * (1 / 128) on the bytes with the sign bit flipped (the CU8 conversion without its offset)",
+            ),
+            (Impl::Kfr, _) => describe_kfr_ops("in * (1 / 128)"),
             (Impl::Volk, InFormat::Cs8) => "volk_8i_s32f_convert_32f",
             (Impl::Volk, InFormat::Cu8) => {
                 "volk_8i_s32f_convert_32f on the bytes with the sign bit flipped (the CU8 conversion without its offset)"
@@ -1706,6 +1743,17 @@ impl Kernel for ConvertQ15In {
                         );
                     }
                 }
+                // KFR's expression `in << 8` from the signed bytes (D2785); for CU8 on the
+                // flipped bytes, as for VOLK.
+                Impl::Kfr => {
+                    let input = if self.format == InFormat::Cu8 {
+                        &self.signed
+                    } else {
+                        &self.raw
+                    };
+                    let values = values as usize;
+                    cref_sys::kfr_ops::i8_to_i16(i8s(&input[..values]), i16s_mut(&mut self.out));
+                }
                 Impl::Cmsis => {
                     // `(u - 128) << 8` from the flipped bytes for CU8, as for VOLK.
                     let input = if self.format == InFormat::Cu8 {
@@ -1730,7 +1778,7 @@ impl Kernel for ConvertQ15In {
 
     fn accuracy(&mut self, which: Impl) -> f64 {
         self.run(which, 1);
-        if matches!(which, Impl::Volk | Impl::Cmsis) && self.format == InFormat::Cu8 {
+        if matches!(which, Impl::Volk | Impl::Cmsis | Impl::Kfr) && self.format == InFormat::Cu8 {
             for v in self.out.iter_mut() {
                 *v = CQ15 {
                     re: Q15(v.re.0 + 128),
@@ -1745,6 +1793,9 @@ impl Kernel for ConvertQ15In {
     }
 
     fn supports(&self, which: Impl) -> bool {
+        if which == Impl::Kfr {
+            return self.entry == BiquadEntry::Simd && cref_sys::kfr_ops::AVAILABLE;
+        }
         convert_supports(self.entry, which, volk_sys::FULL)
     }
 
@@ -1754,6 +1805,10 @@ impl Kernel for ConvertQ15In {
             (Impl::Volk, InFormat::Cu8) => {
                 "volk_8i_convert_16i on the bytes with the sign bit flipped (the CU8 conversion without its offset)"
             }
+            (Impl::Kfr, InFormat::Cu8) => describe_kfr_ops(
+                "cast<i16>(in) << 8 on the bytes with the sign bit flipped (the CU8 conversion without its offset)",
+            ),
+            (Impl::Kfr, _) => describe_kfr_ops("cast<i16>(in) << 8"),
             (Impl::Volk, _) => "volk_8i_convert_16i",
             (Impl::Fallback, _) => "sdrk fallback",
             _ => "sdrk",
@@ -4700,6 +4755,8 @@ impl Kernel for PowerDbK {
                     );
                     volk_sys::native::volk_32f_s32f_add_32f(out, out, POWER_DB_OFFSET, n);
                 },
+                // KFR's `10 log10(x) + offset` of the level (D2785).
+                Impl::Kfr => cref_sys::kfr_ops::power_db(&self.input, &mut self.out, POWER_DB_OFFSET),
                 Impl::Cmsis => cmsis_power_db(&self.input, &mut self.out),
                 other => unreachable!("power_db has no {other:?}"),
             }
@@ -4718,11 +4775,15 @@ impl Kernel for PowerDbK {
     }
 
     fn supports(&self, which: Impl) -> bool {
+        if which == Impl::Kfr {
+            return self.entry == BiquadEntry::Simd && cref_sys::kfr_ops::AVAILABLE;
+        }
         spectrum_supports(self.entry, which, volk_sys::FULL)
     }
 
     fn describe(&self, which: Impl) -> &'static str {
         match which {
+            Impl::Kfr => describe_kfr_ops("10 * log10(x) + offset"),
             Impl::Volk => "volk_32f_log2_32f + volk_32f_s32f_multiply_32f + volk_32f_s32f_add_32f",
             Impl::Cmsis => describe_cmsis("arm_vlog_f32 + arm_scale_f32 (+ offset loop)"),
             Impl::Fallback => "sdrk fallback",
@@ -5727,6 +5788,15 @@ fn describe_kfr(layout: &str) -> &'static str {
     let arch = KfrBiquad::arch().unwrap_or("?");
     Box::leak(
         format!("KFR 7.2.0 kfr::iir, iir_state<float, 2> ({arch}, -ffp-contract=off){layout}")
+            .into_boxed_str(),
+    )
+}
+
+/// The text of [`Kernel::describe`] for KFR's element-wise expressions (D2785).
+pub(crate) fn describe_kfr_ops(expression: &str) -> &'static str {
+    let arch = KfrBiquad::arch().unwrap_or("?");
+    Box::leak(
+        format!("KFR 7.2.0 {expression} (benches/refs/kfr-ops.cpp, {arch}, -ffp-contract=off)")
             .into_boxed_str(),
     )
 }

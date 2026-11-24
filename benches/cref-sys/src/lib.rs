@@ -66,6 +66,7 @@ pub mod gnuradio;
 pub mod gr_dvbs2;
 mod gr_fastnoise;
 mod halfband;
+pub mod kfr_ops;
 pub mod liquid;
 mod liquid_am;
 mod liquid_fir;

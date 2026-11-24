@@ -1412,7 +1412,28 @@ pub fn comparisons(plan: &LevelPlan, spec: &KernelSpec) -> (Reference, Vec<Refer
     (gate, extras)
 }
 
+/// The entries whose VOLK function runs a `generic` protokernel in VOLK's machine of `sse2`
+/// (`VOLK_SSE2_CONFIG`: the int8 conversions start at SSE4.1, the complex product at SSE3, the
+/// base-2 logarithm at SSE4.1): at `sse2` KFR's element-wise expressions compiled for the level
+/// (`benches/refs/kfr-ops.cpp`) are the judged comparison and VOLK is information (the
+/// maintainer's decision on I13.1-11, D2785).
+pub const KFR_AT_SSE2: [&str; 6] = [
+    "convert_cs8",
+    "convert_cu8",
+    "convert_cq15_cs8",
+    "convert_cq15_cu8",
+    "mul",
+    "power_db",
+];
+
 fn family_comparisons(plan: &LevelPlan, spec: &KernelSpec) -> (Reference, Vec<Reference>) {
+    if plan.level == "sse2" && plan.baseline.is_none() && KFR_AT_SSE2.contains(&spec.name) {
+        let mut extras = vec![Reference::Volk];
+        if spec.family == Family::VolkAndOwn {
+            extras.push(Reference::Fallback);
+        }
+        return (Reference::Kfr, extras);
+    }
     match spec.family {
         Family::VolkNative | Family::OwnVsGnuRadioSimd if plan.refs == "wasm32" => {
             (Reference::Fallback, Vec::new())
@@ -1611,10 +1632,62 @@ volk_16i_x2_add_saturated_16i neonv8 neonv8
 volk_16ic_deinterleave_16i_x2 neonv8 neonv8
 ";
 
+/// The protokernel that VOLK runs for `function` at `plan`'s level (D2785): the aligned (`a_`,
+/// the first column) or unaligned implementation of the pinned `volk_config` of the level, from
+/// VOLK's machine tables (`VOLK_SSE2_CONFIG` ... `VOLK_NEON_CONFIG`). `avx512` dispatches over
+/// VOLK's `avx512` machine, which holds every implementation of the `avx2` pin and picks one at
+/// least as high, so the `avx2` pin bounds it from below; on wasm32 only the `generic`
+/// protokernels exist. `None` for a function that the level's pin does not name.
+#[must_use]
+pub fn volk_protokernel(plan: &LevelPlan, function: &str, aligned: bool) -> Option<&'static str> {
+    let config = match plan.volk_pin {
+        VolkPin::Default if plan.refs == "wasm32" => {
+            return VOLK_FUNCTIONS.contains(&function).then_some("generic");
+        }
+        VolkPin::Default => VOLK_AVX2_CONFIG,
+        pin => pin.config(),
+    };
+    config.lines().find_map(|line| {
+        let mut it = line.split_whitespace();
+        (it.next()? == function).then_some(())?;
+        let (a, u) = (it.next()?, it.next()?);
+        Some(if aligned { a } else { u })
+    })
+}
+
+/// The VOLK functions that a comparison names (`compared_with` of a record), each with whether
+/// the aligned implementation runs: an explicit `_u` entry point is unaligned; `_a` and the
+/// plain dispatcher on the aligned buffers of the measurement are aligned.
+#[must_use]
+pub fn volk_functions_of(compared_with: &str) -> Vec<(&'static str, bool)> {
+    let mut out = Vec::new();
+    for f in VOLK_FUNCTIONS {
+        let mut rest = compared_with;
+        while let Some(i) = rest.find(f) {
+            let tail = &rest[i + f.len()..];
+            let next: String = tail
+                .chars()
+                .take_while(|c| c.is_ascii_alphanumeric() || *c == '_')
+                .collect();
+            match next.as_str() {
+                "" | "_a" => out.push((f, true)),
+                "_u" => out.push((f, false)),
+                // A longer name (another function, or an explicit protokernel such as
+                // `_generic` or `_u_avx`, which is no dispatch).
+                _ => {}
+            }
+            rest = &tail[next.len()..];
+        }
+    }
+    out.sort_unstable();
+    out.dedup();
+    out
+}
+
 /// The VOLK functions whose names VOLK reads as environment variables to override its
 /// dispatch (`volk_rank_archs`); the measured processes run without them and without
 /// `VOLK_GENERIC`.
-const VOLK_FUNCTIONS: [&str; 28] = [
+pub const VOLK_FUNCTIONS: [&str; 28] = [
     "volk_8i_s32f_convert_32f",
     "volk_16i_s32f_convert_32f",
     "volk_8i_convert_16i",
@@ -4047,7 +4120,13 @@ mod tests {
         }
         // `mul`: VOLK's dispatch, fused where ours is (D326); its protokernel without FMA as
         // information at those levels.
-        for level in levels {
+        // At `sse2` VOLK's machine has only the `generic` protokernel: KFR is the gate, VOLK
+        // information (D2785).
+        assert_eq!(
+            comparisons(plan("sse2"), kernel("mul")),
+            (Reference::Kfr, vec![Reference::Volk])
+        );
+        for level in levels.into_iter().filter(|l| *l != "sse2") {
             let (gate, extras) = comparisons(plan(level), kernel("mul"));
             assert_eq!(gate, Reference::Volk, "mul at {level}");
             if matches!(level, "avx2" | "avx512" | "neon") {

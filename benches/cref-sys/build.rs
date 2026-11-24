@@ -2,7 +2,7 @@
 //! named by `SDRK_REFS_DIR` (xtask sets it). Each library is optional: a missing one leaves its
 //! cfg (`has_fftw`, `has_kissfft`, `has_ne10`, `has_gragc`, `has_grsquelch`, `has_grrotator`,
 //! `has_grfmmod`, `has_grquaddemod`, `has_grdeemph`, `has_grcrc`, `has_grscrambler`, `has_grsnrest`, `has_grcostas`, `has_grsymsync`, `has_grvolk`, `has_grequalizer`, `has_grconstellation`, `has_liquiddc`, `has_liquidnco`, `has_liquidam`, `has_liquidrandn`, `has_grfastnoise`, `has_grdvbs2`, `has_kfr`, `has_cmsis`,
-//! `has_cmsisdsp`, `has_liquidhb`, `has_airspy`, `has_volknofma`, `has_volkgeneric`) unset, and its wrapper then reports that the library is not available.
+//! `has_cmsisdsp`, `has_liquidhb`, `has_airspy`, `has_volknofma`, `has_volkgeneric`, `has_kfrops`) unset, and its wrapper then reports that the library is not available.
 //!
 //! FFTW, the biquad references (KFR, CMSIS-DSP), the other CMSIS-DSP references and the halfband references
 //! (liquid-dsp, libairspy) exist once per SIMD
@@ -43,8 +43,9 @@ const LIBRARIES: [(&str, &str, &str); 22] = [
 ];
 
 /// The per-level libraries: cfg name, link name without the level.
-const LEVEL_LIBRARIES: [(&str, &str); 8] = [
+const LEVEL_LIBRARIES: [(&str, &str); 9] = [
     ("has_fftw", "fftw3f"),
+    ("has_kfrops", "kfrops"),
     ("has_kfr", "kfrbq"),
     ("has_cmsis", "cmsisbq"),
     ("has_cmsisdsp", "cmsisdsp"),

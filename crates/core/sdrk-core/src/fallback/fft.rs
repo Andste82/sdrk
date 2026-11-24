@@ -183,9 +183,9 @@ mod two {
     /// Two samples `[re0, im0, re1, im1]`.
     type Lanes = [f32; 4];
 
-    /// The smallest size that takes the lanes. Below it the check of [`fits`] and the
-    /// preparation of the twiddles cost more than the lanes save: `channelize_fallback` (16
-    /// points per hop) measured 3 to 15 % more cycles with the lanes on every x86 level (CI run
+    /// The smallest size that takes the lanes. At 16 points the check of [`fits`] and the
+    /// preparation of the twiddles cost about as much as the lanes save (`channelize_fallback`,
+    /// 16 points per hop, measured 3 to 15 % more cycles with them on every x86 level, CI run
     /// 45471656947), while 64 points gain 7 to 29 % (`sapphirerapids` at `avx512` excepted,
     /// 5 % more).
     pub(super) const MIN_N: usize = 64;
@@ -214,8 +214,8 @@ mod two {
 
     /// The transform of [`super::Fallback`] for data that [`fits`]: the bit reversal of
     /// [`bit_reverse_select`], the stages of [`stages`] and the scaling of the inverse. A
-    /// function of its own, so that the transform of the smaller sizes stays as small as it was
-    /// where it is inlined (`channelize` runs 16 points per hop).
+    /// function of its own, so that the smaller sizes and the inputs that may meet an infinity
+    /// or NaN run the scalar code of before.
     #[inline(never)]
     pub(super) fn fft(
         data: &mut [C32],

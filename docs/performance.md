@@ -2547,17 +2547,17 @@ Seven of the ten entries are at 0.5 or above on every level and model, bound by 
 
 Since D2553 the last 128 symbols are left out (before, the symbols still in the filters counted as errors of both receivers, about 10 symbols per seed) and the history of GNU Radio's matched filter is right in the last, shorter call (`GrFront` took it from the length of that call, which turned about 5 symbols of the chain wrong per seed); GNU Radio's BER at 8 dB is 1.96e-4 instead of 2.66e-4 (BPSK), and the tables of D2551 are replaced by these.
 
-Block default (`sync_bw` 0.005, D2553):
+Block default (`sync_bw` 0.005, D2553; the PSK detector of `costas` limited to [-1, 1], D2554):
 
 | constellation | mode | Eb/N0 dB | theory | sdrk BER | GNU Radio BER | sdrk / GNU Radio | sdrk changes per 1e5 | GNU Radio changes per 1e5 | bits |
 | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- |
-| BPSK | coherent | 2 | 3.751e-2 | 4.159e-2 | 3.934e-2 | 1.06 | 0.00 | 0.00 | 1536000 |
-| BPSK | coherent | 4 | 1.250e-2 | 1.381e-2 | 1.306e-2 | 1.06 | 0.00 | 0.00 | 1536000 |
-| BPSK | coherent | 6 | 2.388e-3 | 2.663e-3 | 2.503e-3 | 1.06 | 0.00 | 0.00 | 1536000 |
-| BPSK | coherent | 8 | 1.909e-4 | 2.155e-4 | 1.960e-4 | 1.10 | 0.00 | 0.00 | 1536000 |
-| QPSK | coherent | 2 | 3.751e-2 | 5.616e-2 | 5.050e-2 | 1.11 | 4.56 | 2.73 | 3072000 |
-| QPSK | coherent | 4 | 1.250e-2 | 1.445e-2 | 1.416e-2 | 1.02 | 0.07 | 0.07 | 3072000 |
-| QPSK | coherent | 6 | 2.388e-3 | 2.830e-3 | 2.761e-3 | 1.02 | 0.00 | 0.00 | 3072000 |
+| BPSK | coherent | 2 | 3.751e-2 | 4.134e-2 | 3.934e-2 | 1.05 | 0.00 | 0.00 | 1536000 |
+| BPSK | coherent | 4 | 1.250e-2 | 1.378e-2 | 1.306e-2 | 1.06 | 0.00 | 0.00 | 1536000 |
+| BPSK | coherent | 6 | 2.388e-3 | 2.660e-3 | 2.503e-3 | 1.06 | 0.00 | 0.00 | 1536000 |
+| BPSK | coherent | 8 | 1.909e-4 | 2.142e-4 | 1.960e-4 | 1.09 | 0.00 | 0.00 | 1536000 |
+| QPSK | coherent | 2 | 3.751e-2 | 5.189e-2 | 5.050e-2 | 1.03 | 3.26 | 2.73 | 3072000 |
+| QPSK | coherent | 4 | 1.250e-2 | 1.442e-2 | 1.416e-2 | 1.02 | 0.07 | 0.07 | 3072000 |
+| QPSK | coherent | 6 | 2.388e-3 | 2.829e-3 | 2.761e-3 | 1.02 | 0.00 | 0.00 | 3072000 |
 | QPSK | coherent | 8 | 1.909e-4 | 2.542e-4 | 2.497e-4 | 1.02 | 0.00 | 0.00 | 3072000 |
 | 8PSK | coherent | 6 | 2.048e-2 | 3.946e-2 | 3.848e-2 | 1.03 | 5.14 | 5.92 | 4608000 |
 | 8PSK | coherent | 8 | 6.181e-3 | 7.441e-3 | 7.387e-3 | 1.01 | 0.00 | 0.00 | 4608000 |
@@ -2568,18 +2568,18 @@ Block default (`sync_bw` 0.005, D2553):
 | BPSK | differential | 6 | 9.333e-3 | 9.995e-3 | 5.052e-3 | 1.98 | 0.00 | 0.00 | 1536000 |
 | BPSK | differential | 8 | 9.094e-4 | 1.014e-3 | 3.997e-4 | 2.54 | 0.00 | 0.00 | 1536000 |
 
-`sync_bw` 0.01 (the default before D2553):
+`sync_bw` 0.01 (the default before D2553), with the limit of D2554:
 
 | constellation | mode | Eb/N0 dB | theory | sdrk BER | GNU Radio BER | sdrk / GNU Radio | sdrk changes per 1e5 | GNU Radio changes per 1e5 | bits |
 | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- |
-| BPSK | coherent | 2 | 3.751e-2 | 7.077e-2 | 3.934e-2 | 1.80 | 8.79 | 0.00 | 1536000 |
-| BPSK | coherent | 4 | 1.250e-2 | 1.617e-2 | 1.306e-2 | 1.24 | 0.20 | 0.00 | 1536000 |
-| BPSK | coherent | 6 | 2.388e-3 | 3.068e-3 | 2.503e-3 | 1.23 | 0.00 | 0.00 | 1536000 |
-| BPSK | coherent | 8 | 1.909e-4 | 2.604e-4 | 1.960e-4 | 1.33 | 0.00 | 0.00 | 1536000 |
-| QPSK | coherent | 2 | 3.751e-2 | 6.084e-2 | 5.050e-2 | 1.20 | 5.86 | 2.73 | 3072000 |
-| QPSK | coherent | 4 | 1.250e-2 | 1.507e-2 | 1.416e-2 | 1.06 | 0.07 | 0.07 | 3072000 |
-| QPSK | coherent | 6 | 2.388e-3 | 2.985e-3 | 2.761e-3 | 1.08 | 0.00 | 0.00 | 3072000 |
-| QPSK | coherent | 8 | 1.909e-4 | 2.692e-4 | 2.497e-4 | 1.08 | 0.00 | 0.00 | 3072000 |
+| BPSK | coherent | 2 | 3.751e-2 | 7.307e-2 | 3.934e-2 | 1.86 | 9.05 | 0.00 | 1536000 |
+| BPSK | coherent | 4 | 1.250e-2 | 1.614e-2 | 1.306e-2 | 1.24 | 0.20 | 0.00 | 1536000 |
+| BPSK | coherent | 6 | 2.388e-3 | 3.072e-3 | 2.503e-3 | 1.23 | 0.00 | 0.00 | 1536000 |
+| BPSK | coherent | 8 | 1.909e-4 | 2.611e-4 | 1.960e-4 | 1.33 | 0.00 | 0.00 | 1536000 |
+| QPSK | coherent | 2 | 3.751e-2 | 5.554e-2 | 5.050e-2 | 1.10 | 3.84 | 2.73 | 3072000 |
+| QPSK | coherent | 4 | 1.250e-2 | 1.503e-2 | 1.416e-2 | 1.06 | 0.07 | 0.07 | 3072000 |
+| QPSK | coherent | 6 | 2.388e-3 | 2.981e-3 | 2.761e-3 | 1.08 | 0.00 | 0.00 | 3072000 |
+| QPSK | coherent | 8 | 1.909e-4 | 2.686e-4 | 2.497e-4 | 1.08 | 0.00 | 0.00 | 3072000 |
 | 8PSK | coherent | 6 | 2.048e-2 | 3.863e-2 | 3.848e-2 | 1.00 | 5.34 | 5.92 | 4608000 |
 | 8PSK | coherent | 8 | 6.181e-3 | 7.807e-3 | 7.387e-3 | 1.06 | 0.07 | 0.00 | 4608000 |
 | 8PSK | coherent | 10 | 1.011e-3 | 1.351e-3 | 1.255e-3 | 1.08 | 0.00 | 0.00 | 4608000 |
@@ -2589,48 +2589,24 @@ Block default (`sync_bw` 0.005, D2553):
 | BPSK | differential | 6 | 9.333e-3 | 1.104e-2 | 5.052e-3 | 2.18 | 0.00 | 0.00 | 1536000 |
 | BPSK | differential | 8 | 9.094e-4 | 1.148e-3 | 3.997e-4 | 2.87 | 0.00 | 0.00 | 1536000 |
 
-`sync_bw` 0.0075 for `psk_demod` (and 0.004 for the 8PSK row: 6.856e-2 at 6 dB, 1.78 times, 7.88 changes; BPSK 1.03 to 1.04, QPSK 1.01 to 1.11):
-
-| constellation | mode | Eb/N0 dB | theory | sdrk BER | GNU Radio BER | sdrk / GNU Radio | sdrk changes per 1e5 | GNU Radio changes per 1e5 | bits |
-| --- | --- | --- | --- | --- | --- | --- | --- | --- | --- |
-| BPSK | coherent | 2 | 3.751e-2 | 5.132e-2 | 3.934e-2 | 1.30 | 1.56 | 0.00 | 1536000 |
-| BPSK | coherent | 4 | 1.250e-2 | 1.456e-2 | 1.306e-2 | 1.12 | 0.00 | 0.00 | 1536000 |
-| BPSK | coherent | 6 | 2.388e-3 | 2.838e-3 | 2.503e-3 | 1.13 | 0.00 | 0.00 | 1536000 |
-| BPSK | coherent | 8 | 1.909e-4 | 2.350e-4 | 1.960e-4 | 1.20 | 0.00 | 0.00 | 1536000 |
-| QPSK | coherent | 2 | 3.751e-2 | 5.741e-2 | 5.050e-2 | 1.14 | 4.75 | 2.73 | 3072000 |
-| QPSK | coherent | 4 | 1.250e-2 | 1.474e-2 | 1.416e-2 | 1.04 | 0.07 | 0.07 | 3072000 |
-| QPSK | coherent | 6 | 2.388e-3 | 2.897e-3 | 2.761e-3 | 1.05 | 0.00 | 0.00 | 3072000 |
-| QPSK | coherent | 8 | 1.909e-4 | 2.620e-4 | 2.497e-4 | 1.05 | 0.00 | 0.00 | 3072000 |
-| 8PSK | coherent | 6 | 2.048e-2 | 9.574e-2 | 3.848e-2 | 2.49 | 10.48 | 5.92 | 4608000 |
-| 8PSK | coherent | 8 | 6.181e-3 | 7.541e-3 | 7.387e-3 | 1.02 | 0.00 | 0.00 | 4608000 |
-| 8PSK | coherent | 10 | 1.011e-3 | 1.317e-3 | 1.255e-3 | 1.05 | 0.00 | 0.00 | 4608000 |
-| 8PSK | coherent | 12 | 6.340e-5 | 9.831e-5 | 8.984e-5 | 1.09 | 0.00 | 0.00 | 4608000 |
-| BPSK | differential | 2 | 1.025e-1 | 1.154e-1 | 7.603e-2 | 1.52 | 1.30 | 0.00 | 1536000 |
-| BPSK | differential | 4 | 4.056e-2 | 4.451e-2 | 2.604e-2 | 1.71 | 0.00 | 0.00 | 1536000 |
-| BPSK | differential | 6 | 9.333e-3 | 1.043e-2 | 5.052e-3 | 2.06 | 0.00 | 0.00 | 1536000 |
-| BPSK | differential | 8 | 9.094e-4 | 1.063e-3 | 3.997e-4 | 2.66 | 0.00 | 0.00 | 1536000 |
-
 Timing settling: `cargo run --release --bin psk_ber -- acquisition [symbols [first seed [seeds [sync_bw...]]]]` sends 8000 symbols at a high Eb/N0 (12 dB, 8PSK 18 dB) for each delay of 0 to 7 samples (every symbol phase) and seeds 2701 to 2704 (32 runs per row; carrier offset and phase as above) and counts the symbols up to the last decision error at the alignment of symbols 6872 to 7871 (a run whose final alignment still has errors is "not settled"):
 
 | constellation | Eb/N0 dB | receiver | median | 90 % | max | not settled |
 | --- | --- | --- | --- | --- | --- | --- |
-| BPSK | 12 | sdrk, sync_bw 0.01 | 0 | 47 | 258 | 0 |
-| BPSK | 12 | sdrk, sync_bw 0.0075 | 0 | 71 | 141 | 0 |
 | BPSK | 12 | sdrk, sync_bw 0.005 | 0 | 147 | 258 | 0 |
+| BPSK | 12 | sdrk, sync_bw 0.01 | 0 | 47 | 258 | 0 |
 | BPSK | 12 | GNU Radio, sync_bw 0.01 | 0 | 862 | 2078 | 0 |
-| QPSK | 12 | sdrk, sync_bw 0.01 | 8 | 55 | 142 | 0 |
-| QPSK | 12 | sdrk, sync_bw 0.0075 | 12 | 89 | 223 | 0 |
 | QPSK | 12 | sdrk, sync_bw 0.005 | 17 | 190 | 353 | 0 |
+| QPSK | 12 | sdrk, sync_bw 0.01 | 12 | 78 | 142 | 0 |
 | QPSK | 12 | GNU Radio, sync_bw 0.01 | 27 | 1185 | 2400 | 0 |
-| 8PSK | 18 | sdrk, sync_bw 0.01 | 19 | 115 | 237 | 0 |
-| 8PSK | 18 | sdrk, sync_bw 0.0075 | 47 | 150 | 310 | 0 |
 | 8PSK | 18 | sdrk, sync_bw 0.005 | 60 | 213 | 306 | 0 |
+| 8PSK | 18 | sdrk, sync_bw 0.01 | 19 | 115 | 237 | 0 |
 | 8PSK | 18 | GNU Radio, sync_bw 0.01 | 281 | 2018 | 2032 | 0 |
 
-- **Coherent BPSK, QPSK and 8PSK.** With the default `sync_bw` 0.005 `psk_demod` is within 1 to 11 % of GNU Radio's chain (BPSK 1.06 to 1.10, QPSK 1.02 to 1.11, 8PSK 1.01 to 1.03) with 0 alignment changes for BPSK (QPSK 2 dB 4.56 against GNU Radio's 2.77, 8PSK 6 dB 5.14 against 5.86). At 0.01 it was 23 to 80 % above for BPSK with 8.79 alignment changes per 1e5 symbols at 2 dB against 0: the same nominal `sync_bw` is a wider loop in `psk_demod` than in `symbol_sync_cc` (the likely causes, not isolated: the factor `sps` in our gains, D565, and the cubic interpolator against the 8-tap MMSE, D2539). The carrier loop is not the cause (with `carrier_bw` 0.014 and 0.01 the BPSK rows at 0.01 did not change, D2551). The narrower loop keeps the settling well below that of the chain: at most 258 symbols for BPSK, 353 for QPSK and 306 for 8PSK (0.01: 258, 142 and 237), GNU Radio 2078, 2400 and 2032 (its carrier loop at the same `carrier_bw` and the 8-tap interpolator; the start is not isolated). 8PSK at 6 dB (a BER of 4e-2) is sensitive to the bandwidth: 0.0075 and 0.004 have slipping seeds (2.49 and 1.78 times, 10.48 and 7.88 changes), 0.005 and 0.01 not. The remaining gap of QPSK at 2 dB (1.11) is open item I169-2.
+- **Coherent BPSK, QPSK and 8PSK.** With the block defaults `psk_demod` is within 1 to 9 % of GNU Radio's chain on every row: BPSK 1.05 to 1.09 with 0 alignment changes, QPSK 1.02 to 1.03 (2 dB: 3.26 alignment changes per 1e5 symbols against 2.73), 8PSK 1.01 to 1.03. Two changes brought it there. The timing loop (D2553): the same nominal `sync_bw` is a wider loop in `psk_demod` than in `symbol_sync_cc`, so at 0.01 BPSK is 1.23 to 1.86 times GNU Radio's BER with 9.05 alignment changes at 2 dB; the default is 0.005. The carrier loop (D2554): GNU Radio's `costas_loop_cc` limits the phase error to +-1 before the loop filter, ours did not, so at 2 dB QPSK slipped more (4.56 changes, 1.11 of GNU Radio's BER, before the limit). The narrower timing loop keeps the settling well below that of the chain: at most 258 symbols for BPSK, 353 for QPSK and 306 for 8PSK (0.01: 258, 142 and 237), GNU Radio 2078, 2400 and 2032. With the loop before D2554, 0.0075 and 0.004 made 8PSK at 6 dB slip (2.49 and 1.78 times, D2553).
 
 - **Differential BPSK.** `psk_demod` with `differential` is a non-coherent detector (no carrier loop, the product of two symbols) and its BER is the theory of the non-coherent detector plus 5 to 12 % (1.0e-3 at 8 dB against `exp(-Eb/N0)/2` = 9.1e-4); GNU Radio's chain is coherent detection (`costas_loop_cc`) followed by the differential decoder, which has about twice the BER of coherent BPSK (4.0e-4 at 8 dB), so it is 1.4 to 2.5 times better at 2 to 8 dB (1.8 to 2.9 with `sync_bw` 0.01). These are two receivers with different work (the differential mode of `psk_demod` needs no carrier lock and follows frequency offsets that the loop of the chain would have to pull in), reported as information.
-- **Not compared.** Differential QPSK and differential 8PSK: the differential `psk_mod` steps the phase by the mapped phase (odd multiples of 45 degrees for QPSK and 8PSK, M40 and M40.1), so no point set of GNU Radio's `costas_loop_cc` (orders 4 and 8 lock to one point set) follows the signal, and GNU Radio's `diff_encoder_bb` steps by 0, 90, 180 and 270 degrees, another signal; `pi4` and `offset` likewise (no GNU Radio block). The receiver with the equalizer (`equalizer_taps`): the translations of GNU Radio's `linear_equalizer` in `benches/refs` run the decision-directed NLMS (QPSK points and the rectangular constellation of square QAM) without the CMA start of the QAM comparison, and a constellation of BPSK or 8PSK points is not among them; open item I169-3.
+- **Not compared** (the maintainer's decision D2555: the reason stands, no further comparison). Differential QPSK and differential 8PSK: the differential `psk_mod` steps the phase by the mapped phase (odd multiples of 45 degrees for QPSK and 8PSK, M40 and M40.1), so no point set of GNU Radio's `costas_loop_cc` (orders 4 and 8 lock to one point set) follows the signal, and GNU Radio's `diff_encoder_bb` steps by 0, 90, 180 and 270 degrees, another signal; `pi4` and `offset` likewise (no GNU Radio block). The receiver with the equalizer (`equalizer_taps`): the translations of GNU Radio's `linear_equalizer` in `benches/refs` run the decision-directed NLMS (QPSK points and the rectangular constellation of square QAM) without the CMA start of the QAM comparison, and a constellation of BPSK or 8PSK points is not among them.
 
 ## Running the measurements
 

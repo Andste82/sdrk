@@ -566,12 +566,23 @@ pub fn judge_release(results: &Results, limits: &Limits, open_items: &str, parti
         }
     }
     for (entry, level, limit) in limits.iter() {
-        let Some(rows) = results.get(level) else {
-            continue;
-        };
-        if limit.status == Status::Info {
+        if limit.status == Status::Info || crate::mca::models(level).is_none() {
             continue;
         }
+        // A level with a core model that the results lack as a whole (a lost results file or
+        // partition) is as missing as an entry, unless the results are a selection.
+        let Some(rows) = results.get(level) else {
+            if !partial {
+                out.findings.push(Finding {
+                    path: path.clone(),
+                    line: 0,
+                    message: format!(
+                        "`{entry}` at `{level}` has an entry but the cycle results have no level `{level}`; measure it (`cargo measure --all --level {level}`)"
+                    ),
+                });
+            }
+            continue;
+        };
         match rows.get(entry) {
             Some(Some(_)) => {}
             Some(None) => out.findings.push(Finding {
@@ -647,6 +658,17 @@ pub fn check(root: &Path, o: &Options) -> anyhow::Result<Vec<Finding>> {
         .clone()
         .unwrap_or_else(|| crate::cycle_results::dir(root));
     let results = load(&dir)?;
+    // Empty results (every partition failed) would pass every gate.
+    if results
+        .values()
+        .flat_map(|rows| rows.values())
+        .all(Option::is_none)
+    {
+        bail!(
+            "{} holds no simulated record: nothing to judge",
+            dir.display()
+        );
+    }
     let limits_json = read("benches/limits.json")?;
     let open_items = read("docs/open-items.md")?;
     let fallbacks = judge_fallbacks(&results, &limits_json, &open_items, o.partial)?;
@@ -950,8 +972,24 @@ mod tests {
                 .iter()
                 .any(|f| f.message.contains("no simulation"))
         );
-        // A level without results is not judged.
+        // A level with a core model that the results lack as a whole (a lost partition) is a
+        // finding, except in a selection; a level without a core model is not judged here.
         let l = limits_with(r#""k": {"neon": {"status": "release"}}"#);
+        let g = gate(&results(&[], "sse2"), &l);
+        assert_eq!(g.findings.len(), 1);
+        assert!(
+            g.findings[0].message.contains("no level `neon`"),
+            "{:?}",
+            g.findings
+        );
+        let limits = Limits::parse(&l).unwrap();
+        assert_eq!(
+            judge_release(&results(&[], "sse2"), &limits, OPEN, true)
+                .findings
+                .len(),
+            0
+        );
+        let l = limits_with(r#""k": {"simd128": {"status": "release"}}"#);
         assert_eq!(gate(&results(&[], "sse2"), &l).findings.len(), 0);
     }
 

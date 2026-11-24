@@ -2,6 +2,8 @@
 
 > Plan: [PLAN.md › Phase 7](../PLAN.md#phase-7--embedded-backends-large-incremental) · Depends on: [M15](M15-emulator-targets.md) (and the backend pattern of [M13](M13-simd-backend.md), [M16](M16-esp32-p4-pie-backend.md) and [M17](M17-rvv-backend.md)) · Next: see [BACKLOG.md](BACKLOG.md); the receive series [M19](M19-nfm-squelch.md)–M23 is independent of M16–M18
 
+> **Measurement note (M13.1):** speed is judged in simulated cycles per sample on every out-of-order level (`cargo measure`, `cargo xtask check cycles`); instruction counts stand only where no core model exists: `simd128` and the in-order cores. Cortex-M4/M7/M33 are in-order (the dual issue of the M7 is not modelled), so the instruction counts of §5 against CMSIS-DSP stay the measure here.
+
 ## Goal
 
 Create `sdrk-backend-arm-dsp` for Arm Cortex-M cores with the DSP extension (Cortex-M4, M7 and M33, e.g. STM32F4/F7/H7, nRF52, SAMD51, Teensy, RP2350) with the most expensive `CQ15` kernels — `fir`, `fir_decimate`, `dot`, `mag_sq`, `convert` (CU8/CS8/CS16 → CQ15) and the `CQ15` FFT (fixed and block floating point) — verified by the suite in QEMU on all three cores, and compared with **CMSIS-DSP** by instruction counts (QEMU instruction-count plug-in).

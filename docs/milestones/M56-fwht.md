@@ -163,7 +163,7 @@ Additional rules:
 - the kernel `fwht` (`C32`, `CQ15`) in `sdrk_core::kernels::fwht` with `Fwht<T>`, the enum `Scaling`, Fallback, Reference (the butterfly model, D111 rule), facade delegation, contract, `docs/kernels.md` (with the full text of shared conventions §C.2);
 - SIMD paths in `sdrk-backend-simd` on every level (`sse2`, `sse4.2`, `avx2`, `avx512`, `neon`, `simd128`) for both types and every scaling, bit-identical to the fallback (maintainer rule 2026-11-17, §5), and `docs/backends.md`;
 - golden cases; unit, extreme and SIMD tests; suite cases;
-- `cargo xtask count` and `cargo measure` entries with the reference rows of §5, including FFHT in `benches/refs`;
+- `cargo measure` entries with the reference rows of §5, including FFHT in `benches/refs`;
 - CHANGELOG, decisions log;
 - the block `FwhtBlock<T>` and the pipeline kind `fwht` (§6) with `docs/blocks.md`, `docs/pipeline.md`, `docs/timing.md`, the schema and the WASM kind list.
 
@@ -296,7 +296,7 @@ New file `tests/golden/sdrk_golden/cases/fwht.py`:
 
 ### 5. Cost, SIMD plan and reference rows
 
-**Entries.** `cargo xtask count` and `cargo measure` entries, per element, every level, each with its `<k>_fallback` row, plus `fwht_block` (§6):
+**Entries.** `cargo measure` entries, per element, every level, each with its `<k>_fallback` row, plus `fwht_block` (§6):
 - `fwht_c32_1024`;
 - `fwht_c32_65536` (new: the cache-blocked path; 512 KiB of data);
 - `fwht_cq15_256` (`Unscaled`);
@@ -329,7 +329,7 @@ Numbers go into `docs/performance.md`.
 - The fallback is written so that it vectorises (plain loops over the stage halves), so that the D321 floor is a fair one.
 - Instruction estimates per element and stage (to be confirmed): `C32` about 1 vector operation per 2 or 4 elements plus loads and stores; `CQ15` `Unscaled` about the same per 4 to 16 elements; `Fixed` about 2 to 4 operations more per vector pair on x86 and `simd128`, and none more on NEON for the sum.
 
-**Measurement (D32, D33, D68).** The entries above and the block entry of §6 are measured in cycles with `cargo measure` on every level with a core model (reference and counter model), and counted with `cargo xtask count` on all four platforms (`--merge`). Cycles are the speed measure; instruction counts stand only where no core model exists (`simd128`). A library reference enters only where it does the same work (D32); otherwise the rows are information. The D321 gate applies to every SIMD path.
+**Measurement (D32, D33, D68).** The entries above and the block entry of §6 are measured in cycles with `cargo measure` on every level with a core model (reference and counter model). Cycles are the speed measure and the only one on the out-of-order levels (M13.1, D2700); instruction counts (`cargo xtask count --platform wasm32 --merge`) stand only where no core model exists (`simd128`, Cortex-M). A library reference enters only where it does the same work (D32); otherwise the rows are information. The D321 gate applies to every SIMD path.
 
 **Reference rows (D32).**
 - **`C32` on x86: FFHT** (FALCONN project, MIT licence; `fht_float(buf, log_n)`: in place, unnormalised, natural order). It is pinned to a commit in `benches/refs`, logged in the decisions log.
@@ -390,7 +390,7 @@ Seeds 760 … 769.
 
 ## Acceptance
 
-R1.2 commands (`cargo xtask check` includes `cargo xtask check cycles`, D321); `python tests/golden/generate.py --check`; `cargo test -p sdrk-core --all-features`; `cargo test -p sdrk --all-features`; `cargo test -p sdrk-backend-simd --all-features`; `cargo test -p sdrk-testkit --features std`; `cargo test -p sdrk-blocks --all-features`; `cargo test -p sdrk-pipeline --all-features`; `cargo xtask schema --check`; `cargo xtask count --platform x86_64` (the entries of §5 and `fwht_block`); `cargo measure` (the same entries, every level with a core model, with the FFHT rows at the x86 levels).
+R1.2 commands (`cargo xtask check` includes `cargo xtask check cycles`, D321); `python tests/golden/generate.py --check`; `cargo test -p sdrk-core --all-features`; `cargo test -p sdrk --all-features`; `cargo test -p sdrk-backend-simd --all-features`; `cargo test -p sdrk-testkit --features std`; `cargo test -p sdrk-blocks --all-features`; `cargo test -p sdrk-pipeline --all-features`; `cargo xtask schema --check`; `cargo xtask count --platform wasm32` (the `simd128` instructions of the entries of §5 and `fwht_block`); `cargo measure` (the same entries, every level with a core model, with the FFHT rows at the x86 levels).
 
 ## Deliverables checklist
 
@@ -399,7 +399,7 @@ R1.2 commands (`cargo xtask check` includes `cargo xtask check cycles`, D321); `
 - [ ] SIMD paths of §5 on every level, both types, every scaling (each passing D321); `docs/backends.md`
 - [ ] Golden cases (seeds 760–764, 767, 768) and the Python model with the matrix guard
 - [ ] Tests 1–3, 5 and 6 (seeds 760–769); suite cases
-- [ ] Count and cycle entries of §5 (`cargo xtask count`, `cargo measure`) with their fallback rows and the FFHT rows (pinned in `benches/refs`, licence noted); `docs/performance.md`
+- [ ] Count and cycle entries of §5 (`cargo measure`, `cargo xtask count --platform wasm32`) with their fallback rows and the FFHT rows (pinned in `benches/refs`, licence noted); `docs/performance.md`
 - [ ] Block `FwhtBlock<T>` and kind `fwht` (§6): `docs/blocks.md` (entry and a new reserved-name row), `docs/pipeline.md`, `docs/timing.md`, schema, WASM kind list; count entry `fwht_block`
 - [ ] `BACKLOG.md`: the `fwht` paths for the embedded backends of M16 to M18 (§Scope) and the orthonormal mode as an option for `freq_spread` (both entered with the 2026-11-17 revision) still match the Scope text
 - [ ] CHANGELOG; decisions log: the ordering choice; the scalings (`Scaling` instead of `inverse: bool`, §C.2 taken over from M07, one bit per stage for `BlockFloat`); the Reference by the D111 rule with the matrix guard; the lossless `CQ15` round trip and the `Fixed` bound; the block's `scaling` parameter without `BlockFloat`; the FFHT row and its marking; the cache block size per level; the SIMD levels that stay on the fallback, with their numbers

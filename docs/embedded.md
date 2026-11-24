@@ -97,6 +97,8 @@ The parser and the process handling are tested on the host (`xtask/tests/emu.rs`
 
 ## Instruction counts (Cortex-M4)
 
+The Cortex-M4 is in-order and has no core model in the cycle measurement, so its speed is reported in instructions per sample; on the out-of-order levels the measure is simulated cycles (`cargo measure`, [performance.md](performance.md#measurement-policy), M13.1).
+
 ```text
 cargo xtask count --platform cortex-m4 [--kernel NAME]... [--no-write]
 ```

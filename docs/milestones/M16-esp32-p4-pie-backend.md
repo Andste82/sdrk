@@ -2,6 +2,8 @@
 
 > Plan: [PLAN.md › Phase 7](../PLAN.md#phase-7--embedded-backends-large-incremental) · Depends on: [M15](M15-emulator-targets.md) · Next: see [BACKLOG.md](BACKLOG.md)
 
+> **Measurement note (M13.1):** speed is judged in simulated cycles per sample on every out-of-order level (`cargo measure`, `cargo xtask check cycles`); instruction counts stand only where no core model exists: `simd128` and the in-order cores. The ESP32-P4 is in-order, so the static instruction count of §5 stays the measure here.
+
 ## Goal
 
 Create `sdrk-backend-esp-pie` for the ESP32-P4 (RISC-V with Espressif's PIE SIMD extension) with the most expensive Q15 kernels — `fir`, `fir_decimate`, `dot`, `mag_sq`, `convert` (CU8/CS8/CS16 → CQ15) and the CQ15 FFT (fixed and block floating point) — verified in esp-emulator by the suite, and compared with ESP-DSP by static instruction counts of the inner loops.

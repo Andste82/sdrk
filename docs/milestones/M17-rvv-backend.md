@@ -2,6 +2,8 @@
 
 > Plan: [PLAN.md › Phase 7](../PLAN.md#phase-7--embedded-backends-large-incremental) · Depends on: [M15](M15-emulator-targets.md) (and the backend pattern of [M13](M13-simd-backend.md) and [M16](M16-esp32-p4-pie-backend.md)) · Next: see [BACKLOG.md](BACKLOG.md)
 
+> **Measurement note (M13.1):** speed is judged in simulated cycles per sample on every out-of-order level (`cargo measure`, `cargo xtask check cycles`); instruction counts stand only where no core model exists. The pinned `llvm-mca` tooling of the repository has no core model for the RVV targets of this milestone, so the instruction counting of §8 stays the report here (it shows instruction economy, not speed, as §8 says); whether a cycle model of an RVV core replaces it is decided when M17 starts.
+
 ## Goal
 
 Create `sdrk-backend-rvv` for 64-bit RISC-V with the Vector extension 1.0 (`V`): the kernels `convert`, `convert_out`, `rotate`, `fir`, `fir_decimate`, `fir_interpolate`, `dot`, `mag_sq` and `fft` for `C32` and `CQ15`, written **vector-length agnostic** (one binary runs unchanged on VLEN 128, 256, 512, 1024). Verify the backend with the full suite in QEMU at several vector lengths, prove that results are **bit-identical for every VLEN**, and report instruction counts against the scalar fallback.

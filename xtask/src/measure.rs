@@ -46,7 +46,7 @@ use serde_json::{Value, json};
 
 use crate::bench::{KERNELS, PLANS};
 
-const USAGE: &str = "usage: cargo xtask measure <kernel>|--all [--platform P]... [--level L]... [--no-golden] [--no-cycles] [--cycle-mode whole-loop|per-block] [--cycle-counter sde] [--branches] [--merge] [--json]";
+const USAGE: &str = "usage: cargo xtask measure <kernel>|--all [--platform P]... [--level L]... [--no-golden] [--no-cycles] [--cycle-mode whole-loop|per-block] [--cycle-counter sde] [--branches] [--merge] [--results DIR] [--shard I/N] [--json]";
 
 /// The command line of `cargo xtask measure`.
 #[allow(
@@ -63,6 +63,13 @@ pub struct Options {
     /// `--merge`: write the records of the measured entries into the results files and keep
     /// every other record (implies `--branches`).
     pub merge: bool,
+    /// `--results DIR`: the directory of the results files that `--merge` and `--all` write
+    /// (default `benches/results/cycles`; the nightly measurement writes each partition into a
+    /// directory of its own).
+    pub results: Option<PathBuf>,
+    /// `--shard I/N`: only the entries whose place in the sorted selection is `I - 1` modulo
+    /// `N` (the partitions of the nightly measurement).
+    pub shard: Option<(usize, usize)>,
     /// `--platform` (repeatable); empty: the platform of the host.
     pub platforms: Vec<String>,
     /// `--level` (repeatable): only these levels.
@@ -122,6 +129,18 @@ impl Options {
                 "--branches" => o.branches = true,
                 "--all" => o.all = true,
                 "--merge" => o.merge = true,
+                "--results" => o.results = Some(PathBuf::from(value()?)),
+                "--shard" => {
+                    let v = value()?;
+                    o.shard = Some(
+                        v.split_once('/')
+                            .and_then(|(i, n)| Some((i.parse().ok()?, n.parse().ok()?)))
+                            .filter(|&(i, n): &(usize, usize)| i >= 1 && i <= n)
+                            .ok_or_else(|| {
+                                anyhow::anyhow!("`--shard` takes I/N with 1 <= I <= N, got `{v}`")
+                            })?,
+                    );
+                }
                 "--json" => o.json = true,
                 other if other.starts_with("--") => bail!("unknown option `{other}`; {USAGE}"),
                 name if o.kernel.is_empty() => o.kernel = name.to_string(),
@@ -151,9 +170,9 @@ impl Options {
                     "the results take the counts of the profiler of each level; `--cycle-counter` does not write them"
                 );
             }
-            if o.all && !o.merge && !o.levels.is_empty() {
+            if o.all && !o.merge && (!o.levels.is_empty() || o.shard.is_some()) {
                 bail!(
-                    "`--all` writes every level of a platform anew; with `--level` use `--merge`"
+                    "`--all` writes every entry of a platform anew; with `--level` or `--shard` use `--merge`"
                 );
             }
             o.branches = true;
@@ -163,6 +182,29 @@ impl Options {
 }
 
 impl Options {
+    /// The entries of `names` in this run's shard (all without `--shard`), in sorted order.
+    #[must_use]
+    pub fn shard_of(&self, mut names: Vec<String>) -> Vec<String> {
+        names.sort();
+        match self.shard {
+            None => names,
+            Some((i, n)) => names
+                .into_iter()
+                .enumerate()
+                .filter(|(k, _)| k % n == i - 1)
+                .map(|(_, name)| name)
+                .collect(),
+        }
+    }
+
+    /// The directory of the results files.
+    #[must_use]
+    pub fn results_dir(&self, root: &Path) -> PathBuf {
+        self.results
+            .clone()
+            .unwrap_or_else(|| crate::cycle_results::dir(root))
+    }
+
     /// Whether the run writes the committed results (`--merge`, or `--all`).
     #[must_use]
     pub fn writes(&self) -> bool {
@@ -944,6 +986,7 @@ pub fn run(root: &Path, args: &[&str]) -> anyhow::Result<bool> {
             golden_kernels(root, Some(&o.kernel))?,
         )
     };
+    let (entries, golden) = (o.shard_of(entries), o.shard_of(golden));
     if entries.is_empty() && golden.is_empty() {
         let mut names: Vec<&str> = KERNELS.iter().map(|k| k.name).collect();
         names.sort_unstable();
@@ -997,7 +1040,7 @@ pub fn run(root: &Path, args: &[&str]) -> anyhow::Result<bool> {
                 branches.as_ref().map(|b| field(&b.doc, platform)),
             )?;
             written.push(crate::cycle_results::write(
-                root,
+                &o.results_dir(root),
                 platform,
                 &tools,
                 &measured,
@@ -1091,6 +1134,30 @@ mod tests {
         assert!(Options::parse(&["fir", "--merge", "--no-cycles"]).is_err());
         assert!(Options::parse(&["fir", "--merge", "--cycle-mode", "per-block"]).is_err());
         assert!(Options::parse(&["fir", "--merge", "--cycle-counter", "sde"]).is_err());
+    }
+
+    #[test]
+    fn a_shard_takes_every_nth_entry_of_the_sorted_selection_into_its_own_results() {
+        let o =
+            Options::parse(&["--all", "--merge", "--shard", "2/3", "--results", "out"]).unwrap();
+        assert_eq!(o.shard, Some((2, 3)));
+        assert_eq!(o.results_dir(Path::new("/r")), PathBuf::from("out"));
+        let names = ["e", "a", "d", "b", "c"].map(String::from).to_vec();
+        assert_eq!(o.shard_of(names.clone()), ["b", "e"]);
+        let all = Options::parse(&["fir"]).unwrap();
+        assert_eq!(all.shard_of(names), ["a", "b", "c", "d", "e"]);
+        assert_eq!(
+            all.results_dir(Path::new("/r")),
+            Path::new("/r")
+                .join("benches")
+                .join("results")
+                .join("cycles")
+        );
+        // A shard of `--all` would write a partial file anew.
+        assert!(Options::parse(&["--all", "--shard", "1/2"]).is_err());
+        for bad in ["0/2", "3/2", "x", "1/0"] {
+            assert!(Options::parse(&["fir", "--shard", bad]).is_err(), "{bad}");
+        }
     }
 
     #[test]

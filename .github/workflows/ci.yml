@@ -53,7 +53,7 @@ jobs:
     outputs:
       scope: ${{ steps.scope.outputs.scope }}
       docs_only: ${{ steps.scope.outputs.docs_only }}
-      run_count: ${{ steps.scope.outputs.run_count }}
+      run_bench: ${{ steps.scope.outputs.run_bench }}
       run_golden: ${{ steps.scope.outputs.run_golden }}
       run_selfcheck: ${{ steps.scope.outputs.run_selfcheck }}
     steps:
@@ -74,13 +74,13 @@ jobs:
           docs_only=true
           if grep -vE '\.md$' changed.txt | grep -q . || has "$tested_md"; then docs_only=false; fi
           code_or_ci='^(\.github/|Cargo\.lock$|rust-toolchain\.toml$|deny\.toml$)'
-          run_count=false; has "^(crates/(core|backends|facade)/|benches/|xtask/)" && run_count=true; has "$code_or_ci" && run_count=true
+          run_bench=false; has "^(crates/(core|backends|facade)/|benches/|xtask/)" && run_bench=true; has "$code_or_ci" && run_bench=true
           run_golden=false; has '^tests/golden/' && run_golden=true; has '^\.github/' && run_golden=true
           run_selfcheck=false; has '^(xtask/|targets/|\.github/)' && run_selfcheck=true
           {
             echo "scope=pr"
             echo "docs_only=$docs_only"
-            echo "run_count=$run_count"
+            echo "run_bench=$run_bench"
             echo "run_golden=$run_golden"
             echo "run_selfcheck=$run_selfcheck"
           } | tee -a "$GITHUB_OUTPUT"
@@ -92,7 +92,7 @@ jobs:
     with:
       scope: ${{ needs.scope.outputs.scope }}
       docs_only: ${{ needs.scope.outputs.docs_only == 'true' }}
-      run_count: ${{ needs.scope.outputs.run_count == 'true' }}
+      run_bench: ${{ needs.scope.outputs.run_bench == 'true' }}
       run_golden: ${{ needs.scope.outputs.run_golden == 'true' }}
       run_selfcheck: ${{ needs.scope.outputs.run_selfcheck == 'true' }}
 

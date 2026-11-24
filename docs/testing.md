@@ -166,7 +166,6 @@ check                              gate: fmt · deny · clippy (x86-64, wasm32-w
 │   ├── test_x64_linux_fallback    --cfg sdrk_fallback_only                                                   [pr]
 │   ├── test_x64_linux_fixed_arch  sse2 | sse4.2 | avx2 fixed at compile time; without the tables at sse2, avx2 [pr]
 │   ├── test_x64_linux_sde_runtime sse2 | sse4.2 CPUIDs under SDE: the arms of the run-time dispatch          [pr]
-│   ├── count_x64                  instruction counts with the variants and the pipeline (D175)               [full]
 │   ├── fuzz                       pipeline_json, five minutes                                                [full]
 │   └── soak                       the ten-minute long_run_no_drift                                           [full]
 ├── build_x64_linux_sde_avx512     target-cpu=sapphirerapids, profile emulated, nextest archive
@@ -185,7 +184,9 @@ check                              gate: fmt · deny · clippy (x86-64, wasm32-w
 │   └── test_m4_qemu_selfcheck     a failing case must fail the run (pr: when xtask/ or targets/ changed)    [pr]
 ├── build_m55_qemu, build_rv32_qemu (emulator image; the ESP32 targets are paused in CI, D201)
 ├── test_emu                       m4 full; m55, rv32 quick and full                                          [full]
-├── count_x64_linux_sde_avx512, count_arm64_linux, count_wasm32, count_m4_qemu                                [full]
+├── measure_nightly                measure.yml: cycles per sample of every entry and level with a core model,
+│                                  the gates in cycles and the drift against benches/results/cycles (D2709)  [full]
+├── count_wasm32, count_m4_qemu    instruction counts where no core model exists (simd128, Cortex-M4)        [full]
 └── sweep_x64_linux (sse2 | sse4.2 | avx2), sweep_x64_linux_sde_avx512 (4 parts), sweep_arm64_linux (native),
     sweep_wasm32, sweep_fallback_int: convert_out for every f32, mag CQ15 for every raw pair                  [full]
 ```

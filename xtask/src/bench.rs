@@ -1488,6 +1488,26 @@ pub(crate) fn run_args(
     args
 }
 
+/// Whether the measured processes run without the randomization of the address space: every
+/// run of a profile (the binary on the host, SDE, QEMU, Valgrind) is started by `setarch -R`
+/// where the system permits it (probed once; a container whose seccomp profile refuses
+/// `personality(ADDR_NO_RANDOMIZE)` does not). With randomized stacks, heaps and libraries a
+/// path that depends on addresses (the alignment checks of glibc's `memcpy`, the relative
+/// position of two buffers) moved some profiles by a few instructions from run to run (I13.1-1,
+/// D2710).
+#[must_use]
+pub fn fixed_layout() -> bool {
+    static FIXED: std::sync::OnceLock<bool> = std::sync::OnceLock::new();
+    *FIXED.get_or_init(|| {
+        Command::new("setarch")
+            .args(["-R", "true"])
+            .stdout(Stdio::null())
+            .stderr(Stdio::null())
+            .status()
+            .is_ok_and(|s| s.success())
+    })
+}
+
 /// One run of the measurement binary: the arguments and the `volk_config` directory.
 pub(crate) struct Run<'a> {
     pub(crate) args: Vec<String>,
@@ -1499,7 +1519,13 @@ impl Session {
     /// `volk_config`, the library path of the references, and without the variables that
     /// override VOLK's dispatch.
     pub(crate) fn command(&self, program: impl AsRef<std::ffi::OsStr>, run: &Run<'_>) -> Command {
-        let mut cmd = Command::new(program);
+        let mut cmd = if fixed_layout() {
+            let mut c = Command::new("setarch");
+            c.arg("-R").arg(program);
+            c
+        } else {
+            Command::new(program)
+        };
         cmd.env("VOLK_CONFIGPATH", run.volk_config)
             .env_remove("VOLK_GENERIC");
         for f in VOLK_FUNCTIONS {

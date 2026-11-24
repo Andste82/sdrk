@@ -37,7 +37,11 @@
             },
             "ratio": 0.48466069773689896
           },
-          "samples": 65536
+          "samples": 65536,
+          "snr_db": {
+            "comparison": 150.98,
+            "ours": 150.98
+          }
         },
         "add_cq15": {
           "compared_with": "volk_16i_x2_add_saturated_16i on the 2 n values",
@@ -70,7 +74,11 @@
             },
             "ratio": 0.5360624890768408
           },
-          "samples": 65536
+          "samples": 65536,
+          "snr_db": {
+            "comparison": 999.0,
+            "ours": 999.0
+          }
         },
         "add_cq15_fallback": {
           "compared_with": "CMSIS-DSP 1.18.0 arm_add_q15 on the 2 n values, generic C (-O3 -ffp-contract=off, LOOPUNROLL, avx512)",
@@ -103,7 +111,11 @@
             },
             "ratio": 0.21269434373136534
           },
-          "samples": 65536
+          "samples": 65536,
+          "snr_db": {
+            "comparison": 999.0,
+            "ours": 999.0
+          }
         },
         "add_fallback": {
           "compared_with": "CMSIS-DSP 1.18.0 arm_add_f32 on the 2 n floats, generic C (-O3 -ffp-contract=off, LOOPUNROLL, avx512)",
@@ -136,7 +148,11 @@
             },
             "ratio": 0.5073351191178268
           },
-          "samples": 65536
+          "samples": 65536,
+          "snr_db": {
+            "comparison": 150.98,
+            "ours": 150.98
+          }
         },
         "add_real": {
           "compared_with": "volk_32f_x2_add_32f",
@@ -169,7 +185,11 @@
             },
             "ratio": 0.9108730778821419
           },
-          "samples": 65536
+          "samples": 65536,
+          "snr_db": {
+            "comparison": 150.97,
+            "ours": 150.97
+          }
         },
         "add_real_fallback": {
           "compared_with": "CMSIS-DSP 1.18.0 arm_add_f32, generic C (-O3 -ffp-contract=off, LOOPUNROLL, avx512)",
@@ -202,7 +222,11 @@
             },
             "ratio": 0.9638918374599401
           },
-          "samples": 65536
+          "samples": 65536,
+          "snr_db": {
+            "comparison": 150.97,
+            "ours": 150.97
+          }
         },
         "add_real_q15": {
           "compared_with": "volk_16i_x2_add_saturated_16i",
@@ -235,7 +259,11 @@
             },
             "ratio": 0.5311709546759795
           },
-          "samples": 65536
+          "samples": 65536,
+          "snr_db": {
+            "comparison": 999.0,
+            "ours": 999.0
+          }
         },
         "add_real_q15_fallback": {
           "compared_with": "CMSIS-DSP 1.18.0 arm_add_q15, generic C (-O3 -ffp-contract=off, LOOPUNROLL, avx512)",
@@ -268,7 +296,11 @@
             },
             "ratio": 0.3733718143570749
           },
-          "samples": 65536
+          "samples": 65536,
+          "snr_db": {
+            "comparison": 999.0,
+            "ours": 999.0
+          }
         },
         "agc": {
           "compared_with": "GNU Radio agc_cc (agc.h of gr-analog, generic compiler flags)",
@@ -301,7 +333,11 @@
             },
             "ratio": 0.36206214414104626
           },
-          "samples": 65536
+          "samples": 65536,
+          "snr_db": {
+            "comparison": 118.88,
+            "ours": 119.85
+          }
         },
         "agc_cq15": {
           "compared_with": "sdrk fallback",
@@ -334,7 +370,11 @@
             },
             "ratio": 1.0000004550627783
           },
-          "samples": 65536
+          "samples": 65536,
+          "snr_db": {
+            "comparison": 999.0,
+            "ours": 999.0
+          }
         },
         "agc_fallback": {
           "compared_with": "GNU Radio agc_cc (agc.h of gr-analog, generic compiler flags)",
@@ -367,7 +407,11 @@
             },
             "ratio": 0.5077348907963475
           },
-          "samples": 65536
+          "samples": 65536,
+          "snr_db": {
+            "comparison": 118.88,
+            "ours": 119.85
+          }
         },
         "am_mod": {
           "compared_with": "sdrk fallback",
@@ -400,7 +444,11 @@
             },
             "ratio": 0.9999260437081683
           },
-          "samples": 65536
+          "samples": 65536,
+          "snr_db": {
+            "comparison": 150.8,
+            "ours": 150.8
+          }
         },
         "am_mod_cq15": {
           "compared_with": "sdrk fallback",
@@ -433,7 +481,11 @@
             },
             "ratio": 0.43098644160783917
           },
-          "samples": 65536
+          "samples": 65536,
+          "snr_db": {
+            "comparison": 92.65,
+            "ours": 92.65
+          }
         },
         "am_mod_cq15_fallback": {
           "compared_with": "CMSIS-DSP 1.18.0 arm_scale_q15 by round(c m 32768) (truncating), arm_offset_q15 by c in place and a plain loop to (re, 0) (a composition: CMSIS-DSP has no AM modulator), generic C (-O3 -ffp-contract=off, LOOPUNROLL, avx512)",
@@ -466,7 +518,11 @@
             },
             "ratio": 0.11358384743941828
           },
-          "samples": 65536
+          "samples": 65536,
+          "snr_db": {
+            "comparison": 89.68,
+            "ours": 92.65
+          }
         },
         "am_mod_fallback": {
           "compared_with": "liquid-dsp 1.8.3 ampmodem_modulate_block (LIQUID_AMPMODEM_DSB with the carrier: x * mod_index + 1, no clamp, carrier 1; -O3)",
@@ -499,7 +555,11 @@
             },
             "ratio": 0.7261014715243501
           },
-          "samples": 65536
+          "samples": 65536,
+          "snr_db": {
+            "comparison": 150.8,
+            "ours": 150.8
+          }
         },
         "auto_notch": {
           "compared_with": "sdrk fallback",
@@ -532,7 +592,11 @@
             },
             "ratio": 1.0000000533603135
           },
-          "samples": 65536
+          "samples": 65536,
+          "snr_db": {
+            "comparison": 999.0,
+            "ours": 999.0
+          }
         },
         "band_pulse_detect_block": {
           "compared_with": "sdrk fallback",
@@ -565,7 +629,11 @@
             },
             "ratio": 1.0
           },
-          "samples": 65536
+          "samples": 65536,
+          "snr_db": {
+            "comparison": 999.0,
+            "ours": 999.0
+          }
         },
         "biquad": {
           "compared_with": "KFR 7.2.0 kfr::iir, iir_state<float, 2> (avx512, -ffp-contract=off), two calls on planar re and im (deinterleaving not counted)",
@@ -598,7 +666,11 @@
             },
             "ratio": 0.3786411459146953
           },
-          "samples": 65536
+          "samples": 65536,
+          "snr_db": {
+            "comparison": 136.06,
+            "ours": 136.06
+          }
         },
         "biquad_cq15": {
           "compared_with": "sdrk fallback",
@@ -631,7 +703,11 @@
             },
             "ratio": 0.4330142468882646
           },
-          "samples": 65536
+          "samples": 65536,
+          "snr_db": {
+            "comparison": 71.59,
+            "ours": 71.59
+          }
         },
         "biquad_cq15_fallback": {
           "compared_with": "CMSIS-DSP 1.18.0 arm_biquad_cascade_df1_q15 (postShift 1, truncating), two calls on planar re and im (deinterleaving not counted), generic C (-O3 -ffp-contract=off, LOOPUNROLL, avx512)",
@@ -664,7 +740,11 @@
             },
             "ratio": 0.31827833738462963
           },
-          "samples": 65536
+          "samples": 65536,
+          "snr_db": {
+            "comparison": 56.73,
+            "ours": 71.59
+          }
         },
         "biquad_fallback": {
           "compared_with": "CMSIS-DSP 1.18.0 arm_biquad_cascade_stereo_df2T_f32 (re and im as the two channels), generic C (-O3 -ffp-contract=off, LOOPUNROLL, avx512)",
@@ -697,7 +777,11 @@
             },
             "ratio": 0.7676795072110516
           },
-          "samples": 65536
+          "samples": 65536,
+          "snr_db": {
+            "comparison": 134.9,
+            "ours": 136.06
+          }
         },
         "biquad_real": {
           "compared_with": "KFR 7.2.0 kfr::iir, iir_state<float, 2> (avx512, -ffp-contract=off)",
@@ -730,7 +814,11 @@
             },
             "ratio": 0.7471967943585368
           },
-          "samples": 65536
+          "samples": 65536,
+          "snr_db": {
+            "comparison": 136.72,
+            "ours": 136.72
+          }
         },
         "biquad_real_fallback": {
           "compared_with": "CMSIS-DSP 1.18.0 arm_biquad_cascade_df2T_f32, generic C (-O3 -ffp-contract=off, LOOPUNROLL, avx512)",
@@ -763,7 +851,11 @@
             },
             "ratio": 0.5369617882209424
           },
-          "samples": 65536
+          "samples": 65536,
+          "snr_db": {
+            "comparison": 136.72,
+            "ours": 136.72
+          }
         },
         "biquad_real_q15": {
           "compared_with": "sdrk fallback",
@@ -796,7 +888,11 @@
             },
             "ratio": 0.7484151768651971
           },
-          "samples": 65536
+          "samples": 65536,
+          "snr_db": {
+            "comparison": 71.45,
+            "ours": 71.45
+          }
         },
         "biquad_real_q15_fallback": {
           "compared_with": "CMSIS-DSP 1.18.0 arm_biquad_cascade_df1_q15 (postShift 1, truncating), generic C (-O3 -ffp-contract=off, LOOPUNROLL, avx512)",
@@ -829,7 +925,11 @@
             },
             "ratio": 0.3652658292694071
           },
-          "samples": 65536
+          "samples": 65536,
+          "snr_db": {
+            "comparison": 56.63,
+            "ours": 71.45
+          }
         },
         "bit_descramble_block": {
           "compared_with": "GNU Radio descrambler_bb(0x21, 0, 22): gr::digital::lfsr, one __builtin_parityl per unpacked bit (generic compiler flags)",
@@ -862,7 +962,11 @@
             },
             "ratio": 0.06704455591999142
           },
-          "samples": 65536
+          "samples": 65536,
+          "snr_db": {
+            "comparison": 999.0,
+            "ours": 999.0
+          }
         },
         "bit_descramble_in_place_block": {
           "compared_with": "GNU Radio descrambler_bb(0x21, 0, 22): gr::digital::lfsr, one __builtin_parityl per unpacked bit (generic compiler flags)",
@@ -895,7 +999,11 @@
             },
             "ratio": 0.28491116189515475
           },
-          "samples": 65536
+          "samples": 65536,
+          "snr_db": {
+            "comparison": 999.0,
+            "ours": 999.0
+          }
         },
         "bit_scramble_block": {
           "compared_with": "GNU Radio scrambler_bb(0x21, 0, 22): gr::digital::lfsr, one __builtin_parityl per unpacked bit (generic compiler flags)",
@@ -928,7 +1036,11 @@
             },
             "ratio": 0.17371735387222995
           },
-          "samples": 65536
+          "samples": 65536,
+          "snr_db": {
+            "comparison": 999.0,
+            "ours": 999.0
+          }
         },
         "bit_scramble_in_place_block": {
           "compared_with": "GNU Radio scrambler_bb(0x21, 0, 22): gr::digital::lfsr, one __builtin_parityl per unpacked bit (generic compiler flags)",
@@ -961,7 +1073,11 @@
             },
             "ratio": 0.2293289890398346
           },
-          "samples": 65536
+          "samples": 65536,
+          "snr_db": {
+            "comparison": 999.0,
+            "ours": 999.0
+          }
         },
         "channel_bank_channelize": {
           "compared_with": "sdrk fallback",
@@ -994,7 +1110,11 @@
             },
             "ratio": 1.0
           },
-          "samples": 65536
+          "samples": 65536,
+          "snr_db": {
+            "comparison": 139.12,
+            "ours": 139.12
+          }
         },
         "channel_bank_ddc": {
           "compared_with": "sdrk fallback",
@@ -1027,7 +1147,11 @@
             },
             "ratio": 1.0
           },
-          "samples": 65536
+          "samples": 65536,
+          "snr_db": {
+            "comparison": 140.33,
+            "ours": 140.33
+          }
         },
         "channel_select_block": {
           "compared_with": "sdrk fallback",
@@ -1060,7 +1184,11 @@
             },
             "ratio": 1.0
           },
-          "samples": 65536
+          "samples": 65536,
+          "snr_db": {
+            "comparison": 999.0,
+            "ours": 999.0
+          }
         },
         "channelize": {
           "compared_with": "liquid-dsp 1.8.3 firpfbch2_crcf analyzer (benches/refs/liquid-channelizer.c), the SIMD dot products of the level, FFTW 3.3.10",
@@ -1093,7 +1221,11 @@
             },
             "ratio": 0.11843996471010458
           },
-          "samples": 65536
+          "samples": 65536,
+          "snr_db": {
+            "comparison": 141.44,
+            "ours": 141.22
+          }
         },
         "channelize_block": {
           "compared_with": "sdrk fallback",
@@ -1126,7 +1258,11 @@
             },
             "ratio": 1.0
           },
-          "samples": 65536
+          "samples": 65536,
+          "snr_db": {
+            "comparison": 141.25,
+            "ours": 141.25
+          }
         },
         "channelize_fallback": {
           "compared_with": "liquid-dsp 1.8.3 firpfbch2_crcf analyzer (benches/refs/liquid-channelizer.c), portable dot products, liquid's own FFT",
@@ -1159,7 +1295,11 @@
             },
             "ratio": 0.354604752248651
           },
-          "samples": 65536
+          "samples": 65536,
+          "snr_db": {
+            "comparison": 140.76,
+            "ours": 140.65
+          }
         },
         "convert_cq15_cs8": {
           "compared_with": "volk_8i_convert_16i",
@@ -1192,7 +1332,11 @@
             },
             "ratio": 0.6616385716652169
           },
-          "samples": 65536
+          "samples": 65536,
+          "snr_db": {
+            "comparison": 999.0,
+            "ours": 999.0
+          }
         },
         "convert_cq15_cs8_fallback": {
           "compared_with": "CMSIS-DSP 1.18.0 arm_q7_to_q15, generic C (-O3 -ffp-contract=off, LOOPUNROLL, avx512)",
@@ -1225,7 +1369,11 @@
             },
             "ratio": 1.0167610054315865
           },
-          "samples": 65536
+          "samples": 65536,
+          "snr_db": {
+            "comparison": 999.0,
+            "ours": 999.0
+          }
         },
         "convert_cq15_cu8": {
           "compared_with": "volk_8i_convert_16i on the bytes with the sign bit flipped (the CU8 conversion without its offset)",
@@ -1258,7 +1406,11 @@
             },
             "ratio": 0.713098964092969
           },
-          "samples": 65536
+          "samples": 65536,
+          "snr_db": {
+            "comparison": 999.0,
+            "ours": 999.0
+          }
         },
         "convert_cq15_cu8_fallback": {
           "compared_with": "CMSIS-DSP 1.18.0 arm_q7_to_q15 on the bytes with the sign bit flipped (the CU8 conversion without its offset), generic C (-O3 -ffp-contract=off, LOOPUNROLL, avx512)",
@@ -1291,7 +1443,11 @@
             },
             "ratio": 1.0184645924689595
           },
-          "samples": 65536
+          "samples": 65536,
+          "snr_db": {
+            "comparison": 999.0,
+            "ours": 999.0
+          }
         },
         "convert_cs16": {
           "compared_with": "volk_16i_s32f_convert_32f",
@@ -1324,7 +1480,11 @@
             },
             "ratio": 0.9955718987389326
           },
-          "samples": 65536
+          "samples": 65536,
+          "snr_db": {
+            "comparison": 999.0,
+            "ours": 999.0
+          }
         },
         "convert_cs16_fallback": {
           "compared_with": "CMSIS-DSP 1.18.0 arm_q15_to_float, generic C (-O3 -ffp-contract=off, LOOPUNROLL, avx512)",
@@ -1357,7 +1517,11 @@
             },
             "ratio": 0.9314598038541254
           },
-          "samples": 65536
+          "samples": 65536,
+          "snr_db": {
+            "comparison": 999.0,
+            "ours": 999.0
+          }
         },
         "convert_cs8": {
           "compared_with": "volk_8i_s32f_convert_32f",
@@ -1390,7 +1554,11 @@
             },
             "ratio": 0.9973443413632057
           },
-          "samples": 65536
+          "samples": 65536,
+          "snr_db": {
+            "comparison": 999.0,
+            "ours": 999.0
+          }
         },
         "convert_cs8_fallback": {
           "compared_with": "CMSIS-DSP 1.18.0 arm_q7_to_float, generic C (-O3 -ffp-contract=off, LOOPUNROLL, avx512)",
@@ -1423,7 +1591,11 @@
             },
             "ratio": 0.7852492997384883
           },
-          "samples": 65536
+          "samples": 65536,
+          "snr_db": {
+            "comparison": 999.0,
+            "ours": 999.0
+          }
         },
         "convert_cu8": {
           "compared_with": "volk_8i_s32f_convert_32f on the bytes with the sign bit flipped (the CU8 conversion without its offset)",
@@ -1456,7 +1628,11 @@
             },
             "ratio": 1.0000255218483542
           },
-          "samples": 65536
+          "samples": 65536,
+          "snr_db": {
+            "comparison": 999.0,
+            "ours": 999.0
+          }
         },
         "convert_cu8_fallback": {
           "compared_with": "CMSIS-DSP 1.18.0 arm_q7_to_float on the bytes with the sign bit flipped (the CU8 conversion without its offset), generic C (-O3 -ffp-contract=off, LOOPUNROLL, avx512)",
@@ -1489,7 +1665,11 @@
             },
             "ratio": 0.8341657000341317
           },
-          "samples": 65536
+          "samples": 65536,
+          "snr_db": {
+            "comparison": 999.0,
+            "ours": 999.0
+          }
         },
         "convert_out_cs16": {
           "compared_with": "volk_32f_s32f_convert_16i",
@@ -1522,7 +1702,11 @@
             },
             "ratio": 0.9354648021965872
           },
-          "samples": 65536
+          "samples": 65536,
+          "snr_db": {
+            "comparison": 95.45,
+            "ours": 95.45
+          }
         },
         "convert_out_cs16_fallback": {
           "compared_with": "CMSIS-DSP 1.18.0 arm_float_to_q15 (truncating, saturating), generic C (-O3 -ffp-contract=off, LOOPUNROLL, avx512)",
@@ -1555,7 +1739,11 @@
             },
             "ratio": 1.5760218134609336
           },
-          "samples": 65536
+          "samples": 65536,
+          "snr_db": {
+            "comparison": 89.38,
+            "ours": 95.45
+          }
         },
         "convert_out_cs8": {
           "compared_with": "volk_32f_s32f_convert_8i",
@@ -1588,7 +1776,11 @@
             },
             "ratio": 0.907989933536075
           },
-          "samples": 65536
+          "samples": 65536,
+          "snr_db": {
+            "comparison": 47.31,
+            "ours": 47.31
+          }
         },
         "convert_out_cs8_fallback": {
           "compared_with": "CMSIS-DSP 1.18.0 arm_float_to_q7 (truncating, saturating), generic C (-O3 -ffp-contract=off, LOOPUNROLL, avx512)",
@@ -1621,7 +1813,11 @@
             },
             "ratio": 1.9155921159522358
           },
-          "samples": 65536
+          "samples": 65536,
+          "snr_db": {
+            "comparison": 41.26,
+            "ours": 47.31
+          }
         },
         "convert_out_cu8": {
           "compared_with": "volk_32f_s32f_x2_convert_8u",
@@ -1654,7 +1850,11 @@
             },
             "ratio": 1.2014881590444704
           },
-          "samples": 65536
+          "samples": 65536,
+          "snr_db": {
+            "comparison": 47.27,
+            "ours": 47.27
+          }
         },
         "convert_out_cu8_fallback": {
           "compared_with": "CMSIS-DSP 1.18.0 arm_float_to_q7 (truncating, saturating; the CU8 conversion without its offset), generic C (-O3 -ffp-contract=off, LOOPUNROLL, avx512)",
@@ -1687,7 +1887,11 @@
             },
             "ratio": 3.2026691608492395
           },
-          "samples": 65536
+          "samples": 65536,
+          "snr_db": {
+            "comparison": 41.22,
+            "ours": 47.27
+          }
         },
         "convert_out_real_rs16": {
           "compared_with": "volk_32f_s32f_convert_16i",
@@ -1720,7 +1924,11 @@
             },
             "ratio": 0.9530048704473817
           },
-          "samples": 65536
+          "samples": 65536,
+          "snr_db": {
+            "comparison": 95.51,
+            "ours": 95.51
+          }
         },
         "convert_out_real_rs16_fallback": {
           "compared_with": "CMSIS-DSP 1.18.0 arm_float_to_q15 (truncating, saturating), generic C (-O3 -ffp-contract=off, LOOPUNROLL, avx512)",
@@ -1753,7 +1961,11 @@
             },
             "ratio": 1.5819107965468944
           },
-          "samples": 65536
+          "samples": 65536,
+          "snr_db": {
+            "comparison": 89.52,
+            "ours": 95.51
+          }
         },
         "convert_out_real_rs8": {
           "compared_with": "volk_32f_s32f_convert_8i",
@@ -1786,7 +1998,11 @@
             },
             "ratio": 0.9329100134649513
           },
-          "samples": 65536
+          "samples": 65536,
+          "snr_db": {
+            "comparison": 47.24,
+            "ours": 47.24
+          }
         },
         "convert_out_real_rs8_fallback": {
           "compared_with": "CMSIS-DSP 1.18.0 arm_float_to_q7 (truncating, saturating), generic C (-O3 -ffp-contract=off, LOOPUNROLL, avx512)",
@@ -1819,7 +2035,11 @@
             },
             "ratio": 1.9150555785163963
           },
-          "samples": 65536
+          "samples": 65536,
+          "snr_db": {
+            "comparison": 41.2,
+            "ours": 47.24
+          }
         },
         "convert_out_real_ru8": {
           "compared_with": "volk_32f_s32f_x2_convert_8u",
@@ -1852,7 +2072,11 @@
             },
             "ratio": 1.2066899548131236
           },
-          "samples": 65536
+          "samples": 65536,
+          "snr_db": {
+            "comparison": 47.25,
+            "ours": 47.25
+          }
         },
         "convert_out_real_ru8_fallback": {
           "compared_with": "CMSIS-DSP 1.18.0 arm_float_to_q7 (truncating, saturating; the CU8 conversion without its offset), generic C (-O3 -ffp-contract=off, LOOPUNROLL, avx512)",
@@ -1885,7 +2109,11 @@
             },
             "ratio": 3.167665149648028
           },
-          "samples": 65536
+          "samples": 65536,
+          "snr_db": {
+            "comparison": 41.26,
+            "ours": 47.25
+          }
         },
         "convert_real_rs16": {
           "compared_with": "volk_16i_s32f_convert_32f",
@@ -1918,7 +2146,11 @@
             },
             "ratio": 1.0140564224209574
           },
-          "samples": 65536
+          "samples": 65536,
+          "snr_db": {
+            "comparison": 999.0,
+            "ours": 999.0
+          }
         },
         "convert_real_rs16_fallback": {
           "compared_with": "CMSIS-DSP 1.18.0 arm_q15_to_float, generic C (-O3 -ffp-contract=off, LOOPUNROLL, avx512)",
@@ -1951,7 +2183,11 @@
             },
             "ratio": 0.9411099967784116
           },
-          "samples": 65536
+          "samples": 65536,
+          "snr_db": {
+            "comparison": 999.0,
+            "ours": 999.0
+          }
         },
         "correlate_block": {
           "compared_with": "sdrk fallback",
@@ -1984,40 +2220,48 @@
             },
             "ratio": 1.0
           },
-          "samples": 61760
+          "samples": 61760,
+          "snr_db": {
+            "comparison": 999.0,
+            "ours": 999.0
+          }
         },
         "costas": {
           "compared_with": "sdrk fallback",
           "counter_model": {
             "comparison": {
-              "coverage": 0.9981885530833833,
-              "cycles_per_sample": 68.06654707525193,
-              "efficiency": 0.23513851127930047
+              "coverage": 0.9981730566554962,
+              "cycles_per_sample": 68.06656516494752,
+              "efficiency": 0.24248658975677856
             },
             "cpu": "sapphirerapids",
             "ours": {
-              "coverage": 0.9981891809735522,
-              "cycles_per_sample": 68.06650425940445,
-              "efficiency": 0.23513851127930047
+              "coverage": 0.9981736656993314,
+              "cycles_per_sample": 68.06652363357546,
+              "efficiency": 0.24248658975677856
             },
-            "ratio": 0.9999993709707732
+            "ratio": 0.999999389841812
           },
           "cycle_mode": "whole-loop",
           "reference_model": {
             "comparison": {
-              "coverage": 0.9981885530833833,
-              "cycles_per_sample": 55.09244000543024,
-              "efficiency": 0.3050385837494326
+              "coverage": 0.9981730566554962,
+              "cycles_per_sample": 55.1024578163147,
+              "efficiency": 0.3176908414268857
             },
             "cpu": "znver4",
             "ours": {
-              "coverage": 0.9981891809735522,
-              "cycles_per_sample": 55.09240535067529,
-              "efficiency": 0.3050385837494326
+              "coverage": 0.9981736656993314,
+              "cycles_per_sample": 55.102424195098884,
+              "efficiency": 0.3176908414268857
             },
-            "ratio": 0.9999993709707731
+            "ratio": 0.999999389841812
           },
-          "samples": 65536
+          "samples": 65536,
+          "snr_db": {
+            "comparison": 999.0,
+            "ours": 999.0
+          }
         },
         "costas_fallback": {
           "compared_with": "GNU Radio costas_loop_cc (costas_loop_cc_impl.cc of gr-digital, generic compiler flags)",
@@ -2029,11 +2273,11 @@
             },
             "cpu": "sapphirerapids",
             "ours": {
-              "coverage": 0.9981885530833833,
-              "cycles_per_sample": 68.06654707525193,
-              "efficiency": 0.23513851127930047
+              "coverage": 0.9981730566554962,
+              "cycles_per_sample": 68.06656516494752,
+              "efficiency": 0.24248658975677856
             },
-            "ratio": 1.0287996345410542
+            "ratio": 1.0287999079598336
           },
           "cycle_mode": "whole-loop",
           "reference_model": {
@@ -2044,13 +2288,17 @@
             },
             "cpu": "znver4",
             "ours": {
-              "coverage": 0.9981885530833833,
-              "cycles_per_sample": 55.09244000543024,
-              "efficiency": 0.3050385837494326
+              "coverage": 0.9981730566554962,
+              "cycles_per_sample": 55.1024578163147,
+              "efficiency": 0.3176908414268857
             },
-            "ratio": 0.8024497243326005
+            "ratio": 0.8025956389005858
           },
-          "samples": 65536
+          "samples": 65536,
+          "snr_db": {
+            "comparison": 129.46,
+            "ours": 999.0
+          }
         },
         "costas_qam1024": {
           "compared_with": "sdrk fallback",
@@ -2083,7 +2331,11 @@
             },
             "ratio": 0.9999994026708379
           },
-          "samples": 65536
+          "samples": 65536,
+          "snr_db": {
+            "comparison": 999.0,
+            "ours": 999.0
+          }
         },
         "costas_qam1024_fallback": {
           "compared_with": "GNU Radio constellation_receiver_cb with constellation_rect 1024-QAM (constellation_receiver_cb_impl.cc and constellation.cc of gr-digital, generic compiler flags)",
@@ -2116,7 +2368,11 @@
             },
             "ratio": 0.6103187029642448
           },
-          "samples": 65536
+          "samples": 65536,
+          "snr_db": {
+            "comparison": 128.44,
+            "ours": 999.0
+          }
         },
         "costas_qam16": {
           "compared_with": "sdrk fallback",
@@ -2149,7 +2405,11 @@
             },
             "ratio": 0.9999993189839466
           },
-          "samples": 65536
+          "samples": 65536,
+          "snr_db": {
+            "comparison": 999.0,
+            "ours": 999.0
+          }
         },
         "costas_qam16_fallback": {
           "compared_with": "GNU Radio constellation_receiver_cb with constellation_rect 16-QAM (constellation_receiver_cb_impl.cc and constellation.cc of gr-digital, generic compiler flags)",
@@ -2182,7 +2442,11 @@
             },
             "ratio": 0.7521498193461287
           },
-          "samples": 65536
+          "samples": 65536,
+          "snr_db": {
+            "comparison": 128.22,
+            "ours": 999.0
+          }
         },
         "costas_qam256": {
           "compared_with": "sdrk fallback",
@@ -2215,7 +2479,11 @@
             },
             "ratio": 0.9999993964962989
           },
-          "samples": 65536
+          "samples": 65536,
+          "snr_db": {
+            "comparison": 999.0,
+            "ours": 999.0
+          }
         },
         "costas_qam256_fallback": {
           "compared_with": "GNU Radio constellation_receiver_cb with constellation_rect 256-QAM (constellation_receiver_cb_impl.cc and constellation.cc of gr-digital, generic compiler flags)",
@@ -2248,7 +2516,11 @@
             },
             "ratio": 0.7887534340306667
           },
-          "samples": 65536
+          "samples": 65536,
+          "snr_db": {
+            "comparison": 127.84,
+            "ours": 999.0
+          }
         },
         "costas_qam64": {
           "compared_with": "sdrk fallback",
@@ -2281,7 +2553,11 @@
             },
             "ratio": 0.9999993611406108
           },
-          "samples": 65536
+          "samples": 65536,
+          "snr_db": {
+            "comparison": 999.0,
+            "ours": 999.0
+          }
         },
         "costas_qam64_fallback": {
           "compared_with": "GNU Radio constellation_receiver_cb with constellation_rect 64-QAM (constellation_receiver_cb_impl.cc and constellation.cc of gr-digital, generic compiler flags)",
@@ -2314,7 +2590,11 @@
             },
             "ratio": 0.7621829632026186
           },
-          "samples": 65536
+          "samples": 65536,
+          "snr_db": {
+            "comparison": 127.97,
+            "ours": 999.0
+          }
         },
         "crc16_ccitt_false": {
           "compared_with": "GNU Radio gr::digital::crc: one 256-entry uint64_t table, a 64-bit remainder, one lookup per byte (generic compiler flags)",
@@ -2347,7 +2627,11 @@
             },
             "ratio": 0.8965701262527939
           },
-          "samples": 65536
+          "samples": 65536,
+          "snr_db": {
+            "comparison": 999.0,
+            "ours": 999.0
+          }
         },
         "crc16_x25": {
           "compared_with": "GNU Radio gr::digital::crc: one 256-entry uint64_t table, a 64-bit remainder, one lookup per byte (generic compiler flags)",
@@ -2380,7 +2664,11 @@
             },
             "ratio": 0.67908915766541
           },
-          "samples": 65536
+          "samples": 65536,
+          "snr_db": {
+            "comparison": 999.0,
+            "ours": 999.0
+          }
         },
         "crc24_adsb": {
           "compared_with": "GNU Radio gr::digital::crc: one 256-entry uint64_t table, a 64-bit remainder, one lookup per byte (generic compiler flags)",
@@ -2413,7 +2701,11 @@
             },
             "ratio": 0.8385883806421773
           },
-          "samples": 65536
+          "samples": 65536,
+          "snr_db": {
+            "comparison": 999.0,
+            "ours": 999.0
+          }
         },
         "crc32": {
           "compared_with": "GNU Radio gr::digital::crc: one 256-entry uint64_t table, a 64-bit remainder, one lookup per byte (generic compiler flags)",
@@ -2446,7 +2738,11 @@
             },
             "ratio": 0.6788004325680084
           },
-          "samples": 65536
+          "samples": 65536,
+          "snr_db": {
+            "comparison": 999.0,
+            "ours": 999.0
+          }
         },
         "dc_block": {
           "compared_with": "sdrk fallback",
@@ -2479,7 +2775,11 @@
             },
             "ratio": 0.29396412515451503
           },
-          "samples": 65536
+          "samples": 65536,
+          "snr_db": {
+            "comparison": 120.76,
+            "ours": 151.93
+          }
         },
         "dc_block_cq15": {
           "compared_with": "sdrk fallback",
@@ -2512,7 +2812,11 @@
             },
             "ratio": 0.9999964808806244
           },
-          "samples": 65536
+          "samples": 65536,
+          "snr_db": {
+            "comparison": 999.0,
+            "ours": 999.0
+          }
         },
         "dc_block_fallback": {
           "compared_with": "liquid-dsp 1.8.3 iirfilt_crcf_create_dc_blocker (direct form II, portable dot product, -O3)",
@@ -2545,7 +2849,11 @@
             },
             "ratio": 0.2094257181199191
           },
-          "samples": 65536
+          "samples": 65536,
+          "snr_db": {
+            "comparison": 85.3,
+            "ours": 120.76
+          }
         },
         "dc_block_real": {
           "compared_with": "sdrk fallback",
@@ -2578,7 +2886,11 @@
             },
             "ratio": 0.3219044768685383
           },
-          "samples": 65536
+          "samples": 65536,
+          "snr_db": {
+            "comparison": 124.94,
+            "ours": 152.12
+          }
         },
         "dc_block_real_fallback": {
           "compared_with": "liquid-dsp 1.8.3 iirfilt_rrrf_create_dc_blocker (direct form II, portable dot product, -O3)",
@@ -2611,7 +2923,11 @@
             },
             "ratio": 0.21248751918023134
           },
-          "samples": 65536
+          "samples": 65536,
+          "snr_db": {
+            "comparison": 84.12,
+            "ours": 124.94
+          }
         },
         "dc_block_real_q15": {
           "compared_with": "sdrk fallback",
@@ -2644,7 +2960,11 @@
             },
             "ratio": 0.9999949188024634
           },
-          "samples": 65536
+          "samples": 65536,
+          "snr_db": {
+            "comparison": 999.0,
+            "ours": 999.0
+          }
         },
         "deemphasis": {
           "compared_with": "sdrk fallback",
@@ -2677,7 +2997,11 @@
             },
             "ratio": 0.2194455493491568
           },
-          "samples": 65536
+          "samples": 65536,
+          "snr_db": {
+            "comparison": 145.36,
+            "ours": 152.1
+          }
         },
         "deemphasis_fallback": {
           "compared_with": "GNU Radio fm_deemph: iir_filter_ffd with the bilinear taps of fm_emph.py (double taps and accumulator, generic compiler flags)",
@@ -2710,7 +3034,11 @@
             },
             "ratio": 0.9450138400485213
           },
-          "samples": 65536
+          "samples": 65536,
+          "snr_db": {
+            "comparison": 151.98,
+            "ours": 145.36
+          }
         },
         "deemphasis_q15": {
           "compared_with": "sdrk fallback",
@@ -2743,7 +3071,11 @@
             },
             "ratio": 0.9999928285509728
           },
-          "samples": 65536
+          "samples": 65536,
+          "snr_db": {
+            "comparison": 999.0,
+            "ours": 999.0
+          }
         },
         "deinterleave": {
           "compared_with": "volk_32fc_deinterleave_32f_x2",
@@ -2776,7 +3108,11 @@
             },
             "ratio": 0.7313179826850039
           },
-          "samples": 65536
+          "samples": 65536,
+          "snr_db": {
+            "comparison": 999.0,
+            "ours": 999.0
+          }
         },
         "deinterleave_cq15": {
           "compared_with": "volk_16ic_deinterleave_16i_x2",
@@ -2809,7 +3145,11 @@
             },
             "ratio": 0.3165604458859476
           },
-          "samples": 65536
+          "samples": 65536,
+          "snr_db": {
+            "comparison": 999.0,
+            "ours": 999.0
+          }
         },
         "deinterleave_cq15_fallback": {
           "compared_with": "VOLK 3.3.0 volk_16ic_deinterleave_16i_x2_generic, benches/refs/volk-generic.c (-O3 -ffp-contract=off, avx512)",
@@ -2842,7 +3182,11 @@
             },
             "ratio": 0.6799822429702148
           },
-          "samples": 65536
+          "samples": 65536,
+          "snr_db": {
+            "comparison": 999.0,
+            "ours": 999.0
+          }
         },
         "deinterleave_fallback": {
           "compared_with": "VOLK 3.3.0 volk_32fc_deinterleave_32f_x2_generic, benches/refs/volk-generic.c (-O3 -ffp-contract=off, avx512)",
@@ -2875,7 +3219,11 @@
             },
             "ratio": 0.6668466890104252
           },
-          "samples": 65536
+          "samples": 65536,
+          "snr_db": {
+            "comparison": 999.0,
+            "ours": 999.0
+          }
         },
         "dot": {
           "compared_with": "volk_32fc_32f_dot_prod_32fc",
@@ -2908,7 +3256,11 @@
             },
             "ratio": 0.7482032702063556
           },
-          "samples": 65536
+          "samples": 65536,
+          "snr_db": {
+            "comparison": 134.24,
+            "ours": 138.7
+          }
         },
         "dot_complex": {
           "compared_with": "VOLK 3.3.0 volk_32fc_x2_dot_prod_32fc_u_avx without FMA (benches/refs/volk-nofma.c, -O3 -ffp-contract=off)",
@@ -2941,7 +3293,11 @@
             },
             "ratio": 0.5833755755563522
           },
-          "samples": 65536
+          "samples": 65536,
+          "snr_db": {
+            "comparison": 126.96,
+            "ours": 127.83
+          }
         },
         "dot_complex_fallback": {
           "compared_with": "CMSIS-DSP 1.18.0 arm_cmplx_dot_prod_f32, generic C (-O3 -ffp-contract=off, LOOPUNROLL, avx512)",
@@ -2974,7 +3330,11 @@
             },
             "ratio": 0.2525684385943296
           },
-          "samples": 65536
+          "samples": 65536,
+          "snr_db": {
+            "comparison": 117.09,
+            "ours": 127.83
+          }
         },
         "dot_cq15": {
           "compared_with": "sdrk fallback",
@@ -3007,7 +3367,11 @@
             },
             "ratio": 0.6644621873971016
           },
-          "samples": 65536
+          "samples": 65536,
+          "snr_db": {
+            "comparison": 82.2,
+            "ours": 82.2
+          }
         },
         "dot_cq15_fallback": {
           "compared_with": "CMSIS-DSP 1.18.0 arm_dot_prod_q15 twice, on the planar re and im, generic C (-O3 -ffp-contract=off, LOOPUNROLL, avx512)",
@@ -3040,7 +3404,11 @@
             },
             "ratio": 0.8945484529448976
           },
-          "samples": 65536
+          "samples": 65536,
+          "snr_db": {
+            "comparison": 82.2,
+            "ours": 82.2
+          }
         },
         "dot_fallback": {
           "compared_with": "CMSIS-DSP 1.18.0 arm_dot_prod_f32 twice, on the planar re and im, generic C (-O3 -ffp-contract=off, LOOPUNROLL, avx512)",
@@ -3073,7 +3441,11 @@
             },
             "ratio": 0.4995638731901383
           },
-          "samples": 65536
+          "samples": 65536,
+          "snr_db": {
+            "comparison": 122.6,
+            "ours": 122.6
+          }
         },
         "dot_real": {
           "compared_with": "volk_32f_x2_dot_prod_32f",
@@ -3106,7 +3478,11 @@
             },
             "ratio": 0.40444478089538094
           },
-          "samples": 65536
+          "samples": 65536,
+          "snr_db": {
+            "comparison": 127.56,
+            "ours": 135.0
+          }
         },
         "dot_real_fallback": {
           "compared_with": "CMSIS-DSP 1.18.0 arm_dot_prod_f32, generic C (-O3 -ffp-contract=off, LOOPUNROLL, avx512)",
@@ -3139,7 +3515,11 @@
             },
             "ratio": 0.9993209624408977
           },
-          "samples": 65536
+          "samples": 65536,
+          "snr_db": {
+            "comparison": 123.11,
+            "ours": 123.11
+          }
         },
         "dot_real_q15": {
           "compared_with": "sdrk fallback",
@@ -3172,7 +3552,11 @@
             },
             "ratio": 0.39732084810741214
           },
-          "samples": 65536
+          "samples": 65536,
+          "snr_db": {
+            "comparison": 88.76,
+            "ours": 88.76
+          }
         },
         "dot_real_q15_fallback": {
           "compared_with": "CMSIS-DSP 1.18.0 arm_dot_prod_q15, generic C (-O3 -ffp-contract=off, LOOPUNROLL, avx512)",
@@ -3205,7 +3589,11 @@
             },
             "ratio": 0.9906264296653601
           },
-          "samples": 65536
+          "samples": 65536,
+          "snr_db": {
+            "comparison": 88.76,
+            "ours": 88.76
+          }
         },
         "equalize": {
           "compared_with": "GNU Radio linear_equalizer with adaptive_algorithm_nlms (linear_equalizer_impl.cc of gr-digital, VOLK's dispatched dot products of the level with the aligned tap copies of fir_filter)",
@@ -3238,7 +3626,11 @@
             },
             "ratio": 0.09499721986735024
           },
-          "samples": 65536
+          "samples": 65536,
+          "snr_db": {
+            "comparison": 130.26,
+            "ours": 999.0
+          }
         },
         "equalize_fallback": {
           "compared_with": "GNU Radio linear_equalizer with adaptive_algorithm_nlms (linear_equalizer_impl.cc of gr-digital, VOLK generic dot products, generic compiler flags)",
@@ -3271,7 +3663,11 @@
             },
             "ratio": 0.1118837233517783
           },
-          "samples": 65536
+          "samples": 65536,
+          "snr_db": {
+            "comparison": 129.82,
+            "ours": 999.0
+          }
         },
         "equalize_qam1024": {
           "compared_with": "sdrk fallback",
@@ -3304,7 +3700,11 @@
             },
             "ratio": 0.9999998815977859
           },
-          "samples": 65536
+          "samples": 65536,
+          "snr_db": {
+            "comparison": 999.0,
+            "ours": 999.0
+          }
         },
         "equalize_qam1024_fallback": {
           "compared_with": "GNU Radio linear_equalizer with adaptive_algorithm_nlms on constellation_rect 1024-QAM (linear_equalizer_impl.cc and constellation.cc of gr-digital, VOLK generic dot products, generic compiler flags)",
@@ -3337,7 +3737,11 @@
             },
             "ratio": 0.13370768067469538
           },
-          "samples": 65536
+          "samples": 65536,
+          "snr_db": {
+            "comparison": 131.15,
+            "ours": 999.0
+          }
         },
         "equalize_qam16": {
           "compared_with": "GNU Radio linear_equalizer with adaptive_algorithm_nlms on constellation_rect 16-QAM (linear_equalizer_impl.cc and constellation.cc of gr-digital, VOLK's dispatched dot products of the level with the aligned tap copies of fir_filter)",
@@ -3370,7 +3774,11 @@
             },
             "ratio": 0.11022336530528465
           },
-          "samples": 65536
+          "samples": 65536,
+          "snr_db": {
+            "comparison": 130.02,
+            "ours": 999.0
+          }
         },
         "equalize_qam16_fallback": {
           "compared_with": "GNU Radio linear_equalizer with adaptive_algorithm_nlms on constellation_rect 16-QAM (linear_equalizer_impl.cc and constellation.cc of gr-digital, VOLK generic dot products, generic compiler flags)",
@@ -3403,7 +3811,11 @@
             },
             "ratio": 0.1292796516866405
           },
-          "samples": 65536
+          "samples": 65536,
+          "snr_db": {
+            "comparison": 129.89,
+            "ours": 999.0
+          }
         },
         "equalize_qam256": {
           "compared_with": "sdrk fallback",
@@ -3436,7 +3848,11 @@
             },
             "ratio": 0.9999998815977859
           },
-          "samples": 65536
+          "samples": 65536,
+          "snr_db": {
+            "comparison": 999.0,
+            "ours": 999.0
+          }
         },
         "equalize_qam256_fallback": {
           "compared_with": "GNU Radio linear_equalizer with adaptive_algorithm_nlms on constellation_rect 256-QAM (linear_equalizer_impl.cc and constellation.cc of gr-digital, VOLK generic dot products, generic compiler flags)",
@@ -3469,7 +3885,11 @@
             },
             "ratio": 0.13359629495570827
           },
-          "samples": 65536
+          "samples": 65536,
+          "snr_db": {
+            "comparison": 133.94,
+            "ours": 999.0
+          }
         },
         "equalize_qam64": {
           "compared_with": "GNU Radio linear_equalizer with adaptive_algorithm_nlms on constellation_rect 64-QAM (linear_equalizer_impl.cc and constellation.cc of gr-digital, VOLK's dispatched dot products of the level with the aligned tap copies of fir_filter)",
@@ -3502,7 +3922,11 @@
             },
             "ratio": 0.11020079309154038
           },
-          "samples": 65536
+          "samples": 65536,
+          "snr_db": {
+            "comparison": 130.82,
+            "ours": 999.0
+          }
         },
         "equalize_qam64_fallback": {
           "compared_with": "GNU Radio linear_equalizer with adaptive_algorithm_nlms on constellation_rect 64-QAM (linear_equalizer_impl.cc and constellation.cc of gr-digital, VOLK generic dot products, generic compiler flags)",
@@ -3535,7 +3959,11 @@
             },
             "ratio": 0.12925317663944932
           },
-          "samples": 65536
+          "samples": 65536,
+          "snr_db": {
+            "comparison": 130.82,
+            "ours": 999.0
+          }
         },
         "fft_1024": {
           "compared_with": "rustfft (FftPlanner, forward, in place)",
@@ -3568,7 +3996,11 @@
             },
             "ratio": 0.9320244016654383
           },
-          "samples": 65536
+          "samples": 65536,
+          "snr_db": {
+            "comparison": 139.06,
+            "ours": 139.09
+          }
         },
         "fft_1024_fallback": {
           "compared_with": "CMSIS-DSP 1.18.0 arm_cfft_f32 (forward, in place, bit reversal), generic C (-O3 -ffp-contract=off, LOOPUNROLL, avx512)",
@@ -3601,7 +4033,11 @@
             },
             "ratio": 0.9551253704480569
           },
-          "samples": 65536
+          "samples": 65536,
+          "snr_db": {
+            "comparison": 138.73,
+            "ours": 137.96
+          }
         },
         "fft_4096": {
           "compared_with": "rustfft (FftPlanner, forward, in place)",
@@ -3634,7 +4070,11 @@
             },
             "ratio": 0.8927771105525212
           },
-          "samples": 65536
+          "samples": 65536,
+          "snr_db": {
+            "comparison": 137.89,
+            "ours": 138.17
+          }
         },
         "fft_4096_fallback": {
           "compared_with": "CMSIS-DSP 1.18.0 arm_cfft_f32 (forward, in place, bit reversal), generic C (-O3 -ffp-contract=off, LOOPUNROLL, avx512)",
@@ -3667,7 +4107,11 @@
             },
             "ratio": 0.9994090995585533
           },
-          "samples": 65536
+          "samples": 65536,
+          "snr_db": {
+            "comparison": 137.71,
+            "ours": 137.36
+          }
         },
         "fft_64": {
           "compared_with": "rustfft (FftPlanner, forward, in place)",
@@ -3700,7 +4144,11 @@
             },
             "ratio": 0.8976148674688477
           },
-          "samples": 65536
+          "samples": 65536,
+          "snr_db": {
+            "comparison": 141.45,
+            "ours": 140.65
+          }
         },
         "fft_64_fallback": {
           "compared_with": "CMSIS-DSP 1.18.0 arm_cfft_f32 (forward, in place, bit reversal), generic C (-O3 -ffp-contract=off, LOOPUNROLL, avx512)",
@@ -3733,7 +4181,11 @@
             },
             "ratio": 0.9460540736444024
           },
-          "samples": 65536
+          "samples": 65536,
+          "snr_db": {
+            "comparison": 140.0,
+            "ours": 141.01
+          }
         },
         "fft_cq15_1024": {
           "compared_with": "KissFFT FIXED_POINT=16 (kiss_fft, 1/N scaling, out of place)",
@@ -3766,7 +4218,11 @@
             },
             "ratio": 0.0511085797646523
           },
-          "samples": 65536
+          "samples": 65536,
+          "snr_db": {
+            "comparison": 43.67,
+            "ours": 63.54
+          }
         },
         "fft_cq15_1024_default": {
           "compared_with": "KissFFT FIXED_POINT=16 (kiss_fft, 1/N scaling, out of place)",
@@ -3799,7 +4255,11 @@
             },
             "ratio": 0.04588770383155143
           },
-          "samples": 65536
+          "samples": 65536,
+          "snr_db": {
+            "comparison": 43.51,
+            "ours": 46.71
+          }
         },
         "fft_cq15_1024_default_fallback": {
           "compared_with": "CMSIS-DSP 1.18.0 arm_cfft_q15 (forward, in place, bit reversal, 1/N scaling with truncating shifts), generic C (-O3 -ffp-contract=off, LOOPUNROLL, avx512)",
@@ -3832,7 +4292,11 @@
             },
             "ratio": 0.7661224274861009
           },
-          "samples": 65536
+          "samples": 65536,
+          "snr_db": {
+            "comparison": 41.63,
+            "ours": 46.15
+          }
         },
         "fft_cq15_1024_fallback": {
           "compared_with": "CMSIS-DSP 1.18.0 arm_cfft_q15 (forward, in place, bit reversal, 1/N scaling with truncating shifts), generic C (-O3 -ffp-contract=off, LOOPUNROLL, avx512)",
@@ -3865,7 +4329,11 @@
             },
             "ratio": 1.145094509737365
           },
-          "samples": 65536
+          "samples": 65536,
+          "snr_db": {
+            "comparison": 41.76,
+            "ours": 68.03
+          }
         },
         "fft_cq15_1024_full_scale": {
           "compared_with": "KissFFT FIXED_POINT=16 (kiss_fft, 1/N scaling, out of place)",
@@ -3898,7 +4366,11 @@
             },
             "ratio": 0.047098971424321186
           },
-          "samples": 65536
+          "samples": 65536,
+          "snr_db": {
+            "comparison": 55.08,
+            "ours": 58.86
+          }
         },
         "fir": {
           "compared_with": "volk_32fc_32f_dot_prod_32fc_a as GNU Radio's fir_filter_ccf calls it",
@@ -3931,7 +4403,11 @@
             },
             "ratio": 0.1372832462102758
           },
-          "samples": 65536
+          "samples": 65536,
+          "snr_db": {
+            "comparison": 141.89,
+            "ours": 142.1
+          }
         },
         "fir_cq15": {
           "compared_with": "sdrk fallback",
@@ -3964,7 +4440,11 @@
             },
             "ratio": 0.9999995015386505
           },
-          "samples": 65536
+          "samples": 65536,
+          "snr_db": {
+            "comparison": 999.0,
+            "ours": 999.0
+          }
         },
         "fir_cq15_fallback": {
           "compared_with": "CMSIS-DSP 1.18.0 arm_fir_q15, generic C (-O3 -ffp-contract=off, LOOPUNROLL, avx512)",
@@ -3997,7 +4477,11 @@
             },
             "ratio": 0.2807730245583641
           },
-          "samples": 65536
+          "samples": 65536,
+          "snr_db": {
+            "comparison": 83.12,
+            "ours": 999.0
+          }
         },
         "fir_decimate": {
           "compared_with": "volk_32fc_32f_dot_prod_32fc_a as GNU Radio's fir_filter_ccf (filterNdec) calls it",
@@ -4030,7 +4514,11 @@
             },
             "ratio": 0.23171092583905867
           },
-          "samples": 65536
+          "samples": 65536,
+          "snr_db": {
+            "comparison": 141.06,
+            "ours": 141.92
+          }
         },
         "fir_decimate_cq15": {
           "compared_with": "sdrk fallback",
@@ -4063,7 +4551,11 @@
             },
             "ratio": 0.6885651232780653
           },
-          "samples": 65536
+          "samples": 65536,
+          "snr_db": {
+            "comparison": 999.0,
+            "ours": 999.0
+          }
         },
         "fir_decimate_cq15_fallback": {
           "compared_with": "CMSIS-DSP 1.18.0 arm_fir_decimate_q15 (block 4090 of 4096), generic C (-O3 -ffp-contract=off, LOOPUNROLL, avx512)",
@@ -4096,7 +4588,11 @@
             },
             "ratio": 0.4513726351989509
           },
-          "samples": 65536
+          "samples": 65536,
+          "snr_db": {
+            "comparison": 82.19,
+            "ours": 999.0
+          }
         },
         "fir_decimate_fallback": {
           "compared_with": "CMSIS-DSP 1.18.0 arm_fir_decimate_f32 (block 4090 of 4096), generic C (-O3 -ffp-contract=off, LOOPUNROLL, avx512)",
@@ -4129,7 +4625,11 @@
             },
             "ratio": 0.15597823163607094
           },
-          "samples": 65536
+          "samples": 65536,
+          "snr_db": {
+            "comparison": 134.33,
+            "ours": 133.29
+          }
         },
         "fir_fallback": {
           "compared_with": "CMSIS-DSP 1.18.0 arm_fir_f32, generic C (-O3 -ffp-contract=off, LOOPUNROLL, avx512)",
@@ -4162,7 +4662,11 @@
             },
             "ratio": 0.6053621121019559
           },
-          "samples": 65536
+          "samples": 65536,
+          "snr_db": {
+            "comparison": 136.39,
+            "ours": 136.29
+          }
         },
         "fir_interpolate": {
           "compared_with": "volk_32fc_32f_dot_prod_32fc_a per output as GNU Radio's interp_fir_filter_ccf calls it",
@@ -4195,7 +4699,11 @@
             },
             "ratio": 0.15639988535365337
           },
-          "samples": 65536
+          "samples": 65536,
+          "snr_db": {
+            "comparison": 141.95,
+            "ours": 141.78
+          }
         },
         "fir_interpolate_cq15": {
           "compared_with": "sdrk fallback",
@@ -4228,7 +4736,11 @@
             },
             "ratio": 0.9999996287797278
           },
-          "samples": 65536
+          "samples": 65536,
+          "snr_db": {
+            "comparison": 999.0,
+            "ours": 999.0
+          }
         },
         "fir_interpolate_cq15_fallback": {
           "compared_with": "CMSIS-DSP 1.18.0 arm_fir_interpolate_q15 by 2, generic C (-O3 -ffp-contract=off, LOOPUNROLL, avx512)",
@@ -4261,7 +4773,11 @@
             },
             "ratio": 0.39711218756101463
           },
-          "samples": 65536
+          "samples": 65536,
+          "snr_db": {
+            "comparison": 80.09,
+            "ours": 999.0
+          }
         },
         "fir_interpolate_fallback": {
           "compared_with": "CMSIS-DSP 1.18.0 arm_fir_interpolate_f32 by 2, generic C (-O3 -ffp-contract=off, LOOPUNROLL, avx512)",
@@ -4294,7 +4810,11 @@
             },
             "ratio": 0.38971021922074534
           },
-          "samples": 65536
+          "samples": 65536,
+          "snr_db": {
+            "comparison": 136.48,
+            "ours": 136.35
+          }
         },
         "fir_interpolate_real": {
           "compared_with": "volk_32f_x2_dot_prod_32f_a per output as GNU Radio's interp_fir_filter_fff calls it",
@@ -4327,7 +4847,11 @@
             },
             "ratio": 0.08159202936962015
           },
-          "samples": 65536
+          "samples": 65536,
+          "snr_db": {
+            "comparison": 139.41,
+            "ours": 141.83
+          }
         },
         "fir_interpolate_real_fallback": {
           "compared_with": "CMSIS-DSP 1.18.0 arm_fir_interpolate_f32 by 2, generic C (-O3 -ffp-contract=off, LOOPUNROLL, avx512)",
@@ -4360,7 +4884,11 @@
             },
             "ratio": 0.5035615954230314
           },
-          "samples": 65536
+          "samples": 65536,
+          "snr_db": {
+            "comparison": 136.42,
+            "ours": 136.52
+          }
         },
         "fir_interpolate_real_q15": {
           "compared_with": "sdrk fallback",
@@ -4393,7 +4921,11 @@
             },
             "ratio": 0.9999992133763773
           },
-          "samples": 65536
+          "samples": 65536,
+          "snr_db": {
+            "comparison": 999.0,
+            "ours": 999.0
+          }
         },
         "fir_interpolate_real_q15_fallback": {
           "compared_with": "CMSIS-DSP 1.18.0 arm_fir_interpolate_q15 by 2, generic C (-O3 -ffp-contract=off, LOOPUNROLL, avx512)",
@@ -4426,7 +4958,11 @@
             },
             "ratio": 0.3320938705165776
           },
-          "samples": 65536
+          "samples": 65536,
+          "snr_db": {
+            "comparison": 80.35,
+            "ours": 999.0
+          }
         },
         "fir_interpolate_short": {
           "compared_with": "volk_32fc_32f_dot_prod_32fc_a per output as GNU Radio's interp_fir_filter_ccf calls it",
@@ -4459,7 +4995,11 @@
             },
             "ratio": 0.04560188709338694
           },
-          "samples": 65536
+          "samples": 65536,
+          "snr_db": {
+            "comparison": 143.16,
+            "ours": 145.1
+          }
         },
         "fir_interpolate_short_fallback": {
           "compared_with": "CMSIS-DSP 1.18.0 arm_fir_interpolate_f32 by 8 (80 taps), generic C (-O3 -ffp-contract=off, LOOPUNROLL, avx512)",
@@ -4492,7 +5032,11 @@
             },
             "ratio": 0.5353903668644124
           },
-          "samples": 65536
+          "samples": 65536,
+          "snr_db": {
+            "comparison": 143.04,
+            "ours": 143.09
+          }
         },
         "fm_mod": {
           "compared_with": "GNU Radio frequency_modulator_fc (f32 phase folded with fmodf, gr::fxpt sincos; gr-fm-mod.c, generic compiler flags)",
@@ -4525,7 +5069,11 @@
             },
             "ratio": 0.02446822650069236
           },
-          "samples": 65536
+          "samples": 65536,
+          "snr_db": {
+            "comparison": 96.74,
+            "ours": 133.15
+          }
         },
         "fm_mod_cq15": {
           "compared_with": "sdrk fallback",
@@ -4558,7 +5106,11 @@
             },
             "ratio": 0.1727156936744187
           },
-          "samples": 65536
+          "samples": 65536,
+          "snr_db": {
+            "comparison": 89.37,
+            "ours": 89.37
+          }
         },
         "fm_mod_cq15_fallback": {
           "compared_with": "CMSIS-DSP 1.18.0 arm_cos_q15 + arm_sin_q15 per sample of an integer phase accumulator, generic C (-O3 -ffp-contract=off, LOOPUNROLL, avx512)",
@@ -4591,7 +5143,11 @@
             },
             "ratio": 0.35223181889538213
           },
-          "samples": 65536
+          "samples": 65536,
+          "snr_db": {
+            "comparison": 77.14,
+            "ours": 89.37
+          }
         },
         "fm_mod_fallback": {
           "compared_with": "GNU Radio frequency_modulator_fc (f32 phase folded with fmodf, gr::fxpt sincos; gr-fm-mod.c, generic compiler flags)",
@@ -4624,7 +5180,11 @@
             },
             "ratio": 0.045612745574704835
           },
-          "samples": 65536
+          "samples": 65536,
+          "snr_db": {
+            "comparison": 96.74,
+            "ours": 133.15
+          }
         },
         "frame_decode": {
           "compared_with": "sdrk fallback",
@@ -4657,7 +5217,11 @@
             },
             "ratio": 1.0
           },
-          "samples": 65536
+          "samples": 65536,
+          "snr_db": {
+            "comparison": 999.0,
+            "ours": 999.0
+          }
         },
         "frame_decode_block": {
           "compared_with": "sdrk fallback",
@@ -4690,7 +5254,11 @@
             },
             "ratio": 1.0
           },
-          "samples": 65536
+          "samples": 65536,
+          "snr_db": {
+            "comparison": 999.0,
+            "ours": 999.0
+          }
         },
         "frame_decode_four_block": {
           "compared_with": "sdrk fallback",
@@ -4723,7 +5291,11 @@
             },
             "ratio": 1.0
           },
-          "samples": 65536
+          "samples": 65536,
+          "snr_db": {
+            "comparison": 999.0,
+            "ours": 999.0
+          }
         },
         "frame_encode_block": {
           "compared_with": "sdrk fallback",
@@ -4756,7 +5328,11 @@
             },
             "ratio": 1.0
           },
-          "samples": 65536
+          "samples": 65536,
+          "snr_db": {
+            "comparison": 999.0,
+            "ours": 999.0
+          }
         },
         "gauss_noise_c32": {
           "compared_with": "liquid-dsp 1.8.3 crandnf times sigma (libc rand(), f32 Box-Muller with sqrtf, logf and cexpf; no random access, no bit-exact sequence; reference does different work; -O3)",
@@ -4789,7 +5365,11 @@
             },
             "ratio": 0.008771249499270729
           },
-          "samples": 65536
+          "samples": 65536,
+          "snr_db": {
+            "comparison": 999.0,
+            "ours": 999.0
+          }
         },
         "gauss_noise_c32_fallback": {
           "compared_with": "liquid-dsp 1.8.3 crandnf times sigma (libc rand(), f32 Box-Muller with sqrtf, logf and cexpf; no random access, no bit-exact sequence; reference does different work; -O3)",
@@ -4822,7 +5402,11 @@
             },
             "ratio": 0.05695213270647368
           },
-          "samples": 65536
+          "samples": 65536,
+          "snr_db": {
+            "comparison": 999.0,
+            "ours": 999.0
+          }
         },
         "gauss_noise_c32_fastnoise": {
           "compared_with": "GNU Radio fastnoise_source_c, amplitude sigma * sqrt(2) (benches/refs/gr-fastnoise.c, main at ec1bf15: one xoroshiro128+ draw and a copy from a pool of 8192 precomputed values per sample, no normal mapping, no random access; reference does less work; -O3)",
@@ -4855,7 +5439,11 @@
             },
             "ratio": 0.4070989897177639
           },
-          "samples": 65536
+          "samples": 65536,
+          "snr_db": {
+            "comparison": 999.0,
+            "ours": 999.0
+          }
         },
         "gauss_noise_f32": {
           "compared_with": "liquid-dsp 1.8.3 randnf times sigma (libc rand(), f32 Box-Muller with sqrtf, logf and sinf; no random access, no bit-exact sequence; reference does different work; -O3)",
@@ -4888,7 +5476,11 @@
             },
             "ratio": 0.0071930210314894985
           },
-          "samples": 65536
+          "samples": 65536,
+          "snr_db": {
+            "comparison": 999.0,
+            "ours": 999.0
+          }
         },
         "gauss_noise_f32_fallback": {
           "compared_with": "liquid-dsp 1.8.3 randnf times sigma (libc rand(), f32 Box-Muller with sqrtf, logf and sinf; no random access, no bit-exact sequence; reference does different work; -O3)",
@@ -4921,7 +5513,11 @@
             },
             "ratio": 0.045946859727322154
           },
-          "samples": 65536
+          "samples": 65536,
+          "snr_db": {
+            "comparison": 999.0,
+            "ours": 999.0
+          }
         },
         "gauss_noise_f32_fastnoise": {
           "compared_with": "GNU Radio fastnoise_source_f, amplitude sigma (benches/refs/gr-fastnoise.c, main at ec1bf15: one xoroshiro128+ draw and a copy from a pool of 8192 precomputed values per sample, no normal mapping, no random access; reference does less work; -O3)",
@@ -4954,7 +5550,11 @@
             },
             "ratio": 0.20624800002154897
           },
-          "samples": 65536
+          "samples": 65536,
+          "snr_db": {
+            "comparison": 999.0,
+            "ours": 999.0
+          }
         },
         "gauss_noise_f32_ziggurat": {
           "compared_with": "rand_distr 0.5.1 StandardNormal as f32 times sigma over rand 0.9.5 SmallRng (Ziggurat in f64 with rejection: a variable number of draws per value, no random access, no bit-exact sequence across platforms; reference does different work)",
@@ -4987,7 +5587,11 @@
             },
             "ratio": 0.08513307691002718
           },
-          "samples": 65536
+          "samples": 65536,
+          "snr_db": {
+            "comparison": 999.0,
+            "ours": 999.0
+          }
         },
         "gauss_noise_q15": {
           "compared_with": "sdrk fallback",
@@ -5020,7 +5624,11 @@
             },
             "ratio": 0.104237996011285
           },
-          "samples": 65536
+          "samples": 65536,
+          "snr_db": {
+            "comparison": 999.0,
+            "ours": 999.0
+          }
         },
         "gauss_noise_q15_fallback": {
           "compared_with": "sdrk fallback",
@@ -5053,7 +5661,11 @@
             },
             "ratio": 1.0
           },
-          "samples": 65536
+          "samples": 65536,
+          "snr_db": {
+            "comparison": 999.0,
+            "ours": 999.0
+          }
         },
         "halfband_decimate": {
           "compared_with": "liquid-dsp 1.8.3 resamp2_crcf_decim_execute (dotprod_crcf) with its AVX-512F dot product (-O3 -ffp-contract=off, avx512)",
@@ -5086,7 +5698,11 @@
             },
             "ratio": 0.0239411759203787
           },
-          "samples": 65536
+          "samples": 65536,
+          "snr_db": {
+            "comparison": 143.79,
+            "ours": 142.99
+          }
         },
         "halfband_decimate_cq15": {
           "compared_with": "sdrk fallback",
@@ -5119,7 +5735,11 @@
             },
             "ratio": 0.5983672617595951
           },
-          "samples": 65536
+          "samples": 65536,
+          "snr_db": {
+            "comparison": 999.0,
+            "ours": 999.0
+          }
         },
         "halfband_decimate_cq15_fallback": {
           "compared_with": "CMSIS-DSP 1.18.0 arm_fir_q15 (24 taps) on the even samples, arm_scale_q15 (centre tap) on the odd samples and arm_add_q15 (a composition: CMSIS-DSP has no halfband decimator), generic C (-O3 -ffp-contract=off, LOOPUNROLL, avx512)",
@@ -5152,7 +5772,11 @@
             },
             "ratio": 0.39373386513749575
           },
-          "samples": 65536
+          "samples": 65536,
+          "snr_db": {
+            "comparison": 82.54,
+            "ours": 999.0
+          }
         },
         "halfband_decimate_fallback": {
           "compared_with": "liquid-dsp 1.8.3 resamp2_crcf_decim_execute (dotprod_crcf) with its portable dot product (-O3 -ffp-contract=off, avx512)",
@@ -5185,7 +5809,11 @@
             },
             "ratio": 0.5135430073810323
           },
-          "samples": 65536
+          "samples": 65536,
+          "snr_db": {
+            "comparison": 142.14,
+            "ours": 142.12
+          }
         },
         "halfband_decimate_real": {
           "compared_with": "liquid-dsp 1.8.3 resamp2_rrrf_decim_execute (dotprod_rrrf) with its AVX-512F dot product (-O3 -ffp-contract=off, avx512)",
@@ -5218,7 +5846,11 @@
             },
             "ratio": 0.059257122769801565
           },
-          "samples": 65536
+          "samples": 65536,
+          "snr_db": {
+            "comparison": 142.17,
+            "ours": 142.81
+          }
         },
         "halfband_decimate_real_fallback": {
           "compared_with": "liquid-dsp 1.8.3 resamp2_rrrf_decim_execute (dotprod_rrrf) with its portable dot product (-O3 -ffp-contract=off, avx512)",
@@ -5251,7 +5883,11 @@
             },
             "ratio": 0.11315352666948088
           },
-          "samples": 65536
+          "samples": 65536,
+          "snr_db": {
+            "comparison": 141.96,
+            "ours": 142.54
+          }
         },
         "halfband_decimate_real_q15": {
           "compared_with": "sdrk fallback",
@@ -5284,7 +5920,11 @@
             },
             "ratio": 0.3270792691538334
           },
-          "samples": 65536
+          "samples": 65536,
+          "snr_db": {
+            "comparison": 999.0,
+            "ours": 999.0
+          }
         },
         "halfband_decimate_real_q15_fallback": {
           "compared_with": "CMSIS-DSP 1.18.0 arm_fir_q15 (24 taps) on the even samples, arm_scale_q15 (centre tap) on the odd samples and arm_add_q15 (a composition: CMSIS-DSP has no halfband decimator), generic C (-O3 -ffp-contract=off, LOOPUNROLL, avx512)",
@@ -5317,7 +5957,11 @@
             },
             "ratio": 0.7691333581289937
           },
-          "samples": 65536
+          "samples": 65536,
+          "snr_db": {
+            "comparison": 82.64,
+            "ours": 999.0
+          }
         },
         "halfband_ref_fir_decimate": {
           "compared_with": "sdrk fallback",
@@ -5350,7 +5994,11 @@
             },
             "ratio": 0.36245558506902625
           },
-          "samples": 65536
+          "samples": 65536,
+          "snr_db": {
+            "comparison": 139.91,
+            "ours": 144.54
+          }
         },
         "halfband_ref_fir_decimate_cq15": {
           "compared_with": "sdrk fallback",
@@ -5383,7 +6031,11 @@
             },
             "ratio": 1.1364723626084663
           },
-          "samples": 65536
+          "samples": 65536,
+          "snr_db": {
+            "comparison": 999.0,
+            "ours": 999.0
+          }
         },
         "halfband_ref_shifted": {
           "compared_with": "sdrk fallback",
@@ -5416,7 +6068,11 @@
             },
             "ratio": 0.07844594180954984
           },
-          "samples": 65536
+          "samples": 65536,
+          "snr_db": {
+            "comparison": 142.93,
+            "ours": 150.01
+          }
         },
         "halfband_ref_shifted_cq15": {
           "compared_with": "sdrk fallback",
@@ -5428,11 +6084,11 @@
             },
             "cpu": "sapphirerapids",
             "ours": {
-              "coverage": 0.9902524505174377,
-              "cycles_per_sample": 11.60575186353894,
+              "coverage": 0.9902917454281727,
+              "cycles_per_sample": 11.60529134573134,
               "efficiency": 0.5949391706691206
             },
-            "ratio": 0.7100834239812106
+            "ratio": 0.7100552477746649
           },
           "cycle_mode": "whole-loop",
           "reference_model": {
@@ -5443,13 +6099,17 @@
             },
             "cpu": "znver4",
             "ours": {
-              "coverage": 0.9902524505174377,
-              "cycles_per_sample": 9.928477486375261,
+              "coverage": 0.9902917454281727,
+              "cycles_per_sample": 9.928083523042373,
               "efficiency": 0.7291137562396514
             },
-            "ratio": 0.6737551601236029
+            "ratio": 0.673728425427493
           },
-          "samples": 65536
+          "samples": 65536,
+          "snr_db": {
+            "comparison": 999.0,
+            "ours": 999.0
+          }
         },
         "interleave": {
           "compared_with": "volk_32f_x2_interleave_32fc",
@@ -5482,7 +6142,11 @@
             },
             "ratio": 0.7426797508830308
           },
-          "samples": 65536
+          "samples": 65536,
+          "snr_db": {
+            "comparison": 999.0,
+            "ours": 999.0
+          }
         },
         "interleave_cq15": {
           "compared_with": "sdrk fallback",
@@ -5515,7 +6179,11 @@
             },
             "ratio": 0.7763750655057285
           },
-          "samples": 65536
+          "samples": 65536,
+          "snr_db": {
+            "comparison": 999.0,
+            "ours": 999.0
+          }
         },
         "interleave_cq15_fallback": {
           "compared_with": "VOLK 3.3.0 volk_32f_x2_interleave_32fc_generic on int16 (VOLK has no 16-bit interleave), benches/refs/volk-generic.c (-O3 -ffp-contract=off, avx512)",
@@ -5548,7 +6216,11 @@
             },
             "ratio": 0.9687090262539243
           },
-          "samples": 65536
+          "samples": 65536,
+          "snr_db": {
+            "comparison": 999.0,
+            "ours": 999.0
+          }
         },
         "interleave_fallback": {
           "compared_with": "VOLK 3.3.0 volk_32f_x2_interleave_32fc_generic, benches/refs/volk-generic.c (-O3 -ffp-contract=off, avx512)",
@@ -5581,7 +6253,11 @@
             },
             "ratio": 0.9711904551907112
           },
-          "samples": 65536
+          "samples": 65536,
+          "snr_db": {
+            "comparison": 999.0,
+            "ours": 999.0
+          }
         },
         "iq_offset_block": {
           "compared_with": "sdrk fallback",
@@ -5614,7 +6290,11 @@
             },
             "ratio": 1.0
           },
-          "samples": 65536
+          "samples": 65536,
+          "snr_db": {
+            "comparison": 999.0,
+            "ours": 999.0
+          }
         },
         "mag": {
           "compared_with": "volk_32fc_magnitude_32f",
@@ -5647,7 +6327,11 @@
             },
             "ratio": 0.4964074098680793
           },
-          "samples": 65536
+          "samples": 65536,
+          "snr_db": {
+            "comparison": 150.92,
+            "ours": 150.54
+          }
         },
         "mag_fallback": {
           "compared_with": "CMSIS-DSP 1.18.0 arm_cmplx_mag_f32, generic C (-O3 -ffp-contract=off, LOOPUNROLL, avx512)",
@@ -5680,7 +6364,11 @@
             },
             "ratio": 0.9684922812303932
           },
-          "samples": 65536
+          "samples": 65536,
+          "snr_db": {
+            "comparison": 150.54,
+            "ours": 150.54
+          }
         },
         "mag_q15": {
           "compared_with": "volk_16ic_magnitude_16i",
@@ -5713,7 +6401,11 @@
             },
             "ratio": 0.8476954572242613
           },
-          "samples": 65536
+          "samples": 65536,
+          "snr_db": {
+            "comparison": 96.22,
+            "ours": 96.22
+          }
         },
         "mag_q15_fallback": {
           "compared_with": "CMSIS-DSP 1.18.0 arm_cmplx_mag_q15 (Q2.14, arm_sqrt_q31), generic C (-O3 -ffp-contract=off, LOOPUNROLL, avx512)",
@@ -5746,7 +6438,11 @@
             },
             "ratio": 0.012189876766899728
           },
-          "samples": 65536
+          "samples": 65536,
+          "snr_db": {
+            "comparison": 84.3,
+            "ours": 96.22
+          }
         },
         "mag_sq": {
           "compared_with": "volk_32fc_magnitude_squared_32f",
@@ -5779,7 +6475,11 @@
             },
             "ratio": 0.8769879360391966
           },
-          "samples": 65536
+          "samples": 65536,
+          "snr_db": {
+            "comparison": 149.02,
+            "ours": 149.02
+          }
         },
         "mag_sq_fallback": {
           "compared_with": "CMSIS-DSP 1.18.0 arm_cmplx_mag_squared_f32, generic C (-O3 -ffp-contract=off, LOOPUNROLL, avx512)",
@@ -5812,7 +6512,11 @@
             },
             "ratio": 1.2099658734745407
           },
-          "samples": 65536
+          "samples": 65536,
+          "snr_db": {
+            "comparison": 149.02,
+            "ours": 149.02
+          }
         },
         "mag_sq_q15": {
           "compared_with": "sdrk fallback",
@@ -5845,7 +6549,11 @@
             },
             "ratio": 0.9201822680559713
           },
-          "samples": 65536
+          "samples": 65536,
+          "snr_db": {
+            "comparison": 92.85,
+            "ours": 92.85
+          }
         },
         "mag_sq_q15_fallback": {
           "compared_with": "CMSIS-DSP 1.18.0 arm_cmplx_mag_squared_q15 (Q3.13, truncating), generic C (-O3 -ffp-contract=off, LOOPUNROLL, avx512)",
@@ -5878,7 +6586,11 @@
             },
             "ratio": 0.2154551365398713
           },
-          "samples": 65536
+          "samples": 65536,
+          "snr_db": {
+            "comparison": 74.85,
+            "ours": 92.85
+          }
         },
         "morse_decode_block": {
           "compared_with": "sdrk fallback",
@@ -5911,7 +6623,11 @@
             },
             "ratio": 1.0
           },
-          "samples": 65536
+          "samples": 65536,
+          "snr_db": {
+            "comparison": 999.0,
+            "ours": 999.0
+          }
         },
         "morse_encode_block": {
           "compared_with": "sdrk fallback",
@@ -5944,7 +6660,11 @@
             },
             "ratio": 1.0
           },
-          "samples": 65536
+          "samples": 65536,
+          "snr_db": {
+            "comparison": 999.0,
+            "ours": 999.0
+          }
         },
         "mul": {
           "compared_with": "volk_32fc_x2_multiply_32fc",
@@ -5977,7 +6697,11 @@
             },
             "ratio": 1.1841882256652148
           },
-          "samples": 65536
+          "samples": 65536,
+          "snr_db": {
+            "comparison": 150.12,
+            "ours": 150.12
+          }
         },
         "mul_cq15": {
           "compared_with": "sdrk fallback",
@@ -6010,7 +6734,11 @@
             },
             "ratio": 0.8573516659975878
           },
-          "samples": 65536
+          "samples": 65536,
+          "snr_db": {
+            "comparison": 94.36,
+            "ours": 94.36
+          }
         },
         "mul_cq15_fallback": {
           "compared_with": "CMSIS-DSP 1.18.0 arm_cmplx_mult_cmplx_q15 (Q3.13, truncating, scaled by 4), generic C (-O3 -ffp-contract=off, LOOPUNROLL, avx512)",
@@ -6043,7 +6771,11 @@
             },
             "ratio": 0.7709555310724794
           },
-          "samples": 65536
+          "samples": 65536,
+          "snr_db": {
+            "comparison": 19.61,
+            "ours": 94.36
+          }
         },
         "mul_fallback": {
           "compared_with": "CMSIS-DSP 1.18.0 arm_cmplx_mult_cmplx_f32, generic C (-O3 -ffp-contract=off, LOOPUNROLL, avx512)",
@@ -6076,7 +6808,11 @@
             },
             "ratio": 1.465743520693339
           },
-          "samples": 65536
+          "samples": 65536,
+          "snr_db": {
+            "comparison": 148.5,
+            "ours": 148.5
+          }
         },
         "mul_real": {
           "compared_with": "volk_32f_x2_multiply_32f",
@@ -6109,7 +6845,11 @@
             },
             "ratio": 0.8377404779832969
           },
-          "samples": 65536
+          "samples": 65536,
+          "snr_db": {
+            "comparison": 151.79,
+            "ours": 151.79
+          }
         },
         "mul_real_fallback": {
           "compared_with": "CMSIS-DSP 1.18.0 arm_mult_f32, generic C (-O3 -ffp-contract=off, LOOPUNROLL, avx512)",
@@ -6142,7 +6882,11 @@
             },
             "ratio": 0.9636993997584331
           },
-          "samples": 65536
+          "samples": 65536,
+          "snr_db": {
+            "comparison": 151.79,
+            "ours": 151.79
+          }
         },
         "mul_real_q15": {
           "compared_with": "sdrk fallback",
@@ -6175,7 +6919,11 @@
             },
             "ratio": 0.2891221805890243
           },
-          "samples": 65536
+          "samples": 65536,
+          "snr_db": {
+            "comparison": 91.62,
+            "ours": 91.62
+          }
         },
         "mul_real_q15_fallback": {
           "compared_with": "CMSIS-DSP 1.18.0 arm_mult_q15 (truncating), generic C (-O3 -ffp-contract=off, LOOPUNROLL, avx512)",
@@ -6208,7 +6956,11 @@
             },
             "ratio": 0.8931427458757067
           },
-          "samples": 65536
+          "samples": 65536,
+          "snr_db": {
+            "comparison": 85.59,
+            "ours": 91.62
+          }
         },
         "noise_blank": {
           "compared_with": "sdrk fallback",
@@ -6241,7 +6993,11 @@
             },
             "ratio": 1.0000005575173971
           },
-          "samples": 65536
+          "samples": 65536,
+          "snr_db": {
+            "comparison": 999.0,
+            "ours": 999.0
+          }
         },
         "noise_blank_cq15": {
           "compared_with": "sdrk fallback",
@@ -6274,7 +7030,11 @@
             },
             "ratio": 1.0000005090781356
           },
-          "samples": 65536
+          "samples": 65536,
+          "snr_db": {
+            "comparison": 999.0,
+            "ours": 999.0
+          }
         },
         "noise_block": {
           "compared_with": "sdrk fallback",
@@ -6307,7 +7067,11 @@
             },
             "ratio": 1.0
           },
-          "samples": 65536
+          "samples": 65536,
+          "snr_db": {
+            "comparison": 999.0,
+            "ours": 999.0
+          }
         },
         "oscillate": {
           "compared_with": "sdrk fallback",
@@ -6340,7 +7104,11 @@
             },
             "ratio": 0.5694639077505385
           },
-          "samples": 65536
+          "samples": 65536,
+          "snr_db": {
+            "comparison": 133.23,
+            "ours": 133.23
+          }
         },
         "oscillate_cq15": {
           "compared_with": "sdrk fallback",
@@ -6373,7 +7141,11 @@
             },
             "ratio": 0.09064049279347246
           },
-          "samples": 65536
+          "samples": 65536,
+          "snr_db": {
+            "comparison": 97.85,
+            "ours": 97.85
+          }
         },
         "oscillate_cq15_fallback": {
           "compared_with": "CMSIS-DSP 1.18.0 arm_cos_q15 + arm_sin_q15 per sample (512-entry table, linear interpolation), generic C (-O3 -ffp-contract=off, LOOPUNROLL, avx512)",
@@ -6406,7 +7178,11 @@
             },
             "ratio": 0.2644776784377512
           },
-          "samples": 65536
+          "samples": 65536,
+          "snr_db": {
+            "comparison": 75.45,
+            "ours": 97.85
+          }
         },
         "oscillate_fallback": {
           "compared_with": "CMSIS-DSP 1.18.0 arm_sin_cos_f32 of the angle in degrees per sample (512-entry sine table, cubic Hermite interpolation), generic C (-O3 -ffp-contract=off, LOOPUNROLL, avx512)",
@@ -6439,7 +7215,11 @@
             },
             "ratio": 0.009659793356912883
           },
-          "samples": 65536
+          "samples": 65536,
+          "snr_db": {
+            "comparison": 140.77,
+            "ours": 133.23
+          }
         },
         "power_db": {
           "compared_with": "volk_32f_log2_32f + volk_32f_s32f_multiply_32f + volk_32f_s32f_add_32f",
@@ -6472,7 +7252,11 @@
             },
             "ratio": 1.5425420171727033
           },
-          "samples": 65536
+          "samples": 65536,
+          "snr_db": {
+            "comparison": 141.58,
+            "ours": 151.93
+          }
         },
         "power_db_fallback": {
           "compared_with": "CMSIS-DSP 1.18.0 arm_vlog_f32 + arm_scale_f32 (+ offset loop), generic C (-O3 -ffp-contract=off, LOOPUNROLL, avx512)",
@@ -6505,7 +7289,11 @@
             },
             "ratio": 0.059860310637890185
           },
-          "samples": 65536
+          "samples": 65536,
+          "snr_db": {
+            "comparison": 143.15,
+            "ours": 151.93
+          }
         },
         "power_db_q15": {
           "compared_with": "sdrk fallback",
@@ -6538,7 +7326,11 @@
             },
             "ratio": 0.49743381856517815
           },
-          "samples": 65536
+          "samples": 65536,
+          "snr_db": {
+            "comparison": 149.92,
+            "ours": 149.92
+          }
         },
         "power_db_q15_fallback": {
           "compared_with": "CMSIS-DSP 1.18.0 arm_q15_to_float + arm_vlog_f32 + arm_scale_f32 (+ offset loop), generic C (-O3 -ffp-contract=off, LOOPUNROLL, avx512)",
@@ -6571,7 +7363,11 @@
             },
             "ratio": 0.0736555690069735
           },
-          "samples": 65536
+          "samples": 65536,
+          "snr_db": {
+            "comparison": 143.96,
+            "ours": 149.92
+          }
         },
         "preemph_limit": {
           "compared_with": "sdrk fallback",
@@ -6604,7 +7400,11 @@
             },
             "ratio": 1.00000042414649
           },
-          "samples": 65536
+          "samples": 65536,
+          "snr_db": {
+            "comparison": 999.0,
+            "ours": 999.0
+          }
         },
         "preemph_limit_q15": {
           "compared_with": "sdrk fallback",
@@ -6637,7 +7437,11 @@
             },
             "ratio": 0.9999975778749536
           },
-          "samples": 65536
+          "samples": 65536,
+          "snr_db": {
+            "comparison": 999.0,
+            "ours": 999.0
+          }
         },
         "preemph_limit_stereo": {
           "compared_with": "sdrk fallback",
@@ -6670,7 +7474,11 @@
             },
             "ratio": 1.0000005527269753
           },
-          "samples": 65536
+          "samples": 65536,
+          "snr_db": {
+            "comparison": 999.0,
+            "ours": 999.0
+          }
         },
         "psk_demod_block": {
           "compared_with": "GNU Radio fir_filter_ccf + symbol_sync_cc + costas_loop_cc + constellation_decoder_cb (the sum of the blocks of the receiver chain, generic compiler flags; no acquisition and no lock watches)",
@@ -6682,11 +7490,11 @@
             },
             "cpu": "sapphirerapids",
             "ours": {
-              "coverage": 0.9906257090675502,
-              "cycles_per_sample": 33.62458095586343,
-              "efficiency": 0.48077171911683997
+              "coverage": 0.9906773082517504,
+              "cycles_per_sample": 33.62415053599528,
+              "efficiency": 0.48266428734297945
             },
-            "ratio": 0.08101605502179114
+            "ratio": 0.08101501795549235
           },
           "cycle_mode": "whole-loop",
           "reference_model": {
@@ -6697,13 +7505,17 @@
             },
             "cpu": "znver4",
             "ours": {
-              "coverage": 0.9906257090675502,
-              "cycles_per_sample": 35.136672035472664,
-              "efficiency": 0.5262351046450386
+              "coverage": 0.9906773082517504,
+              "cycles_per_sample": 35.1380752183011,
+              "efficiency": 0.5287563997679748
             },
-            "ratio": 0.030391996820771865
+            "ratio": 0.03039321052501846
           },
-          "samples": 65536
+          "samples": 65536,
+          "snr_db": {
+            "comparison": 999.0,
+            "ours": 999.0
+          }
         },
         "psk_mod_block": {
           "compared_with": "GNU Radio constellation_modulator as the sum of its blocks: pack_k_bits_bb + chunks_to_symbols_bc + pfb_arb_resampler_ccf (32 filters of 88 taps and their derivative filters), VOLK's dispatched dot product of the level",
@@ -6736,7 +7548,11 @@
             },
             "ratio": 0.021507523898292316
           },
-          "samples": 65536
+          "samples": 65536,
+          "snr_db": {
+            "comparison": 143.96,
+            "ours": 144.79
+          }
         },
         "psk_mod_block_liquid": {
           "compared_with": "liquid-dsp 1.8.3 modemcf_modulate (arbitrary-constellation modem) + firinterp_crcf (the root-raised cosine of the block), the SIMD dot products of the level (the portable loop at simd128)",
@@ -6769,7 +7585,11 @@
             },
             "ratio": 0.09404106039452192
           },
-          "samples": 65536
+          "samples": 65536,
+          "snr_db": {
+            "comparison": 144.18,
+            "ours": 144.79
+          }
         },
         "pulse_match_block": {
           "compared_with": "GNU Radio fir_filter_ccf (fir_filter_ccf_impl.cc of gr-filter) with VOLK's dispatched dot product of the level (volk_32fc_32f_dot_prod_32fc_a, the aligned tap copies of fir_filter)",
@@ -6802,7 +7622,11 @@
             },
             "ratio": 0.01251723464956278
           },
-          "samples": 65536
+          "samples": 65536,
+          "snr_db": {
+            "comparison": 144.91,
+            "ours": 142.15
+          }
         },
         "pulse_match_block_liquid": {
           "compared_with": "liquid-dsp 1.8.3 firfilt_crcf (firfilt.proto.c), the SIMD dot product of the level (the portable loop at simd128)",
@@ -6835,7 +7659,11 @@
             },
             "ratio": 0.1493190486396745
           },
-          "samples": 65536
+          "samples": 65536,
+          "snr_db": {
+            "comparison": 145.54,
+            "ours": 142.15
+          }
         },
         "pulse_shape_block": {
           "compared_with": "GNU Radio interp_fir_filter_ccf (interp_fir_filter_impl.cc of gr-filter) with VOLK's dispatched dot product of the level (volk_32fc_32f_dot_prod_32fc_a, the aligned tap copies of fir_filter)",
@@ -6868,7 +7696,11 @@
             },
             "ratio": 0.02314667574567371
           },
-          "samples": 65536
+          "samples": 65536,
+          "snr_db": {
+            "comparison": 142.67,
+            "ours": 143.87
+          }
         },
         "pulse_shape_block_liquid": {
           "compared_with": "liquid-dsp 1.8.3 firinterp_crcf (firinterp.proto.c, firpfb.proto.c), the SIMD dot products of the level (the portable loop at simd128)",
@@ -6901,7 +7733,11 @@
             },
             "ratio": 0.08182482905983918
           },
-          "samples": 65536
+          "samples": 65536,
+          "snr_db": {
+            "comparison": 142.8,
+            "ours": 143.87
+          }
         },
         "qam_acquire_block": {
           "compared_with": "sdrk fallback",
@@ -6934,7 +7770,11 @@
             },
             "ratio": 1.0
           },
-          "samples": 65536
+          "samples": 65536,
+          "snr_db": {
+            "comparison": 999.0,
+            "ours": 999.0
+          }
         },
         "qam_demod_block": {
           "compared_with": "GNU Radio fir_filter_ccf + symbol_sync_cc + linear_equalizer + constellation_receiver_cb (the sum of the blocks of the receiver chain, generic compiler flags and VOLK generic dot products; no acquisition, no blind equalizer stage and no lock watches)",
@@ -6967,7 +7807,11 @@
             },
             "ratio": 0.04632328861680406
           },
-          "samples": 65536
+          "samples": 65536,
+          "snr_db": {
+            "comparison": 0.0,
+            "ours": 999.0
+          }
         },
         "qam_demod_qam256_block": {
           "compared_with": "sdrk fallback",
@@ -7000,7 +7844,11 @@
             },
             "ratio": 1.0
           },
-          "samples": 65536
+          "samples": 65536,
+          "snr_db": {
+            "comparison": 999.0,
+            "ours": 999.0
+          }
         },
         "qam_demod_search_block": {
           "compared_with": "sdrk fallback",
@@ -7033,7 +7881,11 @@
             },
             "ratio": 0.9994059002328267
           },
-          "samples": 65536
+          "samples": 65536,
+          "snr_db": {
+            "comparison": 999.0,
+            "ours": 999.0
+          }
         },
         "qam_frame_decode_block": {
           "compared_with": "sdrk fallback",
@@ -7066,7 +7918,11 @@
             },
             "ratio": 1.0
           },
-          "samples": 65536
+          "samples": 65536,
+          "snr_db": {
+            "comparison": 999.0,
+            "ours": 999.0
+          }
         },
         "qam_frame_encode_block": {
           "compared_with": "sdrk fallback",
@@ -7099,7 +7955,11 @@
             },
             "ratio": 1.0
           },
-          "samples": 65536
+          "samples": 65536,
+          "snr_db": {
+            "comparison": 144.05,
+            "ours": 144.05
+          }
         },
         "qam_mod_block": {
           "compared_with": "GNU Radio constellation_modulator as the sum of its blocks: pack_k_bits_bb + chunks_to_symbols_bc + pfb_arb_resampler_ccf (32 filters of 88 taps and their derivative filters), VOLK's dispatched dot product of the level",
@@ -7132,7 +7992,11 @@
             },
             "ratio": 0.01921296525704313
           },
-          "samples": 65536
+          "samples": 65536,
+          "snr_db": {
+            "comparison": 142.37,
+            "ours": 143.86
+          }
         },
         "qam_mod_block_liquid": {
           "compared_with": "liquid-dsp 1.8.3 modemcf_modulate (arbitrary-constellation modem) + firinterp_crcf (the root-raised cosine of the block), the SIMD dot products of the level (the portable loop at simd128)",
@@ -7165,7 +8029,11 @@
             },
             "ratio": 0.0832999959124879
           },
-          "samples": 65536
+          "samples": 65536,
+          "snr_db": {
+            "comparison": 138.38,
+            "ours": 143.86
+          }
         },
         "qam_mod_qam256_block": {
           "compared_with": "GNU Radio constellation_modulator as the sum of its blocks: pack_k_bits_bb + chunks_to_symbols_bc + pfb_arb_resampler_ccf (32 filters of 88 taps and their derivative filters), VOLK's dispatched dot product of the level",
@@ -7198,7 +8066,11 @@
             },
             "ratio": 0.020256393266331225
           },
-          "samples": 65536
+          "samples": 65536,
+          "snr_db": {
+            "comparison": 142.74,
+            "ours": 144.31
+          }
         },
         "qam_mod_qam256_block_liquid": {
           "compared_with": "liquid-dsp 1.8.3 modemcf_modulate (arbitrary-constellation modem) + firinterp_crcf (the root-raised cosine of the block), the SIMD dot products of the level (the portable loop at simd128)",
@@ -7231,7 +8103,11 @@
             },
             "ratio": 0.0863754345417393
           },
-          "samples": 65536
+          "samples": 65536,
+          "snr_db": {
+            "comparison": 128.29,
+            "ours": 144.31
+          }
         },
         "qam_soft_bits_qam1024": {
           "compared_with": "sdrk fallback",
@@ -7264,7 +8140,11 @@
             },
             "ratio": 1.001012671253701
           },
-          "samples": 65536
+          "samples": 65536,
+          "snr_db": {
+            "comparison": 145.96,
+            "ours": 145.96
+          }
         },
         "qam_soft_bits_qam16": {
           "compared_with": "GNU Radio constellation_soft_decoder_cf with calc_soft_dec (constellation.cc of gr-digital; the exact log-likelihood ratio over all points, npwr 1, not max-log; no vector allocation per symbol, so faster than GNU Radio's object code)",
@@ -7297,7 +8177,11 @@
             },
             "ratio": 0.0002951875044128671
           },
-          "samples": 65536
+          "samples": 65536,
+          "snr_db": {
+            "comparison": 141.04,
+            "ours": 149.15
+          }
         },
         "qam_soft_bits_qam16_liquid": {
           "compared_with": "liquid-dsp 1.8.3 modemcf_demodulate_soft of its own QAM modem (modem_common.proto.c; soft bytes with liquid's scale and labelling; the hard symbol and the soft bits per symbol)",
@@ -7330,7 +8214,11 @@
             },
             "ratio": 0.002300439671480683
           },
-          "samples": 65536
+          "samples": 65536,
+          "snr_db": {
+            "comparison": 999.0,
+            "ours": 149.15
+          }
         },
         "qam_soft_bits_qam16_lut": {
           "compared_with": "GNU Radio constellation_soft_decoder_cf with the look-up table of gen_soft_dec_lut (precision 8, npwr 1; constellation.cc of gr-digital; exact log-likelihood ratio, not max-log; the table lookup and a copy of 2 to 3 floats per symbol, no vector allocation)",
@@ -7363,7 +8251,11 @@
             },
             "ratio": 0.006383353406073867
           },
-          "samples": 65536
+          "samples": 65536,
+          "snr_db": {
+            "comparison": 43.01,
+            "ours": 149.15
+          }
         },
         "qam_soft_bits_qam256": {
           "compared_with": "sdrk fallback",
@@ -7396,7 +8288,11 @@
             },
             "ratio": 1.0016426528274116
           },
-          "samples": 65536
+          "samples": 65536,
+          "snr_db": {
+            "comparison": 144.3,
+            "ours": 144.3
+          }
         },
         "qam_soft_bits_qam64": {
           "compared_with": "GNU Radio constellation_soft_decoder_cf with calc_soft_dec (constellation.cc of gr-digital; the exact log-likelihood ratio over all points, npwr 1, not max-log; no vector allocation per symbol, so faster than GNU Radio's object code)",
@@ -7429,7 +8325,11 @@
             },
             "ratio": 0.0001757657639557023
           },
-          "samples": 65536
+          "samples": 65536,
+          "snr_db": {
+            "comparison": 134.93,
+            "ours": 145.87
+          }
         },
         "qam_soft_bits_qam64_liquid": {
           "compared_with": "liquid-dsp 1.8.3 modemcf_demodulate_soft of its own QAM modem (modem_common.proto.c; soft bytes with liquid's scale and labelling; the hard symbol and the soft bits per symbol)",
@@ -7462,7 +8362,11 @@
             },
             "ratio": 0.0036600251683387027
           },
-          "samples": 65536
+          "samples": 65536,
+          "snr_db": {
+            "comparison": 999.0,
+            "ours": 145.87
+          }
         },
         "qam_soft_bits_qam64_lut": {
           "compared_with": "GNU Radio constellation_soft_decoder_cf with the look-up table of gen_soft_dec_lut (precision 8, npwr 1; constellation.cc of gr-digital; exact log-likelihood ratio, not max-log; the table lookup and a copy of 2 to 3 floats per symbol, no vector allocation)",
@@ -7495,7 +8399,11 @@
             },
             "ratio": 0.013520601868689402
           },
-          "samples": 65536
+          "samples": 65536,
+          "snr_db": {
+            "comparison": 42.04,
+            "ours": 145.87
+          }
         },
         "qam_soft_bits_qpsk": {
           "compared_with": "sdrk fallback",
@@ -7528,7 +8436,11 @@
             },
             "ratio": 0.517486287532754
           },
-          "samples": 65536
+          "samples": 65536,
+          "snr_db": {
+            "comparison": 149.86,
+            "ours": 149.86
+          }
         },
         "quad_demod": {
           "compared_with": "volk_32fc_x2_multiply_conjugate_32fc + volk_32fc_s32f_atan2_32f",
@@ -7561,7 +8473,11 @@
             },
             "ratio": 0.7738998108064872
           },
-          "samples": 65536
+          "samples": 65536,
+          "snr_db": {
+            "comparison": 126.49,
+            "ours": 144.65
+          }
         },
         "quad_demod_cq15": {
           "compared_with": "sdrk fallback",
@@ -7594,7 +8510,11 @@
             },
             "ratio": 0.029685166761301778
           },
-          "samples": 65536
+          "samples": 65536,
+          "snr_db": {
+            "comparison": 81.23,
+            "ours": 81.23
+          }
         },
         "quad_demod_cq15_fallback": {
           "compared_with": "CMSIS-DSP arm_cmplx_mult_cmplx_q15 + arm_atan2_q15 + arm_scale_q15 (generic C), conjugate in a plain loop",
@@ -7627,7 +8547,11 @@
             },
             "ratio": 0.9448592007906348
           },
-          "samples": 65536
+          "samples": 65536,
+          "snr_db": {
+            "comparison": 62.33,
+            "ours": 81.23
+          }
         },
         "quad_demod_fallback": {
           "compared_with": "GNU Radio quadrature_demod_cf (gr-analog, fast_atan2f, generic compiler flags)",
@@ -7660,7 +8584,11 @@
             },
             "ratio": 0.04753124312748197
           },
-          "samples": 65536
+          "samples": 65536,
+          "snr_db": {
+            "comparison": 113.99,
+            "ours": 143.56
+          }
         },
         "rds_decode_block": {
           "compared_with": "sdrk fallback",
@@ -7693,40 +8621,48 @@
             },
             "ratio": 1.0
           },
-          "samples": 65536
+          "samples": 65536,
+          "snr_db": {
+            "comparison": 999.0,
+            "ours": 999.0
+          }
         },
         "rds_demod_block": {
           "compared_with": "sdrk fallback",
           "counter_model": {
             "comparison": {
-              "coverage": 0.9779407083785481,
-              "cycles_per_sample": 50.29339345329639,
-              "efficiency": 0.29481996985060566
+              "coverage": 0.977957035682351,
+              "cycles_per_sample": 50.29183426969612,
+              "efficiency": 0.29492883296861366
             },
             "cpu": "sapphirerapids",
             "ours": {
-              "coverage": 0.9779407083785481,
-              "cycles_per_sample": 50.29339345329639,
-              "efficiency": 0.29481996985060566
+              "coverage": 0.977957035682351,
+              "cycles_per_sample": 50.29183426969612,
+              "efficiency": 0.29492883296861366
             },
             "ratio": 1.0
           },
           "cycle_mode": "whole-loop",
           "reference_model": {
             "comparison": {
-              "coverage": 0.9779407083785481,
-              "cycles_per_sample": 476.91554508733793,
-              "efficiency": 0.2687379172532336
+              "coverage": 0.977957035682351,
+              "cycles_per_sample": 476.9082925202887,
+              "efficiency": 0.26875213175582396
             },
             "cpu": "znver4",
             "ours": {
-              "coverage": 0.9779407083785481,
-              "cycles_per_sample": 476.91554508733793,
-              "efficiency": 0.2687379172532336
+              "coverage": 0.977957035682351,
+              "cycles_per_sample": 476.9082925202887,
+              "efficiency": 0.26875213175582396
             },
             "ratio": 1.0
           },
-          "samples": 65536
+          "samples": 65536,
+          "snr_db": {
+            "comparison": 999.0,
+            "ours": 999.0
+          }
         },
         "rds_shape": {
           "compared_with": "sdrk fallback",
@@ -7759,7 +8695,11 @@
             },
             "ratio": 1.0000126878005953
           },
-          "samples": 65536
+          "samples": 65536,
+          "snr_db": {
+            "comparison": 999.0,
+            "ours": 999.0
+          }
         },
         "real_to_complex": {
           "compared_with": "liquid-dsp 1.8.3 firhilbf_decim_execute_block (dotprod_rrrf) with its AVX-512F dot product (-O3 -ffp-contract=off, avx512)",
@@ -7792,7 +8732,11 @@
             },
             "ratio": 0.03703589180696871
           },
-          "samples": 65536
+          "samples": 65536,
+          "snr_db": {
+            "comparison": 143.32,
+            "ours": 150.28
+          }
         },
         "real_to_complex_airspy": {
           "note": "not simulated: not measured at the level avx512"
@@ -7828,7 +8772,11 @@
             },
             "ratio": 0.019460647099245987
           },
-          "samples": 65536
+          "samples": 65536,
+          "snr_db": {
+            "comparison": 81.49,
+            "ours": 999.0
+          }
         },
         "real_to_complex_cq15_fallback": {
           "compared_with": "libairspy 1.0.10 iqconverter_int16 (truncating >> 15, 32-bit accumulator, the odd samples halved), conversion without remove_dc (-O3 -ffp-contract=off, avx512)",
@@ -7861,7 +8809,11 @@
             },
             "ratio": 0.06565884269681455
           },
-          "samples": 65536
+          "samples": 65536,
+          "snr_db": {
+            "comparison": 81.49,
+            "ours": 999.0
+          }
         },
         "real_to_complex_fallback": {
           "compared_with": "liquid-dsp 1.8.3 firhilbf_decim_execute_block (dotprod_rrrf) with its portable dot product (-O3 -ffp-contract=off, avx512)",
@@ -7894,7 +8846,11 @@
             },
             "ratio": 0.11419110469822014
           },
-          "samples": 65536
+          "samples": 65536,
+          "snr_db": {
+            "comparison": 143.17,
+            "ours": 143.51
+          }
         },
         "resample": {
           "compared_with": "volk_32fc_32f_dot_prod_32fc_a per output as GNU Radio's rational_resampler_ccf calls it",
@@ -7927,7 +8883,11 @@
             },
             "ratio": 0.19239544442875506
           },
-          "samples": 65536
+          "samples": 65536,
+          "snr_db": {
+            "comparison": 141.87,
+            "ours": 142.34
+          }
         },
         "resample_cq15": {
           "compared_with": "sdrk fallback",
@@ -7960,7 +8920,11 @@
             },
             "ratio": 0.79427190390554
           },
-          "samples": 65536
+          "samples": 65536,
+          "snr_db": {
+            "comparison": 999.0,
+            "ours": 999.0
+          }
         },
         "resample_cq15_fallback": {
           "compared_with": "CMSIS-DSP 1.18.0 arm_fir_interpolate_q15 by 3, the same outputs per sample (no rational resampler), generic C (-O3 -ffp-contract=off, LOOPUNROLL, avx512)",
@@ -7993,7 +8957,11 @@
             },
             "ratio": 0.6176669530254437
           },
-          "samples": 65536
+          "samples": 65536,
+          "snr_db": {
+            "comparison": 78.19,
+            "ours": 999.0
+          }
         },
         "resample_fallback": {
           "compared_with": "CMSIS-DSP 1.18.0 arm_fir_interpolate_f32 by 3, the same outputs per sample (no rational resampler), generic C (-O3 -ffp-contract=off, LOOPUNROLL, avx512)",
@@ -8026,7 +8994,11 @@
             },
             "ratio": 0.6062119615069103
           },
-          "samples": 65536
+          "samples": 65536,
+          "snr_db": {
+            "comparison": 136.37,
+            "ours": 136.46
+          }
         },
         "resample_real": {
           "compared_with": "volk_32f_x2_dot_prod_32f_a per output as GNU Radio's rational_resampler_fff calls it",
@@ -8059,7 +9031,11 @@
             },
             "ratio": 0.11189267789443359
           },
-          "samples": 65536
+          "samples": 65536,
+          "snr_db": {
+            "comparison": 139.59,
+            "ours": 142.34
+          }
         },
         "resample_real_fallback": {
           "compared_with": "CMSIS-DSP 1.18.0 arm_fir_interpolate_f32 by 3, the same outputs per sample (no rational resampler), generic C (-O3 -ffp-contract=off, LOOPUNROLL, avx512)",
@@ -8092,7 +9068,11 @@
             },
             "ratio": 0.8100366554839149
           },
-          "samples": 65536
+          "samples": 65536,
+          "snr_db": {
+            "comparison": 136.62,
+            "ours": 136.5
+          }
         },
         "resample_real_q15": {
           "compared_with": "sdrk fallback",
@@ -8125,7 +9105,11 @@
             },
             "ratio": 0.3315402925351056
           },
-          "samples": 65536
+          "samples": 65536,
+          "snr_db": {
+            "comparison": 999.0,
+            "ours": 999.0
+          }
         },
         "resample_real_q15_fallback": {
           "compared_with": "CMSIS-DSP 1.18.0 arm_fir_interpolate_q15 by 3, the same outputs per sample (no rational resampler), generic C (-O3 -ffp-contract=off, LOOPUNROLL, avx512)",
@@ -8158,7 +9142,11 @@
             },
             "ratio": 1.4745584436769166
           },
-          "samples": 65536
+          "samples": 65536,
+          "snr_db": {
+            "comparison": 77.96,
+            "ours": 999.0
+          }
         },
         "rfft_1024": {
           "compared_with": "realfft on rustfft (RealFftPlanner, forward, out of place)",
@@ -8191,7 +9179,11 @@
             },
             "ratio": 0.7535817341893204
           },
-          "samples": 65536
+          "samples": 65536,
+          "snr_db": {
+            "comparison": 138.13,
+            "ours": 138.31
+          }
         },
         "rfft_1024_fallback": {
           "compared_with": "CMSIS-DSP 1.18.0 arm_rfft_fast_f32 (forward, packed output), generic C (-O3 -ffp-contract=off, LOOPUNROLL, avx512)",
@@ -8224,7 +9216,11 @@
             },
             "ratio": 1.0440839014686343
           },
-          "samples": 65536
+          "samples": 65536,
+          "snr_db": {
+            "comparison": 138.31,
+            "ours": 137.86
+          }
         },
         "rotate": {
           "compared_with": "volk_32fc_s32fc_x2_rotator2_32fc",
@@ -8257,7 +9253,11 @@
             },
             "ratio": 0.18182530017282092
           },
-          "samples": 65536
+          "samples": 65536,
+          "snr_db": {
+            "comparison": 114.5,
+            "ours": 143.97
+          }
         },
         "rotate_cq15": {
           "compared_with": "sdrk fallback",
@@ -8290,7 +9290,11 @@
             },
             "ratio": 0.17144725406195954
           },
-          "samples": 65536
+          "samples": 65536,
+          "snr_db": {
+            "comparison": 91.25,
+            "ours": 91.25
+          }
         },
         "rotate_cq15_fallback": {
           "compared_with": "CMSIS-DSP 1.18.0 arm_cos_q15 + arm_sin_q15 per sample, arm_cmplx_mult_cmplx_q15 and the shift to Q15 per 64 samples, generic C (-O3 -ffp-contract=off, LOOPUNROLL, avx512)",
@@ -8323,7 +9327,11 @@
             },
             "ratio": 0.1670858623789846
           },
-          "samples": 65536
+          "samples": 65536,
+          "snr_db": {
+            "comparison": 70.89,
+            "ours": 91.25
+          }
         },
         "rotate_fallback": {
           "compared_with": "GNU Radio gr::blocks::rotator::rotate (scalar, renormalised every 512 samples; gr-rotator.c, generic compiler flags)",
@@ -8356,7 +9364,11 @@
             },
             "ratio": 0.0990017740891881
           },
-          "samples": 65536
+          "samples": 65536,
+          "snr_db": {
+            "comparison": 107.79,
+            "ours": 133.0
+          }
         },
         "scale": {
           "compared_with": "volk_32f_s32f_multiply_32f",
@@ -8389,7 +9401,11 @@
             },
             "ratio": 0.4792734924600928
           },
-          "samples": 65536
+          "samples": 65536,
+          "snr_db": {
+            "comparison": 151.5,
+            "ours": 151.5
+          }
         },
         "scale_cq15": {
           "compared_with": "sdrk fallback",
@@ -8422,7 +9438,11 @@
             },
             "ratio": 0.19302280599739208
           },
-          "samples": 65536
+          "samples": 65536,
+          "snr_db": {
+            "comparison": 93.67,
+            "ours": 93.67
+          }
         },
         "scale_cq15_fallback": {
           "compared_with": "CMSIS-DSP 1.18.0 arm_scale_q15 (shift 0, truncating) on the 2 n values, generic C (-O3 -ffp-contract=off, LOOPUNROLL, avx512)",
@@ -8455,7 +9475,11 @@
             },
             "ratio": 0.6074273206300367
           },
-          "samples": 65536
+          "samples": 65536,
+          "snr_db": {
+            "comparison": 87.62,
+            "ours": 93.67
+          }
         },
         "scale_fallback": {
           "compared_with": "CMSIS-DSP 1.18.0 arm_scale_f32 on the 2 n floats, generic C (-O3 -ffp-contract=off, LOOPUNROLL, avx512)",
@@ -8488,7 +9512,11 @@
             },
             "ratio": 0.49140864666832657
           },
-          "samples": 65536
+          "samples": 65536,
+          "snr_db": {
+            "comparison": 151.5,
+            "ours": 151.5
+          }
         },
         "scramble_block": {
           "compared_with": "sdrk fallback",
@@ -8521,7 +9549,11 @@
             },
             "ratio": 1.0
           },
-          "samples": 65536
+          "samples": 65536,
+          "snr_db": {
+            "comparison": 999.0,
+            "ours": 999.0
+          }
         },
         "scramble_c32_b1": {
           "compared_with": "+-1.0 sequence from the index bits into a buffer of 256 + volk_32fc_32f_multiply_32fc (VOLK 3.3.0 dispatcher; the form of srsRAN srsran_scrambling_c)",
@@ -8554,7 +9586,11 @@
             },
             "ratio": 0.34998081555847177
           },
-          "samples": 65536
+          "samples": 65536,
+          "snr_db": {
+            "comparison": 320.18,
+            "ours": 320.18
+          }
         },
         "scramble_c32_b1_fallback": {
           "compared_with": "+-1.0 sequence from the index bits into a buffer of 256 + VOLK 3.3.0 volk_32fc_32f_multiply_32fc_generic (benches/refs/volk-generic.c, -O3 -ffp-contract=off)",
@@ -8587,7 +9623,11 @@
             },
             "ratio": 0.7309995422948505
           },
-          "samples": 65536
+          "samples": 65536,
+          "snr_db": {
+            "comparison": 320.18,
+            "ours": 320.18
+          }
         },
         "scramble_c32_b2": {
           "compared_with": "phasor lookup into a buffer of 256 + VOLK 3.3.0 volk_32fc_x2_multiply_32fc_u_avx without FMA (benches/refs/volk-nofma.c, -O3 -ffp-contract=off)",
@@ -8620,7 +9660,11 @@
             },
             "ratio": 0.27031882264691287
           },
-          "samples": 65536
+          "samples": 65536,
+          "snr_db": {
+            "comparison": 318.66,
+            "ours": 318.66
+          }
         },
         "scramble_c32_b2_dvbs2": {
           "compared_with": "GNU Radio dvbs2_physical_cc PL scrambling, the per-symbol switch on R_n (benches/refs/gr-dvbs2-plscramble.c, main at ec1bf15; reference does different work; -O3)",
@@ -8653,7 +9697,11 @@
             },
             "ratio": 0.21448240767184723
           },
-          "samples": 65536
+          "samples": 65536,
+          "snr_db": {
+            "comparison": 318.66,
+            "ours": 318.66
+          }
         },
         "scramble_c32_b2_fallback": {
           "compared_with": "phasor lookup into a buffer of 256 + VOLK 3.3.0 volk_32fc_x2_multiply_32fc_generic (benches/refs/volk-generic.c, -O3 -ffp-contract=off)",
@@ -8686,7 +9734,11 @@
             },
             "ratio": 0.23929979146052635
           },
-          "samples": 65536
+          "samples": 65536,
+          "snr_db": {
+            "comparison": 318.66,
+            "ours": 318.66
+          }
         },
         "scramble_c32_b8": {
           "compared_with": "phasor lookup into a buffer of 256 + VOLK 3.3.0 volk_32fc_x2_multiply_32fc_u_avx without FMA (benches/refs/volk-nofma.c, -O3 -ffp-contract=off)",
@@ -8719,7 +9771,11 @@
             },
             "ratio": 0.24623594173197008
           },
-          "samples": 65536
+          "samples": 65536,
+          "snr_db": {
+            "comparison": 147.72,
+            "ours": 147.72
+          }
         },
         "scramble_c32_b8_fallback": {
           "compared_with": "phasor lookup into a buffer of 256 + VOLK 3.3.0 volk_32fc_x2_multiply_32fc_generic (benches/refs/volk-generic.c, -O3 -ffp-contract=off)",
@@ -8752,7 +9808,11 @@
             },
             "ratio": 0.1526075064282181
           },
-          "samples": 65536
+          "samples": 65536,
+          "snr_db": {
+            "comparison": 147.72,
+            "ours": 147.72
+          }
         },
         "scramble_cq15_b2": {
           "compared_with": "CMSIS-DSP 1.18.0 phasor lookup into a buffer of 256 + arm_cmplx_mult_cmplx_q15 (3.13 output), generic C (-O3 -ffp-contract=off, LOOPUNROLL, avx512)",
@@ -8785,7 +9845,11 @@
             },
             "ratio": 0.13766745174244188
           },
-          "samples": 65536
+          "samples": 65536,
+          "snr_db": {
+            "comparison": 75.92,
+            "ours": 318.18
+          }
         },
         "scramble_cq15_b2_fallback": {
           "compared_with": "CMSIS-DSP 1.18.0 phasor lookup into a buffer of 256 + arm_cmplx_mult_cmplx_q15 (3.13 output), generic C (-O3 -ffp-contract=off, LOOPUNROLL, avx512)",
@@ -8818,7 +9882,11 @@
             },
             "ratio": 0.23053780655703957
           },
-          "samples": 65536
+          "samples": 65536,
+          "snr_db": {
+            "comparison": 75.92,
+            "ours": 318.18
+          }
         },
         "scramble_cq15_b8": {
           "compared_with": "CMSIS-DSP 1.18.0 phasor lookup into a buffer of 256 + arm_cmplx_mult_cmplx_q15 (3.13 output), generic C (-O3 -ffp-contract=off, LOOPUNROLL, avx512)",
@@ -8851,7 +9919,11 @@
             },
             "ratio": 0.16740473208488435
           },
-          "samples": 65536
+          "samples": 65536,
+          "snr_db": {
+            "comparison": 72.14,
+            "ours": 92.17
+          }
         },
         "scramble_cq15_b8_fallback": {
           "compared_with": "CMSIS-DSP 1.18.0 phasor lookup into a buffer of 256 + arm_cmplx_mult_cmplx_q15 (3.13 output), generic C (-O3 -ffp-contract=off, LOOPUNROLL, avx512)",
@@ -8884,7 +9956,11 @@
             },
             "ratio": 1.3819612239698387
           },
-          "samples": 65536
+          "samples": 65536,
+          "snr_db": {
+            "comparison": 72.14,
+            "ours": 92.17
+          }
         },
         "snr_estimate_block": {
           "compared_with": "GNU Radio mpsk_snr_est_cc(SNR_EST_M2M4, 4096, 0.001): the moments |x|^2 and |x|^4 averaged in double, six cabsf per symbol (reference does different work: no decisions, a PSK kurtosis; generic compiler flags)",
@@ -8917,7 +9993,11 @@
             },
             "ratio": 0.05482670997432798
           },
-          "samples": 65536
+          "samples": 65536,
+          "snr_db": {
+            "comparison": 0.39,
+            "ours": 50.06
+          }
         },
         "snr_estimate_block_svr": {
           "compared_with": "GNU Radio mpsk_snr_est_cc(SNR_EST_SVR, 4096, 0.001): |x|^4 and |x_n|^2 |x_(n-1)|^2 averaged in double, two cabsf per symbol (reference does different work: no decisions, a PSK constellation; generic compiler flags)",
@@ -8950,7 +10030,11 @@
             },
             "ratio": 0.038199291859233216
           },
-          "samples": 65536
+          "samples": 65536,
+          "snr_db": {
+            "comparison": 0.39,
+            "ours": 50.06
+          }
         },
         "squelch": {
           "compared_with": "GNU Radio pwr_squelch_cc (squelch_base_cc_impl.cc of gr-analog, generic compiler flags)",
@@ -8983,7 +10067,11 @@
             },
             "ratio": 0.495818193195244
           },
-          "samples": 65536
+          "samples": 65536,
+          "snr_db": {
+            "comparison": 999.0,
+            "ours": 999.0
+          }
         },
         "squelch_cq15": {
           "compared_with": "sdrk fallback",
@@ -9016,7 +10104,11 @@
             },
             "ratio": 1.0000011953872396
           },
-          "samples": 65536
+          "samples": 65536,
+          "snr_db": {
+            "comparison": 999.0,
+            "ours": 999.0
+          }
         },
         "stereo_encode": {
           "compared_with": "sdrk fallback",
@@ -9049,7 +10141,11 @@
             },
             "ratio": 1.0000050701840224
           },
-          "samples": 65536
+          "samples": 65536,
+          "snr_db": {
+            "comparison": 999.0,
+            "ours": 999.0
+          }
         },
         "stereo_encode_rds": {
           "compared_with": "sdrk fallback",
@@ -9082,7 +10178,11 @@
             },
             "ratio": 1.0000036855761294
           },
-          "samples": 65536
+          "samples": 65536,
+          "snr_db": {
+            "comparison": 999.0,
+            "ours": 999.0
+          }
         },
         "stereo_matrix": {
           "compared_with": "VOLK 3.3.0 composition: volk_32fc_deinterleave_32f_x2, volk_32f_x2_add_32f (d + d), volk_32f_x2_add_32f (s + d2), volk_32f_x2_subtract_32f (s - d2), volk_32f_x2_interleave_32fc (five passes over memory)",
@@ -9115,7 +10215,11 @@
             },
             "ratio": 0.415725045977496
           },
-          "samples": 65536
+          "samples": 65536,
+          "snr_db": {
+            "comparison": 151.28,
+            "ours": 151.28
+          }
         },
         "stereo_matrix_cq15": {
           "compared_with": "sdrk fallback",
@@ -9148,7 +10252,11 @@
             },
             "ratio": 0.5067891187009981
           },
-          "samples": 65536
+          "samples": 65536,
+          "snr_db": {
+            "comparison": 999.0,
+            "ours": 999.0
+          }
         },
         "stereo_matrix_cq15_fallback": {
           "compared_with": "CMSIS-DSP 1.18.0 arm_add_q15 (d + d, saturating), arm_add_q15 (s + d2), arm_sub_q15 (s - d2) on planar data, generic C (-O3 -ffp-contract=off, LOOPUNROLL, avx512)",
@@ -9181,7 +10289,11 @@
             },
             "ratio": 0.4886366712456167
           },
-          "samples": 65536
+          "samples": 65536,
+          "snr_db": {
+            "comparison": 12.16,
+            "ours": 999.0
+          }
         },
         "stereo_matrix_fallback": {
           "compared_with": "CMSIS-DSP 1.18.0 arm_add_f32 (d + d), arm_add_f32 (s + d2), arm_sub_f32 (s - d2) on planar data, generic C (-O3 -ffp-contract=off, LOOPUNROLL, avx512)",
@@ -9214,7 +10326,11 @@
             },
             "ratio": 0.8003206176799271
           },
-          "samples": 65536
+          "samples": 65536,
+          "snr_db": {
+            "comparison": 151.28,
+            "ours": 151.28
+          }
         },
         "stereo_pll_fallback": {
           "compared_with": "liquid-dsp 1.8.3 nco_crcf (LIQUID_VCO_INTERP): sincos at theta and 2 theta from the 1024-entry table, nco_crcf_adjust_frequency and nco_crcf_adjust_phase (double modulo in _constrain), nco_crcf_step; no lock detector, no integrator limit (-O3 -ffp-contract=off, avx512)",
@@ -9247,7 +10363,11 @@
             },
             "ratio": 1.0894825295642276
           },
-          "samples": 65536
+          "samples": 65536,
+          "snr_db": {
+            "comparison": 9.46,
+            "ours": 57.02
+          }
         },
         "stereo_pll_q15_fallback": {
           "compared_with": "CMSIS-DSP 1.18.0 arm_cos_q15 and arm_sin_q15 (twice) per sample in the loop of the kernel (the oscillator only: CMSIS-DSP has no PLL), generic C (-O3 -ffp-contract=off, LOOPUNROLL, avx512)",
@@ -9280,7 +10400,11 @@
             },
             "ratio": 0.812207873191023
           },
-          "samples": 65536
+          "samples": 65536,
+          "snr_db": {
+            "comparison": 53.72,
+            "ours": 53.62
+          }
         },
         "symbol_demap_qam16_block": {
           "compared_with": "GNU Radio constellation_soft_decoder_cf with calc_soft_dec (constellation.cc of gr-digital; the exact log-likelihood ratio over all points, npwr 1, not max-log; no vector allocation per symbol, so faster than GNU Radio's object code)",
@@ -9313,7 +10437,11 @@
             },
             "ratio": 0.00029525547330657554
           },
-          "samples": 65536
+          "samples": 65536,
+          "snr_db": {
+            "comparison": 141.13,
+            "ours": 149.16
+          }
         },
         "symbol_demap_qam16_block_liquid": {
           "compared_with": "liquid-dsp 1.8.3 modemcf_demodulate_soft of its own QAM modem (modem_common.proto.c; soft bytes with liquid's scale and labelling; the hard symbol and the soft bits per symbol)",
@@ -9346,7 +10474,11 @@
             },
             "ratio": 0.0023009775357585986
           },
-          "samples": 65536
+          "samples": 65536,
+          "snr_db": {
+            "comparison": 999.0,
+            "ours": 149.16
+          }
         },
         "symbol_demap_qam16_block_lut": {
           "compared_with": "GNU Radio constellation_soft_decoder_cf with the look-up table of gen_soft_dec_lut (precision 8, npwr 1; constellation.cc of gr-digital; exact log-likelihood ratio, not max-log; the table lookup and a copy of 2 to 3 floats per symbol, no vector allocation)",
@@ -9379,7 +10511,11 @@
             },
             "ratio": 0.007664468699109404
           },
-          "samples": 65536
+          "samples": 65536,
+          "snr_db": {
+            "comparison": 42.96,
+            "ours": 149.16
+          }
         },
         "symbol_demap_qam256_block": {
           "compared_with": "sdrk fallback",
@@ -9412,7 +10548,11 @@
             },
             "ratio": 1.0
           },
-          "samples": 65536
+          "samples": 65536,
+          "snr_db": {
+            "comparison": 144.21,
+            "ours": 144.21
+          }
         },
         "symbol_demap_qam64_block": {
           "compared_with": "GNU Radio constellation_soft_decoder_cf with calc_soft_dec (constellation.cc of gr-digital; the exact log-likelihood ratio over all points, npwr 1, not max-log; no vector allocation per symbol, so faster than GNU Radio's object code)",
@@ -9445,7 +10585,11 @@
             },
             "ratio": 0.00017604760744117668
           },
-          "samples": 65536
+          "samples": 65536,
+          "snr_db": {
+            "comparison": 134.91,
+            "ours": 145.84
+          }
         },
         "symbol_demap_qam64_block_liquid": {
           "compared_with": "liquid-dsp 1.8.3 modemcf_demodulate_soft of its own QAM modem (modem_common.proto.c; soft bytes with liquid's scale and labelling; the hard symbol and the soft bits per symbol)",
@@ -9478,7 +10622,11 @@
             },
             "ratio": 0.0036642233577038326
           },
-          "samples": 65536
+          "samples": 65536,
+          "snr_db": {
+            "comparison": 999.0,
+            "ours": 145.84
+          }
         },
         "symbol_demap_qam64_block_lut": {
           "compared_with": "GNU Radio constellation_soft_decoder_cf with the look-up table of gen_soft_dec_lut (precision 8, npwr 1; constellation.cc of gr-digital; exact log-likelihood ratio, not max-log; the table lookup and a copy of 2 to 3 floats per symbol, no vector allocation)",
@@ -9511,7 +10659,11 @@
             },
             "ratio": 0.013542657559726586
           },
-          "samples": 65536
+          "samples": 65536,
+          "snr_db": {
+            "comparison": 42.07,
+            "ours": 145.84
+          }
         },
         "symbol_map_block": {
           "compared_with": "GNU Radio pack_k_bits_bb + chunks_to_symbols_bc (pack_k_bits.cc of gr-blocks, chunks_to_symbols_impl.cc of gr-digital), the table of the points of the block, generic compiler flags",
@@ -9544,7 +10696,11 @@
             },
             "ratio": 0.12603649335854208
           },
-          "samples": 65536
+          "samples": 65536,
+          "snr_db": {
+            "comparison": 152.55,
+            "ours": 152.55
+          }
         },
         "symbol_map_block_liquid": {
           "compared_with": "liquid-dsp 1.8.3 modemcf_modulate on the arbitrary-constellation modem of the points of the block (modem_arb.proto.c), the bits packed by the wrapper",
@@ -9577,7 +10733,11 @@
             },
             "ratio": 0.07424824974150278
           },
-          "samples": 65536
+          "samples": 65536,
+          "snr_db": {
+            "comparison": 140.06,
+            "ours": 152.55
+          }
         },
         "symbol_map_block_qam64": {
           "compared_with": "GNU Radio pack_k_bits_bb + chunks_to_symbols_bc (pack_k_bits.cc of gr-blocks, chunks_to_symbols_impl.cc of gr-digital), the table of the points of the block, generic compiler flags",
@@ -9610,7 +10770,11 @@
             },
             "ratio": 0.1809798544771816
           },
-          "samples": 65536
+          "samples": 65536,
+          "snr_db": {
+            "comparison": 153.88,
+            "ours": 153.88
+          }
         },
         "symbol_map_block_qam64_liquid": {
           "compared_with": "liquid-dsp 1.8.3 modemcf_modulate on the arbitrary-constellation modem of the points of the block (modem_arb.proto.c), the bits packed by the wrapper",
@@ -9643,7 +10807,11 @@
             },
             "ratio": 0.11269124797089648
           },
-          "samples": 65536
+          "samples": 65536,
+          "snr_db": {
+            "comparison": 139.13,
+            "ours": 153.88
+          }
         },
         "symbol_map_block_qpsk": {
           "compared_with": "GNU Radio pack_k_bits_bb + chunks_to_symbols_bc (pack_k_bits.cc of gr-blocks, chunks_to_symbols_impl.cc of gr-digital), the table of the points of the block, generic compiler flags",
@@ -9676,7 +10844,11 @@
             },
             "ratio": 0.7358425582416457
           },
-          "samples": 65536
+          "samples": 65536,
+          "snr_db": {
+            "comparison": 155.33,
+            "ours": 155.33
+          }
         },
         "symbol_map_block_qpsk_liquid": {
           "compared_with": "liquid-dsp 1.8.3 modemcf_modulate on the arbitrary-constellation modem of the points of the block (modem_arb.proto.c), the bits packed by the wrapper",
@@ -9709,7 +10881,11 @@
             },
             "ratio": 0.3934911116594419
           },
-          "samples": 65536
+          "samples": 65536,
+          "snr_db": {
+            "comparison": 155.33,
+            "ours": 155.33
+          }
         },
         "symbol_sync": {
           "compared_with": "sdrk fallback",
@@ -9742,7 +10918,11 @@
             },
             "ratio": 1.000000345353476
           },
-          "samples": 65536
+          "samples": 65536,
+          "snr_db": {
+            "comparison": 999.0,
+            "ours": 999.0
+          }
         },
         "symbol_sync_fallback": {
           "compared_with": "GNU Radio symbol_sync_cc (symbol_sync_cc_impl.cc of gr-digital, TED_GARDNER, IR_MMSE_8TAP, generic compiler flags; reference does different work: an 8-tap MMSE interpolator against our 4-point Lagrange polynomial)",
@@ -9775,7 +10955,11 @@
             },
             "ratio": 0.6294504589073497
           },
-          "samples": 65536
+          "samples": 65536,
+          "snr_db": {
+            "comparison": 61.37,
+            "ours": 999.0
+          }
         },
         "symbol_sync_real": {
           "compared_with": "sdrk fallback",
@@ -9808,7 +10992,11 @@
             },
             "ratio": 1.000001476920532
           },
-          "samples": 65536
+          "samples": 65536,
+          "snr_db": {
+            "comparison": 999.0,
+            "ours": 999.0
+          }
         },
         "window": {
           "compared_with": "volk_32fc_32f_multiply_32fc",
@@ -9841,7 +11029,11 @@
             },
             "ratio": 0.5958115900124592
           },
-          "samples": 65536
+          "samples": 65536,
+          "snr_db": {
+            "comparison": 151.95,
+            "ours": 151.95
+          }
         },
         "window_cq15": {
           "compared_with": "sdrk fallback",
@@ -9874,7 +11066,11 @@
             },
             "ratio": 0.2771263348255203
           },
-          "samples": 65536
+          "samples": 65536,
+          "snr_db": {
+            "comparison": 89.03,
+            "ours": 89.03
+          }
         },
         "window_cq15_fallback": {
           "compared_with": "CMSIS-DSP 1.18.0 arm_cmplx_mult_real_q15 (truncating), generic C (-O3 -ffp-contract=off, LOOPUNROLL, avx512)",
@@ -9907,7 +11103,11 @@
             },
             "ratio": 0.7439965487502928
           },
-          "samples": 65536
+          "samples": 65536,
+          "snr_db": {
+            "comparison": 83.11,
+            "ours": 89.03
+          }
         },
         "window_fallback": {
           "compared_with": "CMSIS-DSP 1.18.0 arm_cmplx_mult_real_f32, generic C (-O3 -ffp-contract=off, LOOPUNROLL, avx512)",
@@ -9940,7 +11140,11 @@
             },
             "ratio": 0.6861913528521634
           },
-          "samples": 65536
+          "samples": 65536,
+          "snr_db": {
+            "comparison": 151.95,
+            "ours": 151.95
+          }
         },
         "xcorr_fft_n4096": {
           "compared_with": "liquid-dsp 1.8.3 fftfilt_cccf (benches/refs/liquid-fftfilt.c), FFTW 3.3.10",
@@ -9973,7 +11177,11 @@
             },
             "ratio": 0.010672254818271493
           },
-          "samples": 49184
+          "samples": 49184,
+          "snr_db": {
+            "comparison": 132.09,
+            "ours": 133.9
+          }
         },
         "xcorr_fft_n4096_fallback": {
           "compared_with": "liquid-dsp 1.8.3 fftfilt_cccf (benches/refs/liquid-fftfilt.c), liquid's own FFT",
@@ -10006,7 +11214,11 @@
             },
             "ratio": 0.008552935025271024
           },
-          "samples": 49184
+          "samples": 49184,
+          "snr_db": {
+            "comparison": 131.63,
+            "ours": 133.14
+          }
         },
         "xcorr_fft_n512": {
           "compared_with": "liquid-dsp 1.8.3 fftfilt_cccf (benches/refs/liquid-fftfilt.c), FFTW 3.3.10",
@@ -10039,7 +11251,11 @@
             },
             "ratio": 0.009066017677109336
           },
-          "samples": 61760
+          "samples": 61760,
+          "snr_db": {
+            "comparison": 132.73,
+            "ours": 134.57
+          }
         },
         "xcorr_fft_n512_fallback": {
           "compared_with": "liquid-dsp 1.8.3 fftfilt_cccf (benches/refs/liquid-fftfilt.c), liquid's own FFT",
@@ -10072,7 +11288,11 @@
             },
             "ratio": 0.012260247712245466
           },
-          "samples": 61760
+          "samples": 61760,
+          "snr_db": {
+            "comparison": 132.93,
+            "ours": 134.11
+          }
         }
       },
       "reference_model": "znver4"

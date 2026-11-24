@@ -2269,7 +2269,8 @@
       "status": "release"
     },
     "avx512": {
-      "status": "dev"
+      "status": "release",
+      "accuracy_trade": "SNR 81.23 dB against 62.33 dB of CMSIS-DSP arm_cmplx_mult_cmplx_q15 + arm_atan2_q15 (18.90 dB more accurate, the comparison below 100 dB) at 0.945 / 1.182 of its cycles (77.19 / 76.98 against 81.69 / 65.14 cycles per sample on znver4 / sapphirerapids, CI run 45395683515); release by the accuracy trade of D2760 (D2762)"
     },
     "neon": {
       "status": "release"
@@ -2452,7 +2453,8 @@
   },
   "fft_cq15_1024_default_fallback": {
     "sse2": {
-      "status": "dev"
+      "status": "release",
+      "accuracy_trade": "SNR 46.15 dB against 41.63 dB of CMSIS-DSP arm_cfft_q15 (4.52 dB more accurate, the comparison below 100 dB) at 1.122 / 0.968 of its cycles (50.20 / 54.56 against 44.75 / 56.34 cycles per sample on skylake / znver2, CI run 45395683515); release by the accuracy trade of D2760 (D2762)"
     },
     "sse4.2": {
       "status": "release"
@@ -3133,7 +3135,8 @@
       "status": "release"
     },
     "neon": {
-      "status": "dev"
+      "status": "release",
+      "accuracy_trade": "exact (999 dB) against 82.64 dB of CMSIS-DSP arm_fir_q15 + arm_scale_q15 + arm_add_q15 (the comparison below 100 dB) at 1.156 / 1.052 of its cycles (22.82 / 21.15 against 19.75 / 20.11 cycles per sample on cortex-a72 / cortex-a76, CI run 45395683515); release by the accuracy trade of D2760 (D2762)"
     },
     "simd128": {
       "status": "release"

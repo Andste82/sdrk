@@ -40,6 +40,11 @@ fn method() -> Value {
         "cycle_mode": MODE.name(),
         "branches": "valgrind cachegrind --branch-sim=yes, conditional and indirect mispredictions (Bcm + Bim) of the counted calls, per sample (D1611)",
         "cost": "cycles + mispredictions x penalty of the core model (D1611, D1612)",
+        "address_space": if crate::bench::fixed_layout() {
+            "fixed: the profiled processes run under setarch -R (I13.1-1)"
+        } else {
+            "randomized: setarch -R is not permitted here (I13.1-1)"
+        },
         "note": "only the ratio of ours to the comparison on one model means something; the cycles are no hardware figures",
     })
 }
@@ -430,13 +435,13 @@ pub fn tools(root: &Path, platform: &str) -> anyhow::Result<Value> {
 /// # Errors
 /// The file cannot be read or written, or [`merge`] refuses.
 pub fn write(
-    root: &Path,
+    dir: &Path,
     platform: &str,
     tools: &Value,
     measured: &Map<String, Value>,
     replace: bool,
 ) -> anyhow::Result<PathBuf> {
-    let path = dir(root).join(format!("{platform}.json"));
+    let path = dir.join(format!("{platform}.json"));
     let old = match std::fs::read_to_string(&path) {
         Ok(text) => Some(
             serde_json::from_str(&text)
@@ -446,7 +451,7 @@ pub fn write(
         Err(e) => return Err(e).with_context(|| format!("cannot read {}", path.display())),
     };
     let (doc, replaced, added) = merge(old, platform, tools, measured, replace)?;
-    std::fs::create_dir_all(dir(root))?;
+    std::fs::create_dir_all(dir)?;
     let mut text = serde_json::to_string_pretty(&doc)?;
     text.push('\n');
     std::fs::write(&path, text).with_context(|| format!("cannot write {}", path.display()))?;
@@ -456,6 +461,257 @@ pub fn write(
         path.display()
     );
     Ok(path)
+}
+
+/// The results documents of the `*.json` files of `dir`, sorted by file name.
+///
+/// # Errors
+/// The directory or a file cannot be read or parsed.
+#[allow(
+    clippy::large_stack_frames,
+    reason = "the Windows file system calls are large; xtask is a host tool"
+)]
+fn documents(dir: &Path) -> anyhow::Result<Vec<(PathBuf, Value)>> {
+    let mut files: Vec<PathBuf> = std::fs::read_dir(dir)
+        .with_context(|| format!("cannot read {}", dir.display()))?
+        .filter_map(|e| e.ok().map(|e| e.path()))
+        .filter(|p| p.extension().is_some_and(|x| x == "json"))
+        .collect();
+    files.sort();
+    files
+        .into_iter()
+        .map(|f| {
+            let text = std::fs::read_to_string(&f)
+                .with_context(|| format!("cannot read {}", f.display()))?;
+            let doc = serde_json::from_str(&text)
+                .with_context(|| format!("cannot parse {}", f.display()))?;
+            Ok((f, doc))
+        })
+        .collect()
+}
+
+/// `cargo xtask results merge --into DIR SRC...`: merges the results files of the partitions
+/// of a measurement (each `SRC` holds `<platform>.json` files written by `cargo measure
+/// --merge --results SRC`) into `DIR`, as `--merge` does: the records of a partition replace
+/// or add those of `DIR`. The partitions must have the same tools and method (one
+/// environment).
+///
+/// # Errors
+/// A file cannot be read, parsed or written, or [`merge`] refuses.
+pub fn merge_dirs(into: &Path, sources: &[PathBuf]) -> anyhow::Result<()> {
+    std::fs::create_dir_all(into)?;
+    for src in sources {
+        for (file, doc) in documents(src)? {
+            let platform = doc
+                .get("platform")
+                .and_then(Value::as_str)
+                .ok_or_else(|| anyhow!("{} has no `platform`", file.display()))?;
+            let levels = doc
+                .get("levels")
+                .and_then(Value::as_object)
+                .ok_or_else(|| anyhow!("{} has no `levels`", file.display()))?;
+            let path = into.join(format!("{platform}.json"));
+            let old: Option<Value> = match std::fs::read_to_string(&path) {
+                Ok(text) => Some(serde_json::from_str(&text)?),
+                Err(e) if e.kind() == std::io::ErrorKind::NotFound => None,
+                Err(e) => return Err(e).with_context(|| format!("cannot read {}", path.display())),
+            };
+            if let Some(old) = &old
+                && field(old, "method") != field(&doc, "method")
+            {
+                bail!(
+                    "{} was made with another method than {}",
+                    file.display(),
+                    path.display()
+                );
+            }
+            let (mut merged, replaced, added) =
+                merge(old, platform, field(&doc, "tools"), levels, false)?;
+            if let Some(o) = merged.as_object_mut() {
+                o.insert("method".into(), field(&doc, "method").clone());
+            }
+            let mut text = serde_json::to_string_pretty(&merged)?;
+            text.push('\n');
+            std::fs::write(&path, text)
+                .with_context(|| format!("cannot write {}", path.display()))?;
+            println!(
+                "merged {} into {}: {replaced} records replaced, {added} added",
+                file.display(),
+                path.display()
+            );
+        }
+    }
+    Ok(())
+}
+
+/// The cycles per sample of a record that a comparison of two results looks at: ours and the
+/// comparison on both models.
+const COMPARED: [(&str, &str); 4] = [
+    ("reference_model", "ours"),
+    ("reference_model", "comparison"),
+    ("counter_model", "ours"),
+    ("counter_model", "comparison"),
+];
+
+/// The differences of the records of `fresh` from those of `base` (the committed results),
+/// one line each: a simulated record whose cycles per sample of ours or of the comparison
+/// differ by more than `tolerance` (relative) on either model, a record that `base` does not
+/// have, and a record that was simulated in `base` and not in `fresh`. Records of `base` that
+/// `fresh` does not have (a selection) are not compared.
+#[must_use]
+#[allow(
+    clippy::large_stack_frames,
+    reason = "the serde_json values are built in place; xtask is a host tool"
+)]
+pub fn differences(base: &[Value], fresh: &[Value], tolerance: f64) -> Vec<String> {
+    let record = |docs: &[Value], platform: &str, level: &str, entry: &str| -> Option<Value> {
+        docs.iter()
+            .find(|d| field(d, "platform").as_str() == Some(platform))
+            .and_then(|d| d.get("levels")?.get(level)?.get("entries")?.get(entry))
+            .cloned()
+    };
+    let mut out = Vec::new();
+    for doc in fresh {
+        let platform = field(doc, "platform").as_str().unwrap_or_default();
+        for (level, l) in field(doc, "levels").as_object().into_iter().flatten() {
+            for (entry, r) in field(l, "entries").as_object().into_iter().flatten() {
+                let name = format!("{platform} {level} {entry}");
+                let Some(b) = record(base, platform, level, entry) else {
+                    out.push(format!("{name}: not in the committed results"));
+                    continue;
+                };
+                match (b.get("reference_model"), r.get("reference_model")) {
+                    (None, None) => continue,
+                    (Some(_), None) => {
+                        out.push(format!(
+                            "{name}: simulated in the committed results, now {}",
+                            field(r, "note")
+                        ));
+                        continue;
+                    }
+                    (None, Some(_)) => {
+                        out.push(format!(
+                            "{name}: not simulated in the committed results ({}), now simulated",
+                            field(&b, "note")
+                        ));
+                        continue;
+                    }
+                    (Some(_), Some(_)) => {}
+                }
+                let mut drift = Vec::new();
+                for (m, side) in COMPARED {
+                    let get = |v: &Value| v.get(m)?.get(side)?.get("cycles_per_sample")?.as_f64();
+                    let (Some(x), Some(y)) = (get(&b), get(r)) else {
+                        drift.push(format!("{m} {side}: missing"));
+                        continue;
+                    };
+                    let rel = if x == 0.0 {
+                        if y == 0.0 { 0.0 } else { f64::INFINITY }
+                    } else {
+                        (y / x - 1.0).abs()
+                    };
+                    if rel > tolerance {
+                        drift.push(format!(
+                            "{} {side} {x:.4} -> {y:.4} ({:+.2} %)",
+                            field(&b, m).get("cpu").and_then(Value::as_str).unwrap_or(m),
+                            (y / x - 1.0) * 100.0
+                        ));
+                    }
+                }
+                if !drift.is_empty() {
+                    out.push(format!("{name}: {}", drift.join(", ")));
+                }
+            }
+        }
+    }
+    out
+}
+
+/// The reproduction check of the corrected `llvm-mca` (D942): `costas` at `neon`, ours, on the
+/// reference and the counter-model, in the two decimals of the tables.
+pub const REPRODUCTION: (&str, &str, &str, [f64; 2]) =
+    ("aarch64", "neon", "costas", [86.13, 54.09]);
+
+/// Checks the reproduction record in the results of `dir`.
+///
+/// # Errors
+/// The record is missing or its cycles differ from [`REPRODUCTION`].
+pub fn check_reproduction(dir: &Path) -> anyhow::Result<()> {
+    let (platform, level, entry, want) = REPRODUCTION;
+    let docs: Vec<Value> = documents(dir)?.into_iter().map(|(_, d)| d).collect();
+    let r = docs
+        .iter()
+        .find(|d| field(d, "platform").as_str() == Some(platform))
+        .and_then(|d| d.get("levels")?.get(level)?.get("entries")?.get(entry))
+        .ok_or_else(|| anyhow!("{} has no record `{entry}` at `{level}`", dir.display()))?;
+    let got: Vec<String> = ["reference_model", "counter_model"]
+        .iter()
+        .map(|m| {
+            r.get(*m)
+                .and_then(|v| v.get("ours")?.get("cycles_per_sample")?.as_f64())
+                .map_or_else(|| "-".to_string(), |x| format!("{x:.2}"))
+        })
+        .collect();
+    let want: Vec<String> = want.iter().map(|x| format!("{x:.2}")).collect();
+    if got != want {
+        bail!(
+            "the reproduction check failed: `{entry}` at `{level}` gives {} cycles per sample, the corrected llvm-mca gives {} (D942)",
+            got.join(" / "),
+            want.join(" / ")
+        );
+    }
+    println!(
+        "reproduction check: `{entry}` at `{level}` {} (D942)",
+        got.join(" / ")
+    );
+    Ok(())
+}
+
+/// `cargo xtask results <merge --into DIR SRC... | compare BASE FRESH [--tolerance T] | repro DIR>`.
+///
+/// # Errors
+/// Wrong arguments, or a file that cannot be read, parsed or written.
+pub fn run(args: &[&str]) -> anyhow::Result<bool> {
+    const USAGE: &str = "usage: cargo xtask results <merge --into DIR SRC... | compare BASE FRESH [--tolerance T] | repro DIR>";
+    match args {
+        ["merge", "--into", into, sources @ ..] if !sources.is_empty() => {
+            let sources: Vec<PathBuf> = sources.iter().map(PathBuf::from).collect();
+            merge_dirs(Path::new(into), &sources)?;
+            Ok(true)
+        }
+        ["compare", base, fresh, rest @ ..] => {
+            let tolerance = match rest {
+                [] => 0.01,
+                ["--tolerance", t] => t
+                    .parse::<f64>()
+                    .ok()
+                    .filter(|t| *t >= 0.0)
+                    .ok_or_else(|| anyhow!("`--tolerance` takes a number >= 0"))?,
+                _ => bail!("{USAGE}"),
+            };
+            let load = |d: &str| -> anyhow::Result<Vec<Value>> {
+                Ok(documents(Path::new(d))?
+                    .into_iter()
+                    .map(|(_, v)| v)
+                    .collect())
+            };
+            let diff = differences(&load(base)?, &load(fresh)?, tolerance);
+            for line in &diff {
+                println!("{line}");
+            }
+            println!(
+                "results compare: {} records of {fresh} differ from {base} by more than {:.2} % on a model, or are new or missing",
+                diff.len(),
+                tolerance * 100.0
+            );
+            Ok(diff.is_empty())
+        }
+        ["repro", dir] => {
+            check_reproduction(Path::new(dir))?;
+            Ok(true)
+        }
+        _ => bail!("{USAGE}"),
+    }
 }
 
 #[cfg(test)]
@@ -616,16 +872,10 @@ mod tests {
         let x = 0.992_041_588_177_742_7_f64;
         let root = tempfile::tempdir().unwrap();
         let tools = json!({ "llvm-mca": "23.1.1" });
-        write(root.path(), "x86_64", &tools, &measured(&[("a", x)]), false).unwrap();
-        let before = std::fs::read_to_string(dir(root.path()).join("x86_64.json")).unwrap();
-        write(
-            root.path(),
-            "x86_64",
-            &tools,
-            &measured(&[("b", 1.0)]),
-            false,
-        )
-        .unwrap();
+        let out = dir(root.path());
+        write(&out, "x86_64", &tools, &measured(&[("a", x)]), false).unwrap();
+        let before = std::fs::read_to_string(out.join("x86_64.json")).unwrap();
+        write(&out, "x86_64", &tools, &measured(&[("b", 1.0)]), false).unwrap();
         let doc: Value = serde_json::from_str(
             &std::fs::read_to_string(dir(root.path()).join("x86_64.json")).unwrap(),
         )
@@ -655,5 +905,96 @@ mod tests {
             "valgrind cachegrind --branch-sim=yes on the x86-64 build of the level"
         );
         assert!(l["avx2"]["entries"]["k"].get("branches").is_none());
+    }
+
+    /// A results document of `x86_64` with the given records of `sse2`.
+    fn doc_of(entries: &[(&str, f64)]) -> Value {
+        let (doc, _, _) = merge(
+            None,
+            "x86_64",
+            &json!({ "llvm-mca": "23.1.1" }),
+            &measured(entries),
+            true,
+        )
+        .unwrap();
+        doc
+    }
+
+    #[test]
+    fn differences_name_the_drift_above_the_tolerance_and_new_or_lost_records() {
+        let base = doc_of(&[("a", 1.0), ("b", 1.0), ("c", 1.0)]);
+        // Within 1 %, 2 % slower on both models, a new record.
+        let fresh = doc_of(&[("a", 1.009), ("b", 1.02), ("n", 1.0)]);
+        let d = differences(std::slice::from_ref(&base), &[fresh], 0.01);
+        assert_eq!(d.len(), 2, "{d:?}");
+        assert!(
+            d[0].starts_with("x86_64 sse2 b: skylake ours 1.0000 -> 1.0200 (+2.00 %)"),
+            "{d:?}"
+        );
+        assert!(d[1].contains("x86_64 sse2 n: not in the committed results"));
+        // A record that is no longer simulated; `c` is not in the selection and not compared.
+        let mut lost = doc_of(&[("a", 1.0)]);
+        lost["levels"]["sse2"]["entries"]["a"] = json!({ "note": "not simulated: the run failed" });
+        let d = differences(std::slice::from_ref(&base), &[lost], 0.01);
+        assert_eq!(d.len(), 1);
+        assert!(
+            d[0].contains("now \"not simulated: the run failed\""),
+            "{d:?}"
+        );
+        assert_eq!(
+            differences(
+                std::slice::from_ref(&base),
+                std::slice::from_ref(&base),
+                0.0
+            ),
+            Vec::<String>::new()
+        );
+    }
+
+    #[test]
+    fn partitions_merge_into_one_file_per_platform() {
+        let root = tempfile::tempdir().unwrap();
+        let (p1, p2, into) = (
+            root.path().join("p1"),
+            root.path().join("p2"),
+            root.path().join("all"),
+        );
+        let tools = json!({ "llvm-mca": "23.1.1" });
+        write(&p1, "x86_64", &tools, &measured(&[("a", 1.0)]), false).unwrap();
+        write(&p2, "x86_64", &tools, &measured(&[("b", 2.0)]), false).unwrap();
+        merge_dirs(&into, &[p1.clone(), p2]).unwrap();
+        let doc: Value =
+            serde_json::from_str(&std::fs::read_to_string(into.join("x86_64.json")).unwrap())
+                .unwrap();
+        let e = &doc["levels"]["sse2"]["entries"];
+        assert!(e.get("a").is_some() && e.get("b").is_some());
+        // A partition with other tools is refused.
+        let p3 = root.path().join("p3");
+        write(
+            &p3,
+            "x86_64",
+            &json!({ "llvm-mca": "22" }),
+            &measured(&[("c", 1.0)]),
+            false,
+        )
+        .unwrap();
+        assert!(merge_dirs(&into, &[p3]).is_err());
+        assert!(run(&["merge", "--into", "x"]).is_err());
+    }
+
+    #[test]
+    fn the_reproduction_check_reads_costas_at_neon() {
+        let root = tempfile::tempdir().unwrap();
+        let write_costas = |ours_ref: f64, ours_counter: f64| {
+            let m = |o: f64| json!({ "cpu": "x", "ours": { "cycles_per_sample": o }, "comparison": { "cycles_per_sample": 1.0 }, "ratio": o });
+            let doc = json!({ "platform": "aarch64", "levels": { "neon": { "entries": {
+                "costas": { "reference_model": m(ours_ref), "counter_model": m(ours_counter) } } } } });
+            std::fs::write(root.path().join("aarch64.json"), doc.to_string()).unwrap();
+        };
+        write_costas(86.131_242, 54.094_621);
+        check_reproduction(root.path()).unwrap();
+        write_costas(86.14, 54.09);
+        let err = check_reproduction(root.path()).unwrap_err();
+        assert!(err.to_string().contains("86.14 / 54.09"), "{err}");
     }
 }

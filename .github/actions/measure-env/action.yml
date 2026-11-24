@@ -1,0 +1,108 @@
+name: measure-env
+description: >
+  The tools of `cargo measure` in the pinned container of measure.yml, after the packages and
+  the checkout: the Rust toolchain, the corrected llvm-mca of the run (D942, from the cache that
+  the job `llvm_mca` saved), the cached C references, Intel SDE (x86-64), QEMU user mode with
+  plugin support (aarch64), and the check that the profiled processes can run without the
+  randomization of the address space (`setarch -R`, I13.1-1).
+inputs:
+  platform:
+    description: "`x86_64`, `x86_64-avx512` or `aarch64`."
+    required: true
+  llvm-mca-key:
+    description: The cache key of the corrected llvm-mca (output of the job `llvm_mca`).
+    required: true
+runs:
+  using: composite
+  steps:
+    - name: Install toolchain from rust-toolchain.toml
+      shell: bash
+      run: |
+        git config --global --add safe.directory "$GITHUB_WORKSPACE"
+        curl -fsSL https://sh.rustup.rs | sh -s -- -y --profile minimal --default-toolchain none
+        echo "$HOME/.cargo/bin" >> "$GITHUB_PATH"
+        "$HOME/.cargo/bin/rustup" toolchain install
+    - uses: Swatinem/rust-cache@v2
+      with:
+        shared-key: measure-${{ inputs.platform }}
+        save-if: ${{ github.ref == 'refs/heads/main' }}
+    - name: The corrected llvm-mca (D942)
+      uses: actions/cache/restore@v4
+      with:
+        path: ~/llvm-mca
+        key: ${{ inputs.llvm-mca-key }}
+        fail-on-cache-miss: true
+    - name: Use the corrected llvm-mca
+      shell: bash
+      run: echo "SDRK_LLVM_MCA=$HOME/llvm-mca/bin/llvm-mca" >> "$GITHUB_ENV"
+    - name: Cache the C references
+      # Keyed on the build script (versions, checksums, flags), the image and the snapshot
+      # (the compilers); the build script itself also rebuilds when a compiler version differs.
+      uses: actions/cache@v4
+      with:
+        path: benches/target/refs
+        key: refs-${{ inputs.platform == 'aarch64' && 'aarch64' || 'x86_64' }}-${{ hashFiles('benches/refs/**') }}-${{ env.MEASURE_IMAGE_TAG }}-${{ env.MEASURE_IMAGE_SNAPSHOT }}
+    - name: Cache Intel SDE
+      if: inputs.platform != 'aarch64'
+      id: sde-cache
+      uses: actions/cache@v4
+      with:
+        path: ~/sde
+        # Not the key of the host jobs: that cache was saved on the host (another home
+        # directory), and restored here it leaves ~/sde empty.
+        key: sde-container-${{ env.SDE_SHA256 }}
+    - name: Download Intel SDE (pinned)
+      if: inputs.platform != 'aarch64' && steps.sde-cache.outputs.cache-hit != 'true'
+      shell: bash
+      run: |
+        mkdir -p ~/sde
+        curl -fsSL "$SDE_URL" -o ~/sde.tar.xz
+        echo "$SDE_SHA256  $HOME/sde.tar.xz" | sha256sum -c -
+        tar -xJf ~/sde.tar.xz -C ~/sde
+    - name: Use Intel SDE
+      if: inputs.platform != 'aarch64'
+      shell: bash
+      run: echo "SDRK_SDE=$HOME/sde/$SDE_DIR/sde64" >> "$GITHUB_ENV"
+    - name: Cache QEMU
+      if: inputs.platform == 'aarch64'
+      id: qemu-cache
+      uses: actions/cache@v4
+      with:
+        path: |
+          ~/qemu-build/qemu-aarch64
+          ~/qemu-build/plugin-src
+        key: qemu-aarch64-plugins-${{ env.CI_QEMU_VERSION }}-${{ env.MEASURE_IMAGE_TAG }}-${{ env.MEASURE_IMAGE_SNAPSHOT }}
+    - name: QEMU user mode with plugins
+      # The distribution's qemu-user is built without plugin support: build QEMU from source.
+      if: inputs.platform == 'aarch64' && steps.qemu-cache.outputs.cache-hit != 'true'
+      shell: bash
+      run: |
+        curl -fsSL "https://download.qemu.org/qemu-$CI_QEMU_VERSION.tar.xz" -o ~/qemu.tar.xz
+        echo "$CI_QEMU_SHA256  $HOME/qemu.tar.xz" | sha256sum -c -
+        tar -xJf ~/qemu.tar.xz -C "$HOME"
+        mkdir -p ~/qemu-build && cd ~/qemu-build
+        ~/qemu-$CI_QEMU_VERSION/configure --target-list=aarch64-linux-user --enable-plugins --disable-docs --disable-tools --disable-guest-agent --disable-werror
+        ninja qemu-aarch64
+        # The plugin header of the release, for the bbcount plugin that xtask builds.
+        install -D ~/qemu-$CI_QEMU_VERSION/include/qemu/qemu-plugin.h ~/qemu-build/plugin-src/include/qemu/qemu-plugin.h
+    - name: Use QEMU
+      if: inputs.platform == 'aarch64'
+      shell: bash
+      run: |
+        echo "SDRK_QEMU_AARCH64=$HOME/qemu-build/qemu-aarch64" >> "$GITHUB_ENV"
+        echo "SDRK_QEMU_SRC=$HOME/qemu-build/plugin-src" >> "$GITHUB_ENV"
+    - name: Address space without randomization (I13.1-1)
+      # The container runs with `--security-opt seccomp=unconfined`, so that `setarch -R`
+      # (personality ADDR_NO_RANDOMIZE) is permitted; xtask then starts every profiled run
+      # with it, and the results files record it.
+      shell: bash
+      run: setarch -R true
+    - name: CPU of the runner and tools
+      shell: bash
+      run: |
+        grep -m1 'model name' /proc/cpuinfo || true
+        grep -m1 '^flags' /proc/cpuinfo | tr ' ' '\n' | grep -E '^(sse|ssse|avx|fma|bmi|f16c|gfni|vaes|vpclmul|adx|amx)' | sort | tr '\n' ' ' || true
+        echo
+        gcc --version | head -n 1
+        valgrind --version
+        "$SDRK_LLVM_MCA" --version | grep 'LLVM version'

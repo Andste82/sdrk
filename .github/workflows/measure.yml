@@ -1,0 +1,291 @@
+# The cycle measurement in CI (M13.1 §4, D2709): `cargo measure` with the corrected llvm-mca
+# (D942) for the chosen entries, levels and platforms, in the pinned container that is the
+# reference environment of the committed results `benches/results/cycles` (maintainer,
+# 2026-11-24). The nightly run calls it for every entry (the job `measure_nightly` of
+# tree.yml, scope `full`); `gh workflow run measure.yml --ref <branch> -f kernels=... -f
+# levels=...` measures a selection.
+#
+#   llvm_mca      builds llvm-mca 23.1.1 with assets/llvm-mca-23.1.1-sdrk-sched.patch, cached
+#                 by the patch, the LLVM version, the image and the snapshot
+#   reproduction  the check `costas` at `neon` 86.13 / 54.09 (D942) before anything else
+#   plan          the partitions: one job per level, the whole set split into `shards`
+#   measure       `cargo measure ... --merge --results` per partition (optionally twice, to
+#                 show that the profiles are deterministic, I13.1-1)
+#   results       merges the partitions, shows the drift against the committed results (fails
+#                 above 1 % on either model), runs `cargo xtask check cycles` on them (D321 and
+#                 the release gate in cycles) and uploads them as the artifact `cycle-results`
+name: measure
+
+on:
+  workflow_call:
+    inputs:
+      kernels:
+        description: "`all`, or kernel names separated by spaces (each selects its entries as `cargo measure <kernel>`)."
+        type: string
+        default: all
+      levels:
+        description: "`all`, or levels separated by spaces (sse2 sse4.2 avx2 avx2-runtime avx512 neon)."
+        type: string
+        default: all
+      shards:
+        description: Partitions per level when every entry is measured.
+        type: number
+        default: 4
+      repeat:
+        description: Measure every partition twice and fail unless both results are identical.
+        type: boolean
+        default: false
+  workflow_dispatch:
+    inputs:
+      kernels:
+        description: "`all`, or kernel names separated by spaces (each selects its entries as `cargo measure <kernel>`)."
+        type: string
+        default: all
+      levels:
+        description: "`all`, or levels separated by spaces (sse2 sse4.2 avx2 avx2-runtime avx512 neon)."
+        type: string
+        default: all
+      shards:
+        description: Partitions per level when every entry is measured.
+        type: number
+        default: 4
+      repeat:
+        description: Measure every partition twice and fail unless both results are identical.
+        type: boolean
+        default: false
+
+concurrency:
+  group: measure-${{ github.ref }}-${{ inputs.kernels }}-${{ inputs.levels }}
+  cancel-in-progress: false
+
+permissions:
+  contents: read
+
+env:
+  CARGO_TERM_COLOR: always
+  # The same pins as tree.yml (its count jobs and the development container).
+  SDE_URL: https://downloadmirror.intel.com/859732/sde-external-9.58.0-2025-06-16-lin.tar.xz
+  SDE_SHA256: f849acecad4c9b108259c643b2688fd65c35723cd23368abe5dd64b917cc18c0
+  SDE_DIR: sde-external-9.58.0-2025-06-16-lin
+  # Not QEMU_VERSION: qemu-user reads QEMU_<OPTION> variables as options.
+  CI_QEMU_VERSION: 10.2.1
+  CI_QEMU_SHA256: a3717477d8e2c84d630bfffbc20f6cd3293eb45aa1e6dac6d0cc27689991c9e1
+  LLVM_MCA_VERSION: 23.1.1
+  LLVM_MCA_SHA256: ebe9be46fe8756d58c5b198ffad0fa2a766257add81a4dc52179bfacc7888ee6
+  # The pinned image (the digest in `container.image` below) and its apt snapshot, as the count
+  # jobs of tree.yml: the compilers of the C references, glibc and the profilers are the same
+  # in every run.
+  MEASURE_IMAGE_TAG: c098726dd9b9
+  MEASURE_IMAGE_SNAPSHOT: "20261019T000000Z"
+  MEASURE_PACKAGES: >-
+    git ca-certificates curl xz-utils zstd patch build-essential cmake ninja-build pkg-config
+    python3 python3-mako python3-venv valgrind clang lld llvm util-linux
+    gcc-aarch64-linux-gnu g++-aarch64-linux-gnu libc6-dev-arm64-cross
+    libglib2.0-dev libpixman-1-dev
+
+jobs:
+  llvm_mca:
+    name: llvm_mca
+    runs-on: ubuntu-24.04
+    container:
+      image: ubuntu:26.04@sha256:c098726dd9b9733f3e885f8de0ef375206a311b0a317eadc40d347b1115fb944
+    timeout-minutes: 180
+    outputs:
+      key: ${{ steps.key.outputs.key }}
+    steps:
+      - name: Packages of the pinned snapshot
+        run: &packages |
+          # A mirror that answers 502/503 makes `apt-get update` warn and exit 0 (issue 38):
+          # apt retries every download, `--error-on=any` turns a failed index into an error and
+          # the loop retries the update. The image has no CA certificates, which the https
+          # snapshot needs: they come from the image's own mirror first.
+          echo 'Acquire::Retries "5";' > /etc/apt/apt.conf.d/80-retries
+          apt_update() {
+            for i in 1 2 3 4 5; do
+              apt-get update --error-on=any "$@" && return 0
+              sleep $((i * 60))
+            done
+            return 1
+          }
+          apt_update
+          DEBIAN_FRONTEND=noninteractive apt-get install -y ca-certificates
+          apt_update --snapshot "$MEASURE_IMAGE_SNAPSHOT"
+          # shellcheck disable=SC2086
+          DEBIAN_FRONTEND=noninteractive apt-get install -y --snapshot "$MEASURE_IMAGE_SNAPSHOT" $MEASURE_PACKAGES
+      - uses: actions/checkout@v4
+      - name: Cache key
+        id: key
+        shell: bash
+        run: echo "key=llvm-mca-$LLVM_MCA_VERSION-${{ hashFiles('assets/llvm-mca-23.1.1-sdrk-sched.patch') }}-$MEASURE_IMAGE_TAG-$MEASURE_IMAGE_SNAPSHOT" | tee -a "$GITHUB_OUTPUT"
+      - name: Cache the corrected llvm-mca
+        id: cache
+        uses: actions/cache@v4
+        with:
+          path: ~/llvm-mca
+          key: ${{ steps.key.outputs.key }}
+      - name: Build llvm-mca with the corrections of the scheduling models (D942)
+        # As .devcontainer/Dockerfile, the patched build only.
+        if: steps.cache.outputs.cache-hit != 'true'
+        shell: bash
+        run: |
+          curl -fsSL -o ~/llvm.tar.xz \
+            "https://github.com/llvm/llvm-project/releases/download/llvmorg-$LLVM_MCA_VERSION/llvm-project-$LLVM_MCA_VERSION.src.tar.xz"
+          echo "$LLVM_MCA_SHA256  $HOME/llvm.tar.xz" | sha256sum -c -
+          src="$HOME/llvm-project-$LLVM_MCA_VERSION.src"
+          tar -xJf ~/llvm.tar.xz -C "$HOME" \
+            "llvm-project-$LLVM_MCA_VERSION.src/llvm" "llvm-project-$LLVM_MCA_VERSION.src/cmake" \
+            "llvm-project-$LLVM_MCA_VERSION.src/third-party" "llvm-project-$LLVM_MCA_VERSION.src/libc"
+          patch -p1 --forward --batch -d "$src" < assets/llvm-mca-23.1.1-sdrk-sched.patch
+          cmake -S "$src/llvm" -B ~/llvm-build -G Ninja \
+            -DCMAKE_BUILD_TYPE=Release -DLLVM_TARGETS_TO_BUILD="X86;AArch64" \
+            -DLLVM_INCLUDE_TESTS=OFF -DLLVM_INCLUDE_BENCHMARKS=OFF -DLLVM_INCLUDE_EXAMPLES=OFF \
+            -DLLVM_ENABLE_ZLIB=OFF -DLLVM_ENABLE_ZSTD=OFF -DLLVM_ENABLE_LIBXML2=OFF \
+            -DCMAKE_C_COMPILER=clang -DCMAKE_CXX_COMPILER=clang++ -DLLVM_USE_LINKER=lld
+          ninja -C ~/llvm-build llvm-mca
+          install -D ~/llvm-build/bin/llvm-mca ~/llvm-mca/bin/llvm-mca
+      - name: Version
+        run: ~/llvm-mca/bin/llvm-mca --version
+
+  reproduction:
+    # The corrected llvm-mca must give the committed `costas` at `neon` (86.13 / 54.09 on
+    # cortex-a72 / cortex-a76) before any result counts.
+    name: reproduction
+    needs: llvm_mca
+    runs-on: ubuntu-24.04
+    container:
+      image: ubuntu:26.04@sha256:c098726dd9b9733f3e885f8de0ef375206a311b0a317eadc40d347b1115fb944
+      options: --security-opt seccomp=unconfined
+    timeout-minutes: 120
+    steps:
+      - name: Packages of the pinned snapshot
+        run: *packages
+      - uses: actions/checkout@v4
+      - uses: ./.github/actions/measure-env
+        with:
+          platform: aarch64
+          llvm-mca-key: ${{ needs.llvm_mca.outputs.key }}
+      - name: Measure costas at neon
+        run: cargo measure costas --merge --no-golden --platform aarch64 --level neon --results target/repro
+      - name: Reproduction check (D942)
+        run: cargo xtask results repro target/repro
+
+  plan:
+    name: plan
+    runs-on: ubuntu-24.04
+    timeout-minutes: 5
+    outputs:
+      matrix: ${{ steps.plan.outputs.matrix }}
+      partial: ${{ steps.plan.outputs.partial }}
+    steps:
+      - name: Partitions
+        id: plan
+        shell: python3 {0}
+        env:
+          KERNELS: ${{ inputs.kernels }}
+          LEVELS: ${{ inputs.levels }}
+          SHARDS: ${{ inputs.shards }}
+        run: |
+          import json, os
+          platforms = {"sse2": "x86_64", "sse4.2": "x86_64", "avx2": "x86_64",
+                       "avx2-runtime": "x86_64", "avx512": "x86_64-avx512", "neon": "aarch64"}
+          kernels, levels = os.environ["KERNELS"].split(), os.environ["LEVELS"].split()
+          if levels == ["all"]:
+              levels = list(platforms)
+          unknown = [l for l in levels if l not in platforms]
+          if unknown:
+              raise SystemExit(f"unknown levels {unknown}")
+          everything = kernels == ["all"]
+          shards = int(os.environ["SHARDS"]) if everything else 1
+          include = [{"name": f"{level}-{i}" if everything else level, "level": level,
+                      "platform": platforms[level], "shard": f"{i}/{shards}" if everything else ""}
+                     for level in levels for i in range(1, shards + 1)]
+          partial = not everything or len(levels) < len(platforms)
+          with open(os.environ["GITHUB_OUTPUT"], "a") as out:
+              out.write(f"matrix={json.dumps({'include': include})}\n")
+              out.write(f"partial={'true' if partial else 'false'}\n")
+          print(json.dumps(include, indent=1), "partial:", partial)
+
+  measure:
+    name: measure (${{ matrix.name }})
+    needs: [llvm_mca, reproduction, plan]
+    runs-on: ubuntu-24.04
+    container:
+      image: ubuntu:26.04@sha256:c098726dd9b9733f3e885f8de0ef375206a311b0a317eadc40d347b1115fb944
+      options: --security-opt seccomp=unconfined
+    timeout-minutes: 300
+    strategy:
+      fail-fast: false
+      matrix: ${{ fromJSON(needs.plan.outputs.matrix) }}
+    steps:
+      - name: Packages of the pinned snapshot
+        run: *packages
+      - uses: actions/checkout@v4
+      - uses: ./.github/actions/measure-env
+        with:
+          platform: ${{ matrix.platform }}
+          llvm-mca-key: ${{ needs.llvm_mca.outputs.key }}
+      - name: Measure
+        shell: bash
+        env:
+          KERNELS: ${{ inputs.kernels }}
+          PLATFORM: ${{ matrix.platform }}
+          LEVEL: ${{ matrix.level }}
+          SHARD: ${{ matrix.shard }}
+          REPEAT: ${{ inputs.repeat }}
+        run: |
+          measure() {
+            if [ -n "$SHARD" ]; then
+              cargo measure --all --merge --no-golden --platform "$PLATFORM" --level "$LEVEL" --shard "$SHARD" --results "$1"
+            else
+              for k in $KERNELS; do
+                cargo measure "$k" --merge --no-golden --platform "$PLATFORM" --level "$LEVEL" --results "$1"
+              done
+            fi
+          }
+          measure target/cycles
+          if [ "$REPEAT" = true ]; then
+            # The same partition again: the results files must be identical byte for byte.
+            measure target/cycles-again
+            diff -r target/cycles target/cycles-again
+            echo "the repeated measurement is identical"
+          fi
+      - name: Keep the results of the partition
+        uses: actions/upload-artifact@v4
+        with:
+          name: cycles-${{ matrix.name }}
+          path: target/cycles
+          retention-days: 7
+
+  results:
+    name: results
+    needs: [plan, measure]
+    if: ${{ !cancelled() && needs.plan.result == 'success' }}
+    runs-on: ubuntu-24.04
+    timeout-minutes: 30
+    steps:
+      - uses: actions/checkout@v4
+      - uses: ./.github/actions/rust
+        with:
+          cache-key: x64-linux-check
+      - uses: actions/download-artifact@v4
+        with:
+          pattern: cycles-*
+          path: target/parts
+      - name: Merge the partitions
+        run: cargo xtask results merge --into target/cycle-results target/parts/*
+      - name: Keep the merged results
+        uses: actions/upload-artifact@v4
+        with:
+          name: cycle-results
+          path: target/cycle-results
+          retention-days: 30
+      - name: Drift against the committed results (fails above 1 % on either model)
+        run: cargo xtask results compare benches/results/cycles target/cycle-results
+      - name: Gates in cycles on the fresh results (D321, the release gate)
+        if: success() || failure()
+        run: cargo xtask check cycles --results target/cycle-results ${{ needs.plan.outputs.partial == 'true' && '--partial' || '' }}
+      - name: A partition failed
+        if: needs.measure.result != 'success'
+        run: |
+          echo "measure: ${{ needs.measure.result }}"
+          exit 1

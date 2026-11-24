@@ -205,6 +205,15 @@ impl Limits {
     pub fn get(&self, kernel: &str, level: &str) -> Option<&Limit> {
         self.entries.get(kernel).and_then(|l| l.get(level))
     }
+
+    /// Every entry: kernel, level and its limit, sorted by kernel, then level.
+    pub fn iter(&self) -> impl Iterator<Item = (&str, &str, &Limit)> {
+        self.entries.iter().flat_map(|(kernel, levels)| {
+            levels
+                .iter()
+                .map(move |(level, limit)| (kernel.as_str(), level.as_str(), limit))
+        })
+    }
 }
 
 /// An informational comparison next to the judged one: another library, the cheapest VOLK

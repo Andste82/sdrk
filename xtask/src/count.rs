@@ -101,6 +101,11 @@ pub struct Limit {
     pub waiver: Option<String>,
     /// The same for an accuracy more than [`SNR_MARGIN_DB`] below the comparison.
     pub accuracy_waiver: Option<String>,
+    /// The accuracy trade of the cycle gate (`cargo xtask check cycles`, D2760): a `release`
+    /// entry above the release limit in cycles stays `release` while its SNR is at least
+    /// [`crate::cycle_gate::TRADE_DB`] above the comparison's and its ratio within the `dev`
+    /// limit; the text names the SNR of both sides. Not used by the count of `simd128`.
+    pub accuracy_trade: Option<String>,
     /// The efficiency target of an own-kernel comparison ([`Reference::OwnKernel`]) of the
     /// entry (`"own_target"`): the results record whether `ours / ours:<kernel>` meets it. It is
     /// information, never judged, and it does not replace the limit of the judged comparison.
@@ -115,6 +120,7 @@ impl Limit {
             status: Status::Release,
             waiver: None,
             accuracy_waiver: None,
+            accuracy_trade: None,
             own_target: None,
         }
     }
@@ -130,7 +136,8 @@ pub struct Limits {
 
 impl Limits {
     /// Parses the file: `{ "_limits": { "release": 1.10, ... }, "<kernel>": { "<level>": {
-    /// "status": "release" | "dev" | "info", "waiver": "<text>", "accuracy_waiver": "<text>" } } }`.
+    /// "status": "release" | "dev" | "info", "waiver": "<text>", "accuracy_waiver": "<text>",
+    /// "accuracy_trade": "<text>" } } }`.
     /// Other keys starting with `_` are comments.
     ///
     /// # Errors
@@ -183,6 +190,7 @@ impl Limits {
                         status,
                         waiver: text("waiver"),
                         accuracy_waiver: text("accuracy_waiver"),
+                        accuracy_trade: text("accuracy_trade"),
                         own_target: match entry.get("own_target") {
                             None => None,
                             Some(v) => match v.as_f64() {
@@ -665,20 +673,6 @@ impl Session {
             )
         })?;
         Ok(diff as f64 / (calls * variant.samples) as f64)
-    }
-
-    /// The SNR of one run of `which`, against the f64 reference.
-    fn snr(&self, kernel: &str, which: &str, volk_config: &Path) -> anyhow::Result<f64> {
-        let out = self.plain(&Run {
-            args: ["accuracy", kernel, which]
-                .map(ToString::to_string)
-                .to_vec(),
-            volk_config,
-        })?;
-        let v: Value = serde_json::from_str(out.trim()).context("accuracy output")?;
-        v.get("snr_db")
-            .and_then(Value::as_f64)
-            .ok_or_else(|| anyhow!("no snr_db in {out}"))
     }
 }
 
@@ -1294,6 +1288,7 @@ mod tests {
             status,
             waiver: waiver.map(Into::into),
             accuracy_waiver: accuracy.map(Into::into),
+            accuracy_trade: None,
             own_target: None,
         }
     }

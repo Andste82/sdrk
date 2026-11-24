@@ -22,6 +22,19 @@
 //! `_limits.warn` are reported, not failed; `_limits.goal` is reported per entry. An entry
 //! without a record of `limits.json` on a level that is simulated fails, and so does a
 //! `release` or `dev` entry without a simulated record (except for a selection, `--partial`).
+//!
+//! **The accuracy (D34, D2749).** Every judged record carries the SNR of ours and of the
+//! comparison against the f64 reference of the measurement binary, on the workload of the
+//! cycles (`snr_db`, `cargo measure`). Ours must be at least the comparison's minus
+//! [`SNR_MARGIN_DB`]; below that it passes only with an `accuracy_waiver` whose open items exist,
+//! as the count judged it before M13.1. A judged record without `snr_db` fails.
+//!
+//! **The accuracy trade (D2760, the threshold is the maintainer's to confirm).** A `release`
+//! entry above the release limit in cycles whose SNR is at least [`TRADE_DB`] above the
+//! comparison's stays `release` with an `accuracy_trade` text that names both SNR figures: it
+//! passes while the advantage holds and its ratio stays within the `dev` limit on both models,
+//! and fails as soon as either does not. A trade on an entry within its limit is a remark.
+//!
 //! The instruction judgement of `simd128` stays in `cargo xtask count`.
 #![allow(clippy::print_stdout, clippy::print_stderr)]
 
@@ -42,6 +55,59 @@ const FALLBACK: &str = "_fallback";
 const RUNTIME_LEVEL: &str = "avx2-runtime";
 /// The note of an entry that the level does not measure.
 const NOT_MEASURED: &str = "not simulated: not measured at";
+
+/// How far the SNR of ours may lie below the comparison's, in dB (D34).
+pub use crate::count::SNR_MARGIN_DB;
+/// The SNR advantage over the comparison, in dB, that lets a `release` entry above the release
+/// limit stay `release` with an `accuracy_trade` (D2760; proposed, the maintainer's to confirm).
+pub const TRADE_DB: f64 = 3.0;
+/// The SNR the measurement binary reports for an exact result.
+pub const EXACT_DB: f64 = 999.0;
+
+/// An SNR in dB for the messages and tables: `exact` for [`EXACT_DB`], else one decimal.
+#[must_use]
+pub fn snr_text(db: f64) -> String {
+    if db >= EXACT_DB {
+        "exact".to_string()
+    } else {
+        format!("{db:.1}")
+    }
+}
+
+/// The accuracy of a record: the SNR in dB of ours and of the comparison against the f64
+/// reference.
+#[derive(Clone, Copy, Debug, PartialEq)]
+pub struct Snr {
+    /// Ours.
+    pub ours: f64,
+    /// The comparison.
+    pub comparison: f64,
+}
+
+impl Snr {
+    /// How far ours lies above the comparison, in dB (negative: below).
+    #[must_use]
+    pub fn advantage(self) -> f64 {
+        self.ours - self.comparison
+    }
+
+    /// `ours X dB against Y dB of the comparison`, for the messages.
+    #[must_use]
+    pub fn describe(self) -> String {
+        let db = |x: f64| {
+            if x >= EXACT_DB {
+                "exact".to_string()
+            } else {
+                format!("{x:.1} dB")
+            }
+        };
+        format!(
+            "SNR ours {} against {} of the comparison",
+            db(self.ours),
+            db(self.comparison)
+        )
+    }
+}
 
 /// One model of a record: the cycles per sample of ours and of the comparison.
 #[derive(Clone, Debug, PartialEq)]
@@ -67,6 +133,8 @@ pub struct Record {
     pub reference: Model,
     /// The counter-model.
     pub counter: Model,
+    /// The accuracy of both sides (`None`: the record has none).
+    pub snr: Option<Snr>,
 }
 
 /// The records of the results, by level, then entry: `Some` for a simulated entry, `None` for
@@ -138,6 +206,12 @@ pub fn add_results(file: &Path, text: &str, into: &mut Results) -> anyhow::Resul
                         .to_string(),
                     reference,
                     counter,
+                    snr: r.get("snr_db").and_then(|v| {
+                        Some(Snr {
+                            ours: v.get("ours")?.as_f64()?,
+                            comparison: v.get("comparison")?.as_f64()?,
+                        })
+                    }),
                 }),
             );
         }
@@ -404,6 +478,9 @@ pub enum Verdict {
     Warn(String),
     /// Above its limit on a model, with a waiver.
     Waived(String),
+    /// A `release` entry above the release limit, within the `dev` limit and at least
+    /// [`TRADE_DB`] more accurate than its comparison, with an `accuracy_trade` (D2760).
+    Traded(String),
     /// Above its limit without a waiver, a waiver that names a missing open item, or no entry
     /// in `benches/limits.json`.
     Fail(String),
@@ -434,8 +511,64 @@ fn ratios(r: &Record, cap: f64) -> String {
     )
 }
 
-/// Judges one simulated entry and level by its limit (`None`: not listed).
+/// Whether a waiver text is valid: every open item it names exists (a text that names none
+/// states its reason, as `release-check` accepts); `Err` names the missing items.
+fn valid_waiver(text: &str, open_items: &str) -> Result<(), String> {
+    let (_, missing) = missing_open_items(text, open_items);
+    if missing.is_empty() {
+        Ok(())
+    } else {
+        Err(missing.join(", "))
+    }
+}
+
+/// The accuracy part of a judgement (D34): ours at most [`SNR_MARGIN_DB`] below the
+/// comparison, else an `accuracy_waiver` with existing open items.
+fn judge_accuracy(
+    limit: &crate::count::Limit,
+    open_items: &str,
+    r: &Record,
+    failing: &mut Vec<String>,
+    waived: &mut Vec<String>,
+    notes: &mut Vec<String>,
+) {
+    let Some(snr) = r.snr else {
+        failing.push(
+            "the record has no accuracy (`snr_db`); measure it again with `cargo measure` (D34)"
+                .into(),
+        );
+        return;
+    };
+    if -snr.advantage() > SNR_MARGIN_DB {
+        let text = format!(
+            "the accuracy is more than {SNR_MARGIN_DB:.0} dB below the comparison: {} (D34)",
+            snr.describe()
+        );
+        match &limit.accuracy_waiver {
+            None => failing.push(text),
+            Some(w) => match valid_waiver(w, open_items) {
+                Ok(()) => waived.push(format!("{text} (accuracy waiver: {w})")),
+                Err(missing) => failing.push(format!(
+                    "{text}; the accuracy waiver names open items that docs/open-items.md does not have: {missing}"
+                )),
+            },
+        }
+    } else if let Some(w) = &limit.accuracy_waiver {
+        notes.push(format!(
+            "the accuracy is within {SNR_MARGIN_DB:.0} dB of the comparison ({}): the accuracy waiver is no longer needed ({w})",
+            snr.describe()
+        ));
+    }
+}
+
+/// Judges one simulated entry and level by its limit (`None`: not listed): the cycles against
+/// the cap of its status, the accuracy (D34) and an accuracy trade (D2760).
 #[must_use]
+#[allow(
+    clippy::too_many_lines,
+    clippy::large_stack_frames,
+    reason = "one judgement with its three parts, in the order of the messages; the texts are built in place"
+)]
 pub fn judge_record(
     caps: &Caps,
     level: &str,
@@ -450,68 +583,127 @@ pub fn judge_record(
         (None, true) => &release,
         (None, false) => return Verdict::Fail("no entry in benches/limits.json".into()),
     };
+    if let Some(t) = &limit.accuracy_trade {
+        if limit.status != Status::Release || runtime {
+            return Verdict::Fail(format!(
+                "an `accuracy_trade` is only for a `release` entry against a comparison, not for {} (accuracy trade: {t})",
+                if runtime {
+                    "the run-time level".to_string()
+                } else {
+                    format!("a `{}` entry", status_name(limit.status))
+                }
+            ));
+        }
+        if limit.waiver.is_some() {
+            return Verdict::Fail(format!(
+                "an entry has a `waiver` or an `accuracy_trade`, not both (accuracy trade: {t})"
+            ));
+        }
+    }
     let cap = match (limit.status, runtime) {
         (Status::Info, _) => return Verdict::Info,
         (Status::Release, false) => caps.release,
         (Status::Release, true) => caps.runtime,
         (Status::Dev, _) => caps.dev,
     };
-    let status = match limit.status {
-        Status::Release => "release",
-        _ => "dev",
-    };
+    let status = status_name(limit.status);
     let worst = r.reference.ratio.max(r.counter.ratio);
     let against = if runtime {
         "our avx2 build".to_string()
     } else {
         format!("`{}`", r.compared_with)
     };
+    let (mut failing, mut waived, mut traded, mut notes) =
+        (Vec::new(), Vec::new(), Vec::new(), Vec::new());
     if worst > cap {
         let text = format!(
             "ours / {against} {} exceeds the {status} limit of {cap:.2}x on a model",
             ratios(r, cap)
         );
-        return match &limit.waiver {
-            None => Verdict::Fail(text),
-            Some(w) => {
-                let (_, missing) = missing_open_items(w, open_items);
-                if missing.is_empty() {
-                    Verdict::Waived(format!("{text} (waiver: {w})"))
+        match (&limit.accuracy_trade, &limit.waiver) {
+            (Some(t), _) => {
+                let advantage = r.snr.map(Snr::advantage);
+                if worst > caps.dev {
+                    failing.push(format!(
+                        "{text}; the accuracy trade holds only within the dev limit of {:.2}x: {} (accuracy trade: {t})",
+                        caps.dev,
+                        ratios(r, caps.dev)
+                    ));
+                } else if advantage.is_none_or(|a| a < TRADE_DB) {
+                    failing.push(format!(
+                        "{text}; the accuracy trade needs an SNR at least {TRADE_DB:.0} dB above the comparison: {} (D2760; accuracy trade: {t})",
+                        r.snr.map_or_else(|| "no accuracy in the record".to_string(), Snr::describe)
+                    ));
                 } else {
-                    Verdict::Fail(format!(
-                        "{text}; the waiver names open items that docs/open-items.md does not have: {}",
-                        missing.join(", ")
-                    ))
+                    traded.push(format!(
+                        "{text}, traded for the accuracy: {} (D2760; accuracy trade: {t})",
+                        r.snr.map(Snr::describe).unwrap_or_default()
+                    ));
                 }
             }
-        };
-    }
-    let mut notes = Vec::new();
-    if let Some(w) = &limit.waiver {
-        notes.push(format!(
-            "{} is within the {status} limit of {cap:.2}x: the waiver is no longer needed ({w})",
-            ratios(r, cap)
-        ));
-    }
-    if !runtime {
-        if limit.status == Status::Dev && worst <= caps.warn {
+            (None, None) => failing.push(text),
+            (None, Some(w)) => match valid_waiver(w, open_items) {
+                Ok(()) => waived.push(format!("{text} (waiver: {w})")),
+                Err(missing) => failing.push(format!(
+                    "{text}; the waiver names open items that docs/open-items.md does not have: {missing}"
+                )),
+            },
+        }
+    } else {
+        if let Some(w) = &limit.waiver {
             notes.push(format!(
-                "{}: ready to be promoted from dev to release (release limit {:.2}x)",
-                ratios(r, caps.warn),
-                caps.release
-            ));
-        } else if worst > caps.warn {
-            notes.push(format!(
-                "{} is above {:.2}x ({status} limit {cap:.2}x)",
-                ratios(r, caps.warn),
-                caps.warn
+                "{} is within the {status} limit of {cap:.2}x: the waiver is no longer needed ({w})",
+                ratios(r, cap)
             ));
         }
+        if let Some(t) = &limit.accuracy_trade {
+            notes.push(format!(
+                "{} is within the {status} limit of {cap:.2}x: the accuracy trade is no longer needed ({t})",
+                ratios(r, cap)
+            ));
+        }
+        if !runtime {
+            if limit.status == Status::Dev && worst <= caps.warn {
+                notes.push(format!(
+                    "{}: ready to be promoted from dev to release (release limit {:.2}x)",
+                    ratios(r, caps.warn),
+                    caps.release
+                ));
+            } else if worst > caps.warn {
+                notes.push(format!(
+                    "{} is above {:.2}x ({status} limit {cap:.2}x)",
+                    ratios(r, caps.warn),
+                    caps.warn
+                ));
+            }
+        }
+    }
+    judge_accuracy(limit, open_items, r, &mut failing, &mut waived, &mut notes);
+    if !failing.is_empty() {
+        failing.extend(traded);
+        failing.extend(waived);
+        return Verdict::Fail(failing.join("; "));
+    }
+    if !waived.is_empty() {
+        waived.extend(traded);
+        return Verdict::Waived(waived.join("; "));
+    }
+    if !traded.is_empty() {
+        return Verdict::Traded(traded.join("; "));
     }
     if notes.is_empty() {
         Verdict::Pass
     } else {
         Verdict::Warn(notes.join("; "))
+    }
+}
+
+/// `release`, `dev` or `info`.
+fn status_name(status: Status) -> &'static str {
+    match status {
+        Status::Release => "release",
+        Status::Dev => "dev",
+        Status::Info => "info",
     }
 }
 
@@ -523,6 +715,8 @@ pub struct Gate {
     pub findings: Vec<Finding>,
     /// The waived exceedances: `entry level: text`.
     pub waived: Vec<String>,
+    /// The accuracy trades that hold (D2760): `entry level: text`.
+    pub traded: Vec<String>,
     /// The remarks: `entry level: text`.
     pub warnings: Vec<String>,
     /// The number of entries and levels judged (`info` excluded).
@@ -557,10 +751,11 @@ pub fn judge_release(results: &Results, limits: &Limits, open_items: &str, parti
                 Verdict::Pass | Verdict::Info => {}
                 Verdict::Warn(t) => out.warnings.push(format!("`{entry}` at `{level}`: {t}")),
                 Verdict::Waived(t) => out.waived.push(format!("`{entry}` at `{level}`: {t}")),
+                Verdict::Traded(t) => out.traded.push(format!("`{entry}` at `{level}`: {t}")),
                 Verdict::Fail(t) => out.findings.push(Finding {
                     path: r.file.clone(),
                     line: 0,
-                    message: format!("`{entry}` at `{level}`: {t} (M13.1 §3, D14)"),
+                    message: format!("`{entry}` at `{level}`: {t} (M13.1 §3, D14, D34)"),
                 }),
             }
         }
@@ -650,6 +845,10 @@ impl Options {
 ///
 /// # Errors
 /// A file cannot be read or parsed.
+#[allow(
+    clippy::large_stack_frames,
+    reason = "the gates and their messages are built in place; xtask is a host tool"
+)]
 pub fn check(root: &Path, o: &Options) -> anyhow::Result<Vec<Finding>> {
     let read =
         |p: &str| std::fs::read_to_string(root.join(p)).with_context(|| format!("cannot read {p}"));
@@ -689,16 +888,20 @@ pub fn check(root: &Path, o: &Options) -> anyhow::Result<Vec<Finding>> {
         );
     }
     println!(
-        "check cycles: {} entries and levels against their comparison: {} at the goal of {:.2}x, {} waived, {} with remarks, {} over the limit (D14 in cycles)",
+        "check cycles: {} entries and levels against their comparison: {} at the goal of {:.2}x, {} waived, {} accuracy trades, {} with remarks, {} failed (D14 in cycles, the accuracy of D34)",
         gate.judged,
         gate.goal,
         limits.caps.goal,
         gate.waived.len(),
+        gate.traded.len(),
         gate.warnings.len(),
         gate.findings.len()
     );
     for w in &gate.waived {
         println!("  waived: {w}");
+    }
+    for t in &gate.traded {
+        println!("  accuracy trade: {t}");
     }
     for w in &gate.warnings {
         println!("  warn: {w}");
@@ -734,6 +937,7 @@ mod tests {
                         "compared_with": comp,
                         "reference_model": m("skylake", *or, *cr),
                         "counter_model": m("znver2", *oc, *cc),
+                        "snr_db": { "ours": 100.0, "comparison": 100.0 },
                     }),
                 )
             })
@@ -742,6 +946,17 @@ mod tests {
         let mut out = Results::new();
         add_results(Path::new("x86_64.json"), &doc.to_string(), &mut out).unwrap();
         out
+    }
+
+    /// `r` with the SNR of `entry` at `level` set (`None`: no `snr_db` in the record).
+    fn with_snr(mut r: Results, level: &str, entry: &str, snr: Option<(f64, f64)>) -> Results {
+        let rec = r
+            .get_mut(level)
+            .and_then(|rows| rows.get_mut(entry))
+            .and_then(Option::as_mut)
+            .unwrap();
+        rec.snr = snr.map(|(ours, comparison)| Snr { ours, comparison });
+        r
     }
 
     fn limits_with(entry: &str) -> String {
@@ -991,6 +1206,146 @@ mod tests {
         );
         let l = limits_with(r#""k": {"simd128": {"status": "release"}}"#);
         assert_eq!(gate(&results(&[], "sse2"), &l).findings.len(), 0);
+    }
+
+    #[test]
+    fn the_snr_of_both_sides_is_read_from_the_record() {
+        let doc = r#"{"levels": {"sse2": {"entries": {
+            "k": {"compared_with": "volk", "snr_db": {"ours": 999.0, "comparison": 82.64},
+                  "reference_model": {"cpu": "skylake", "ours": {"cycles_per_sample": 1.0}, "comparison": {"cycles_per_sample": 1.0}, "ratio": 1.0},
+                  "counter_model": {"cpu": "znver2", "ours": {"cycles_per_sample": 1.0}, "comparison": {"cycles_per_sample": 1.0}, "ratio": 1.0}},
+            "j": {"compared_with": "volk",
+                  "reference_model": {"cpu": "skylake", "ours": {"cycles_per_sample": 1.0}, "comparison": {"cycles_per_sample": 1.0}, "ratio": 1.0},
+                  "counter_model": {"cpu": "znver2", "ours": {"cycles_per_sample": 1.0}, "comparison": {"cycles_per_sample": 1.0}, "ratio": 1.0}}}}}}"#;
+        let mut r = Results::new();
+        add_results(Path::new("x.json"), doc, &mut r).unwrap();
+        let k = r["sse2"]["k"].as_ref().unwrap().snr.unwrap();
+        assert_eq!((k.ours, k.comparison), (999.0, 82.64));
+        assert!(k.describe().contains("exact against 82.6 dB"));
+        assert!(r["sse2"]["j"].as_ref().unwrap().snr.is_none());
+        assert_eq!(snr_text(999.0), "exact");
+        assert_eq!(snr_text(41.64), "41.6");
+    }
+
+    #[test]
+    fn the_accuracy_may_be_at_most_one_db_below_the_comparison() {
+        let l = limits_with(r#""k": {"sse2": {"status": "release"}}"#);
+        let fast = || results(&[("k", 1.0, 1.0, 1.0, 1.0, "volk")], "sse2");
+        // 1 dB below passes, more fails; above passes.
+        for (ours, ok) in [(99.0, true), (98.99, false), (120.0, true), (60.0, false)] {
+            let g = gate(&with_snr(fast(), "sse2", "k", Some((ours, 100.0))), &l);
+            assert_eq!(g.findings.is_empty(), ok, "{ours}: {:?}", g.findings);
+            if !ok {
+                assert!(g.findings[0].message.contains("below the comparison"));
+                assert!(g.findings[0].message.contains("D34"));
+            }
+        }
+        // `dev` is judged as well, `info` is not.
+        let dev = limits_with(r#""k": {"sse2": {"status": "dev"}}"#);
+        let low = || with_snr(fast(), "sse2", "k", Some((90.0, 100.0)));
+        assert_eq!(gate(&low(), &dev).findings.len(), 1);
+        let info = limits_with(r#""k": {"sse2": {"status": "info"}}"#);
+        assert_eq!(gate(&low(), &info).findings.len(), 0);
+        // A judged record without the accuracy fails.
+        let g = gate(&with_snr(fast(), "sse2", "k", None), &l);
+        assert!(g.findings[0].message.contains("no accuracy"));
+    }
+
+    #[test]
+    fn an_accuracy_waiver_covers_only_the_accuracy_and_needs_existing_open_items() {
+        let w = |t: &str| {
+            limits_with(&format!(
+                r#""k": {{"sse2": {{"status": "release", "accuracy_waiver": "{t}"}}}}"#
+            ))
+        };
+        let low = |ours_ref: f64| {
+            with_snr(
+                results(&[("k", ours_ref, 1.0, 1.0, 1.0, "volk")], "sse2"),
+                "sse2",
+                "k",
+                Some((90.0, 100.0)),
+            )
+        };
+        let g = gate(&low(1.0), &w("open item I30-9"));
+        assert_eq!((g.findings.len(), g.waived.len()), (0, 1));
+        assert!(g.waived[0].contains("accuracy waiver: open item I30-9"));
+        let g = gate(&low(1.0), &w("open item I30-8"));
+        assert!(g.findings[0].message.contains("I30-8"));
+        // It does not cover the cycles.
+        let g = gate(&low(1.3), &w("open item I30-9"));
+        assert_eq!(g.findings.len(), 1);
+        assert!(g.findings[0].message.contains("release limit"));
+        // Within the margin it is a remark.
+        let ok = with_snr(
+            results(&[("k", 1.0, 1.0, 1.0, 1.0, "volk")], "sse2"),
+            "sse2",
+            "k",
+            Some((100.0, 100.0)),
+        );
+        let g = gate(&ok, &w("open item I30-9"));
+        assert_eq!(g.findings.len(), 0);
+        assert!(g.warnings[0].contains("accuracy waiver is no longer needed"));
+    }
+
+    #[test]
+    fn an_accuracy_trade_keeps_release_while_three_db_and_the_dev_limit_hold() {
+        let l = |status: &str, extra: &str| {
+            limits_with(&format!(
+                r#""k": {{"sse2": {{"status": "{status}", "accuracy_trade": "exact against 82.6 dB"{extra}}}}}"#
+            ))
+        };
+        let rec = |ratio: f64, snr: Option<(f64, f64)>| {
+            with_snr(
+                results(&[("k", ratio, 1.0, 1.0, 1.0, "CMSIS-DSP")], "sse2"),
+                "sse2",
+                "k",
+                snr,
+            )
+        };
+        // Over the release limit, within dev, 3 dB or more above: traded.
+        for snr in [(85.6, 82.6), (999.0, 82.64)] {
+            let g = gate(&rec(1.3, Some(snr)), &l("release", ""));
+            assert_eq!(
+                (g.findings.len(), g.traded.len(), g.waived.len()),
+                (0, 1, 0),
+                "{:?}",
+                g.findings
+            );
+            assert!(g.traded[0].contains("traded for the accuracy"));
+        }
+        // Less than 3 dB above, no accuracy, or over the dev limit: fails.
+        let g = gate(&rec(1.3, Some((85.59, 82.6))), &l("release", ""));
+        assert!(g.findings[0].message.contains("at least 3 dB above"));
+        let g = gate(&rec(1.3, None), &l("release", ""));
+        assert_eq!(g.findings.len(), 1);
+        let g = gate(&rec(1.51, Some((999.0, 82.6))), &l("release", ""));
+        assert!(g.findings[0].message.contains("dev limit of 1.50x"));
+        // Within the release limit: a remark.
+        let g = gate(&rec(1.05, Some((999.0, 82.6))), &l("release", ""));
+        assert_eq!((g.findings.len(), g.traded.len()), (0, 0));
+        assert!(g.warnings[0].contains("accuracy trade is no longer needed"));
+        // Only on a release entry, not with a waiver, not at the run-time level.
+        let g = gate(&rec(1.3, Some((999.0, 82.6))), &l("dev", ""));
+        assert!(g.findings[0].message.contains("only for a `release` entry"));
+        let g = gate(&rec(1.3, Some((999.0, 82.6))), &l("info", ""));
+        assert_eq!(g.findings.len(), 1);
+        let g = gate(
+            &rec(1.3, Some((999.0, 82.6))),
+            &l("release", r#", "waiver": "open item I30-9""#),
+        );
+        assert!(g.findings[0].message.contains("not both"));
+        let rt =
+            limits_with(r#""k": {"avx2-runtime": {"status": "release", "accuracy_trade": "x"}}"#);
+        let r = results(&[("k", 1.0, 1.0, 1.0, 1.0, "ours at avx2")], RUNTIME_LEVEL);
+        assert_eq!(gate(&r, &rt).findings.len(), 1);
+        // A trade does not cover an accuracy below the comparison of another entry's kind:
+        // the accuracy is judged on its own.
+        let g = gate(&rec(1.0, Some((90.0, 100.0))), &l("release", ""));
+        assert!(
+            g.findings
+                .iter()
+                .any(|f| f.message.contains("below the comparison"))
+        );
     }
 
     #[test]

@@ -19,8 +19,9 @@ def model(cpu, ours, other):
             "ratio": ours / other}
 
 
-def record(ours, other, comparison="a library"):
+def record(ours, other, comparison="a library", snr=(120.04, 999.0)):
     return {"compared_with": comparison, "samples": 4096, "cycle_mode": "whole-loop",
+            "snr_db": {"ours": snr[0], "comparison": snr[1]},
             "reference_model": model("znver4", ours, other),
             "counter_model": model("sapphirerapids", ours, other)}
 
@@ -45,7 +46,8 @@ class GenerateTest(unittest.TestCase):
             "zzz_new": record(7.0, 8.0), "fft_64": record(5.0, 6.0), "mag_sq": record(3.0, 4.0),
             "convert_cs8": record(1.0, 2.0)})})
         self.assertEqual(rows(text), ["convert_cs8", "mag_sq", "fft_64", "zzz_new"])
-        self.assertIn("| `mag_sq` | 3.00 | 4.00 | 0.75 | 3.00 | 4.00 | 0.75 | a library |", text)
+        self.assertIn("| `mag_sq` | 3.00 | 4.00 | 0.75 | 3.00 | 4.00 | 0.75 | 120.0 / exact | a library |", text)
+        self.assertIn("| SNR (dB, ours / comparison) | comparison |", text)
         self.assertIn(f"Reference model `znver4`, counter-model `sapphirerapids`, mode `whole-loop`; "
                       f"execution counts: {COUNTS}.", text)
 
@@ -58,6 +60,17 @@ class GenerateTest(unittest.TestCase):
         self.assertIn("x \\| y |", text)
         self.assertIn("- `broken`: not simulated: the run failed.", text)
         self.assertIn("- Not measured at this level: `airspy`.", text)
+
+    def test_an_accuracy_trade_is_marked_and_a_record_without_snr_shows_a_dash(self):
+        entries = {"mul_real_q15_fallback": record(1.3, 1.0, snr=(91.62, 85.59)), "mag_sq": record(1.0, 1.0)}
+        del entries["mag_sq"]["snr_db"]
+        text = ct.block({"x86_64-avx512": results(entries)},
+                        ct.trades_of({"_limits": {}, "mul_real_q15_fallback": {
+                            "avx512": {"status": "release", "accuracy_trade": "91.6 dB against 85.6 dB"},
+                            "avx2": {"status": "release"}}}))
+        self.assertIn("| 91.6 / 85.6 (accuracy trade) | a library |", text)
+        self.assertIn("| 1.00 | - | a library |", text)
+        self.assertNotIn("(accuracy trade)", ct.block({"x86_64-avx512": results(entries)}))
 
     def test_levels_come_in_the_order_of_the_policy(self):
         docs = {"aarch64": results({"a": record(1.0, 1.0)}, "neon", "aarch64"),
@@ -98,15 +111,16 @@ class Simd128Test(unittest.TestCase):
     def test_rows_status_and_verdict(self):
         def k(ours, other, status="release", verdict="pass", what="VOLK | generic"):
             return {"ours_instr_per_sample": ours, "other_instr_per_sample": other, "ratio": ours / other,
-                    "status": status, "verdict": verdict, "compared_with": what}
+                    "status": status, "verdict": verdict, "compared_with": what,
+                    "snr_db": {"ours": 150.98, "other": 999.0}}
         text = ct.simd128_block({"levels": {"simd128": {"kernels": {
             "mag_sq": k(1.0, 2.0), "convert_cs8": k(3.0, 4.0, "info", "info"),
             "mul": k(5.0, 4.0, "release", "waived")}}}})
         lines = text.split("\n")
         self.assertEqual([l.split("`")[1] for l in lines if ct.ROW.match(l)], ["convert_cs8", "mag_sq", "mul"])
-        self.assertIn("| `convert_cs8` | 3.00 | 4.00 | 0.75 | info | VOLK \\| generic |", text)
-        self.assertIn("| `mag_sq` | 1.00 | 2.00 | 0.50 |  | VOLK \\| generic |", text)
-        self.assertIn("| 1.25 | waived |", text)
+        self.assertIn("| `convert_cs8` | 3.00 | 4.00 | 0.75 | 151.0 / exact | info | VOLK \\| generic |", text)
+        self.assertIn("| `mag_sq` | 1.00 | 2.00 | 0.50 | 151.0 / exact |  | VOLK \\| generic |", text)
+        self.assertIn("| 1.25 | 151.0 / exact | waived |", text)
 
 
 class CommittedBlockTest(unittest.TestCase):
@@ -116,7 +130,9 @@ class CommittedBlockTest(unittest.TestCase):
         with open(ct.DOC) as fh:
             doc = fh.read()
         block = doc[doc.index(ct.BEGIN) + len(ct.BEGIN):doc.index(ct.END)].strip("\n")
-        self.assertEqual(ct.differences(block, ct.block(ct.load(ct.RESULTS))), [])
+        with open(ct.LIMITS) as fh:
+            trades = ct.trades_of(json.load(fh))
+        self.assertEqual(ct.differences(block, ct.block(ct.load(ct.RESULTS), trades)), [])
 
     def test_the_committed_simd128_table_is_generated(self):
         with open(ct.DOC) as fh:

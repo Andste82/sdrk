@@ -29399,35 +29399,35 @@
         "convert_cq15_cs8": {
           "branches": {
             "comparison": {
-              "branches_per_sample": 0.06597900390625,
-              "mispredictions_per_sample": 0.00054931640625
+              "branches_per_sample": 0.25323486328125,
+              "mispredictions_per_sample": 0.00042724609375
             },
             "ours": {
               "branches_per_sample": 0.03448486328125,
-              "mispredictions_per_sample": 0.00048828125
+              "mispredictions_per_sample": 0.000457763671875
             }
           },
-          "compared_with": "volk_8i_convert_16i",
+          "compared_with": "KFR 7.2.0 cast<i16>(in) << 8 (benches/refs/kfr-ops.cpp, sse2, -ffp-contract=off)",
           "comparison_kind": "library",
           "cost": {
             "counter_model": {
-              "comparison": 0.4308252449047056,
+              "comparison": 24.175552148895672,
               "cpu": "znver2",
-              "ours": 0.2717596376412986,
+              "ours": 0.2712713563912986,
               "penalty": 16.0
             },
             "reference_model": {
-              "comparison": 0.3382405650383906,
+              "comparison": 25.0536912229809,
               "cpu": "skylake",
-              "ours": 0.27312340267388174,
+              "ours": 0.27251305111138174,
               "penalty": 20.0
             }
           },
           "counter_model": {
             "comparison": {
-              "coverage": 0.9919329414164643,
-              "cycles_per_sample": 0.4220361824047056,
-              "efficiency": 0.9900187494714865
+              "coverage": 0.9997945190240046,
+              "cycles_per_sample": 24.168716211395672,
+              "efficiency": 0.9777042056799958
             },
             "cpu": "znver2",
             "ours": {
@@ -29435,14 +29435,14 @@
               "cycles_per_sample": 0.2639471376412986,
               "efficiency": 0.9810648791266162
             },
-            "ratio": 0.6254135276680858
+            "ratio": 0.010921024324694838
           },
           "cycle_mode": "whole-loop",
           "reference_model": {
             "comparison": {
-              "coverage": 0.9919329414164643,
-              "cycles_per_sample": 0.3272542369133906,
-              "efficiency": 0.967043215354763
+              "coverage": 0.9997945190240046,
+              "cycles_per_sample": 25.0451463011059,
+              "efficiency": 0.6689297124600639
             },
             "cpu": "skylake",
             "ours": {
@@ -29450,7 +29450,7 @@
               "cycles_per_sample": 0.26335777767388174,
               "efficiency": 0.9785884144774648
             },
-            "ratio": 0.8047497876813757
+            "ratio": 0.010515321991241586
           },
           "samples": 65536,
           "snr_db": {
@@ -29462,26 +29462,26 @@
           "branches": {
             "comparison": {
               "branches_per_sample": 0.12774658203125,
-              "mispredictions_per_sample": 0.000396728515625
+              "mispredictions_per_sample": 0.00042724609375
             },
             "ours": {
               "branches_per_sample": 0.13043212890625,
-              "mispredictions_per_sample": 0.00042724609375
+              "mispredictions_per_sample": 0.000518798828125
             }
           },
           "compared_with": "CMSIS-DSP 1.18.0 arm_q7_to_q15, generic C (-O3 -ffp-contract=off, LOOPUNROLL, sse2)",
           "comparison_kind": "library",
           "cost": {
             "counter_model": {
-              "comparison": 0.4246097564697266,
+              "comparison": 0.4250980377197266,
               "cpu": "znver2",
-              "ours": 0.3671084577804923,
+              "ours": 0.3685733015304923,
               "penalty": 16.0
             },
             "reference_model": {
-              "comparison": 0.3315672360933744,
+              "comparison": 0.3321775876558744,
               "cpu": "skylake",
-              "ours": 0.3103217417203668,
+              "ours": 0.3121527964078668,
               "penalty": 20.0
             }
           },
@@ -29523,25 +29523,25 @@
         "convert_cq15_cu8": {
           "branches": {
             "comparison": {
-              "branches_per_sample": 0.06597900390625,
-              "mispredictions_per_sample": 0.00054931640625
+              "branches_per_sample": 0.25323486328125,
+              "mispredictions_per_sample": 0.0004730224609375
             },
             "ours": {
               "branches_per_sample": 0.03448486328125,
               "mispredictions_per_sample": 0.00054931640625
             }
           },
-          "compared_with": "volk_8i_convert_16i on the bytes with the sign bit flipped (the CU8 conversion without its offset)",
+          "compared_with": "KFR 7.2.0 cast<i16>(in) << 8 on the bytes with the sign bit flipped (the CU8 conversion without its offset) (benches/refs/kfr-ops.cpp, sse2, -ffp-contract=off)",
           "comparison_kind": "library",
           "cost": {
             "counter_model": {
-              "comparison": 0.43049102223980484,
+              "comparison": 24.17622130693124,
               "cpu": "znver2",
               "ours": 0.32646251312673913,
               "penalty": 16.0
             },
             "reference_model": {
-              "comparison": 0.338172044547173,
+              "comparison": 25.054541192348776,
               "cpu": "skylake",
               "ours": 0.27250778768580486,
               "penalty": 20.0
@@ -29549,9 +29549,9 @@
           },
           "counter_model": {
             "comparison": {
-              "coverage": 0.9919317444125012,
-              "cycles_per_sample": 0.42170195973980484,
-              "efficiency": 0.9906878609511747
+              "coverage": 0.9997971360850405,
+              "cycles_per_sample": 24.16865294755624,
+              "efficiency": 0.9777042056799958
             },
             "cpu": "znver2",
             "ours": {
@@ -29559,14 +29559,14 @@
               "cycles_per_sample": 0.31767345062673913,
               "efficiency": 0.993388749275082
             },
-            "ratio": 0.7533127207251953
+            "ratio": 0.013144027981868141
           },
           "cycle_mode": "whole-loop",
           "reference_model": {
             "comparison": {
-              "coverage": 0.9919317444125012,
-              "cycles_per_sample": 0.327185716422173,
-              "efficiency": 0.9671716791791416
+              "coverage": 0.9997971360850405,
+              "cycles_per_sample": 25.045080743130026,
+              "efficiency": 0.6689297124600639
             },
             "cpu": "skylake",
             "ours": {
@@ -29574,7 +29574,7 @@
               "cycles_per_sample": 0.26152145956080486,
               "efficiency": 0.9844503618543096
             },
-            "ratio": 0.7993058572989767
+            "ratio": 0.010442029005338357
           },
           "samples": 65536,
           "snr_db": {
@@ -29586,26 +29586,26 @@
           "branches": {
             "comparison": {
               "branches_per_sample": 0.12774658203125,
-              "mispredictions_per_sample": 0.0003662109375
+              "mispredictions_per_sample": 0.00042724609375
             },
             "ours": {
               "branches_per_sample": 0.12994384765625,
-              "mispredictions_per_sample": 0.0005035400390625
+              "mispredictions_per_sample": 0.000518798828125
             }
           },
           "compared_with": "CMSIS-DSP 1.18.0 arm_q7_to_q15 on the bytes with the sign bit flipped (the CU8 conversion without its offset), generic C (-O3 -ffp-contract=off, LOOPUNROLL, sse2)",
           "comparison_kind": "library",
           "cost": {
             "counter_model": {
-              "comparison": 0.4241214752197266,
+              "comparison": 0.4250980377197266,
               "cpu": "znver2",
-              "ours": 0.431887923429019,
+              "ours": 0.432132064054019,
               "penalty": 16.0
             },
             "reference_model": {
-              "comparison": 0.3309568845308744,
+              "comparison": 0.3321775876558744,
               "cpu": "skylake",
-              "ours": 0.3433313132514053,
+              "ours": 0.3436364890326553,
               "penalty": 20.0
             }
           },
@@ -29771,35 +29771,35 @@
         "convert_cs8": {
           "branches": {
             "comparison": {
-              "branches_per_sample": 0.06597900390625,
-              "mispredictions_per_sample": 0.0003814697265625
+              "branches_per_sample": 0.50299072265625,
+              "mispredictions_per_sample": 0.000457763671875
             },
             "ours": {
               "branches_per_sample": 0.0349884033203125,
-              "mispredictions_per_sample": 0.0005645751953125
+              "mispredictions_per_sample": 0.00054931640625
             }
           },
-          "compared_with": "volk_8i_s32f_convert_32f",
+          "compared_with": "KFR 7.2.0 in * (1 / 128) (benches/refs/kfr-ops.cpp, sse2, -ffp-contract=off)",
           "comparison_kind": "library",
           "cost": {
             "counter_model": {
-              "comparison": 1.0236913108825685,
+              "comparison": 4.563691139221192,
               "cpu": "znver2",
-              "ours": 0.64299361859014,
+              "ours": 0.64274947796514,
               "penalty": 16.0
             },
             "reference_model": {
-              "comparison": 1.0245886611938477,
+              "comparison": 4.745675086975098,
               "cpu": "skylake",
-              "ours": 0.779245963904222,
+              "ours": 0.778940788122972,
               "penalty": 20.0
             }
           },
           "counter_model": {
             "comparison": {
-              "coverage": 0.9943859436166662,
-              "cycles_per_sample": 1.0175877952575685,
-              "efficiency": 0.9882643607164916
+              "coverage": 0.9991513149536272,
+              "cycles_per_sample": 4.556366920471192,
+              "efficiency": 0.9884678747940692
             },
             "cpu": "znver2",
             "ours": {
@@ -29807,14 +29807,14 @@
               "cycles_per_sample": 0.63396041546514,
               "efficiency": 0.9911261844534479
             },
-            "ratio": 0.6230031633827467
+            "ratio": 0.13913726144767544
           },
           "cycle_mode": "whole-loop",
           "reference_model": {
             "comparison": {
-              "coverage": 0.9943859436166662,
-              "cycles_per_sample": 1.0169592666625977,
-              "efficiency": 0.7416563658838072
+              "coverage": 0.9991513149536272,
+              "cycles_per_sample": 4.736519813537598,
+              "efficiency": 0.739566825145272
             },
             "cpu": "skylake",
             "ours": {
@@ -29822,7 +29822,7 @@
               "cycles_per_sample": 0.767954459997972,
               "efficiency": 0.9894468617034065
             },
-            "ratio": 0.7551477086375383
+            "ratio": 0.16213475087828344
           },
           "samples": 65536,
           "snr_db": {
@@ -29834,26 +29834,26 @@
           "branches": {
             "comparison": {
               "branches_per_sample": 0.1282501220703125,
-              "mispredictions_per_sample": 0.000457763671875
+              "mispredictions_per_sample": 0.0004425048828125
             },
             "ours": {
               "branches_per_sample": 0.2552032470703125,
-              "mispredictions_per_sample": 0.0005340576171875
+              "mispredictions_per_sample": 0.000518798828125
             }
           },
           "compared_with": "CMSIS-DSP 1.18.0 arm_q7_to_float, generic C (-O3 -ffp-contract=off, LOOPUNROLL, sse2)",
           "comparison_kind": "library",
           "cost": {
             "counter_model": {
-              "comparison": 1.0236768150329592,
+              "comparison": 1.0234326744079592,
               "cpu": "znver2",
-              "ours": 1.1028706988166361,
+              "ours": 1.1026265581916361,
               "penalty": 16.0
             },
             "reference_model": {
-              "comparison": 1.0248801040649413,
+              "comparison": 1.0245749282836913,
               "cpu": "skylake",
-              "ours": 1.0419697301528033,
+              "ours": 1.0416645543715533,
               "penalty": 20.0
             }
           },
@@ -29895,35 +29895,35 @@
         "convert_cu8": {
           "branches": {
             "comparison": {
-              "branches_per_sample": 0.06597900390625,
-              "mispredictions_per_sample": 0.0005035400390625
+              "branches_per_sample": 0.50299072265625,
+              "mispredictions_per_sample": 0.00048828125
             },
             "ours": {
               "branches_per_sample": 0.0352325439453125,
-              "mispredictions_per_sample": 0.000579833984375
+              "mispredictions_per_sample": 0.00054931640625
             }
           },
-          "compared_with": "volk_8i_s32f_convert_32f on the bytes with the sign bit flipped (the CU8 conversion without its offset)",
+          "compared_with": "KFR 7.2.0 in * (1 / 128) on the bytes with the sign bit flipped (the CU8 conversion without its offset) (benches/refs/kfr-ops.cpp, sse2, -ffp-contract=off)",
           "comparison_kind": "library",
           "cost": {
             "counter_model": {
-              "comparison": 1.025582675933838,
+              "comparison": 4.564117673238119,
               "cpu": "znver2",
-              "ours": 0.6432642982098221,
+              "ours": 0.6427760169598221,
               "penalty": 16.0
             },
             "reference_model": {
-              "comparison": 1.0269683456420897,
+              "comparison": 4.746221249898275,
               "cpu": "skylake",
-              "ours": 0.7796566824401292,
+              "ours": 0.7790463308776292,
               "penalty": 20.0
             }
           },
           "counter_model": {
             "comparison": {
-              "coverage": 0.9944462990501047,
-              "cycles_per_sample": 1.017526035308838,
-              "efficiency": 0.9882643607164916
+              "coverage": 0.9991648554928962,
+              "cycles_per_sample": 4.556305173238119,
+              "efficiency": 0.9884678747940692
             },
             "cpu": "znver2",
             "ours": {
@@ -29931,14 +29931,14 @@
               "cycles_per_sample": 0.6339869544598221,
               "efficiency": 0.9914491440412739
             },
-            "ratio": 0.6230670591808448
+            "ratio": 0.13914497171603063
           },
           "cycle_mode": "whole-loop",
           "reference_model": {
             "comparison": {
-              "coverage": 0.9944462990501047,
-              "cycles_per_sample": 1.0168975448608397,
-              "efficiency": 0.7416563658838072
+              "coverage": 0.9991648554928962,
+              "cycles_per_sample": 4.736455624898275,
+              "efficiency": 0.739566825145272
             },
             "cpu": "skylake",
             "ours": {
@@ -29946,7 +29946,7 @@
               "cycles_per_sample": 0.7680600027526292,
               "efficiency": 0.9893029714324153
             },
-            "ratio": 0.7552973321985319
+            "ratio": 0.16215923120131098
           },
           "samples": 65536,
           "snr_db": {
@@ -29962,7 +29962,7 @@
             },
             "ours": {
               "branches_per_sample": 0.2547149658203125,
-              "mispredictions_per_sample": 0.0005645751953125
+              "mispredictions_per_sample": 0.000579833984375
             }
           },
           "compared_with": "CMSIS-DSP 1.18.0 arm_q7_to_float on the bytes with the sign bit flipped (the CU8 conversion without its offset), generic C (-O3 -ffp-contract=off, LOOPUNROLL, sse2)",
@@ -29971,13 +29971,13 @@
             "counter_model": {
               "comparison": 1.0238591957092287,
               "cpu": "znver2",
-              "ours": 1.1056930541992187,
+              "ours": 1.1059371948242187,
               "penalty": 16.0
             },
             "reference_model": {
               "comparison": 1.0251235580444336,
               "cpu": "skylake",
-              "ours": 1.0461854553222658,
+              "ours": 1.0464906311035158,
               "penalty": 20.0
             }
           },
@@ -38389,58 +38389,58 @@
         "mul": {
           "branches": {
             "comparison": {
-              "branches_per_sample": 2.003021240234375,
-              "mispredictions_per_sample": 0.000457763671875
+              "branches_per_sample": 0.503265380859375,
+              "mispredictions_per_sample": 0.0003662109375
             },
             "ours": {
               "branches_per_sample": 0.253021240234375,
-              "mispredictions_per_sample": 0.0004119873046875
+              "mispredictions_per_sample": 0.0003509521484375
             }
           },
-          "compared_with": "volk_32fc_x2_multiply_32fc",
+          "compared_with": "KFR 7.2.0 a * b on complex<float> (benches/refs/kfr-ops.cpp, sse2, -ffp-contract=off)",
           "comparison_kind": "library",
           "cost": {
             "counter_model": {
-              "comparison": 6.097398658420729,
+              "comparison": 2.812441274469549,
               "cpu": "znver2",
-              "ours": 1.5972837615966797,
+              "ours": 1.5963110717773434,
               "penalty": 16.0
             },
             "reference_model": {
-              "comparison": 4.362782851509426,
+              "comparison": 2.691227694424716,
               "cpu": "skylake",
-              "ours": 1.5375101928710937,
+              "ours": 1.5362932128906248,
               "penalty": 20.0
             }
           },
           "counter_model": {
             "comparison": {
-              "coverage": 0.9991667688595605,
-              "cycles_per_sample": 6.090074439670729,
-              "efficiency": 0.9860312243221035
+              "coverage": 0.9985455975931717,
+              "cycles_per_sample": 2.806581899469549,
+              "efficiency": 0.9812667261373773
             },
             "cpu": "znver2",
             "ours": {
-              "coverage": 0.9972075267743891,
-              "cycles_per_sample": 1.5906919647216797,
+              "coverage": 0.9972050989901351,
+              "cycles_per_sample": 1.5906958374023434,
               "efficiency": 0.9929078014184397
             },
-            "ratio": 0.26119417430432645
+            "ratio": 0.5667733543435839
           },
           "cycle_mode": "whole-loop",
           "reference_model": {
             "comparison": {
-              "coverage": 0.9991667688595605,
-              "cycles_per_sample": 4.353627578071926,
-              "efficiency": 0.9655172413793105
+              "coverage": 0.9985455975931717,
+              "cycles_per_sample": 2.683903475674716,
+              "efficiency": 0.9328358208955223
             },
             "cpu": "skylake",
             "ours": {
-              "coverage": 0.9972075267743891,
-              "cycles_per_sample": 1.5292704467773437,
+              "coverage": 0.9972050989901351,
+              "cycles_per_sample": 1.5292741699218748,
               "efficiency": 0.9836065573770493
             },
-            "ratio": 0.3512634967859621
+            "ratio": 0.5697947723464329
           },
           "samples": 65536,
           "snr_db": {
@@ -38452,26 +38452,26 @@
           "branches": {
             "comparison": {
               "branches_per_sample": 0.253265380859375,
-              "mispredictions_per_sample": 0.0003509521484375
+              "mispredictions_per_sample": 0.0002593994140625
             },
             "ours": {
               "branches_per_sample": 0.253265380859375,
-              "mispredictions_per_sample": 0.0003509521484375
+              "mispredictions_per_sample": 0.000396728515625
             }
           },
           "compared_with": "sdrk fallback",
           "comparison_kind": "own_fallback",
           "cost": {
             "counter_model": {
-              "comparison": 3.908120624708093,
+              "comparison": 3.906655780958093,
               "cpu": "znver2",
-              "ours": 3.9077173846700917,
+              "ours": 3.9084498065450917,
               "penalty": 16.0
             },
             "reference_model": {
-              "comparison": 5.03758261639139,
+              "comparison": 5.03575156170389,
               "cpu": "skylake",
-              "ours": 5.03706281579059,
+              "ours": 5.03797834313434,
               "penalty": 20.0
             }
           },
@@ -38514,26 +38514,26 @@
           "branches": {
             "comparison": {
               "branches_per_sample": 0.253753662109375,
-              "mispredictions_per_sample": 0.000335693359375
+              "mispredictions_per_sample": 0.0003814697265625
             },
             "ours": {
               "branches_per_sample": 0.253265380859375,
-              "mispredictions_per_sample": 0.0003509521484375
+              "mispredictions_per_sample": 0.0002593994140625
             }
           },
           "compared_with": "CMSIS-DSP 1.18.0 arm_cmplx_mult_cmplx_q15 (Q3.13, truncating, scaled by 4), generic C (-O3 -ffp-contract=off, LOOPUNROLL, sse2)",
           "comparison_kind": "library",
           "cost": {
             "counter_model": {
-              "comparison": 4.784034302655388,
+              "comparison": 4.784766724530388,
               "cpu": "znver2",
-              "ours": 3.908120624708093,
+              "ours": 3.906655780958093,
               "penalty": 16.0
             },
             "reference_model": {
-              "comparison": 5.292679461310892,
+              "comparison": 5.293594988654642,
               "cpu": "skylake",
-              "ours": 5.03758261639139,
+              "ours": 5.03575156170389,
               "penalty": 20.0
             }
           },
@@ -38576,57 +38576,57 @@
           "branches": {
             "comparison": {
               "branches_per_sample": 0.253753662109375,
-              "mispredictions_per_sample": 0.0003204345703125
+              "mispredictions_per_sample": 0.0003814697265625
             },
             "ours": {
               "branches_per_sample": 0.253265380859375,
-              "mispredictions_per_sample": 0.000396728515625
+              "mispredictions_per_sample": 0.0003662109375
             }
           },
           "compared_with": "CMSIS-DSP 1.18.0 arm_cmplx_mult_cmplx_f32, generic C (-O3 -ffp-contract=off, LOOPUNROLL, sse2)",
           "comparison_kind": "library",
           "cost": {
             "counter_model": {
-              "comparison": 2.0958381514115767,
+              "comparison": 2.096818570223722,
               "cpu": "znver2",
-              "ours": 1.5959022094726565,
+              "ours": 1.5954177978515625,
               "penalty": 16.0
             },
             "reference_model": {
-              "comparison": 2.533311434659091,
+              "comparison": 2.5345367986505685,
               "cpu": "skylake",
-              "ours": 1.536063119506836,
+              "ours": 1.5354564880371093,
               "penalty": 20.0
             }
           },
           "counter_model": {
             "comparison": {
-              "coverage": 0.9972682988012609,
-              "cycles_per_sample": 2.0907111982865767,
+              "coverage": 0.9972664593454996,
+              "cycles_per_sample": 2.090715054598722,
               "efficiency": 0.9952038369304558
             },
             "cpu": "znver2",
             "ours": {
-              "coverage": 0.9971346983886634,
-              "cycles_per_sample": 1.5895545532226565,
+              "coverage": 0.9971322709590095,
+              "cycles_per_sample": 1.5895584228515625,
               "efficiency": 0.9936908517350158
             },
-            "ratio": 0.7602937003089482
+            "ratio": 0.7602941488153449
           },
           "cycle_mode": "whole-loop",
           "reference_model": {
             "comparison": {
-              "coverage": 0.9972682988012609,
-              "cycles_per_sample": 2.526902743252841,
+              "coverage": 0.9972664593454996,
+              "cycles_per_sample": 2.5269074041193185,
               "efficiency": 0.9920634920634921
             },
             "cpu": "skylake",
             "ours": {
-              "coverage": 0.9971346983886634,
-              "cycles_per_sample": 1.528128549194336,
+              "coverage": 0.9971322709590095,
+              "cycles_per_sample": 1.5281322692871093,
               "efficiency": 0.9844134536505332
             },
-            "ratio": 0.6047437137320136
+            "ratio": 0.6047440704776027
           },
           "samples": 65536,
           "snr_db": {
@@ -38700,7 +38700,7 @@
           "branches": {
             "comparison": {
               "branches_per_sample": 0.253753662109375,
-              "mispredictions_per_sample": 0.0003204345703125
+              "mispredictions_per_sample": 0.000335693359375
             },
             "ours": {
               "branches_per_sample": 0.128265380859375,
@@ -38711,13 +38711,13 @@
           "comparison_kind": "library",
           "cost": {
             "counter_model": {
-              "comparison": 0.4675399350206818,
+              "comparison": 0.4677840756456818,
               "cpu": "znver2",
               "ours": 0.3631607350891948,
               "penalty": 16.0
             },
             "reference_model": {
-              "comparison": 0.3636908035850048,
+              "comparison": 0.3639959793662548,
               "cpu": "skylake",
               "ours": 0.3004544358332033,
               "penalty": 20.0
@@ -38824,7 +38824,7 @@
           "branches": {
             "comparison": {
               "branches_per_sample": 0.129241943359375,
-              "mispredictions_per_sample": 0.0005035400390625
+              "mispredictions_per_sample": 0.0004730224609375
             },
             "ours": {
               "branches_per_sample": 0.128265380859375,
@@ -38835,13 +38835,13 @@
           "comparison_kind": "library",
           "cost": {
             "counter_model": {
-              "comparison": 1.4028907082297584,
+              "comparison": 1.4024024269797584,
               "cpu": "znver2",
               "ours": 1.0221322526602907,
               "penalty": 16.0
             },
             "reference_model": {
-              "comparison": 1.220017034357244,
+              "comparison": 1.219406682794744,
               "cpu": "skylake",
               "ours": 0.9821422077047413,
               "penalty": 20.0
@@ -39319,62 +39319,62 @@
         "power_db": {
           "branches": {
             "comparison": {
-              "branches_per_sample": 6.50616455078125,
-              "mispredictions_per_sample": 0.0010833740234375
+              "branches_per_sample": 0.25225830078125,
+              "mispredictions_per_sample": 0.0004730224609375
             },
             "ours": {
               "branches_per_sample": 0.06475830078125,
-              "mispredictions_per_sample": 0.0004425048828125
+              "mispredictions_per_sample": 0.000457763671875
             }
           },
-          "compared_with": "volk_32f_log2_32f + volk_32f_s32f_multiply_32f + volk_32f_s32f_add_32f",
+          "compared_with": "KFR 7.2.0 10 * log10(x) + offset (benches/refs/kfr-ops.cpp, sse2, -ffp-contract=off)",
           "comparison_kind": "library",
           "cost": {
             "counter_model": {
-              "comparison": 54.14147330655889,
+              "comparison": 16.622628609793527,
               "cpu": "znver2",
-              "ours": 5.306460273128816,
+              "ours": 5.3067737389341625,
               "penalty": 16.0
             },
             "reference_model": {
-              "comparison": 59.7150914201898,
+              "comparison": 16.877249778747554,
               "cpu": "skylake",
-              "ours": 5.435240231218009,
+              "ours": 5.435616393692192,
               "penalty": 20.0
             }
           },
           "counter_model": {
             "comparison": {
-              "coverage": 0.9992306700354895,
-              "cycles_per_sample": 54.12413932218389,
-              "efficiency": 0.29307077150649474
+              "coverage": 0.9990935783444934,
+              "cycles_per_sample": 16.615060250418527,
+              "efficiency": 0.5271084337349398
             },
             "cpu": "znver2",
             "ours": {
-              "coverage": 0.9989375748112723,
-              "cycles_per_sample": 5.299380195003816,
+              "coverage": 0.9989245071280602,
+              "cycles_per_sample": 5.2994495201841625,
               "efficiency": 0.7709563164108618
             },
-            "ratio": 0.09791158365509113
+            "ratio": 0.3189545773720966
           },
           "cycle_mode": "whole-loop",
           "reference_model": {
             "comparison": {
-              "coverage": 0.9992306700354895,
-              "cycles_per_sample": 59.69342393972105,
-              "efficiency": 0.22297665451192425
+              "coverage": 0.9990935783444934,
+              "cycles_per_sample": 16.867789329528804,
+              "efficiency": 0.3886663699747812
             },
             "cpu": "skylake",
             "ours": {
-              "coverage": 0.9989375748112723,
-              "cycles_per_sample": 5.426390133561759,
+              "coverage": 0.9989245071280602,
+              "cycles_per_sample": 5.426461120254692,
               "efficiency": 0.8071025020177562
             },
-            "ratio": 0.09090432036603187
+            "ratio": 0.321705530834151
           },
           "samples": 65536,
           "snr_db": {
-            "comparison": 143.03,
+            "comparison": 145.34,
             "ours": 151.93
           }
         },
@@ -39382,57 +39382,57 @@
           "branches": {
             "comparison": {
               "branches_per_sample": 4.37872314453125,
-              "mispredictions_per_sample": 0.0010223388671875
+              "mispredictions_per_sample": 0.0009613037109375
             },
             "ours": {
               "branches_per_sample": 0.25201416015625,
-              "mispredictions_per_sample": 0.000457763671875
+              "mispredictions_per_sample": 0.0004425048828125
             }
           },
           "compared_with": "CMSIS-DSP 1.18.0 arm_vlog_f32 + arm_scale_f32 (+ offset loop), generic C (-O3 -ffp-contract=off, LOOPUNROLL, sse2)",
           "comparison_kind": "library",
           "cost": {
             "counter_model": {
-              "comparison": 49.42399627463868,
+              "comparison": 49.42207099785238,
               "cpu": "znver2",
-              "ours": 11.080981645427768,
+              "ours": 11.080903537937854,
               "penalty": 16.0
             },
             "reference_model": {
-              "comparison": 55.96470186764622,
+              "comparison": 55.96240693561101,
               "cpu": "skylake",
-              "ours": 8.870583736232069,
+              "ours": 8.870411424480501,
               "penalty": 20.0
             }
           },
           "counter_model": {
             "comparison": {
-              "coverage": 0.9994658952871167,
-              "cycles_per_sample": 49.40763885276368,
+              "coverage": 0.999485087173294,
+              "cycles_per_sample": 49.40669013847738,
               "efficiency": 0.2726237185166435
             },
             "cpu": "znver2",
             "ours": {
-              "coverage": 0.9989924352679642,
-              "cycles_per_sample": 11.073657426677768,
+              "coverage": 0.9989774570766867,
+              "cycles_per_sample": 11.073823459812854,
               "efficiency": 0.34576271186440677
             },
-            "ratio": 0.22412844822796765
+            "ratio": 0.22413611251381285
           },
           "cycle_mode": "whole-loop",
           "reference_model": {
             "comparison": {
-              "coverage": 0.9994658952871167,
-              "cycles_per_sample": 55.94425509030247,
+              "coverage": 0.999485087173294,
+              "cycles_per_sample": 55.94318086139226,
               "efficiency": 0.2155080871421705
             },
             "cpu": "skylake",
             "ours": {
-              "coverage": 0.9989924352679642,
-              "cycles_per_sample": 8.861428462794569,
+              "coverage": 0.9989774570766867,
+              "cycles_per_sample": 8.861561326824251,
               "efficiency": 0.49421067495057897
             },
-            "ratio": 0.15839746991877693
+            "ratio": 0.15840288647118794
           },
           "samples": 65536,
           "snr_db": {
@@ -39448,7 +39448,7 @@
             },
             "ours": {
               "branches_per_sample": 0.0647430419921875,
-              "mispredictions_per_sample": 0.0004119873046875
+              "mispredictions_per_sample": 0.00042724609375
             }
           },
           "compared_with": "sdrk fallback",
@@ -39457,13 +39457,13 @@
             "counter_model": {
               "comparison": 13.437141129024445,
               "cpu": "znver2",
-              "ours": 5.270971092810997,
+              "ours": 5.271215233435997,
               "penalty": 16.0
             },
             "reference_model": {
               "comparison": 10.534902183896019,
               "cpu": "skylake",
-              "ours": 5.441862517136793,
+              "ours": 5.442167692918043,
               "penalty": 20.0
             }
           },
@@ -39506,7 +39506,7 @@
           "branches": {
             "comparison": {
               "branches_per_sample": 4.50616455078125,
-              "mispredictions_per_sample": 0.00140380859375
+              "mispredictions_per_sample": 0.0012969970703125
             },
             "ours": {
               "branches_per_sample": 0.2520294189453125,
@@ -39517,13 +39517,13 @@
           "comparison_kind": "library",
           "cost": {
             "counter_model": {
-              "comparison": 49.92101256147723,
+              "comparison": 49.91930357710223,
               "cpu": "znver2",
               "ours": 13.437141129024445,
               "penalty": 16.0
             },
             "reference_model": {
-              "comparison": 56.37207108203496,
+              "comparison": 56.36993485156621,
               "cpu": "skylake",
               "ours": 10.534902183896019,
               "penalty": 20.0

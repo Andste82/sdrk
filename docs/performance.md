@@ -458,7 +458,7 @@ Reference model `skylake`, counter-model `znver2`, mode `whole-loop`; execution 
 | `scramble_c32_b1` | 0.89 | 1.99 | 0.45 | 0.83 | 2.40 | 0.35 | +-1.0 sequence from the index bits into a buffer of 256 + volk_32fc_32f_multiply_32fc (VOLK 3.3.0 dispatcher; the form of srsRAN srsran_scrambling_c) |
 | `scramble_c32_b1_fallback` | 2.04 | 2.07 | 0.98 | 1.54 | 2.60 | 0.59 | +-1.0 sequence from the index bits into a buffer of 256 + VOLK 3.3.0 volk_32fc_32f_multiply_32fc_generic (benches/refs/volk-generic.c, -O3 -ffp-contract=off) |
 | `scramble_c32_b2` | 2.85 | 6.39 | 0.45 | 2.77 | 8.80 | 0.31 | phasor lookup into a buffer of 256 + volk_32fc_x2_multiply_32fc (VOLK 3.3.0 dispatcher) |
-| `scramble_c32_b2_dvbs2` | 2.85 | 3.55 | 0.80 | 2.77 | 4.43 | 0.62 | GNU Radio dvbs2_physical_cc PL scrambling, the per-symbol switch on R_n (benches/refs/gr-dvbs2-plscramble.c, main at ec1bf15; reference does different work; -O3) |
+| `scramble_c32_b2_dvbs2` | 2.85 | 3.55 | 0.80 | 2.77 | 4.44 | 0.62 | GNU Radio dvbs2_physical_cc PL scrambling, the per-symbol switch on R_n (benches/refs/gr-dvbs2-plscramble.c, main at ec1bf15; reference does different work; -O3) |
 | `scramble_c32_b2_fallback` | 4.54 | 6.30 | 0.72 | 4.04 | 8.71 | 0.46 | phasor lookup into a buffer of 256 + VOLK 3.3.0 volk_32fc_x2_multiply_32fc_generic (benches/refs/volk-generic.c, -O3 -ffp-contract=off) |
 | `scramble_c32_b8` | 3.40 | 6.39 | 0.53 | 3.74 | 8.80 | 0.42 | phasor lookup into a buffer of 256 + volk_32fc_x2_multiply_32fc (VOLK 3.3.0 dispatcher) |
 | `scramble_c32_b8_fallback` | 6.18 | 6.30 | 0.98 | 6.88 | 8.71 | 0.79 | phasor lookup into a buffer of 256 + VOLK 3.3.0 volk_32fc_x2_multiply_32fc_generic (benches/refs/volk-generic.c, -O3 -ffp-contract=off) |
@@ -598,7 +598,7 @@ Reference model `skylake`, counter-model `znver2`, mode `whole-loop`; execution 
 | `am_mod_cq15_fallback` | 2.62 | 4.17 | 0.63 | 3.12 | 4.64 | 0.67 | CMSIS-DSP 1.18.0 arm_scale_q15 by round(c m 32768) (truncating), arm_offset_q15 by c in place and a plain loop to (re, 0) (a composition: CMSIS-DSP has no AM modulator), generic C (-O3 -ffp-contract=off, LOOPUNROLL, sse2) |
 | `am_mod_fallback` | 1.09 | 0.59 | 1.84 | 1.16 | 0.72 | 1.61 | liquid-dsp 1.8.3 ampmodem_modulate_block (LIQUID_AMPMODEM_DSB with the carrier: x * mod_index + 1, no clamp, carrier 1; -O3) |
 | `auto_notch` | 233.12 | 233.12 | 1.00 | 207.68 | 207.68 | 1.00 | sdrk fallback |
-| `band_pulse_detect_block` | 55.58 | 55.58 | 1.00 | 58.30 | 58.30 | 1.00 | sdrk fallback |
+| `band_pulse_detect_block` | 53.73 | 53.73 | 1.00 | 56.40 | 56.40 | 1.00 | sdrk fallback |
 | `bit_descramble_block` | 0.64 | 6.36 | 0.10 | 0.87 | 7.10 | 0.12 | GNU Radio descrambler_bb(0x21, 0, 22): gr::digital::lfsr, one __builtin_parityl per unpacked bit (generic compiler flags) |
 | `bit_descramble_in_place_block` | 2.02 | 6.36 | 0.32 | 2.50 | 7.10 | 0.35 | GNU Radio descrambler_bb(0x21, 0, 22): gr::digital::lfsr, one __builtin_parityl per unpacked bit (generic compiler flags) |
 | `bit_scramble_block` | 1.27 | 5.34 | 0.24 | 1.60 | 6.57 | 0.24 | GNU Radio scrambler_bb(0x21, 0, 22): gr::digital::lfsr, one __builtin_parityl per unpacked bit (generic compiler flags) |
@@ -611,40 +611,40 @@ Reference model `skylake`, counter-model `znver2`, mode `whole-loop`; execution 
 | `channelize_fallback` | 55.45 | 166.47 | 0.33 | 59.82 | 182.49 | 0.33 | liquid-dsp 1.8.3 firpfbch2_crcf analyzer (benches/refs/liquid-channelizer.c), portable dot products, liquid's own FFT |
 | `correlate_block` | 21.75 | 21.75 | 1.00 | 20.30 | 20.30 | 1.00 | sdrk fallback |
 | `costas` | 75.14 | 75.14 | 1.00 | 63.16 | 63.16 | 1.00 | sdrk fallback |
-| `costas_fallback` | 75.14 | 86.69 | 0.87 | 63.16 | 80.45 | 0.78 | GNU Radio costas_loop_cc (costas_loop_cc_impl.cc of gr-digital, generic compiler flags) |
-| `costas_qam1024` | 155.37 | 155.37 | 1.00 | 139.49 | 139.49 | 1.00 | sdrk fallback |
-| `costas_qam1024_fallback` | 155.37 | 287.25 | 0.54 | 139.49 | 247.13 | 0.56 | GNU Radio constellation_receiver_cb with constellation_rect 1024-QAM (constellation_receiver_cb_impl.cc and constellation.cc of gr-digital, generic compiler flags) |
-| `costas_qam16` | 156.32 | 156.32 | 1.00 | 140.29 | 140.29 | 1.00 | sdrk fallback |
-| `costas_qam16_fallback` | 156.32 | 205.14 | 0.76 | 140.29 | 181.05 | 0.77 | GNU Radio constellation_receiver_cb with constellation_rect 16-QAM (constellation_receiver_cb_impl.cc and constellation.cc of gr-digital, generic compiler flags) |
-| `costas_qam256` | 155.95 | 155.95 | 1.00 | 139.95 | 139.95 | 1.00 | sdrk fallback |
-| `costas_qam256_fallback` | 155.95 | 210.17 | 0.74 | 139.95 | 185.09 | 0.76 | GNU Radio constellation_receiver_cb with constellation_rect 256-QAM (constellation_receiver_cb_impl.cc and constellation.cc of gr-digital, generic compiler flags) |
-| `costas_qam64` | 156.28 | 156.28 | 1.00 | 140.26 | 140.26 | 1.00 | sdrk fallback |
-| `costas_qam64_fallback` | 156.28 | 206.10 | 0.76 | 140.26 | 181.50 | 0.77 | GNU Radio constellation_receiver_cb with constellation_rect 64-QAM (constellation_receiver_cb_impl.cc and constellation.cc of gr-digital, generic compiler flags) |
+| `costas_fallback` | 75.14 | 86.26 | 0.87 | 63.16 | 80.13 | 0.79 | GNU Radio costas_loop_cc (costas_loop_cc_impl.cc of gr-digital, generic compiler flags) |
+| `costas_qam1024` | 155.27 | 155.27 | 1.00 | 139.40 | 139.40 | 1.00 | sdrk fallback |
+| `costas_qam1024_fallback` | 155.27 | 287.31 | 0.54 | 139.40 | 247.17 | 0.56 | GNU Radio constellation_receiver_cb with constellation_rect 1024-QAM (constellation_receiver_cb_impl.cc and constellation.cc of gr-digital, generic compiler flags) |
+| `costas_qam16` | 156.35 | 156.35 | 1.00 | 140.33 | 140.33 | 1.00 | sdrk fallback |
+| `costas_qam16_fallback` | 156.35 | 205.09 | 0.76 | 140.33 | 181.00 | 0.78 | GNU Radio constellation_receiver_cb with constellation_rect 16-QAM (constellation_receiver_cb_impl.cc and constellation.cc of gr-digital, generic compiler flags) |
+| `costas_qam256` | 155.62 | 155.62 | 1.00 | 139.70 | 139.70 | 1.00 | sdrk fallback |
+| `costas_qam256_fallback` | 155.62 | 210.25 | 0.74 | 139.70 | 185.16 | 0.75 | GNU Radio constellation_receiver_cb with constellation_rect 256-QAM (constellation_receiver_cb_impl.cc and constellation.cc of gr-digital, generic compiler flags) |
+| `costas_qam64` | 156.24 | 156.24 | 1.00 | 140.23 | 140.23 | 1.00 | sdrk fallback |
+| `costas_qam64_fallback` | 156.24 | 206.06 | 0.76 | 140.23 | 181.48 | 0.77 | GNU Radio constellation_receiver_cb with constellation_rect 64-QAM (constellation_receiver_cb_impl.cc and constellation.cc of gr-digital, generic compiler flags) |
 | `crc16_ccitt_false` | 13.55 | 15.15 | 0.89 | 11.55 | 13.14 | 0.88 | GNU Radio gr::digital::crc: one 256-entry uint64_t table, a 64-bit remainder, one lookup per byte (generic compiler flags) |
 | `crc16_x25` | 8.06 | 8.15 | 0.99 | 7.06 | 7.14 | 0.99 | GNU Radio gr::digital::crc: one 256-entry uint64_t table, a 64-bit remainder, one lookup per byte (generic compiler flags) |
 | `crc24_adsb` | 13.05 | 15.15 | 0.86 | 11.06 | 13.14 | 0.84 | GNU Radio gr::digital::crc: one 256-entry uint64_t table, a 64-bit remainder, one lookup per byte (generic compiler flags) |
 | `crc32` | 8.06 | 8.15 | 0.99 | 7.06 | 7.15 | 0.99 | GNU Radio gr::digital::crc: one 256-entry uint64_t table, a 64-bit remainder, one lookup per byte (generic compiler flags) |
-| `equalize` | 138.46 | 138.46 | 1.00 | 145.11 | 145.11 | 1.00 | sdrk fallback |
-| `equalize_fallback` | 138.46 | 168.47 | 0.82 | 145.11 | 201.30 | 0.72 | GNU Radio linear_equalizer with adaptive_algorithm_nlms (linear_equalizer_impl.cc of gr-digital, VOLK generic dot products, generic compiler flags) |
+| `equalize` | 138.46 | 355.18 | 0.39 | 145.11 | 390.47 | 0.37 | GNU Radio linear_equalizer with adaptive_algorithm_nlms (linear_equalizer_impl.cc of gr-digital, VOLK's dispatched dot products of the level with the aligned tap copies of fir_filter) |
+| `equalize_fallback` | 138.46 | 168.48 | 0.82 | 145.11 | 201.30 | 0.72 | GNU Radio linear_equalizer with adaptive_algorithm_nlms (linear_equalizer_impl.cc of gr-digital, VOLK generic dot products, generic compiler flags) |
 | `equalize_qam1024` | 160.64 | 160.64 | 1.00 | 164.28 | 164.28 | 1.00 | sdrk fallback |
-| `equalize_qam1024_fallback` | 160.64 | 191.52 | 0.84 | 164.28 | 213.78 | 0.77 | GNU Radio linear_equalizer with adaptive_algorithm_nlms on constellation_rect 1024-QAM (linear_equalizer_impl.cc and constellation.cc of gr-digital, VOLK generic dot products, generic compiler flags) |
-| `equalize_qam16` | 159.59 | 159.59 | 1.00 | 158.25 | 158.25 | 1.00 | sdrk fallback |
-| `equalize_qam16_fallback` | 159.59 | 191.52 | 0.83 | 158.25 | 213.78 | 0.74 | GNU Radio linear_equalizer with adaptive_algorithm_nlms on constellation_rect 16-QAM (linear_equalizer_impl.cc and constellation.cc of gr-digital, VOLK generic dot products, generic compiler flags) |
+| `equalize_qam1024_fallback` | 160.64 | 191.53 | 0.84 | 164.28 | 213.78 | 0.77 | GNU Radio linear_equalizer with adaptive_algorithm_nlms on constellation_rect 1024-QAM (linear_equalizer_impl.cc and constellation.cc of gr-digital, VOLK generic dot products, generic compiler flags) |
+| `equalize_qam16` | 159.59 | 357.76 | 0.45 | 158.25 | 396.73 | 0.40 | GNU Radio linear_equalizer with adaptive_algorithm_nlms on constellation_rect 16-QAM (linear_equalizer_impl.cc and constellation.cc of gr-digital, VOLK's dispatched dot products of the level with the aligned tap copies of fir_filter) |
+| `equalize_qam16_fallback` | 159.59 | 191.53 | 0.83 | 158.25 | 213.78 | 0.74 | GNU Radio linear_equalizer with adaptive_algorithm_nlms on constellation_rect 16-QAM (linear_equalizer_impl.cc and constellation.cc of gr-digital, VOLK generic dot products, generic compiler flags) |
 | `equalize_qam256` | 160.64 | 160.64 | 1.00 | 164.28 | 164.28 | 1.00 | sdrk fallback |
-| `equalize_qam256_fallback` | 160.64 | 191.52 | 0.84 | 164.28 | 213.78 | 0.77 | GNU Radio linear_equalizer with adaptive_algorithm_nlms on constellation_rect 256-QAM (linear_equalizer_impl.cc and constellation.cc of gr-digital, VOLK generic dot products, generic compiler flags) |
-| `equalize_qam64` | 159.59 | 159.59 | 1.00 | 158.25 | 158.25 | 1.00 | sdrk fallback |
-| `equalize_qam64_fallback` | 159.59 | 191.52 | 0.83 | 158.25 | 213.78 | 0.74 | GNU Radio linear_equalizer with adaptive_algorithm_nlms on constellation_rect 64-QAM (linear_equalizer_impl.cc and constellation.cc of gr-digital, VOLK generic dot products, generic compiler flags) |
+| `equalize_qam256_fallback` | 160.64 | 191.53 | 0.84 | 164.28 | 213.78 | 0.77 | GNU Radio linear_equalizer with adaptive_algorithm_nlms on constellation_rect 256-QAM (linear_equalizer_impl.cc and constellation.cc of gr-digital, VOLK generic dot products, generic compiler flags) |
+| `equalize_qam64` | 159.59 | 357.76 | 0.45 | 158.25 | 396.73 | 0.40 | GNU Radio linear_equalizer with adaptive_algorithm_nlms on constellation_rect 64-QAM (linear_equalizer_impl.cc and constellation.cc of gr-digital, VOLK's dispatched dot products of the level with the aligned tap copies of fir_filter) |
+| `equalize_qam64_fallback` | 159.59 | 191.53 | 0.83 | 158.25 | 213.78 | 0.74 | GNU Radio linear_equalizer with adaptive_algorithm_nlms on constellation_rect 64-QAM (linear_equalizer_impl.cc and constellation.cc of gr-digital, VOLK generic dot products, generic compiler flags) |
 | `frame_decode` | 6.20 | 6.20 | 1.00 | 8.43 | 8.43 | 1.00 | sdrk fallback |
 | `frame_decode_block` | 6.03 | 6.03 | 1.00 | 7.98 | 7.98 | 1.00 | sdrk fallback |
 | `frame_decode_four_block` | 34.77 | 34.77 | 1.00 | 33.53 | 33.53 | 1.00 | sdrk fallback |
 | `frame_encode_block` | 1.87 | 1.87 | 1.00 | 1.82 | 1.82 | 1.00 | sdrk fallback |
-| `gauss_noise_c32` | 15.60 | 281.26 | 0.06 | 13.81 | 246.92 | 0.06 | liquid-dsp 1.8.3 crandnf times sigma (libc rand(), f32 Box-Muller with sqrtf, logf and cexpf; no random access, no bit-exact sequence; reference does different work; -O3) |
-| `gauss_noise_c32_fallback` | 24.74 | 281.26 | 0.09 | 28.14 | 246.92 | 0.11 | liquid-dsp 1.8.3 crandnf times sigma (libc rand(), f32 Box-Muller with sqrtf, logf and cexpf; no random access, no bit-exact sequence; reference does different work; -O3) |
+| `gauss_noise_c32` | 15.60 | 281.32 | 0.06 | 13.81 | 246.97 | 0.06 | liquid-dsp 1.8.3 crandnf times sigma (libc rand(), f32 Box-Muller with sqrtf, logf and cexpf; no random access, no bit-exact sequence; reference does different work; -O3) |
+| `gauss_noise_c32_fallback` | 24.74 | 281.32 | 0.09 | 28.14 | 246.97 | 0.11 | liquid-dsp 1.8.3 crandnf times sigma (libc rand(), f32 Box-Muller with sqrtf, logf and cexpf; no random access, no bit-exact sequence; reference does different work; -O3) |
 | `gauss_noise_c32_fastnoise` | 15.60 | 4.04 | 3.86 | 13.81 | 4.03 | 3.42 | GNU Radio fastnoise_source_c, amplitude sigma * sqrt(2) (benches/refs/gr-fastnoise.c, main at ec1bf15: one xoroshiro128+ draw and a copy from a pool of 8192 precomputed values per sample, no normal mapping, no random access; reference does less work; -O3) |
-| `gauss_noise_f32` | 7.81 | 168.27 | 0.05 | 6.91 | 146.45 | 0.05 | liquid-dsp 1.8.3 randnf times sigma (libc rand(), f32 Box-Muller with sqrtf, logf and sinf; no random access, no bit-exact sequence; reference does different work; -O3) |
-| `gauss_noise_f32_fallback` | 12.37 | 168.27 | 0.07 | 14.07 | 146.45 | 0.10 | liquid-dsp 1.8.3 randnf times sigma (libc rand(), f32 Box-Muller with sqrtf, logf and sinf; no random access, no bit-exact sequence; reference does different work; -O3) |
+| `gauss_noise_f32` | 7.81 | 168.33 | 0.05 | 6.91 | 146.51 | 0.05 | liquid-dsp 1.8.3 randnf times sigma (libc rand(), f32 Box-Muller with sqrtf, logf and sinf; no random access, no bit-exact sequence; reference does different work; -O3) |
+| `gauss_noise_f32_fallback` | 12.37 | 168.33 | 0.07 | 14.07 | 146.51 | 0.10 | liquid-dsp 1.8.3 randnf times sigma (libc rand(), f32 Box-Muller with sqrtf, logf and sinf; no random access, no bit-exact sequence; reference does different work; -O3) |
 | `gauss_noise_f32_fastnoise` | 7.81 | 4.04 | 1.93 | 6.91 | 4.05 | 1.71 | GNU Radio fastnoise_source_f, amplitude sigma (benches/refs/gr-fastnoise.c, main at ec1bf15: one xoroshiro128+ draw and a copy from a pool of 8192 precomputed values per sample, no normal mapping, no random access; reference does less work; -O3) |
-| `gauss_noise_f32_ziggurat` | 7.81 | 14.37 | 0.54 | 6.91 | 15.46 | 0.45 | rand_distr 0.5.1 StandardNormal as f32 times sigma over rand 0.9.5 SmallRng (Ziggurat in f64 with rejection: a variable number of draws per value, no random access, no bit-exact sequence across platforms; reference does different work) |
+| `gauss_noise_f32_ziggurat` | 7.81 | 14.35 | 0.54 | 6.91 | 15.45 | 0.45 | rand_distr 0.5.1 StandardNormal as f32 times sigma over rand 0.9.5 SmallRng (Ziggurat in f64 with rejection: a variable number of draws per value, no random access, no bit-exact sequence across platforms; reference does different work) |
 | `gauss_noise_q15` | 9.58 | 14.71 | 0.65 | 10.30 | 17.35 | 0.59 | sdrk fallback |
 | `gauss_noise_q15_fallback` | 14.71 | 14.71 | 1.00 | 17.35 | 17.35 | 1.00 | sdrk fallback |
 | `halfband_decimate` | 6.83 | 59.03 | 0.12 | 7.85 | 50.49 | 0.16 | liquid-dsp 1.8.3 resamp2_crcf_decim_execute (dotprod_crcf) with its SSE dot product (-O3 -ffp-contract=off, sse2) |
@@ -668,24 +668,34 @@ Reference model `skylake`, counter-model `znver2`, mode `whole-loop`; execution 
 | `preemph_limit` | 16.10 | 16.10 | 1.00 | 11.93 | 11.93 | 1.00 | sdrk fallback |
 | `preemph_limit_q15` | 51.64 | 51.64 | 1.00 | 43.84 | 43.84 | 1.00 | sdrk fallback |
 | `preemph_limit_stereo` | 21.13 | 21.13 | 1.00 | 22.70 | 22.70 | 1.00 | sdrk fallback |
-| `psk_mod_block` | 8.98 | 8.98 | 1.00 | 11.34 | 11.34 | 1.00 | sdrk fallback |
-| `pulse_match_block` | 43.16 | 43.16 | 1.00 | 38.95 | 38.95 | 1.00 | sdrk fallback |
-| `pulse_shape_block` | 8.18 | 8.18 | 1.00 | 10.30 | 10.30 | 1.00 | sdrk fallback |
+| `psk_demod_block` | 75.73 | 447.26 | 0.17 | 66.83 | 367.86 | 0.18 | GNU Radio fir_filter_ccf + symbol_sync_cc + costas_loop_cc + constellation_decoder_cb (the sum of the blocks of the receiver chain, generic compiler flags; no acquisition and no lock watches) |
+| `psk_mod_block` | 8.98 | 198.05 | 0.05 | 11.34 | 195.97 | 0.06 | GNU Radio constellation_modulator as the sum of its blocks: pack_k_bits_bb + chunks_to_symbols_bc + pfb_arb_resampler_ccf (32 filters of 88 taps and their derivative filters), VOLK's dispatched dot product of the level |
+| `psk_mod_block_liquid` | 8.98 | 77.95 | 0.12 | 11.34 | 66.01 | 0.17 | liquid-dsp 1.8.3 modemcf_modulate (arbitrary-constellation modem) + firinterp_crcf (the root-raised cosine of the block), the SIMD dot products of the level (the portable loop at simd128) |
+| `pulse_match_block` | 43.14 | 94.30 | 0.46 | 38.95 | 96.26 | 0.40 | GNU Radio fir_filter_ccf (fir_filter_ccf_impl.cc of gr-filter) with VOLK's dispatched dot product of the level (volk_32fc_32f_dot_prod_32fc_a, the aligned tap copies of fir_filter) |
+| `pulse_match_block_liquid` | 43.14 | 227.97 | 0.19 | 38.95 | 186.24 | 0.21 | liquid-dsp 1.8.3 firfilt_crcf (firfilt.proto.c), the SIMD dot product of the level (the portable loop at simd128) |
+| `pulse_shape_block` | 8.18 | 48.24 | 0.17 | 10.30 | 53.98 | 0.19 | GNU Radio interp_fir_filter_ccf (interp_fir_filter_impl.cc of gr-filter) with VOLK's dispatched dot product of the level (volk_32fc_32f_dot_prod_32fc_a, the aligned tap copies of fir_filter) |
+| `pulse_shape_block_liquid` | 8.18 | 75.35 | 0.11 | 10.30 | 63.54 | 0.16 | liquid-dsp 1.8.3 firinterp_crcf (firinterp.proto.c, firpfb.proto.c), the SIMD dot products of the level (the portable loop at simd128) |
 | `qam_acquire_block` | 52.13 | 52.13 | 1.00 | 44.08 | 44.08 | 1.00 | sdrk fallback |
-| `qam_demod_block` | 113.79 | 113.79 | 1.00 | 103.57 | 103.57 | 1.00 | sdrk fallback |
-| `qam_demod_qam256_block` | 114.18 | 114.18 | 1.00 | 104.63 | 104.63 | 1.00 | sdrk fallback |
-| `qam_demod_search_block` | 120.91 | 120.91 | 1.00 | 109.71 | 109.71 | 1.00 | sdrk fallback |
-| `qam_frame_decode_block` | 131.73 | 131.73 | 1.00 | 120.88 | 120.88 | 1.00 | sdrk fallback |
+| `qam_demod_block` | 108.18 | 485.33 | 0.22 | 98.64 | 406.59 | 0.24 | GNU Radio fir_filter_ccf + symbol_sync_cc + linear_equalizer + constellation_receiver_cb (the sum of the blocks of the receiver chain, generic compiler flags and VOLK generic dot products; no acquisition, no blind equalizer stage and no lock watches) |
+| `qam_demod_qam256_block` | 108.63 | 108.63 | 1.00 | 99.73 | 99.73 | 1.00 | sdrk fallback |
+| `qam_demod_search_block` | 115.48 | 115.48 | 1.00 | 104.89 | 104.89 | 1.00 | sdrk fallback |
+| `qam_frame_decode_block` | 126.16 | 126.16 | 1.00 | 115.95 | 115.95 | 1.00 | sdrk fallback |
 | `qam_frame_encode_block` | 10.14 | 10.14 | 1.00 | 12.17 | 12.17 | 1.00 | sdrk fallback |
-| `qam_mod_block` | 9.11 | 9.11 | 1.00 | 11.19 | 11.19 | 1.00 | sdrk fallback |
-| `qam_mod_qam256_block` | 10.06 | 10.06 | 1.00 | 12.33 | 12.33 | 1.00 | sdrk fallback |
+| `qam_mod_block` | 9.11 | 198.63 | 0.05 | 11.19 | 196.54 | 0.06 | GNU Radio constellation_modulator as the sum of its blocks: pack_k_bits_bb + chunks_to_symbols_bc + pfb_arb_resampler_ccf (32 filters of 88 taps and their derivative filters), VOLK's dispatched dot product of the level |
+| `qam_mod_block_liquid` | 9.11 | 78.46 | 0.12 | 11.19 | 66.52 | 0.17 | liquid-dsp 1.8.3 modemcf_modulate (arbitrary-constellation modem) + firinterp_crcf (the root-raised cosine of the block), the SIMD dot products of the level (the portable loop at simd128) |
+| `qam_mod_qam256_block` | 10.06 | 199.78 | 0.05 | 12.33 | 197.69 | 0.06 | GNU Radio constellation_modulator as the sum of its blocks: pack_k_bits_bb + chunks_to_symbols_bc + pfb_arb_resampler_ccf (32 filters of 88 taps and their derivative filters), VOLK's dispatched dot product of the level |
+| `qam_mod_qam256_block_liquid` | 10.06 | 79.47 | 0.13 | 12.33 | 67.53 | 0.18 | liquid-dsp 1.8.3 modemcf_modulate (arbitrary-constellation modem) + firinterp_crcf (the root-raised cosine of the block), the SIMD dot products of the level (the portable loop at simd128) |
 | `qam_soft_bits_qam1024` | 7.89 | 7.88 | 1.00 | 9.05 | 9.05 | 1.00 | sdrk fallback |
-| `qam_soft_bits_qam16` | 1.35 | 2.04 | 0.66 | 1.49 | 2.43 | 0.61 | sdrk fallback |
+| `qam_soft_bits_qam16` | 1.35 | 1864.75 | 0.00 | 1.49 | 1588.53 | 0.00 | GNU Radio constellation_soft_decoder_cf with calc_soft_dec (constellation.cc of gr-digital; the exact log-likelihood ratio over all points, npwr 1, not max-log; no vector allocation per symbol, so faster than GNU Radio's object code) |
+| `qam_soft_bits_qam16_liquid` | 1.35 | 224.89 | 0.01 | 1.49 | 227.63 | 0.01 | liquid-dsp 1.8.3 modemcf_demodulate_soft of its own QAM modem (modem_common.proto.c; soft bytes with liquid's scale and labelling; the hard symbol and the soft bits per symbol) |
+| `qam_soft_bits_qam16_lut` | 1.35 | 78.15 | 0.02 | 1.49 | 66.61 | 0.02 | GNU Radio constellation_soft_decoder_cf with the look-up table of gen_soft_dec_lut (precision 8, npwr 1; constellation.cc of gr-digital; exact log-likelihood ratio, not max-log; the table lookup and a copy of 2 to 3 floats per symbol, no vector allocation) |
 | `qam_soft_bits_qam256` | 6.02 | 6.56 | 0.92 | 6.02 | 7.06 | 0.85 | sdrk fallback |
-| `qam_soft_bits_qam64` | 3.03 | 4.57 | 0.66 | 3.34 | 4.31 | 0.77 | sdrk fallback |
+| `qam_soft_bits_qam64` | 3.03 | 6763.49 | 0.00 | 3.34 | 5733.38 | 0.00 | GNU Radio constellation_soft_decoder_cf with calc_soft_dec (constellation.cc of gr-digital; the exact log-likelihood ratio over all points, npwr 1, not max-log; no vector allocation per symbol, so faster than GNU Radio's object code) |
+| `qam_soft_bits_qam64_liquid` | 3.03 | 274.50 | 0.01 | 3.34 | 273.82 | 0.01 | liquid-dsp 1.8.3 modemcf_demodulate_soft of its own QAM modem (modem_common.proto.c; soft bytes with liquid's scale and labelling; the hard symbol and the soft bits per symbol) |
+| `qam_soft_bits_qam64_lut` | 3.03 | 78.15 | 0.04 | 3.34 | 66.61 | 0.05 | GNU Radio constellation_soft_decoder_cf with the look-up table of gen_soft_dec_lut (precision 8, npwr 1; constellation.cc of gr-digital; exact log-likelihood ratio, not max-log; the table lookup and a copy of 2 to 3 floats per symbol, no vector allocation) |
 | `qam_soft_bits_qpsk` | 0.52 | 0.52 | 0.99 | 0.52 | 0.59 | 0.88 | sdrk fallback |
 | `rds_decode_block` | 9.18 | 9.18 | 1.00 | 11.91 | 11.91 | 1.00 | sdrk fallback |
-| `rds_demod_block` | 42.38 | 42.38 | 1.00 | 39.53 | 39.53 | 1.00 | sdrk fallback |
+| `rds_demod_block` | 41.90 | 41.90 | 1.00 | 39.11 | 39.11 | 1.00 | sdrk fallback |
 | `rds_shape` | 83.94 | 83.94 | 1.00 | 75.83 | 75.83 | 1.00 | sdrk fallback |
 | `real_to_complex` | 5.32 | 70.40 | 0.08 | 5.52 | 57.25 | 0.10 | liquid-dsp 1.8.3 firhilbf_decim_execute_block (dotprod_rrrf) with its portable dot product (-O3 -ffp-contract=off, sse2) |
 | `real_to_complex_airspy` | 5.32 | 11.28 | 0.47 | 5.52 | 9.37 | 0.59 | libairspy 1.0.10 iqconverter_float, conversion without remove_dc (USE_SSE2) (-O3 -ffp-contract=off, sse2) |
@@ -702,12 +712,22 @@ Reference model `skylake`, counter-model `znver2`, mode `whole-loop`; execution 
 | `stereo_matrix_fallback` | 1.55 | 1.07 | 1.45 | 1.67 | 1.38 | 1.21 | CMSIS-DSP 1.18.0 arm_add_f32 (d + d), arm_add_f32 (s + d2), arm_sub_f32 (s - d2) on planar data, generic C (-O3 -ffp-contract=off, LOOPUNROLL, sse2) |
 | `stereo_pll_fallback` | 88.81 | 71.63 | 1.24 | 77.78 | 63.55 | 1.22 | liquid-dsp 1.8.3 nco_crcf (LIQUID_VCO_INTERP): sincos at theta and 2 theta from the 1024-entry table, nco_crcf_adjust_frequency and nco_crcf_adjust_phase (double modulo in _constrain), nco_crcf_step; no lock detector, no integrator limit (-O3 -ffp-contract=off, sse2) |
 | `stereo_pll_q15_fallback` | 38.04 | 55.54 | 0.68 | 38.06 | 58.48 | 0.65 | CMSIS-DSP 1.18.0 arm_cos_q15 and arm_sin_q15 (twice) per sample in the loop of the kernel (the oscillator only: CMSIS-DSP has no PLL), generic C (-O3 -ffp-contract=off, LOOPUNROLL, sse2) |
-| `symbol_demap_qam16_block` | 1.35 | 1.35 | 1.00 | 1.49 | 1.49 | 1.00 | sdrk fallback |
+| `symbol_demap_qam16_block` | 1.35 | 1864.75 | 0.00 | 1.49 | 1588.53 | 0.00 | GNU Radio constellation_soft_decoder_cf with calc_soft_dec (constellation.cc of gr-digital; the exact log-likelihood ratio over all points, npwr 1, not max-log; no vector allocation per symbol, so faster than GNU Radio's object code) |
+| `symbol_demap_qam16_block_liquid` | 1.35 | 224.88 | 0.01 | 1.49 | 227.62 | 0.01 | liquid-dsp 1.8.3 modemcf_demodulate_soft of its own QAM modem (modem_common.proto.c; soft bytes with liquid's scale and labelling; the hard symbol and the soft bits per symbol) |
+| `symbol_demap_qam16_block_lut` | 1.35 | 66.25 | 0.02 | 1.49 | 52.13 | 0.03 | GNU Radio constellation_soft_decoder_cf with the look-up table of gen_soft_dec_lut (precision 8, npwr 1; constellation.cc of gr-digital; exact log-likelihood ratio, not max-log; the table lookup and a copy of 2 to 3 floats per symbol, no vector allocation) |
 | `symbol_demap_qam256_block` | 6.02 | 6.02 | 1.00 | 6.03 | 6.03 | 1.00 | sdrk fallback |
-| `symbol_demap_qam64_block` | 3.03 | 3.03 | 1.00 | 3.34 | 3.34 | 1.00 | sdrk fallback |
-| `symbol_map_block` | 7.10 | 7.10 | 1.00 | 6.61 | 6.61 | 1.00 | sdrk fallback |
-| `symbol_sync` | 49.33 | 49.33 | 1.00 | 39.57 | 39.57 | 1.00 | sdrk fallback |
-| `symbol_sync_real` | 23.16 | 23.16 | 1.00 | 18.66 | 18.66 | 1.00 | sdrk fallback |
+| `symbol_demap_qam64_block` | 3.03 | 6763.49 | 0.00 | 3.34 | 5733.38 | 0.00 | GNU Radio constellation_soft_decoder_cf with calc_soft_dec (constellation.cc of gr-digital; the exact log-likelihood ratio over all points, npwr 1, not max-log; no vector allocation per symbol, so faster than GNU Radio's object code) |
+| `symbol_demap_qam64_block_liquid` | 3.03 | 274.49 | 0.01 | 3.34 | 273.82 | 0.01 | liquid-dsp 1.8.3 modemcf_demodulate_soft of its own QAM modem (modem_common.proto.c; soft bytes with liquid's scale and labelling; the hard symbol and the soft bits per symbol) |
+| `symbol_demap_qam64_block_lut` | 3.03 | 78.15 | 0.04 | 3.34 | 66.60 | 0.05 | GNU Radio constellation_soft_decoder_cf with the look-up table of gen_soft_dec_lut (precision 8, npwr 1; constellation.cc of gr-digital; exact log-likelihood ratio, not max-log; the table lookup and a copy of 2 to 3 floats per symbol, no vector allocation) |
+| `symbol_map_block` | 7.10 | 13.20 | 0.54 | 6.61 | 15.02 | 0.44 | GNU Radio pack_k_bits_bb + chunks_to_symbols_bc (pack_k_bits.cc of gr-blocks, chunks_to_symbols_impl.cc of gr-digital), the table of the points of the block, generic compiler flags |
+| `symbol_map_block_liquid` | 7.10 | 22.45 | 0.32 | 6.61 | 23.09 | 0.29 | liquid-dsp 1.8.3 modemcf_modulate on the arbitrary-constellation modem of the points of the block (modem_arb.proto.c), the bits packed by the wrapper |
+| `symbol_map_block_qam64` | 10.11 | 17.84 | 0.57 | 10.12 | 19.62 | 0.52 | GNU Radio pack_k_bits_bb + chunks_to_symbols_bc (pack_k_bits.cc of gr-blocks, chunks_to_symbols_impl.cc of gr-digital), the table of the points of the block, generic compiler flags |
+| `symbol_map_block_qam64_liquid` | 10.11 | 26.53 | 0.38 | 10.12 | 27.16 | 0.37 | liquid-dsp 1.8.3 modemcf_modulate on the arbitrary-constellation modem of the points of the block (modem_arb.proto.c), the bits packed by the wrapper |
+| `symbol_map_block_qpsk` | 6.01 | 8.56 | 0.70 | 7.74 | 10.43 | 0.74 | GNU Radio pack_k_bits_bb + chunks_to_symbols_bc (pack_k_bits.cc of gr-blocks, chunks_to_symbols_impl.cc of gr-digital), the table of the points of the block, generic compiler flags |
+| `symbol_map_block_qpsk_liquid` | 6.01 | 18.37 | 0.33 | 7.74 | 19.02 | 0.41 | liquid-dsp 1.8.3 modemcf_modulate on the arbitrary-constellation modem of the points of the block (modem_arb.proto.c), the bits packed by the wrapper |
+| `symbol_sync` | 38.58 | 38.58 | 1.00 | 30.05 | 30.05 | 1.00 | sdrk fallback |
+| `symbol_sync_fallback` | 38.58 | 57.52 | 0.67 | 30.05 | 57.78 | 0.52 | GNU Radio symbol_sync_cc (symbol_sync_cc_impl.cc of gr-digital, TED_GARDNER, IR_MMSE_8TAP, generic compiler flags; reference does different work: an 8-tap MMSE interpolator against our 4-point Lagrange polynomial) |
+| `symbol_sync_real` | 19.03 | 19.03 | 1.00 | 14.53 | 14.53 | 1.00 | sdrk fallback |
 | `xcorr_fft_n4096` | 25.47 | 68.23 | 0.37 | 23.94 | 66.22 | 0.36 | liquid-dsp 1.8.3 fftfilt_cccf (benches/refs/liquid-fftfilt.c), FFTW 3.3.10 |
 | `xcorr_fft_n4096_fallback` | 104.39 | 363.78 | 0.29 | 101.22 | 397.16 | 0.25 | liquid-dsp 1.8.3 fftfilt_cccf (benches/refs/liquid-fftfilt.c), liquid's own FFT |
 | `xcorr_fft_n512` | 21.75 | 45.86 | 0.47 | 20.30 | 50.34 | 0.40 | liquid-dsp 1.8.3 fftfilt_cccf (benches/refs/liquid-fftfilt.c), FFTW 3.3.10 |
@@ -751,7 +771,7 @@ Reference model `skylake`, counter-model `znver2`, mode `whole-loop`; execution 
 | `scramble_c32_b1` | 0.89 | 1.99 | 0.45 | 0.83 | 2.39 | 0.35 | +-1.0 sequence from the index bits into a buffer of 256 + volk_32fc_32f_multiply_32fc (VOLK 3.3.0 dispatcher; the form of srsRAN srsran_scrambling_c) |
 | `scramble_c32_b1_fallback` | 1.53 | 2.07 | 0.74 | 1.42 | 2.59 | 0.55 | +-1.0 sequence from the index bits into a buffer of 256 + VOLK 3.3.0 volk_32fc_32f_multiply_32fc_generic (benches/refs/volk-generic.c, -O3 -ffp-contract=off) |
 | `scramble_c32_b2` | 2.35 | 3.63 | 0.65 | 1.96 | 4.29 | 0.46 | phasor lookup into a buffer of 256 + volk_32fc_x2_multiply_32fc (VOLK 3.3.0 dispatcher) |
-| `scramble_c32_b2_dvbs2` | 2.35 | 3.55 | 0.66 | 1.96 | 4.43 | 0.44 | GNU Radio dvbs2_physical_cc PL scrambling, the per-symbol switch on R_n (benches/refs/gr-dvbs2-plscramble.c, main at ec1bf15; reference does different work; -O3) |
+| `scramble_c32_b2_dvbs2` | 2.35 | 3.55 | 0.66 | 1.96 | 4.44 | 0.44 | GNU Radio dvbs2_physical_cc PL scrambling, the per-symbol switch on R_n (benches/refs/gr-dvbs2-plscramble.c, main at ec1bf15; reference does different work; -O3) |
 | `scramble_c32_b2_fallback` | 4.04 | 8.05 | 0.50 | 3.55 | 9.73 | 0.36 | phasor lookup into a buffer of 256 + VOLK 3.3.0 volk_32fc_x2_multiply_32fc_generic (benches/refs/volk-generic.c, -O3 -ffp-contract=off) |
 | `scramble_c32_b8` | 3.40 | 3.63 | 0.94 | 3.74 | 4.29 | 0.87 | phasor lookup into a buffer of 256 + volk_32fc_x2_multiply_32fc (VOLK 3.3.0 dispatcher) |
 | `scramble_c32_b8_fallback` | 5.88 | 8.05 | 0.73 | 6.87 | 9.73 | 0.71 | phasor lookup into a buffer of 256 + VOLK 3.3.0 volk_32fc_x2_multiply_32fc_generic (benches/refs/volk-generic.c, -O3 -ffp-contract=off) |
@@ -891,53 +911,53 @@ Reference model `skylake`, counter-model `znver2`, mode `whole-loop`; execution 
 | `am_mod_cq15_fallback` | 1.23 | 3.17 | 0.39 | 1.15 | 3.60 | 0.32 | CMSIS-DSP 1.18.0 arm_scale_q15 by round(c m 32768) (truncating), arm_offset_q15 by c in place and a plain loop to (re, 0) (a composition: CMSIS-DSP has no AM modulator), generic C (-O3 -ffp-contract=off, LOOPUNROLL, sse4.2) |
 | `am_mod_fallback` | 1.09 | 0.59 | 1.84 | 1.16 | 0.72 | 1.61 | liquid-dsp 1.8.3 ampmodem_modulate_block (LIQUID_AMPMODEM_DSB with the carrier: x * mod_index + 1, no clamp, carrier 1; -O3) |
 | `auto_notch` | 233.12 | 233.12 | 1.00 | 207.68 | 207.68 | 1.00 | sdrk fallback |
-| `band_pulse_detect_block` | 54.92 | 54.92 | 1.00 | 57.84 | 57.84 | 1.00 | sdrk fallback |
+| `band_pulse_detect_block` | 53.06 | 53.06 | 1.00 | 55.95 | 55.95 | 1.00 | sdrk fallback |
 | `bit_descramble_block` | 0.64 | 6.36 | 0.10 | 0.87 | 7.10 | 0.12 | GNU Radio descrambler_bb(0x21, 0, 22): gr::digital::lfsr, one __builtin_parityl per unpacked bit (generic compiler flags) |
-| `bit_descramble_in_place_block` | 2.02 | 6.36 | 0.32 | 2.50 | 7.10 | 0.35 | GNU Radio descrambler_bb(0x21, 0, 22): gr::digital::lfsr, one __builtin_parityl per unpacked bit (generic compiler flags) |
+| `bit_descramble_in_place_block` | 2.03 | 6.36 | 0.32 | 2.50 | 7.10 | 0.35 | GNU Radio descrambler_bb(0x21, 0, 22): gr::digital::lfsr, one __builtin_parityl per unpacked bit (generic compiler flags) |
 | `bit_scramble_block` | 1.27 | 5.34 | 0.24 | 1.60 | 6.57 | 0.24 | GNU Radio scrambler_bb(0x21, 0, 22): gr::digital::lfsr, one __builtin_parityl per unpacked bit (generic compiler flags) |
 | `bit_scramble_in_place_block` | 1.51 | 5.34 | 0.28 | 1.90 | 6.57 | 0.29 | GNU Radio scrambler_bb(0x21, 0, 22): gr::digital::lfsr, one __builtin_parityl per unpacked bit (generic compiler flags) |
 | `channel_bank_channelize` | 45.78 | 45.78 | 1.00 | 53.10 | 53.10 | 1.00 | sdrk fallback |
-| `channel_bank_ddc` | 227.75 | 227.77 | 1.00 | 214.02 | 214.06 | 1.00 | sdrk fallback |
+| `channel_bank_ddc` | 227.75 | 227.75 | 1.00 | 214.03 | 214.03 | 1.00 | sdrk fallback |
 | `channel_select_block` | 0.60 | 0.60 | 1.00 | 0.77 | 0.77 | 1.00 | sdrk fallback |
 | `channelize` | 21.71 | 171.63 | 0.13 | 28.26 | 176.12 | 0.16 | liquid-dsp 1.8.3 firpfbch2_crcf analyzer (benches/refs/liquid-channelizer.c), the SIMD dot products of the level, FFTW 3.3.10 |
 | `channelize_block` | 26.54 | 26.54 | 1.00 | 28.38 | 28.38 | 1.00 | sdrk fallback |
 | `channelize_fallback` | 55.89 | 166.73 | 0.34 | 59.69 | 182.23 | 0.33 | liquid-dsp 1.8.3 firpfbch2_crcf analyzer (benches/refs/liquid-channelizer.c), portable dot products, liquid's own FFT |
 | `correlate_block` | 21.66 | 21.66 | 1.00 | 20.37 | 20.37 | 1.00 | sdrk fallback |
 | `costas` | 73.14 | 73.14 | 1.00 | 62.15 | 62.15 | 1.00 | sdrk fallback |
-| `costas_fallback` | 73.14 | 86.69 | 0.84 | 62.15 | 80.45 | 0.77 | GNU Radio costas_loop_cc (costas_loop_cc_impl.cc of gr-digital, generic compiler flags) |
-| `costas_qam1024` | 155.37 | 155.37 | 1.00 | 139.49 | 139.49 | 1.00 | sdrk fallback |
-| `costas_qam1024_fallback` | 155.37 | 287.25 | 0.54 | 139.49 | 247.13 | 0.56 | GNU Radio constellation_receiver_cb with constellation_rect 1024-QAM (constellation_receiver_cb_impl.cc and constellation.cc of gr-digital, generic compiler flags) |
-| `costas_qam16` | 156.32 | 156.32 | 1.00 | 140.29 | 140.29 | 1.00 | sdrk fallback |
-| `costas_qam16_fallback` | 156.32 | 205.14 | 0.76 | 140.29 | 181.05 | 0.77 | GNU Radio constellation_receiver_cb with constellation_rect 16-QAM (constellation_receiver_cb_impl.cc and constellation.cc of gr-digital, generic compiler flags) |
-| `costas_qam256` | 155.95 | 155.95 | 1.00 | 139.95 | 139.95 | 1.00 | sdrk fallback |
-| `costas_qam256_fallback` | 155.95 | 210.17 | 0.74 | 139.95 | 185.09 | 0.76 | GNU Radio constellation_receiver_cb with constellation_rect 256-QAM (constellation_receiver_cb_impl.cc and constellation.cc of gr-digital, generic compiler flags) |
-| `costas_qam64` | 156.28 | 156.28 | 1.00 | 140.26 | 140.26 | 1.00 | sdrk fallback |
-| `costas_qam64_fallback` | 156.28 | 206.10 | 0.76 | 140.26 | 181.50 | 0.77 | GNU Radio constellation_receiver_cb with constellation_rect 64-QAM (constellation_receiver_cb_impl.cc and constellation.cc of gr-digital, generic compiler flags) |
+| `costas_fallback` | 73.14 | 86.26 | 0.85 | 62.15 | 80.13 | 0.78 | GNU Radio costas_loop_cc (costas_loop_cc_impl.cc of gr-digital, generic compiler flags) |
+| `costas_qam1024` | 155.27 | 155.27 | 1.00 | 139.40 | 139.40 | 1.00 | sdrk fallback |
+| `costas_qam1024_fallback` | 155.27 | 287.31 | 0.54 | 139.40 | 247.17 | 0.56 | GNU Radio constellation_receiver_cb with constellation_rect 1024-QAM (constellation_receiver_cb_impl.cc and constellation.cc of gr-digital, generic compiler flags) |
+| `costas_qam16` | 156.35 | 156.35 | 1.00 | 140.33 | 140.33 | 1.00 | sdrk fallback |
+| `costas_qam16_fallback` | 156.35 | 205.09 | 0.76 | 140.33 | 181.00 | 0.78 | GNU Radio constellation_receiver_cb with constellation_rect 16-QAM (constellation_receiver_cb_impl.cc and constellation.cc of gr-digital, generic compiler flags) |
+| `costas_qam256` | 155.62 | 155.62 | 1.00 | 139.70 | 139.70 | 1.00 | sdrk fallback |
+| `costas_qam256_fallback` | 155.62 | 210.25 | 0.74 | 139.70 | 185.16 | 0.75 | GNU Radio constellation_receiver_cb with constellation_rect 256-QAM (constellation_receiver_cb_impl.cc and constellation.cc of gr-digital, generic compiler flags) |
+| `costas_qam64` | 156.24 | 156.24 | 1.00 | 140.23 | 140.23 | 1.00 | sdrk fallback |
+| `costas_qam64_fallback` | 156.24 | 206.06 | 0.76 | 140.23 | 181.48 | 0.77 | GNU Radio constellation_receiver_cb with constellation_rect 64-QAM (constellation_receiver_cb_impl.cc and constellation.cc of gr-digital, generic compiler flags) |
 | `crc16_ccitt_false` | 13.55 | 15.15 | 0.89 | 11.55 | 13.14 | 0.88 | GNU Radio gr::digital::crc: one 256-entry uint64_t table, a 64-bit remainder, one lookup per byte (generic compiler flags) |
 | `crc16_x25` | 8.06 | 8.15 | 0.99 | 7.06 | 7.14 | 0.99 | GNU Radio gr::digital::crc: one 256-entry uint64_t table, a 64-bit remainder, one lookup per byte (generic compiler flags) |
 | `crc24_adsb` | 13.05 | 15.15 | 0.86 | 11.06 | 13.14 | 0.84 | GNU Radio gr::digital::crc: one 256-entry uint64_t table, a 64-bit remainder, one lookup per byte (generic compiler flags) |
 | `crc32` | 8.06 | 8.15 | 0.99 | 7.06 | 7.15 | 0.99 | GNU Radio gr::digital::crc: one 256-entry uint64_t table, a 64-bit remainder, one lookup per byte (generic compiler flags) |
-| `equalize` | 135.40 | 135.40 | 1.00 | 133.75 | 133.75 | 1.00 | sdrk fallback |
-| `equalize_fallback` | 135.40 | 168.47 | 0.80 | 133.75 | 201.30 | 0.66 | GNU Radio linear_equalizer with adaptive_algorithm_nlms (linear_equalizer_impl.cc of gr-digital, VOLK generic dot products, generic compiler flags) |
+| `equalize` | 135.40 | 271.02 | 0.50 | 133.75 | 292.38 | 0.46 | GNU Radio linear_equalizer with adaptive_algorithm_nlms (linear_equalizer_impl.cc of gr-digital, VOLK's dispatched dot products of the level with the aligned tap copies of fir_filter) |
+| `equalize_fallback` | 135.40 | 168.48 | 0.80 | 133.75 | 201.30 | 0.66 | GNU Radio linear_equalizer with adaptive_algorithm_nlms (linear_equalizer_impl.cc of gr-digital, VOLK generic dot products, generic compiler flags) |
 | `equalize_qam1024` | 159.18 | 159.18 | 1.00 | 158.86 | 158.86 | 1.00 | sdrk fallback |
-| `equalize_qam1024_fallback` | 159.18 | 191.52 | 0.83 | 158.86 | 213.78 | 0.74 | GNU Radio linear_equalizer with adaptive_algorithm_nlms on constellation_rect 1024-QAM (linear_equalizer_impl.cc and constellation.cc of gr-digital, VOLK generic dot products, generic compiler flags) |
-| `equalize_qam16` | 160.09 | 160.09 | 1.00 | 152.75 | 152.75 | 1.00 | sdrk fallback |
-| `equalize_qam16_fallback` | 160.09 | 191.52 | 0.84 | 152.75 | 213.78 | 0.71 | GNU Radio linear_equalizer with adaptive_algorithm_nlms on constellation_rect 16-QAM (linear_equalizer_impl.cc and constellation.cc of gr-digital, VOLK generic dot products, generic compiler flags) |
+| `equalize_qam1024_fallback` | 159.18 | 191.53 | 0.83 | 158.86 | 213.78 | 0.74 | GNU Radio linear_equalizer with adaptive_algorithm_nlms on constellation_rect 1024-QAM (linear_equalizer_impl.cc and constellation.cc of gr-digital, VOLK generic dot products, generic compiler flags) |
+| `equalize_qam16` | 160.09 | 273.34 | 0.59 | 152.75 | 297.82 | 0.51 | GNU Radio linear_equalizer with adaptive_algorithm_nlms on constellation_rect 16-QAM (linear_equalizer_impl.cc and constellation.cc of gr-digital, VOLK's dispatched dot products of the level with the aligned tap copies of fir_filter) |
+| `equalize_qam16_fallback` | 160.09 | 191.53 | 0.84 | 152.75 | 213.78 | 0.71 | GNU Radio linear_equalizer with adaptive_algorithm_nlms on constellation_rect 16-QAM (linear_equalizer_impl.cc and constellation.cc of gr-digital, VOLK generic dot products, generic compiler flags) |
 | `equalize_qam256` | 159.18 | 159.18 | 1.00 | 158.86 | 158.86 | 1.00 | sdrk fallback |
-| `equalize_qam256_fallback` | 159.18 | 191.52 | 0.83 | 158.86 | 213.78 | 0.74 | GNU Radio linear_equalizer with adaptive_algorithm_nlms on constellation_rect 256-QAM (linear_equalizer_impl.cc and constellation.cc of gr-digital, VOLK generic dot products, generic compiler flags) |
-| `equalize_qam64` | 160.09 | 160.09 | 1.00 | 152.75 | 152.75 | 1.00 | sdrk fallback |
-| `equalize_qam64_fallback` | 160.09 | 191.52 | 0.84 | 152.75 | 213.78 | 0.71 | GNU Radio linear_equalizer with adaptive_algorithm_nlms on constellation_rect 64-QAM (linear_equalizer_impl.cc and constellation.cc of gr-digital, VOLK generic dot products, generic compiler flags) |
+| `equalize_qam256_fallback` | 159.18 | 191.53 | 0.83 | 158.86 | 213.78 | 0.74 | GNU Radio linear_equalizer with adaptive_algorithm_nlms on constellation_rect 256-QAM (linear_equalizer_impl.cc and constellation.cc of gr-digital, VOLK generic dot products, generic compiler flags) |
+| `equalize_qam64` | 160.09 | 273.34 | 0.59 | 152.75 | 297.82 | 0.51 | GNU Radio linear_equalizer with adaptive_algorithm_nlms on constellation_rect 64-QAM (linear_equalizer_impl.cc and constellation.cc of gr-digital, VOLK's dispatched dot products of the level with the aligned tap copies of fir_filter) |
+| `equalize_qam64_fallback` | 160.09 | 191.53 | 0.84 | 152.75 | 213.78 | 0.71 | GNU Radio linear_equalizer with adaptive_algorithm_nlms on constellation_rect 64-QAM (linear_equalizer_impl.cc and constellation.cc of gr-digital, VOLK generic dot products, generic compiler flags) |
 | `frame_decode` | 6.27 | 6.27 | 1.00 | 8.52 | 8.52 | 1.00 | sdrk fallback |
 | `frame_decode_block` | 6.06 | 6.06 | 1.00 | 7.98 | 7.98 | 1.00 | sdrk fallback |
 | `frame_decode_four_block` | 34.82 | 34.82 | 1.00 | 33.27 | 33.27 | 1.00 | sdrk fallback |
 | `frame_encode_block` | 1.87 | 1.87 | 1.00 | 1.82 | 1.82 | 1.00 | sdrk fallback |
-| `gauss_noise_c32` | 14.94 | 281.26 | 0.05 | 14.45 | 246.92 | 0.06 | liquid-dsp 1.8.3 crandnf times sigma (libc rand(), f32 Box-Muller with sqrtf, logf and cexpf; no random access, no bit-exact sequence; reference does different work; -O3) |
-| `gauss_noise_c32_fallback` | 24.14 | 281.26 | 0.09 | 27.45 | 246.92 | 0.11 | liquid-dsp 1.8.3 crandnf times sigma (libc rand(), f32 Box-Muller with sqrtf, logf and cexpf; no random access, no bit-exact sequence; reference does different work; -O3) |
+| `gauss_noise_c32` | 14.94 | 281.32 | 0.05 | 14.45 | 246.97 | 0.06 | liquid-dsp 1.8.3 crandnf times sigma (libc rand(), f32 Box-Muller with sqrtf, logf and cexpf; no random access, no bit-exact sequence; reference does different work; -O3) |
+| `gauss_noise_c32_fallback` | 24.14 | 281.32 | 0.09 | 27.45 | 246.97 | 0.11 | liquid-dsp 1.8.3 crandnf times sigma (libc rand(), f32 Box-Muller with sqrtf, logf and cexpf; no random access, no bit-exact sequence; reference does different work; -O3) |
 | `gauss_noise_c32_fastnoise` | 14.94 | 4.04 | 3.70 | 14.45 | 4.03 | 3.58 | GNU Radio fastnoise_source_c, amplitude sigma * sqrt(2) (benches/refs/gr-fastnoise.c, main at ec1bf15: one xoroshiro128+ draw and a copy from a pool of 8192 precomputed values per sample, no normal mapping, no random access; reference does less work; -O3) |
-| `gauss_noise_f32` | 7.48 | 168.27 | 0.04 | 7.24 | 146.45 | 0.05 | liquid-dsp 1.8.3 randnf times sigma (libc rand(), f32 Box-Muller with sqrtf, logf and sinf; no random access, no bit-exact sequence; reference does different work; -O3) |
-| `gauss_noise_f32_fallback` | 12.07 | 168.27 | 0.07 | 13.73 | 146.45 | 0.09 | liquid-dsp 1.8.3 randnf times sigma (libc rand(), f32 Box-Muller with sqrtf, logf and sinf; no random access, no bit-exact sequence; reference does different work; -O3) |
+| `gauss_noise_f32` | 7.48 | 168.33 | 0.04 | 7.24 | 146.51 | 0.05 | liquid-dsp 1.8.3 randnf times sigma (libc rand(), f32 Box-Muller with sqrtf, logf and sinf; no random access, no bit-exact sequence; reference does different work; -O3) |
+| `gauss_noise_f32_fallback` | 12.07 | 168.33 | 0.07 | 13.73 | 146.51 | 0.09 | liquid-dsp 1.8.3 randnf times sigma (libc rand(), f32 Box-Muller with sqrtf, logf and sinf; no random access, no bit-exact sequence; reference does different work; -O3) |
 | `gauss_noise_f32_fastnoise` | 7.48 | 4.04 | 1.85 | 7.24 | 4.05 | 1.79 | GNU Radio fastnoise_source_f, amplitude sigma (benches/refs/gr-fastnoise.c, main at ec1bf15: one xoroshiro128+ draw and a copy from a pool of 8192 precomputed values per sample, no normal mapping, no random access; reference does less work; -O3) |
-| `gauss_noise_f32_ziggurat` | 7.48 | 15.52 | 0.48 | 7.24 | 19.59 | 0.37 | rand_distr 0.5.1 StandardNormal as f32 times sigma over rand 0.9.5 SmallRng (Ziggurat in f64 with rejection: a variable number of draws per value, no random access, no bit-exact sequence across platforms; reference does different work) |
+| `gauss_noise_f32_ziggurat` | 7.48 | 15.50 | 0.48 | 7.24 | 19.58 | 0.37 | rand_distr 0.5.1 StandardNormal as f32 times sigma over rand 0.9.5 SmallRng (Ziggurat in f64 with rejection: a variable number of draws per value, no random access, no bit-exact sequence across platforms; reference does different work) |
 | `gauss_noise_q15` | 9.85 | 14.71 | 0.67 | 10.12 | 17.35 | 0.58 | sdrk fallback |
 | `gauss_noise_q15_fallback` | 14.71 | 14.71 | 1.00 | 17.35 | 17.35 | 1.00 | sdrk fallback |
 | `halfband_decimate` | 6.78 | 59.03 | 0.11 | 7.78 | 50.49 | 0.15 | liquid-dsp 1.8.3 resamp2_crcf_decim_execute (dotprod_crcf) with its SSE dot product (-O3 -ffp-contract=off, sse4.2) |
@@ -950,7 +970,7 @@ Reference model `skylake`, counter-model `znver2`, mode `whole-loop`; execution 
 | `halfband_decimate_real_q15_fallback` | 16.50 | 19.39 | 0.85 | 16.82 | 23.61 | 0.71 | CMSIS-DSP 1.18.0 arm_fir_q15 (24 taps) on the even samples, arm_scale_q15 (centre tap) on the odd samples and arm_add_q15 (a composition: CMSIS-DSP has no halfband decimator), generic C (-O3 -ffp-contract=off, LOOPUNROLL, sse4.2) |
 | `halfband_ref_fir_decimate` | 13.07 | 29.62 | 0.44 | 12.48 | 29.80 | 0.42 | sdrk fallback |
 | `halfband_ref_fir_decimate_cq15` | 19.29 | 60.56 | 0.32 | 19.65 | 86.06 | 0.23 | sdrk fallback |
-| `halfband_ref_shifted` | 9.52 | 18.49 | 0.52 | 11.31 | 21.34 | 0.53 | sdrk fallback |
+| `halfband_ref_shifted` | 9.52 | 18.49 | 0.51 | 11.31 | 21.34 | 0.53 | sdrk fallback |
 | `halfband_ref_shifted_cq15` | 16.01 | 26.85 | 0.60 | 17.14 | 25.98 | 0.66 | sdrk fallback |
 | `iq_offset_block` | 3.55 | 3.55 | 1.00 | 3.56 | 3.56 | 1.00 | sdrk fallback |
 | `morse_decode_block` | 16.62 | 16.62 | 1.00 | 20.29 | 20.29 | 1.00 | sdrk fallback |
@@ -961,24 +981,34 @@ Reference model `skylake`, counter-model `znver2`, mode `whole-loop`; execution 
 | `preemph_limit` | 16.10 | 16.10 | 1.00 | 11.44 | 11.44 | 1.00 | sdrk fallback |
 | `preemph_limit_q15` | 51.64 | 51.64 | 1.00 | 43.84 | 43.84 | 1.00 | sdrk fallback |
 | `preemph_limit_stereo` | 20.85 | 20.85 | 1.00 | 21.65 | 21.65 | 1.00 | sdrk fallback |
-| `psk_mod_block` | 8.57 | 8.57 | 1.00 | 10.61 | 10.61 | 1.00 | sdrk fallback |
-| `pulse_match_block` | 43.16 | 43.16 | 1.00 | 38.95 | 38.95 | 1.00 | sdrk fallback |
-| `pulse_shape_block` | 7.77 | 7.77 | 1.00 | 9.58 | 9.58 | 1.00 | sdrk fallback |
+| `psk_demod_block` | 75.60 | 447.26 | 0.17 | 66.68 | 367.86 | 0.18 | GNU Radio fir_filter_ccf + symbol_sync_cc + costas_loop_cc + constellation_decoder_cb (the sum of the blocks of the receiver chain, generic compiler flags; no acquisition and no lock watches) |
+| `psk_mod_block` | 8.57 | 216.10 | 0.04 | 10.62 | 214.99 | 0.05 | GNU Radio constellation_modulator as the sum of its blocks: pack_k_bits_bb + chunks_to_symbols_bc + pfb_arb_resampler_ccf (32 filters of 88 taps and their derivative filters), VOLK's dispatched dot product of the level |
+| `psk_mod_block_liquid` | 8.57 | 77.95 | 0.11 | 10.62 | 66.00 | 0.16 | liquid-dsp 1.8.3 modemcf_modulate (arbitrary-constellation modem) + firinterp_crcf (the root-raised cosine of the block), the SIMD dot products of the level (the portable loop at simd128) |
+| `pulse_match_block` | 43.14 | 103.32 | 0.42 | 38.95 | 105.55 | 0.37 | GNU Radio fir_filter_ccf (fir_filter_ccf_impl.cc of gr-filter) with VOLK's dispatched dot product of the level (volk_32fc_32f_dot_prod_32fc_a, the aligned tap copies of fir_filter) |
+| `pulse_match_block_liquid` | 43.14 | 228.29 | 0.19 | 38.95 | 186.56 | 0.21 | liquid-dsp 1.8.3 firfilt_crcf (firfilt.proto.c), the SIMD dot product of the level (the portable loop at simd128) |
+| `pulse_shape_block` | 7.77 | 50.59 | 0.15 | 9.58 | 57.06 | 0.17 | GNU Radio interp_fir_filter_ccf (interp_fir_filter_impl.cc of gr-filter) with VOLK's dispatched dot product of the level (volk_32fc_32f_dot_prod_32fc_a, the aligned tap copies of fir_filter) |
+| `pulse_shape_block_liquid` | 7.77 | 75.35 | 0.10 | 9.58 | 63.53 | 0.15 | liquid-dsp 1.8.3 firinterp_crcf (firinterp.proto.c, firpfb.proto.c), the SIMD dot products of the level (the portable loop at simd128) |
 | `qam_acquire_block` | 51.31 | 51.31 | 1.00 | 43.41 | 43.41 | 1.00 | sdrk fallback |
-| `qam_demod_block` | 114.14 | 114.14 | 1.00 | 102.23 | 102.23 | 1.00 | sdrk fallback |
-| `qam_demod_qam256_block` | 114.25 | 114.25 | 1.00 | 103.27 | 103.27 | 1.00 | sdrk fallback |
-| `qam_demod_search_block` | 119.97 | 119.97 | 1.00 | 107.15 | 107.15 | 1.00 | sdrk fallback |
-| `qam_frame_decode_block` | 132.12 | 132.12 | 1.00 | 119.38 | 119.38 | 1.00 | sdrk fallback |
+| `qam_demod_block` | 108.35 | 485.33 | 0.22 | 97.91 | 406.59 | 0.24 | GNU Radio fir_filter_ccf + symbol_sync_cc + linear_equalizer + constellation_receiver_cb (the sum of the blocks of the receiver chain, generic compiler flags and VOLK generic dot products; no acquisition, no blind equalizer stage and no lock watches) |
+| `qam_demod_qam256_block` | 108.52 | 108.52 | 1.00 | 98.98 | 98.98 | 1.00 | sdrk fallback |
+| `qam_demod_search_block` | 114.49 | 114.49 | 1.00 | 103.14 | 103.14 | 1.00 | sdrk fallback |
+| `qam_frame_decode_block` | 126.38 | 126.38 | 1.00 | 115.09 | 115.09 | 1.00 | sdrk fallback |
 | `qam_frame_encode_block` | 9.74 | 9.74 | 1.00 | 11.45 | 11.45 | 1.00 | sdrk fallback |
-| `qam_mod_block` | 8.71 | 8.71 | 1.00 | 10.47 | 10.47 | 1.00 | sdrk fallback |
-| `qam_mod_qam256_block` | 9.97 | 9.97 | 1.00 | 11.45 | 11.45 | 1.00 | sdrk fallback |
+| `qam_mod_block` | 8.71 | 216.68 | 0.04 | 10.47 | 215.56 | 0.05 | GNU Radio constellation_modulator as the sum of its blocks: pack_k_bits_bb + chunks_to_symbols_bc + pfb_arb_resampler_ccf (32 filters of 88 taps and their derivative filters), VOLK's dispatched dot product of the level |
+| `qam_mod_block_liquid` | 8.71 | 78.45 | 0.11 | 10.47 | 66.51 | 0.16 | liquid-dsp 1.8.3 modemcf_modulate (arbitrary-constellation modem) + firinterp_crcf (the root-raised cosine of the block), the SIMD dot products of the level (the portable loop at simd128) |
+| `qam_mod_qam256_block` | 9.97 | 217.84 | 0.05 | 11.45 | 216.71 | 0.05 | GNU Radio constellation_modulator as the sum of its blocks: pack_k_bits_bb + chunks_to_symbols_bc + pfb_arb_resampler_ccf (32 filters of 88 taps and their derivative filters), VOLK's dispatched dot product of the level |
+| `qam_mod_qam256_block_liquid` | 9.97 | 79.47 | 0.13 | 11.45 | 67.52 | 0.17 | liquid-dsp 1.8.3 modemcf_modulate (arbitrary-constellation modem) + firinterp_crcf (the root-raised cosine of the block), the SIMD dot products of the level (the portable loop at simd128) |
 | `qam_soft_bits_qam1024` | 7.20 | 7.19 | 1.00 | 8.07 | 8.06 | 1.00 | sdrk fallback |
-| `qam_soft_bits_qam16` | 1.35 | 2.04 | 0.66 | 1.49 | 2.43 | 0.61 | sdrk fallback |
+| `qam_soft_bits_qam16` | 1.35 | 1864.75 | 0.00 | 1.49 | 1588.53 | 0.00 | GNU Radio constellation_soft_decoder_cf with calc_soft_dec (constellation.cc of gr-digital; the exact log-likelihood ratio over all points, npwr 1, not max-log; no vector allocation per symbol, so faster than GNU Radio's object code) |
+| `qam_soft_bits_qam16_liquid` | 1.35 | 220.40 | 0.01 | 1.49 | 226.71 | 0.01 | liquid-dsp 1.8.3 modemcf_demodulate_soft of its own QAM modem (modem_common.proto.c; soft bytes with liquid's scale and labelling; the hard symbol and the soft bits per symbol) |
+| `qam_soft_bits_qam16_lut` | 1.35 | 78.15 | 0.02 | 1.49 | 66.61 | 0.02 | GNU Radio constellation_soft_decoder_cf with the look-up table of gen_soft_dec_lut (precision 8, npwr 1; constellation.cc of gr-digital; exact log-likelihood ratio, not max-log; the table lookup and a copy of 2 to 3 floats per symbol, no vector allocation) |
 | `qam_soft_bits_qam256` | 5.65 | 5.82 | 0.97 | 5.72 | 6.56 | 0.87 | sdrk fallback |
-| `qam_soft_bits_qam64` | 3.03 | 4.06 | 0.74 | 3.34 | 3.92 | 0.85 | sdrk fallback |
+| `qam_soft_bits_qam64` | 3.03 | 6763.49 | 0.00 | 3.34 | 5733.38 | 0.00 | GNU Radio constellation_soft_decoder_cf with calc_soft_dec (constellation.cc of gr-digital; the exact log-likelihood ratio over all points, npwr 1, not max-log; no vector allocation per symbol, so faster than GNU Radio's object code) |
+| `qam_soft_bits_qam64_liquid` | 3.03 | 269.15 | 0.01 | 3.34 | 274.90 | 0.01 | liquid-dsp 1.8.3 modemcf_demodulate_soft of its own QAM modem (modem_common.proto.c; soft bytes with liquid's scale and labelling; the hard symbol and the soft bits per symbol) |
+| `qam_soft_bits_qam64_lut` | 3.03 | 78.15 | 0.04 | 3.34 | 66.61 | 0.05 | GNU Radio constellation_soft_decoder_cf with the look-up table of gen_soft_dec_lut (precision 8, npwr 1; constellation.cc of gr-digital; exact log-likelihood ratio, not max-log; the table lookup and a copy of 2 to 3 floats per symbol, no vector allocation) |
 | `qam_soft_bits_qpsk` | 0.52 | 0.52 | 0.99 | 0.52 | 0.59 | 0.89 | sdrk fallback |
 | `rds_decode_block` | 8.74 | 8.74 | 1.00 | 11.50 | 11.50 | 1.00 | sdrk fallback |
-| `rds_demod_block` | 42.35 | 42.35 | 1.00 | 39.04 | 39.04 | 1.00 | sdrk fallback |
+| `rds_demod_block` | 41.84 | 41.84 | 1.00 | 38.66 | 38.66 | 1.00 | sdrk fallback |
 | `rds_shape` | 78.95 | 78.95 | 1.00 | 71.83 | 71.83 | 1.00 | sdrk fallback |
 | `real_to_complex` | 5.33 | 55.36 | 0.10 | 5.44 | 50.25 | 0.11 | liquid-dsp 1.8.3 firhilbf_decim_execute_block (dotprod_rrrf) with its SSE (SSE3 horizontal add) dot product (-O3 -ffp-contract=off, sse4.2) |
 | `real_to_complex_cq15` | 7.55 | 10.87 | 0.69 | 6.96 | 13.90 | 0.50 | libairspy 1.0.10 iqconverter_int16 (truncating >> 15, 32-bit accumulator, the odd samples halved), conversion without remove_dc (-O3 -ffp-contract=off, sse4.2) |
@@ -994,12 +1024,22 @@ Reference model `skylake`, counter-model `znver2`, mode `whole-loop`; execution 
 | `stereo_matrix_fallback` | 1.52 | 1.07 | 1.42 | 1.46 | 1.38 | 1.06 | CMSIS-DSP 1.18.0 arm_add_f32 (d + d), arm_add_f32 (s + d2), arm_sub_f32 (s - d2) on planar data, generic C (-O3 -ffp-contract=off, LOOPUNROLL, sse4.2) |
 | `stereo_pll_fallback` | 88.29 | 71.63 | 1.23 | 77.34 | 63.55 | 1.22 | liquid-dsp 1.8.3 nco_crcf (LIQUID_VCO_INTERP): sincos at theta and 2 theta from the 1024-entry table, nco_crcf_adjust_frequency and nco_crcf_adjust_phase (double modulo in _constrain), nco_crcf_step; no lock detector, no integrator limit (-O3 -ffp-contract=off, sse4.2) |
 | `stereo_pll_q15_fallback` | 38.04 | 55.54 | 0.68 | 38.06 | 58.48 | 0.65 | CMSIS-DSP 1.18.0 arm_cos_q15 and arm_sin_q15 (twice) per sample in the loop of the kernel (the oscillator only: CMSIS-DSP has no PLL), generic C (-O3 -ffp-contract=off, LOOPUNROLL, sse4.2) |
-| `symbol_demap_qam16_block` | 1.35 | 1.35 | 1.00 | 1.49 | 1.49 | 1.00 | sdrk fallback |
+| `symbol_demap_qam16_block` | 1.35 | 1864.75 | 0.00 | 1.49 | 1588.53 | 0.00 | GNU Radio constellation_soft_decoder_cf with calc_soft_dec (constellation.cc of gr-digital; the exact log-likelihood ratio over all points, npwr 1, not max-log; no vector allocation per symbol, so faster than GNU Radio's object code) |
+| `symbol_demap_qam16_block_liquid` | 1.35 | 220.40 | 0.01 | 1.49 | 226.70 | 0.01 | liquid-dsp 1.8.3 modemcf_demodulate_soft of its own QAM modem (modem_common.proto.c; soft bytes with liquid's scale and labelling; the hard symbol and the soft bits per symbol) |
+| `symbol_demap_qam16_block_lut` | 1.35 | 66.25 | 0.02 | 1.49 | 52.13 | 0.03 | GNU Radio constellation_soft_decoder_cf with the look-up table of gen_soft_dec_lut (precision 8, npwr 1; constellation.cc of gr-digital; exact log-likelihood ratio, not max-log; the table lookup and a copy of 2 to 3 floats per symbol, no vector allocation) |
 | `symbol_demap_qam256_block` | 5.66 | 5.66 | 1.00 | 5.72 | 5.72 | 1.00 | sdrk fallback |
-| `symbol_demap_qam64_block` | 3.03 | 3.03 | 1.00 | 3.34 | 3.34 | 1.00 | sdrk fallback |
-| `symbol_map_block` | 7.10 | 7.10 | 1.00 | 6.61 | 6.61 | 1.00 | sdrk fallback |
-| `symbol_sync` | 49.82 | 49.82 | 1.00 | 38.10 | 38.10 | 1.00 | sdrk fallback |
-| `symbol_sync_real` | 23.29 | 23.29 | 1.00 | 18.29 | 18.29 | 1.00 | sdrk fallback |
+| `symbol_demap_qam64_block` | 3.03 | 6763.49 | 0.00 | 3.34 | 5733.38 | 0.00 | GNU Radio constellation_soft_decoder_cf with calc_soft_dec (constellation.cc of gr-digital; the exact log-likelihood ratio over all points, npwr 1, not max-log; no vector allocation per symbol, so faster than GNU Radio's object code) |
+| `symbol_demap_qam64_block_liquid` | 3.03 | 269.14 | 0.01 | 3.34 | 274.89 | 0.01 | liquid-dsp 1.8.3 modemcf_demodulate_soft of its own QAM modem (modem_common.proto.c; soft bytes with liquid's scale and labelling; the hard symbol and the soft bits per symbol) |
+| `symbol_demap_qam64_block_lut` | 3.03 | 78.15 | 0.04 | 3.34 | 66.60 | 0.05 | GNU Radio constellation_soft_decoder_cf with the look-up table of gen_soft_dec_lut (precision 8, npwr 1; constellation.cc of gr-digital; exact log-likelihood ratio, not max-log; the table lookup and a copy of 2 to 3 floats per symbol, no vector allocation) |
+| `symbol_map_block` | 7.10 | 13.20 | 0.54 | 6.61 | 15.02 | 0.44 | GNU Radio pack_k_bits_bb + chunks_to_symbols_bc (pack_k_bits.cc of gr-blocks, chunks_to_symbols_impl.cc of gr-digital), the table of the points of the block, generic compiler flags |
+| `symbol_map_block_liquid` | 7.10 | 22.45 | 0.32 | 6.61 | 23.09 | 0.29 | liquid-dsp 1.8.3 modemcf_modulate on the arbitrary-constellation modem of the points of the block (modem_arb.proto.c), the bits packed by the wrapper |
+| `symbol_map_block_qam64` | 10.11 | 17.84 | 0.57 | 10.12 | 19.62 | 0.52 | GNU Radio pack_k_bits_bb + chunks_to_symbols_bc (pack_k_bits.cc of gr-blocks, chunks_to_symbols_impl.cc of gr-digital), the table of the points of the block, generic compiler flags |
+| `symbol_map_block_qam64_liquid` | 10.11 | 26.53 | 0.38 | 10.12 | 27.16 | 0.37 | liquid-dsp 1.8.3 modemcf_modulate on the arbitrary-constellation modem of the points of the block (modem_arb.proto.c), the bits packed by the wrapper |
+| `symbol_map_block_qpsk` | 6.01 | 8.56 | 0.70 | 7.74 | 10.43 | 0.74 | GNU Radio pack_k_bits_bb + chunks_to_symbols_bc (pack_k_bits.cc of gr-blocks, chunks_to_symbols_impl.cc of gr-digital), the table of the points of the block, generic compiler flags |
+| `symbol_map_block_qpsk_liquid` | 6.01 | 18.37 | 0.33 | 7.74 | 19.02 | 0.41 | liquid-dsp 1.8.3 modemcf_modulate on the arbitrary-constellation modem of the points of the block (modem_arb.proto.c), the bits packed by the wrapper |
+| `symbol_sync` | 38.82 | 38.82 | 1.00 | 30.04 | 30.04 | 1.00 | sdrk fallback |
+| `symbol_sync_fallback` | 38.82 | 57.52 | 0.67 | 30.04 | 57.78 | 0.52 | GNU Radio symbol_sync_cc (symbol_sync_cc_impl.cc of gr-digital, TED_GARDNER, IR_MMSE_8TAP, generic compiler flags; reference does different work: an 8-tap MMSE interpolator against our 4-point Lagrange polynomial) |
+| `symbol_sync_real` | 19.03 | 19.03 | 1.00 | 14.53 | 14.53 | 1.00 | sdrk fallback |
 | `xcorr_fft_n4096` | 25.43 | 69.62 | 0.37 | 24.00 | 65.57 | 0.37 | liquid-dsp 1.8.3 fftfilt_cccf (benches/refs/liquid-fftfilt.c), FFTW 3.3.10 |
 | `xcorr_fft_n4096_fallback` | 104.08 | 373.34 | 0.28 | 101.88 | 393.11 | 0.26 | liquid-dsp 1.8.3 fftfilt_cccf (benches/refs/liquid-fftfilt.c), liquid's own FFT |
 | `xcorr_fft_n512` | 21.66 | 47.25 | 0.46 | 20.38 | 49.69 | 0.41 | liquid-dsp 1.8.3 fftfilt_cccf (benches/refs/liquid-fftfilt.c), FFTW 3.3.10 |
@@ -1045,7 +1085,7 @@ Reference model `znver3`, counter-model `alderlake`, mode `whole-loop`; executio
 | `scramble_c32_b1` | 0.41 | 1.36 | 0.30 | 0.30 | 1.48 | 0.20 | +-1.0 sequence from the index bits into a buffer of 256 + volk_32fc_32f_multiply_32fc (VOLK 3.3.0 dispatcher; the form of srsRAN srsran_scrambling_c) |
 | `scramble_c32_b1_fallback` | 0.64 | 1.36 | 0.47 | 0.78 | 1.31 | 0.59 | +-1.0 sequence from the index bits into a buffer of 256 + VOLK 3.3.0 volk_32fc_32f_multiply_32fc_generic (benches/refs/volk-generic.c, -O3 -ffp-contract=off) |
 | `scramble_c32_b2` | 0.95 | 2.37 | 0.40 | 1.04 | 2.41 | 0.43 | phasor lookup into a buffer of 256 + VOLK 3.3.0 volk_32fc_x2_multiply_32fc_u_avx without FMA (benches/refs/volk-nofma.c, -O3 -ffp-contract=off) |
-| `scramble_c32_b2_dvbs2` | 0.95 | 2.97 | 0.32 | 1.04 | 2.42 | 0.43 | GNU Radio dvbs2_physical_cc PL scrambling, the per-symbol switch on R_n (benches/refs/gr-dvbs2-plscramble.c, main at ec1bf15; reference does different work; -O3) |
+| `scramble_c32_b2_dvbs2` | 0.95 | 2.98 | 0.32 | 1.04 | 2.42 | 0.43 | GNU Radio dvbs2_physical_cc PL scrambling, the per-symbol switch on R_n (benches/refs/gr-dvbs2-plscramble.c, main at ec1bf15; reference does different work; -O3) |
 | `scramble_c32_b2_fallback` | 1.98 | 6.24 | 0.32 | 1.70 | 7.00 | 0.24 | phasor lookup into a buffer of 256 + VOLK 3.3.0 volk_32fc_x2_multiply_32fc_generic (benches/refs/volk-generic.c, -O3 -ffp-contract=off) |
 | `scramble_c32_b8` | 1.31 | 2.37 | 0.55 | 1.17 | 2.41 | 0.49 | phasor lookup into a buffer of 256 + VOLK 3.3.0 volk_32fc_x2_multiply_32fc_u_avx without FMA (benches/refs/volk-nofma.c, -O3 -ffp-contract=off) |
 | `scramble_c32_b8_fallback` | 2.57 | 6.24 | 0.41 | 3.04 | 7.00 | 0.43 | phasor lookup into a buffer of 256 + VOLK 3.3.0 volk_32fc_x2_multiply_32fc_generic (benches/refs/volk-generic.c, -O3 -ffp-contract=off) |
@@ -1185,9 +1225,9 @@ Reference model `znver3`, counter-model `alderlake`, mode `whole-loop`; executio
 | `am_mod_cq15_fallback` | 0.43 | 2.91 | 0.15 | 0.56 | 2.30 | 0.24 | CMSIS-DSP 1.18.0 arm_scale_q15 by round(c m 32768) (truncating), arm_offset_q15 by c in place and a plain loop to (re, 0) (a composition: CMSIS-DSP has no AM modulator), generic C (-O3 -ffp-contract=off, LOOPUNROLL, avx2) |
 | `am_mod_fallback` | 0.65 | 0.53 | 1.22 | 0.47 | 0.54 | 0.87 | liquid-dsp 1.8.3 ampmodem_modulate_block (LIQUID_AMPMODEM_DSB with the carrier: x * mod_index + 1, no clamp, carrier 1; -O3) |
 | `auto_notch` | 164.98 | 164.98 | 1.00 | 164.85 | 164.85 | 1.00 | sdrk fallback |
-| `band_pulse_detect_block` | 49.58 | 49.58 | 1.00 | 48.29 | 48.29 | 1.00 | sdrk fallback |
+| `band_pulse_detect_block` | 47.93 | 47.93 | 1.00 | 46.70 | 46.70 | 1.00 | sdrk fallback |
 | `bit_descramble_block` | 0.33 | 4.75 | 0.07 | 0.32 | 5.55 | 0.06 | GNU Radio descrambler_bb(0x21, 0, 22): gr::digital::lfsr, one __builtin_parityl per unpacked bit (generic compiler flags) |
-| `bit_descramble_in_place_block` | 1.46 | 4.75 | 0.31 | 1.22 | 5.55 | 0.22 | GNU Radio descrambler_bb(0x21, 0, 22): gr::digital::lfsr, one __builtin_parityl per unpacked bit (generic compiler flags) |
+| `bit_descramble_in_place_block` | 1.48 | 4.75 | 0.31 | 1.23 | 5.55 | 0.22 | GNU Radio descrambler_bb(0x21, 0, 22): gr::digital::lfsr, one __builtin_parityl per unpacked bit (generic compiler flags) |
 | `bit_scramble_block` | 0.77 | 4.41 | 0.17 | 0.81 | 5.18 | 0.16 | GNU Radio scrambler_bb(0x21, 0, 22): gr::digital::lfsr, one __builtin_parityl per unpacked bit (generic compiler flags) |
 | `bit_scramble_in_place_block` | 1.02 | 4.41 | 0.23 | 0.99 | 5.18 | 0.19 | GNU Radio scrambler_bb(0x21, 0, 22): gr::digital::lfsr, one __builtin_parityl per unpacked bit (generic compiler flags) |
 | `channel_bank_channelize` | 20.88 | 20.88 | 1.00 | 25.55 | 25.55 | 1.00 | sdrk fallback |
@@ -1198,53 +1238,53 @@ Reference model `znver3`, counter-model `alderlake`, mode `whole-loop`; executio
 | `channelize_fallback` | 34.73 | 147.96 | 0.23 | 32.88 | 133.26 | 0.25 | liquid-dsp 1.8.3 firpfbch2_crcf analyzer (benches/refs/liquid-channelizer.c), portable dot products, liquid's own FFT |
 | `correlate_block` | 7.60 | 7.60 | 1.00 | 7.15 | 7.15 | 1.00 | sdrk fallback |
 | `costas` | 56.17 | 56.17 | 1.00 | 68.16 | 68.16 | 1.00 | sdrk fallback |
-| `costas_fallback` | 56.17 | 76.48 | 0.73 | 68.16 | 66.29 | 1.03 | GNU Radio costas_loop_cc (costas_loop_cc_impl.cc of gr-digital, generic compiler flags) |
-| `costas_qam1024` | 131.43 | 131.43 | 1.00 | 152.22 | 152.22 | 1.00 | sdrk fallback |
-| `costas_qam1024_fallback` | 131.43 | 211.11 | 0.62 | 152.22 | 254.51 | 0.60 | GNU Radio constellation_receiver_cb with constellation_rect 1024-QAM (constellation_receiver_cb_impl.cc and constellation.cc of gr-digital, generic compiler flags) |
-| `costas_qam16` | 124.31 | 124.31 | 1.00 | 148.35 | 148.35 | 1.00 | sdrk fallback |
-| `costas_qam16_fallback` | 124.31 | 166.41 | 0.75 | 148.35 | 172.86 | 0.86 | GNU Radio constellation_receiver_cb with constellation_rect 16-QAM (constellation_receiver_cb_impl.cc and constellation.cc of gr-digital, generic compiler flags) |
-| `costas_qam256` | 131.63 | 131.63 | 1.00 | 152.48 | 152.48 | 1.00 | sdrk fallback |
-| `costas_qam256_fallback` | 131.63 | 169.28 | 0.78 | 152.48 | 178.01 | 0.86 | GNU Radio constellation_receiver_cb with constellation_rect 256-QAM (constellation_receiver_cb_impl.cc and constellation.cc of gr-digital, generic compiler flags) |
-| `costas_qam64` | 128.27 | 128.27 | 1.00 | 154.29 | 154.29 | 1.00 | sdrk fallback |
-| `costas_qam64_fallback` | 128.27 | 166.55 | 0.77 | 154.29 | 173.14 | 0.89 | GNU Radio constellation_receiver_cb with constellation_rect 64-QAM (constellation_receiver_cb_impl.cc and constellation.cc of gr-digital, generic compiler flags) |
+| `costas_fallback` | 56.17 | 76.46 | 0.73 | 68.16 | 66.01 | 1.03 | GNU Radio costas_loop_cc (costas_loop_cc_impl.cc of gr-digital, generic compiler flags) |
+| `costas_qam1024` | 131.34 | 131.34 | 1.00 | 152.10 | 152.10 | 1.00 | sdrk fallback |
+| `costas_qam1024_fallback` | 131.34 | 211.17 | 0.62 | 152.10 | 254.58 | 0.60 | GNU Radio constellation_receiver_cb with constellation_rect 1024-QAM (constellation_receiver_cb_impl.cc and constellation.cc of gr-digital, generic compiler flags) |
+| `costas_qam16` | 124.35 | 124.35 | 1.00 | 148.39 | 148.39 | 1.00 | sdrk fallback |
+| `costas_qam16_fallback` | 124.35 | 166.34 | 0.75 | 148.39 | 172.78 | 0.86 | GNU Radio constellation_receiver_cb with constellation_rect 16-QAM (constellation_receiver_cb_impl.cc and constellation.cc of gr-digital, generic compiler flags) |
+| `costas_qam256` | 131.66 | 131.66 | 1.00 | 152.53 | 152.53 | 1.00 | sdrk fallback |
+| `costas_qam256_fallback` | 131.66 | 169.39 | 0.78 | 152.53 | 178.14 | 0.86 | GNU Radio constellation_receiver_cb with constellation_rect 256-QAM (constellation_receiver_cb_impl.cc and constellation.cc of gr-digital, generic compiler flags) |
+| `costas_qam64` | 128.23 | 128.23 | 1.00 | 154.25 | 154.25 | 1.00 | sdrk fallback |
+| `costas_qam64_fallback` | 128.23 | 166.51 | 0.77 | 154.25 | 173.10 | 0.89 | GNU Radio constellation_receiver_cb with constellation_rect 64-QAM (constellation_receiver_cb_impl.cc and constellation.cc of gr-digital, generic compiler flags) |
 | `crc16_ccitt_false` | 11.81 | 13.17 | 0.90 | 12.80 | 16.19 | 0.79 | GNU Radio gr::digital::crc: one 256-entry uint64_t table, a 64-bit remainder, one lookup per byte (generic compiler flags) |
 | `crc16_x25` | 7.05 | 10.39 | 0.68 | 8.05 | 9.40 | 0.86 | GNU Radio gr::digital::crc: one 256-entry uint64_t table, a 64-bit remainder, one lookup per byte (generic compiler flags) |
 | `crc24_adsb` | 11.04 | 13.17 | 0.84 | 12.04 | 16.19 | 0.74 | GNU Radio gr::digital::crc: one 256-entry uint64_t table, a 64-bit remainder, one lookup per byte (generic compiler flags) |
 | `crc32` | 7.05 | 10.39 | 0.68 | 8.05 | 9.40 | 0.86 | GNU Radio gr::digital::crc: one 256-entry uint64_t table, a 64-bit remainder, one lookup per byte (generic compiler flags) |
-| `equalize` | 111.94 | 111.94 | 1.00 | 152.23 | 152.23 | 1.00 | sdrk fallback |
+| `equalize` | 111.94 | 1076.92 | 0.10 | 152.23 | 287.12 | 0.53 | GNU Radio linear_equalizer with adaptive_algorithm_nlms (linear_equalizer_impl.cc of gr-digital, VOLK's dispatched dot products of the level with the aligned tap copies of fir_filter) |
 | `equalize_fallback` | 111.94 | 931.44 | 0.12 | 152.23 | 220.19 | 0.69 | GNU Radio linear_equalizer with adaptive_algorithm_nlms (linear_equalizer_impl.cc of gr-digital, VOLK generic dot products, generic compiler flags) |
 | `equalize_qam1024` | 142.06 | 142.06 | 1.00 | 174.29 | 174.29 | 1.00 | sdrk fallback |
-| `equalize_qam1024_fallback` | 142.06 | 943.07 | 0.15 | 174.29 | 277.16 | 0.63 | GNU Radio linear_equalizer with adaptive_algorithm_nlms on constellation_rect 1024-QAM (linear_equalizer_impl.cc and constellation.cc of gr-digital, VOLK generic dot products, generic compiler flags) |
-| `equalize_qam16` | 119.94 | 119.94 | 1.00 | 164.27 | 164.27 | 1.00 | sdrk fallback |
+| `equalize_qam1024_fallback` | 142.06 | 943.08 | 0.15 | 174.29 | 277.17 | 0.63 | GNU Radio linear_equalizer with adaptive_algorithm_nlms on constellation_rect 1024-QAM (linear_equalizer_impl.cc and constellation.cc of gr-digital, VOLK generic dot products, generic compiler flags) |
+| `equalize_qam16` | 119.94 | 1088.28 | 0.11 | 164.27 | 294.40 | 0.56 | GNU Radio linear_equalizer with adaptive_algorithm_nlms on constellation_rect 16-QAM (linear_equalizer_impl.cc and constellation.cc of gr-digital, VOLK's dispatched dot products of the level with the aligned tap copies of fir_filter) |
 | `equalize_qam16_fallback` | 119.94 | 943.86 | 0.13 | 164.27 | 277.23 | 0.59 | GNU Radio linear_equalizer with adaptive_algorithm_nlms on constellation_rect 16-QAM (linear_equalizer_impl.cc and constellation.cc of gr-digital, VOLK generic dot products, generic compiler flags) |
 | `equalize_qam256` | 142.06 | 142.06 | 1.00 | 174.29 | 174.29 | 1.00 | sdrk fallback |
 | `equalize_qam256_fallback` | 142.06 | 943.86 | 0.15 | 174.29 | 277.23 | 0.63 | GNU Radio linear_equalizer with adaptive_algorithm_nlms on constellation_rect 256-QAM (linear_equalizer_impl.cc and constellation.cc of gr-digital, VOLK generic dot products, generic compiler flags) |
-| `equalize_qam64` | 123.94 | 123.94 | 1.00 | 170.30 | 170.30 | 1.00 | sdrk fallback |
+| `equalize_qam64` | 123.94 | 1088.28 | 0.11 | 170.30 | 294.40 | 0.58 | GNU Radio linear_equalizer with adaptive_algorithm_nlms on constellation_rect 64-QAM (linear_equalizer_impl.cc and constellation.cc of gr-digital, VOLK's dispatched dot products of the level with the aligned tap copies of fir_filter) |
 | `equalize_qam64_fallback` | 123.94 | 943.86 | 0.13 | 170.30 | 277.23 | 0.61 | GNU Radio linear_equalizer with adaptive_algorithm_nlms on constellation_rect 64-QAM (linear_equalizer_impl.cc and constellation.cc of gr-digital, VOLK generic dot products, generic compiler flags) |
 | `frame_decode` | 5.57 | 5.57 | 1.00 | 6.18 | 6.18 | 1.00 | sdrk fallback |
 | `frame_decode_block` | 6.91 | 6.91 | 1.00 | 5.80 | 5.80 | 1.00 | sdrk fallback |
-| `frame_decode_four_block` | 23.40 | 23.42 | 1.00 | 20.76 | 20.77 | 1.00 | sdrk fallback |
+| `frame_decode_four_block` | 23.43 | 23.43 | 1.00 | 20.78 | 20.78 | 1.00 | sdrk fallback |
 | `frame_encode_block` | 1.64 | 1.64 | 1.00 | 1.73 | 1.73 | 1.00 | sdrk fallback |
-| `gauss_noise_c32` | 3.42 | 194.85 | 0.02 | 4.97 | 191.33 | 0.03 | liquid-dsp 1.8.3 crandnf times sigma (libc rand(), f32 Box-Muller with sqrtf, logf and cexpf; no random access, no bit-exact sequence; reference does different work; -O3) |
-| `gauss_noise_c32_fallback` | 18.12 | 194.85 | 0.09 | 16.34 | 191.33 | 0.09 | liquid-dsp 1.8.3 crandnf times sigma (libc rand(), f32 Box-Muller with sqrtf, logf and cexpf; no random access, no bit-exact sequence; reference does different work; -O3) |
+| `gauss_noise_c32` | 3.42 | 194.93 | 0.02 | 4.97 | 191.42 | 0.03 | liquid-dsp 1.8.3 crandnf times sigma (libc rand(), f32 Box-Muller with sqrtf, logf and cexpf; no random access, no bit-exact sequence; reference does different work; -O3) |
+| `gauss_noise_c32_fallback` | 18.12 | 194.93 | 0.09 | 16.34 | 191.42 | 0.09 | liquid-dsp 1.8.3 crandnf times sigma (libc rand(), f32 Box-Muller with sqrtf, logf and cexpf; no random access, no bit-exact sequence; reference does different work; -O3) |
 | `gauss_noise_c32_fastnoise` | 3.42 | 4.04 | 0.85 | 4.97 | 6.09 | 0.82 | GNU Radio fastnoise_source_c, amplitude sigma * sqrt(2) (benches/refs/gr-fastnoise.c, main at ec1bf15: one xoroshiro128+ draw and a copy from a pool of 8192 precomputed values per sample, no normal mapping, no random access; reference does less work; -O3) |
-| `gauss_noise_f32` | 1.72 | 117.02 | 0.01 | 2.49 | 125.05 | 0.02 | liquid-dsp 1.8.3 randnf times sigma (libc rand(), f32 Box-Muller with sqrtf, logf and sinf; no random access, no bit-exact sequence; reference does different work; -O3) |
-| `gauss_noise_f32_fallback` | 9.06 | 117.02 | 0.08 | 8.17 | 125.05 | 0.07 | liquid-dsp 1.8.3 randnf times sigma (libc rand(), f32 Box-Muller with sqrtf, logf and sinf; no random access, no bit-exact sequence; reference does different work; -O3) |
+| `gauss_noise_f32` | 1.72 | 117.09 | 0.01 | 2.49 | 125.14 | 0.02 | liquid-dsp 1.8.3 randnf times sigma (libc rand(), f32 Box-Muller with sqrtf, logf and sinf; no random access, no bit-exact sequence; reference does different work; -O3) |
+| `gauss_noise_f32_fallback` | 9.06 | 117.09 | 0.08 | 8.17 | 125.14 | 0.07 | liquid-dsp 1.8.3 randnf times sigma (libc rand(), f32 Box-Muller with sqrtf, logf and sinf; no random access, no bit-exact sequence; reference does different work; -O3) |
 | `gauss_noise_f32_fastnoise` | 1.72 | 4.05 | 0.42 | 2.49 | 6.10 | 0.41 | GNU Radio fastnoise_source_f, amplitude sigma (benches/refs/gr-fastnoise.c, main at ec1bf15: one xoroshiro128+ draw and a copy from a pool of 8192 precomputed values per sample, no normal mapping, no random access; reference does less work; -O3) |
-| `gauss_noise_f32_ziggurat` | 1.72 | 9.93 | 0.17 | 2.49 | 10.76 | 0.23 | rand_distr 0.5.1 StandardNormal as f32 times sigma over rand 0.9.5 SmallRng (Ziggurat in f64 with rejection: a variable number of draws per value, no random access, no bit-exact sequence across platforms; reference does different work) |
+| `gauss_noise_f32_ziggurat` | 1.72 | 9.92 | 0.17 | 2.49 | 10.75 | 0.23 | rand_distr 0.5.1 StandardNormal as f32 times sigma over rand 0.9.5 SmallRng (Ziggurat in f64 with rejection: a variable number of draws per value, no random access, no bit-exact sequence across platforms; reference does different work) |
 | `gauss_noise_q15` | 2.33 | 10.63 | 0.22 | 3.02 | 9.46 | 0.32 | sdrk fallback |
 | `gauss_noise_q15_fallback` | 10.63 | 10.63 | 1.00 | 9.46 | 9.46 | 1.00 | sdrk fallback |
 | `halfband_decimate` | 3.43 | 87.24 | 0.04 | 2.97 | 34.43 | 0.09 | liquid-dsp 1.8.3 resamp2_crcf_decim_execute (dotprod_crcf) with its AVX dot product (-O3 -ffp-contract=off, avx2) |
 | `halfband_decimate_cq15` | 6.56 | 12.86 | 0.51 | 7.11 | 13.27 | 0.54 | sdrk fallback |
 | `halfband_decimate_cq15_fallback` | 12.86 | 30.91 | 0.42 | 13.27 | 33.32 | 0.40 | CMSIS-DSP 1.18.0 arm_fir_q15 (24 taps) on the even samples, arm_scale_q15 (centre tap) on the odd samples and arm_add_q15 (a composition: CMSIS-DSP has no halfband decimator), generic C (-O3 -ffp-contract=off, LOOPUNROLL, avx2) |
 | `halfband_decimate_fallback` | 61.26 | 68.43 | 0.90 | 13.84 | 62.30 | 0.22 | liquid-dsp 1.8.3 resamp2_crcf_decim_execute (dotprod_crcf) with its portable dot product (-O3 -ffp-contract=off, avx2) |
-| `halfband_decimate_real` | 1.81 | 65.32 | 0.03 | 1.35 | 32.31 | 0.04 | liquid-dsp 1.8.3 resamp2_rrrf_decim_execute (dotprod_rrrf) with its AVX dot product (-O3 -ffp-contract=off, avx2) |
+| `halfband_decimate_real` | 1.81 | 65.32 | 0.03 | 1.36 | 32.31 | 0.04 | liquid-dsp 1.8.3 resamp2_rrrf_decim_execute (dotprod_rrrf) with its AVX dot product (-O3 -ffp-contract=off, avx2) |
 | `halfband_decimate_real_fallback` | 9.11 | 80.18 | 0.11 | 8.76 | 50.72 | 0.17 | liquid-dsp 1.8.3 resamp2_rrrf_decim_execute (dotprod_rrrf) with its portable dot product (-O3 -ffp-contract=off, avx2) |
 | `halfband_decimate_real_q15` | 2.95 | 11.33 | 0.26 | 3.83 | 10.11 | 0.38 | sdrk fallback |
 | `halfband_decimate_real_q15_fallback` | 11.33 | 15.45 | 0.73 | 10.11 | 16.66 | 0.61 | CMSIS-DSP 1.18.0 arm_fir_q15 (24 taps) on the even samples, arm_scale_q15 (centre tap) on the odd samples and arm_add_q15 (a composition: CMSIS-DSP has no halfband decimator), generic C (-O3 -ffp-contract=off, LOOPUNROLL, avx2) |
 | `halfband_ref_fir_decimate` | 5.53 | 21.84 | 0.25 | 5.48 | 21.35 | 0.26 | sdrk fallback |
 | `halfband_ref_fir_decimate_cq15` | 40.97 | 40.97 | 1.00 | 39.60 | 39.60 | 1.00 | sdrk fallback |
-| `halfband_ref_shifted` | 5.80 | 63.70 | 0.09 | 5.41 | 16.31 | 0.33 | sdrk fallback |
+| `halfband_ref_shifted` | 5.80 | 63.70 | 0.09 | 5.42 | 16.31 | 0.33 | sdrk fallback |
 | `halfband_ref_shifted_cq15` | 9.34 | 15.65 | 0.60 | 10.19 | 16.35 | 0.62 | sdrk fallback |
 | `iq_offset_block` | 2.89 | 2.89 | 1.00 | 2.95 | 2.95 | 1.00 | sdrk fallback |
 | `morse_decode_block` | 12.77 | 12.77 | 1.00 | 16.08 | 16.08 | 1.00 | sdrk fallback |
@@ -1255,27 +1295,37 @@ Reference model `znver3`, counter-model `alderlake`, mode `whole-loop`; executio
 | `preemph_limit` | 15.37 | 15.37 | 1.00 | 13.18 | 13.18 | 1.00 | sdrk fallback |
 | `preemph_limit_q15` | 27.62 | 27.62 | 1.00 | 18.69 | 18.69 | 1.00 | sdrk fallback |
 | `preemph_limit_stereo` | 16.71 | 16.71 | 1.00 | 22.32 | 22.32 | 1.00 | sdrk fallback |
-| `psk_mod_block` | 4.37 | 4.37 | 1.00 | 4.27 | 4.27 | 1.00 | sdrk fallback |
-| `pulse_match_block` | 12.32 | 12.32 | 1.00 | 11.29 | 11.29 | 1.00 | sdrk fallback |
-| `pulse_shape_block` | 3.57 | 3.57 | 1.00 | 3.54 | 3.54 | 1.00 | sdrk fallback |
+| `psk_demod_block` | 37.72 | 1161.39 | 0.03 | 38.80 | 415.11 | 0.09 | GNU Radio fir_filter_ccf + symbol_sync_cc + costas_loop_cc + constellation_decoder_cb (the sum of the blocks of the receiver chain, generic compiler flags; no acquisition and no lock watches) |
+| `psk_mod_block` | 4.37 | 180.44 | 0.02 | 4.27 | 249.90 | 0.02 | GNU Radio constellation_modulator as the sum of its blocks: pack_k_bits_bb + chunks_to_symbols_bc + pfb_arb_resampler_ccf (32 filters of 88 taps and their derivative filters), VOLK's dispatched dot product of the level |
+| `psk_mod_block_liquid` | 4.37 | 57.11 | 0.08 | 4.27 | 57.04 | 0.07 | liquid-dsp 1.8.3 modemcf_modulate (arbitrary-constellation modem) + firinterp_crcf (the root-raised cosine of the block), the SIMD dot products of the level (the portable loop at simd128) |
+| `pulse_match_block` | 12.32 | 878.31 | 0.01 | 11.29 | 149.29 | 0.08 | GNU Radio fir_filter_ccf (fir_filter_ccf_impl.cc of gr-filter) with VOLK's dispatched dot product of the level (volk_32fc_32f_dot_prod_32fc_a, the aligned tap copies of fir_filter) |
+| `pulse_match_block_liquid` | 12.32 | 109.99 | 0.11 | 11.29 | 94.89 | 0.12 | liquid-dsp 1.8.3 firfilt_crcf (firfilt.proto.c), the SIMD dot product of the level (the portable loop at simd128) |
+| `pulse_shape_block` | 3.57 | 64.78 | 0.06 | 3.54 | 69.12 | 0.05 | GNU Radio interp_fir_filter_ccf (interp_fir_filter_impl.cc of gr-filter) with VOLK's dispatched dot product of the level (volk_32fc_32f_dot_prod_32fc_a, the aligned tap copies of fir_filter) |
+| `pulse_shape_block_liquid` | 3.57 | 55.18 | 0.06 | 3.54 | 55.16 | 0.06 | liquid-dsp 1.8.3 firinterp_crcf (firinterp.proto.c, firpfb.proto.c), the SIMD dot products of the level (the portable loop at simd128) |
 | `qam_acquire_block` | 26.92 | 26.92 | 1.00 | 32.63 | 32.63 | 1.00 | sdrk fallback |
-| `qam_demod_block` | 64.18 | 64.18 | 1.00 | 76.39 | 76.39 | 1.00 | sdrk fallback |
-| `qam_demod_qam256_block` | 67.95 | 67.95 | 1.00 | 78.32 | 78.32 | 1.00 | sdrk fallback |
-| `qam_demod_search_block` | 66.92 | 66.92 | 1.00 | 80.01 | 80.01 | 1.00 | sdrk fallback |
-| `qam_frame_decode_block` | 76.22 | 76.22 | 1.00 | 87.24 | 87.25 | 1.00 | sdrk fallback |
+| `qam_demod_block` | 62.75 | 1192.78 | 0.05 | 70.69 | 455.70 | 0.16 | GNU Radio fir_filter_ccf + symbol_sync_cc + linear_equalizer + constellation_receiver_cb (the sum of the blocks of the receiver chain, generic compiler flags and VOLK generic dot products; no acquisition, no blind equalizer stage and no lock watches) |
+| `qam_demod_qam256_block` | 66.52 | 66.52 | 1.00 | 72.62 | 72.62 | 1.00 | sdrk fallback |
+| `qam_demod_search_block` | 65.65 | 65.65 | 1.00 | 74.37 | 74.37 | 1.00 | sdrk fallback |
+| `qam_frame_decode_block` | 74.73 | 74.73 | 1.00 | 81.50 | 81.50 | 1.00 | sdrk fallback |
 | `qam_frame_encode_block` | 5.26 | 5.26 | 1.00 | 5.48 | 5.48 | 1.00 | sdrk fallback |
-| `qam_mod_block` | 4.39 | 4.39 | 1.00 | 4.57 | 4.57 | 1.00 | sdrk fallback |
-| `qam_mod_qam256_block` | 4.96 | 4.96 | 1.00 | 4.74 | 4.74 | 1.00 | sdrk fallback |
+| `qam_mod_block` | 4.39 | 180.83 | 0.02 | 4.57 | 250.43 | 0.02 | GNU Radio constellation_modulator as the sum of its blocks: pack_k_bits_bb + chunks_to_symbols_bc + pfb_arb_resampler_ccf (32 filters of 88 taps and their derivative filters), VOLK's dispatched dot product of the level |
+| `qam_mod_block_liquid` | 4.39 | 57.62 | 0.08 | 4.57 | 57.80 | 0.08 | liquid-dsp 1.8.3 modemcf_modulate (arbitrary-constellation modem) + firinterp_crcf (the root-raised cosine of the block), the SIMD dot products of the level (the portable loop at simd128) |
+| `qam_mod_qam256_block` | 4.96 | 181.61 | 0.03 | 4.74 | 251.49 | 0.02 | GNU Radio constellation_modulator as the sum of its blocks: pack_k_bits_bb + chunks_to_symbols_bc + pfb_arb_resampler_ccf (32 filters of 88 taps and their derivative filters), VOLK's dispatched dot product of the level |
+| `qam_mod_qam256_block_liquid` | 4.96 | 58.64 | 0.08 | 4.74 | 59.33 | 0.08 | liquid-dsp 1.8.3 modemcf_modulate (arbitrary-constellation modem) + firinterp_crcf (the root-raised cosine of the block), the SIMD dot products of the level (the portable loop at simd128) |
 | `qam_soft_bits_qam1024` | 5.53 | 5.53 | 1.00 | 4.31 | 4.31 | 1.00 | sdrk fallback |
-| `qam_soft_bits_qam16` | 0.52 | 0.54 | 0.95 | 1.02 | 1.02 | 1.00 | sdrk fallback |
+| `qam_soft_bits_qam16` | 0.52 | 1246.72 | 0.00 | 1.02 | 1327.29 | 0.00 | GNU Radio constellation_soft_decoder_cf with calc_soft_dec (constellation.cc of gr-digital; the exact log-likelihood ratio over all points, npwr 1, not max-log; no vector allocation per symbol, so faster than GNU Radio's object code) |
+| `qam_soft_bits_qam16_liquid` | 0.52 | 164.02 | 0.00 | 1.02 | 163.46 | 0.01 | liquid-dsp 1.8.3 modemcf_demodulate_soft of its own QAM modem (modem_common.proto.c; soft bytes with liquid's scale and labelling; the hard symbol and the soft bits per symbol) |
+| `qam_soft_bits_qam16_lut` | 0.52 | 56.48 | 0.01 | 1.02 | 55.13 | 0.02 | GNU Radio constellation_soft_decoder_cf with the look-up table of gen_soft_dec_lut (precision 8, npwr 1; constellation.cc of gr-digital; exact log-likelihood ratio, not max-log; the table lookup and a copy of 2 to 3 floats per symbol, no vector allocation) |
 | `qam_soft_bits_qam256` | 2.51 | 2.51 | 1.00 | 4.06 | 4.05 | 1.00 | sdrk fallback |
-| `qam_soft_bits_qam64` | 1.55 | 1.79 | 0.86 | 1.42 | 1.80 | 0.79 | sdrk fallback |
+| `qam_soft_bits_qam64` | 1.55 | 4422.74 | 0.00 | 1.42 | 4747.33 | 0.00 | GNU Radio constellation_soft_decoder_cf with calc_soft_dec (constellation.cc of gr-digital; the exact log-likelihood ratio over all points, npwr 1, not max-log; no vector allocation per symbol, so faster than GNU Radio's object code) |
+| `qam_soft_bits_qam64_liquid` | 1.55 | 234.13 | 0.01 | 1.42 | 212.09 | 0.01 | liquid-dsp 1.8.3 modemcf_demodulate_soft of its own QAM modem (modem_common.proto.c; soft bytes with liquid's scale and labelling; the hard symbol and the soft bits per symbol) |
+| `qam_soft_bits_qam64_lut` | 1.55 | 56.48 | 0.03 | 1.42 | 55.13 | 0.03 | GNU Radio constellation_soft_decoder_cf with the look-up table of gen_soft_dec_lut (precision 8, npwr 1; constellation.cc of gr-digital; exact log-likelihood ratio, not max-log; the table lookup and a copy of 2 to 3 floats per symbol, no vector allocation) |
 | `qam_soft_bits_qpsk` | 0.26 | 0.26 | 1.00 | 0.20 | 0.20 | 0.99 | sdrk fallback |
 | `rds_decode_block` | 7.28 | 7.28 | 1.00 | 7.98 | 7.98 | 1.00 | sdrk fallback |
-| `rds_demod_block` | 16.70 | 16.70 | 1.00 | 14.90 | 14.90 | 1.00 | sdrk fallback |
+| `rds_demod_block` | 16.60 | 16.60 | 1.00 | 14.43 | 14.43 | 1.00 | sdrk fallback |
 | `rds_shape` | 50.41 | 50.41 | 1.00 | 78.60 | 78.60 | 1.00 | sdrk fallback |
 | `real_to_complex` | 2.49 | 91.87 | 0.03 | 2.27 | 35.24 | 0.06 | liquid-dsp 1.8.3 firhilbf_decim_execute_block (dotprod_rrrf) with its AVX dot product (-O3 -ffp-contract=off, avx2) |
-| `real_to_complex_cq15` | 3.61 | 7.27 | 0.50 | 4.87 | 8.83 | 0.55 | libairspy 1.0.10 iqconverter_int16 (truncating >> 15, 32-bit accumulator, the odd samples halved), conversion without remove_dc (-O3 -ffp-contract=off, avx2) |
+| `real_to_complex_cq15` | 3.60 | 7.27 | 0.50 | 4.87 | 8.83 | 0.55 | libairspy 1.0.10 iqconverter_int16 (truncating >> 15, 32-bit accumulator, the odd samples halved), conversion without remove_dc (-O3 -ffp-contract=off, avx2) |
 | `real_to_complex_cq15_fallback` | 14.90 | 7.27 | 2.05 | 14.49 | 8.83 | 1.64 | libairspy 1.0.10 iqconverter_int16 (truncating >> 15, 32-bit accumulator, the odd samples halved), conversion without remove_dc (-O3 -ffp-contract=off, avx2) |
 | `real_to_complex_fallback` | 12.67 | 106.72 | 0.12 | 12.75 | 53.64 | 0.24 | liquid-dsp 1.8.3 firhilbf_decim_execute_block (dotprod_rrrf) with its portable dot product (-O3 -ffp-contract=off, avx2) |
 | `snr_estimate_block` | 2.70 | 50.03 | 0.05 | 2.78 | 57.26 | 0.05 | GNU Radio mpsk_snr_est_cc(SNR_EST_M2M4, 4096, 0.001): the moments \|x\|^2 and \|x\|^4 averaged in double, six cabsf per symbol (reference does different work: no decisions, a PSK kurtosis; generic compiler flags) |
@@ -1288,12 +1338,22 @@ Reference model `znver3`, counter-model `alderlake`, mode `whole-loop`; executio
 | `stereo_matrix_fallback` | 0.63 | 0.60 | 1.06 | 0.86 | 0.53 | 1.61 | CMSIS-DSP 1.18.0 arm_add_f32 (d + d), arm_add_f32 (s + d2), arm_sub_f32 (s - d2) on planar data, generic C (-O3 -ffp-contract=off, LOOPUNROLL, avx2) |
 | `stereo_pll_fallback` | 63.32 | 57.06 | 1.11 | 79.41 | 78.06 | 1.02 | liquid-dsp 1.8.3 nco_crcf (LIQUID_VCO_INTERP): sincos at theta and 2 theta from the 1024-entry table, nco_crcf_adjust_frequency and nco_crcf_adjust_phase (double modulo in _constrain), nco_crcf_step; no lock detector, no integrator limit (-O3 -ffp-contract=off, avx2) |
 | `stereo_pll_q15_fallback` | 37.04 | 51.46 | 0.72 | 38.06 | 34.89 | 1.09 | CMSIS-DSP 1.18.0 arm_cos_q15 and arm_sin_q15 (twice) per sample in the loop of the kernel (the oscillator only: CMSIS-DSP has no PLL), generic C (-O3 -ffp-contract=off, LOOPUNROLL, avx2) |
-| `symbol_demap_qam16_block` | 0.52 | 0.52 | 1.00 | 1.02 | 1.02 | 1.00 | sdrk fallback |
+| `symbol_demap_qam16_block` | 0.52 | 1246.72 | 0.00 | 1.02 | 1327.29 | 0.00 | GNU Radio constellation_soft_decoder_cf with calc_soft_dec (constellation.cc of gr-digital; the exact log-likelihood ratio over all points, npwr 1, not max-log; no vector allocation per symbol, so faster than GNU Radio's object code) |
+| `symbol_demap_qam16_block_liquid` | 0.52 | 164.01 | 0.00 | 1.02 | 163.45 | 0.01 | liquid-dsp 1.8.3 modemcf_demodulate_soft of its own QAM modem (modem_common.proto.c; soft bytes with liquid's scale and labelling; the hard symbol and the soft bits per symbol) |
+| `symbol_demap_qam16_block_lut` | 0.52 | 47.02 | 0.01 | 1.02 | 35.13 | 0.03 | GNU Radio constellation_soft_decoder_cf with the look-up table of gen_soft_dec_lut (precision 8, npwr 1; constellation.cc of gr-digital; exact log-likelihood ratio, not max-log; the table lookup and a copy of 2 to 3 floats per symbol, no vector allocation) |
 | `symbol_demap_qam256_block` | 2.51 | 2.51 | 1.00 | 4.06 | 4.06 | 1.00 | sdrk fallback |
-| `symbol_demap_qam64_block` | 1.55 | 1.55 | 1.00 | 1.42 | 1.42 | 1.00 | sdrk fallback |
-| `symbol_map_block` | 5.78 | 5.78 | 1.00 | 7.55 | 7.55 | 1.00 | sdrk fallback |
-| `symbol_sync` | 31.52 | 31.52 | 1.00 | 43.74 | 43.74 | 1.00 | sdrk fallback |
-| `symbol_sync_real` | 15.66 | 15.66 | 1.00 | 21.81 | 21.81 | 1.00 | sdrk fallback |
+| `symbol_demap_qam64_block` | 1.55 | 4422.74 | 0.00 | 1.42 | 4747.33 | 0.00 | GNU Radio constellation_soft_decoder_cf with calc_soft_dec (constellation.cc of gr-digital; the exact log-likelihood ratio over all points, npwr 1, not max-log; no vector allocation per symbol, so faster than GNU Radio's object code) |
+| `symbol_demap_qam64_block_liquid` | 1.55 | 234.67 | 0.01 | 1.42 | 212.20 | 0.01 | liquid-dsp 1.8.3 modemcf_demodulate_soft of its own QAM modem (modem_common.proto.c; soft bytes with liquid's scale and labelling; the hard symbol and the soft bits per symbol) |
+| `symbol_demap_qam64_block_lut` | 1.55 | 56.48 | 0.03 | 1.42 | 55.13 | 0.03 | GNU Radio constellation_soft_decoder_cf with the look-up table of gen_soft_dec_lut (precision 8, npwr 1; constellation.cc of gr-digital; exact log-likelihood ratio, not max-log; the table lookup and a copy of 2 to 3 floats per symbol, no vector allocation) |
+| `symbol_map_block` | 5.78 | 10.17 | 0.57 | 7.55 | 11.66 | 0.65 | GNU Radio pack_k_bits_bb + chunks_to_symbols_bc (pack_k_bits.cc of gr-blocks, chunks_to_symbols_impl.cc of gr-digital), the table of the points of the block, generic compiler flags |
+| `symbol_map_block_liquid` | 5.78 | 18.15 | 0.32 | 7.55 | 20.14 | 0.38 | liquid-dsp 1.8.3 modemcf_modulate on the arbitrary-constellation modem of the points of the block (modem_arb.proto.c), the bits packed by the wrapper |
+| `symbol_map_block_qam64` | 7.65 | 13.29 | 0.58 | 7.14 | 15.92 | 0.45 | GNU Radio pack_k_bits_bb + chunks_to_symbols_bc (pack_k_bits.cc of gr-blocks, chunks_to_symbols_impl.cc of gr-digital), the table of the points of the block, generic compiler flags |
+| `symbol_map_block_qam64_liquid` | 7.65 | 22.23 | 0.34 | 7.14 | 26.23 | 0.27 | liquid-dsp 1.8.3 modemcf_modulate on the arbitrary-constellation modem of the points of the block (modem_arb.proto.c), the bits packed by the wrapper |
+| `symbol_map_block_qpsk` | 5.56 | 7.05 | 0.79 | 5.15 | 7.40 | 0.70 | GNU Radio pack_k_bits_bb + chunks_to_symbols_bc (pack_k_bits.cc of gr-blocks, chunks_to_symbols_impl.cc of gr-digital), the table of the points of the block, generic compiler flags |
+| `symbol_map_block_qpsk_liquid` | 5.56 | 14.07 | 0.39 | 5.15 | 14.05 | 0.37 | liquid-dsp 1.8.3 modemcf_modulate on the arbitrary-constellation modem of the points of the block (modem_arb.proto.c), the bits packed by the wrapper |
+| `symbol_sync` | 29.31 | 29.31 | 1.00 | 32.97 | 32.97 | 1.00 | sdrk fallback |
+| `symbol_sync_fallback` | 29.31 | 43.55 | 0.67 | 32.97 | 36.52 | 0.90 | GNU Radio symbol_sync_cc (symbol_sync_cc_impl.cc of gr-digital, TED_GARDNER, IR_MMSE_8TAP, generic compiler flags; reference does different work: an 8-tap MMSE interpolator against our 4-point Lagrange polynomial) |
+| `symbol_sync_real` | 14.41 | 14.41 | 1.00 | 16.16 | 16.16 | 1.00 | sdrk fallback |
 | `xcorr_fft_n4096` | 8.60 | 854.13 | 0.01 | 8.00 | 115.28 | 0.07 | liquid-dsp 1.8.3 fftfilt_cccf (benches/refs/liquid-fftfilt.c), FFTW 3.3.10 |
 | `xcorr_fft_n4096_fallback` | 69.36 | 4330.92 | 0.02 | 64.06 | 605.13 | 0.11 | liquid-dsp 1.8.3 fftfilt_cccf (benches/refs/liquid-fftfilt.c), liquid's own FFT |
 | `xcorr_fft_n512` | 7.60 | 35.33 | 0.22 | 7.15 | 35.79 | 0.20 | liquid-dsp 1.8.3 fftfilt_cccf (benches/refs/liquid-fftfilt.c), FFTW 3.3.10 |
@@ -1331,7 +1391,7 @@ Reference model `znver3`, counter-model `alderlake`, mode `whole-loop`; executio
 | `fir_cq15` | 84.10 | 40.62 | 2.07 | 98.96 | 61.15 | 1.62 | ours at avx2 |
 | `fir_decimate` | 2.43 | 2.42 | 1.00 | 2.09 | 2.08 | 1.00 | ours at avx2 |
 | `fir_decimate_cq15` | 18.97 | 21.61 | 0.88 | 20.01 | 22.05 | 0.91 | ours at avx2 |
-| `fir_interpolate` | 12.40 | 12.44 | 1.00 | 11.40 | 11.40 | 1.00 | ours at avx2 |
+| `fir_interpolate` | 12.39 | 12.44 | 1.00 | 11.40 | 11.40 | 1.00 | ours at avx2 |
 | `fir_interpolate_cq15` | 97.70 | 52.45 | 1.86 | 110.63 | 71.49 | 1.55 | ours at avx2 |
 | `fir_interpolate_real` | 7.15 | 7.27 | 0.98 | 6.80 | 6.78 | 1.00 | ours at avx2 |
 | `fir_interpolate_real_q15` | 60.92 | 42.13 | 1.45 | 67.03 | 38.06 | 1.76 | ours at avx2 |
@@ -1397,9 +1457,9 @@ Reference model `znver3`, counter-model `alderlake`, mode `whole-loop`; executio
 | `am_mod` | 0.65 | 0.65 | 1.01 | 0.47 | 0.47 | 1.01 | ours at avx2 |
 | `am_mod_cq15` | 0.20 | 0.20 | 1.02 | 0.21 | 0.21 | 1.02 | ours at avx2 |
 | `auto_notch` | 156.14 | 164.98 | 0.95 | 189.93 | 164.85 | 1.15 | ours at avx2 |
-| `band_pulse_detect_block` | 48.00 | 49.58 | 0.97 | 58.39 | 48.29 | 1.21 | ours at avx2 |
+| `band_pulse_detect_block` | 46.41 | 47.93 | 0.97 | 56.47 | 46.70 | 1.21 | ours at avx2 |
 | `bit_descramble_block` | 0.59 | 0.33 | 1.79 | 0.70 | 0.32 | 2.19 | ours at avx2 |
-| `bit_descramble_in_place_block` | 1.67 | 1.46 | 1.14 | 1.58 | 1.22 | 1.29 | ours at avx2 |
+| `bit_descramble_in_place_block` | 1.67 | 1.48 | 1.13 | 1.59 | 1.23 | 1.29 | ours at avx2 |
 | `bit_scramble_block` | 1.12 | 0.77 | 1.45 | 1.18 | 0.81 | 1.46 | ours at avx2 |
 | `bit_scramble_in_place_block` | 1.35 | 1.02 | 1.33 | 1.41 | 0.99 | 1.42 | ours at avx2 |
 | `channel_bank_channelize` | 20.71 | 20.88 | 0.99 | 25.62 | 25.55 | 1.00 | ours at avx2 |
@@ -1409,10 +1469,10 @@ Reference model `znver3`, counter-model `alderlake`, mode `whole-loop`; executio
 | `channelize_block` | 11.96 | 12.08 | 0.99 | 12.87 | 12.81 | 1.00 | ours at avx2 |
 | `correlate_block` | 7.72 | 7.60 | 1.02 | 7.14 | 7.15 | 1.00 | ours at avx2 |
 | `costas` | 59.17 | 56.17 | 1.05 | 71.13 | 68.16 | 1.04 | ours at avx2 |
-| `costas_qam1024` | 131.34 | 131.43 | 1.00 | 158.05 | 152.22 | 1.04 | ours at avx2 |
-| `costas_qam16` | 132.27 | 124.31 | 1.06 | 159.31 | 148.35 | 1.07 | ours at avx2 |
-| `costas_qam256` | 131.90 | 131.63 | 1.00 | 158.89 | 152.48 | 1.04 | ours at avx2 |
-| `costas_qam64` | 132.24 | 128.27 | 1.03 | 159.27 | 154.29 | 1.03 | ours at avx2 |
+| `costas_qam1024` | 131.27 | 131.34 | 1.00 | 157.92 | 152.10 | 1.04 | ours at avx2 |
+| `costas_qam16` | 132.30 | 124.35 | 1.06 | 159.34 | 148.39 | 1.07 | ours at avx2 |
+| `costas_qam256` | 131.63 | 131.66 | 1.00 | 158.43 | 152.53 | 1.04 | ours at avx2 |
+| `costas_qam64` | 132.21 | 128.23 | 1.03 | 159.23 | 154.25 | 1.03 | ours at avx2 |
 | `crc16_ccitt_false` | 11.55 | 11.81 | 0.98 | 12.54 | 12.80 | 0.98 | ours at avx2 |
 | `crc16_x25` | 7.06 | 7.05 | 1.00 | 8.05 | 8.05 | 1.00 | ours at avx2 |
 | `crc24_adsb` | 11.05 | 11.04 | 1.00 | 12.04 | 12.04 | 1.00 | ours at avx2 |
@@ -1424,15 +1484,15 @@ Reference model `znver3`, counter-model `alderlake`, mode `whole-loop`; executio
 | `equalize_qam64` | 129.16 | 123.94 | 1.04 | 112.47 | 170.30 | 0.66 | ours at avx2 |
 | `frame_decode` | 6.92 | 5.57 | 1.24 | 6.22 | 6.18 | 1.01 | ours at avx2 |
 | `frame_decode_block` | 6.90 | 6.91 | 1.00 | 5.79 | 5.80 | 1.00 | ours at avx2 |
-| `frame_decode_four_block` | 23.37 | 23.42 | 1.00 | 21.19 | 20.77 | 1.02 | ours at avx2 |
+| `frame_decode_four_block` | 23.39 | 23.43 | 1.00 | 21.19 | 20.77 | 1.02 | ours at avx2 |
 | `frame_encode_block` | 1.61 | 1.64 | 0.98 | 1.69 | 1.73 | 0.98 | ours at avx2 |
 | `gauss_noise_c32` | 3.42 | 3.42 | 1.00 | 4.97 | 4.97 | 1.00 | ours at avx2 |
 | `gauss_noise_f32` | 1.72 | 1.72 | 1.00 | 2.50 | 2.49 | 1.00 | ours at avx2 |
 | `gauss_noise_q15` | 2.18 | 2.33 | 0.93 | 2.97 | 3.02 | 0.98 | ours at avx2 |
-| `halfband_decimate` | 3.42 | 3.43 | 1.00 | 2.99 | 2.97 | 1.01 | ours at avx2 |
+| `halfband_decimate` | 3.43 | 3.43 | 1.00 | 2.98 | 2.97 | 1.00 | ours at avx2 |
 | `halfband_decimate_cq15` | 6.55 | 6.56 | 1.00 | 7.11 | 7.11 | 1.00 | ours at avx2 |
 | `halfband_decimate_real` | 2.00 | 1.81 | 1.10 | 1.34 | 1.36 | 0.99 | ours at avx2 |
-| `halfband_decimate_real_q15` | 2.98 | 2.95 | 1.01 | 3.84 | 3.83 | 1.01 | ours at avx2 |
+| `halfband_decimate_real_q15` | 2.98 | 2.94 | 1.01 | 3.84 | 3.82 | 1.01 | ours at avx2 |
 | `iq_offset_block` | 2.02 | 2.89 | 0.70 | 2.28 | 2.95 | 0.77 | ours at avx2 |
 | `morse_decode_block` | 13.35 | 12.77 | 1.05 | 16.29 | 16.08 | 1.01 | ours at avx2 |
 | `morse_encode_block` | 5.27 | 4.44 | 1.19 | 5.43 | 4.49 | 1.21 | ours at avx2 |
@@ -1442,24 +1502,34 @@ Reference model `znver3`, counter-model `alderlake`, mode `whole-loop`; executio
 | `preemph_limit` | 16.03 | 15.37 | 1.04 | 15.16 | 13.18 | 1.15 | ours at avx2 |
 | `preemph_limit_q15` | 28.42 | 27.62 | 1.03 | 18.69 | 18.69 | 1.00 | ours at avx2 |
 | `preemph_limit_stereo` | 19.59 | 16.71 | 1.17 | 22.55 | 22.32 | 1.01 | ours at avx2 |
+| `psk_demod_block` | 37.55 | 37.72 | 1.00 | 38.85 | 38.80 | 1.00 | ours at avx2 |
 | `psk_mod_block` | 4.40 | 4.37 | 1.01 | 4.23 | 4.27 | 0.99 | ours at avx2 |
+| `psk_mod_block_liquid` | 4.40 | 4.37 | 1.01 | 4.23 | 4.27 | 0.99 | ours at avx2 |
 | `pulse_match_block` | 12.40 | 12.32 | 1.01 | 11.32 | 11.29 | 1.00 | ours at avx2 |
+| `pulse_match_block_liquid` | 12.40 | 12.32 | 1.01 | 11.32 | 11.29 | 1.00 | ours at avx2 |
 | `pulse_shape_block` | 3.59 | 3.57 | 1.01 | 3.51 | 3.54 | 0.99 | ours at avx2 |
+| `pulse_shape_block_liquid` | 3.59 | 3.57 | 1.01 | 3.51 | 3.54 | 0.99 | ours at avx2 |
 | `qam_acquire_block` | 26.55 | 26.92 | 0.99 | 33.04 | 32.63 | 1.01 | ours at avx2 |
-| `qam_demod_block` | 67.36 | 64.18 | 1.05 | 72.85 | 76.39 | 0.95 | ours at avx2 |
-| `qam_demod_qam256_block` | 67.98 | 67.95 | 1.00 | 73.43 | 78.32 | 0.94 | ours at avx2 |
-| `qam_demod_search_block` | 71.19 | 66.92 | 1.06 | 77.56 | 80.01 | 0.97 | ours at avx2 |
-| `qam_frame_decode_block` | 79.42 | 76.22 | 1.04 | 83.90 | 87.25 | 0.96 | ours at avx2 |
+| `qam_demod_block` | 64.42 | 62.75 | 1.03 | 65.10 | 70.69 | 0.92 | ours at avx2 |
+| `qam_demod_qam256_block` | 65.05 | 66.52 | 0.98 | 65.71 | 72.62 | 0.90 | ours at avx2 |
+| `qam_demod_search_block` | 68.30 | 65.65 | 1.04 | 69.82 | 74.37 | 0.94 | ours at avx2 |
+| `qam_frame_decode_block` | 76.50 | 74.73 | 1.02 | 76.11 | 81.50 | 0.93 | ours at avx2 |
 | `qam_frame_encode_block` | 5.17 | 5.26 | 0.98 | 5.28 | 5.48 | 0.96 | ours at avx2 |
 | `qam_mod_block` | 4.31 | 4.39 | 0.98 | 4.39 | 4.57 | 0.96 | ours at avx2 |
+| `qam_mod_block_liquid` | 4.31 | 4.39 | 0.98 | 4.39 | 4.57 | 0.96 | ours at avx2 |
 | `qam_mod_qam256_block` | 4.89 | 4.96 | 0.99 | 5.12 | 4.74 | 1.08 | ours at avx2 |
+| `qam_mod_qam256_block_liquid` | 4.89 | 4.96 | 0.99 | 5.12 | 4.74 | 1.08 | ours at avx2 |
 | `qam_soft_bits_qam1024` | 4.67 | 5.53 | 0.84 | 4.89 | 4.31 | 1.13 | ours at avx2 |
 | `qam_soft_bits_qam16` | 0.52 | 0.52 | 1.00 | 1.02 | 1.02 | 1.00 | ours at avx2 |
+| `qam_soft_bits_qam16_liquid` | 0.52 | 0.52 | 1.00 | 1.02 | 1.02 | 1.00 | ours at avx2 |
+| `qam_soft_bits_qam16_lut` | 0.52 | 0.52 | 1.00 | 1.02 | 1.02 | 1.00 | ours at avx2 |
 | `qam_soft_bits_qam256` | 2.51 | 2.51 | 1.00 | 4.06 | 4.06 | 1.00 | ours at avx2 |
 | `qam_soft_bits_qam64` | 1.55 | 1.55 | 1.00 | 1.42 | 1.42 | 1.00 | ours at avx2 |
+| `qam_soft_bits_qam64_liquid` | 1.55 | 1.55 | 1.00 | 1.42 | 1.42 | 1.00 | ours at avx2 |
+| `qam_soft_bits_qam64_lut` | 1.55 | 1.55 | 1.00 | 1.42 | 1.42 | 1.00 | ours at avx2 |
 | `qam_soft_bits_qpsk` | 0.27 | 0.26 | 1.02 | 0.20 | 0.20 | 1.01 | ours at avx2 |
 | `rds_decode_block` | 7.77 | 7.28 | 1.07 | 8.56 | 7.98 | 1.07 | ours at avx2 |
-| `rds_demod_block` | 17.03 | 16.70 | 1.02 | 15.37 | 14.90 | 1.03 | ours at avx2 |
+| `rds_demod_block` | 16.79 | 16.60 | 1.01 | 14.71 | 14.43 | 1.02 | ours at avx2 |
 | `rds_shape` | 47.87 | 50.41 | 0.95 | 69.18 | 78.60 | 0.88 | ours at avx2 |
 | `real_to_complex` | 2.55 | 2.49 | 1.02 | 2.30 | 2.27 | 1.01 | ours at avx2 |
 | `real_to_complex_cq15` | 3.63 | 3.60 | 1.01 | 4.93 | 4.87 | 1.01 | ours at avx2 |
@@ -1470,15 +1540,24 @@ Reference model `znver3`, counter-model `alderlake`, mode `whole-loop`; executio
 | `stereo_matrix` | 0.33 | 0.32 | 1.01 | 0.45 | 0.45 | 1.01 | ours at avx2 |
 | `stereo_matrix_cq15` | 0.15 | 0.15 | 1.03 | 0.20 | 0.20 | 1.02 | ours at avx2 |
 | `symbol_demap_qam16_block` | 0.52 | 0.52 | 1.00 | 1.02 | 1.02 | 1.00 | ours at avx2 |
+| `symbol_demap_qam16_block_liquid` | 0.52 | 0.52 | 1.00 | 1.02 | 1.02 | 1.00 | ours at avx2 |
+| `symbol_demap_qam16_block_lut` | 0.52 | 0.52 | 1.00 | 1.02 | 1.02 | 1.00 | ours at avx2 |
 | `symbol_demap_qam256_block` | 2.51 | 2.51 | 1.00 | 4.06 | 4.06 | 1.00 | ours at avx2 |
-| `symbol_demap_qam64_block` | 1.55 | 1.55 | 1.00 | 1.42 | 1.42 | 1.00 | ours at avx2 |
+| `symbol_demap_qam64_block` | 1.55 | 1.55 | 1.00 | 1.43 | 1.42 | 1.00 | ours at avx2 |
+| `symbol_demap_qam64_block_liquid` | 1.55 | 1.55 | 1.00 | 1.43 | 1.42 | 1.00 | ours at avx2 |
+| `symbol_demap_qam64_block_lut` | 1.55 | 1.55 | 1.00 | 1.43 | 1.42 | 1.00 | ours at avx2 |
 | `symbol_map_block` | 4.93 | 5.78 | 0.85 | 6.38 | 7.55 | 0.84 | ours at avx2 |
-| `symbol_sync` | 32.97 | 31.52 | 1.05 | 46.67 | 43.74 | 1.07 | ours at avx2 |
-| `symbol_sync_real` | 9.47 | 15.66 | 0.60 | 24.55 | 21.81 | 1.13 | ours at avx2 |
+| `symbol_map_block_liquid` | 4.93 | 5.78 | 0.85 | 6.38 | 7.55 | 0.84 | ours at avx2 |
+| `symbol_map_block_qam64` | 7.15 | 7.65 | 0.94 | 9.20 | 7.14 | 1.29 | ours at avx2 |
+| `symbol_map_block_qam64_liquid` | 7.15 | 7.65 | 0.94 | 9.20 | 7.14 | 1.29 | ours at avx2 |
+| `symbol_map_block_qpsk` | 5.56 | 5.56 | 1.00 | 5.05 | 5.15 | 0.98 | ours at avx2 |
+| `symbol_map_block_qpsk_liquid` | 5.56 | 5.56 | 1.00 | 5.05 | 5.15 | 0.98 | ours at avx2 |
+| `symbol_sync` | 27.35 | 29.31 | 0.93 | 31.75 | 32.97 | 0.96 | ours at avx2 |
+| `symbol_sync_real` | 13.53 | 14.41 | 0.94 | 17.66 | 16.16 | 1.09 | ours at avx2 |
 | `xcorr_fft_n4096` | 8.66 | 8.60 | 1.01 | 8.03 | 8.00 | 1.00 | ours at avx2 |
 | `xcorr_fft_n512` | 7.72 | 7.60 | 1.02 | 7.14 | 7.15 | 1.00 | ours at avx2 |
 
-- Not measured at this level: `convert_cq15_cs8_fallback`, `convert_cq15_cu8_fallback`, `convert_cs16_fallback`, `convert_cs8_fallback`, `convert_cu8_fallback`, `convert_out_cs16_fallback`, `convert_out_cs8_fallback`, `convert_out_cu8_fallback`, `convert_out_real_rs16_fallback`, `convert_out_real_rs8_fallback`, `convert_out_real_ru8_fallback`, `convert_real_rs16_fallback`, `rotate_cq15_fallback`, `rotate_fallback`, `scramble_c32_b1_fallback`, `scramble_c32_b2_dvbs2`, `scramble_c32_b2_fallback`, `scramble_c32_b8_fallback`, `scramble_cq15_b2_fallback`, `scramble_cq15_b8_fallback`, `fir_cq15_fallback`, `fir_decimate_cq15_fallback`, `fir_decimate_fallback`, `fir_fallback`, `fir_interpolate_cq15_fallback`, `fir_interpolate_fallback`, `fir_interpolate_real_fallback`, `fir_interpolate_real_q15_fallback`, `fir_interpolate_short_fallback`, `resample_cq15_fallback`, `resample_fallback`, `resample_real_fallback`, `resample_real_q15_fallback`, `mag_fallback`, `mag_q15_fallback`, `mag_sq_fallback`, `mag_sq_q15_fallback`, `quad_demod_cq15_fallback`, `quad_demod_fallback`, `fm_mod_cq15_fallback`, `fm_mod_fallback`, `window_cq15_fallback`, `window_fallback`, `power_db_fallback`, `power_db_q15_fallback`, `agc_fallback`, `dc_block_fallback`, `dc_block_real_fallback`, `deemphasis_fallback`, `biquad_cq15_fallback`, `biquad_fallback`, `biquad_real_fallback`, `biquad_real_q15_fallback`, `dot_complex_fallback`, `dot_cq15_fallback`, `dot_fallback`, `dot_real_fallback`, `dot_real_q15_fallback`, `scale_cq15_fallback`, `scale_fallback`, `add_cq15_fallback`, `add_fallback`, `add_real_fallback`, `add_real_q15_fallback`, `mul_cq15_fallback`, `mul_fallback`, `mul_real_fallback`, `mul_real_q15_fallback`, `interleave_cq15_fallback`, `interleave_fallback`, `deinterleave_cq15_fallback`, `deinterleave_fallback`, `oscillate_cq15_fallback`, `oscillate_fallback`, `fft_1024_fallback`, `fft_4096_fallback`, `fft_64_fallback`, `fft_cq15_1024_default_fallback`, `fft_cq15_1024_fallback`, `rfft_1024_fallback`, `am_mod_cq15_fallback`, `am_mod_fallback`, `channelize_fallback`, `costas_fallback`, `costas_qam1024_fallback`, `costas_qam16_fallback`, `costas_qam256_fallback`, `costas_qam64_fallback`, `equalize_fallback`, `equalize_qam1024_fallback`, `equalize_qam16_fallback`, `equalize_qam256_fallback`, `equalize_qam64_fallback`, `gauss_noise_c32_fallback`, `gauss_noise_c32_fastnoise`, `gauss_noise_f32_fallback`, `gauss_noise_f32_fastnoise`, `gauss_noise_f32_ziggurat`, `gauss_noise_q15_fallback`, `halfband_decimate_cq15_fallback`, `halfband_decimate_fallback`, `halfband_decimate_real_fallback`, `halfband_decimate_real_q15_fallback`, `halfband_ref_fir_decimate`, `halfband_ref_fir_decimate_cq15`, `halfband_ref_shifted`, `halfband_ref_shifted_cq15`, `real_to_complex_airspy`, `real_to_complex_cq15_fallback`, `real_to_complex_fallback`, `stereo_matrix_cq15_fallback`, `stereo_matrix_fallback`, `stereo_pll_fallback`, `stereo_pll_q15_fallback`, `xcorr_fft_n4096_fallback`, `xcorr_fft_n512_fallback`.
+- Not measured at this level: `convert_cq15_cs8_fallback`, `convert_cq15_cu8_fallback`, `convert_cs16_fallback`, `convert_cs8_fallback`, `convert_cu8_fallback`, `convert_out_cs16_fallback`, `convert_out_cs8_fallback`, `convert_out_cu8_fallback`, `convert_out_real_rs16_fallback`, `convert_out_real_rs8_fallback`, `convert_out_real_ru8_fallback`, `convert_real_rs16_fallback`, `rotate_cq15_fallback`, `rotate_fallback`, `scramble_c32_b1_fallback`, `scramble_c32_b2_dvbs2`, `scramble_c32_b2_fallback`, `scramble_c32_b8_fallback`, `scramble_cq15_b2_fallback`, `scramble_cq15_b8_fallback`, `fir_cq15_fallback`, `fir_decimate_cq15_fallback`, `fir_decimate_fallback`, `fir_fallback`, `fir_interpolate_cq15_fallback`, `fir_interpolate_fallback`, `fir_interpolate_real_fallback`, `fir_interpolate_real_q15_fallback`, `fir_interpolate_short_fallback`, `resample_cq15_fallback`, `resample_fallback`, `resample_real_fallback`, `resample_real_q15_fallback`, `mag_fallback`, `mag_q15_fallback`, `mag_sq_fallback`, `mag_sq_q15_fallback`, `quad_demod_cq15_fallback`, `quad_demod_fallback`, `fm_mod_cq15_fallback`, `fm_mod_fallback`, `window_cq15_fallback`, `window_fallback`, `power_db_fallback`, `power_db_q15_fallback`, `agc_fallback`, `dc_block_fallback`, `dc_block_real_fallback`, `deemphasis_fallback`, `biquad_cq15_fallback`, `biquad_fallback`, `biquad_real_fallback`, `biquad_real_q15_fallback`, `dot_complex_fallback`, `dot_cq15_fallback`, `dot_fallback`, `dot_real_fallback`, `dot_real_q15_fallback`, `scale_cq15_fallback`, `scale_fallback`, `add_cq15_fallback`, `add_fallback`, `add_real_fallback`, `add_real_q15_fallback`, `mul_cq15_fallback`, `mul_fallback`, `mul_real_fallback`, `mul_real_q15_fallback`, `interleave_cq15_fallback`, `interleave_fallback`, `deinterleave_cq15_fallback`, `deinterleave_fallback`, `oscillate_cq15_fallback`, `oscillate_fallback`, `fft_1024_fallback`, `fft_4096_fallback`, `fft_64_fallback`, `fft_cq15_1024_default_fallback`, `fft_cq15_1024_fallback`, `rfft_1024_fallback`, `am_mod_cq15_fallback`, `am_mod_fallback`, `channelize_fallback`, `costas_fallback`, `costas_qam1024_fallback`, `costas_qam16_fallback`, `costas_qam256_fallback`, `costas_qam64_fallback`, `equalize_fallback`, `equalize_qam1024_fallback`, `equalize_qam16_fallback`, `equalize_qam256_fallback`, `equalize_qam64_fallback`, `gauss_noise_c32_fallback`, `gauss_noise_c32_fastnoise`, `gauss_noise_f32_fallback`, `gauss_noise_f32_fastnoise`, `gauss_noise_f32_ziggurat`, `gauss_noise_q15_fallback`, `halfband_decimate_cq15_fallback`, `halfband_decimate_fallback`, `halfband_decimate_real_fallback`, `halfband_decimate_real_q15_fallback`, `halfband_ref_fir_decimate`, `halfband_ref_fir_decimate_cq15`, `halfband_ref_shifted`, `halfband_ref_shifted_cq15`, `real_to_complex_airspy`, `real_to_complex_cq15_fallback`, `real_to_complex_fallback`, `stereo_matrix_cq15_fallback`, `stereo_matrix_fallback`, `stereo_pll_fallback`, `stereo_pll_q15_fallback`, `symbol_sync_fallback`, `xcorr_fft_n4096_fallback`, `xcorr_fft_n512_fallback`.
 
 #### Simulated cycles at `avx512` (`x86_64-avx512`)
 
@@ -1518,7 +1597,7 @@ Reference model `znver4`, counter-model `sapphirerapids`, mode `whole-loop`; exe
 | `scramble_c32_b1` | 0.23 | 0.66 | 0.35 | 0.15 | 1.59 | 0.09 | +-1.0 sequence from the index bits into a buffer of 256 + volk_32fc_32f_multiply_32fc (VOLK 3.3.0 dispatcher; the form of srsRAN srsran_scrambling_c) |
 | `scramble_c32_b1_fallback` | 0.51 | 0.70 | 0.73 | 0.52 | 1.42 | 0.36 | +-1.0 sequence from the index bits into a buffer of 256 + VOLK 3.3.0 volk_32fc_32f_multiply_32fc_generic (benches/refs/volk-generic.c, -O3 -ffp-contract=off) |
 | `scramble_c32_b2` | 0.64 | 2.36 | 0.27 | 0.78 | 2.41 | 0.32 | phasor lookup into a buffer of 256 + VOLK 3.3.0 volk_32fc_x2_multiply_32fc_u_avx without FMA (benches/refs/volk-nofma.c, -O3 -ffp-contract=off) |
-| `scramble_c32_b2_dvbs2` | 0.64 | 2.97 | 0.21 | 0.78 | 2.42 | 0.32 | GNU Radio dvbs2_physical_cc PL scrambling, the per-symbol switch on R_n (benches/refs/gr-dvbs2-plscramble.c, main at ec1bf15; reference does different work; -O3) |
+| `scramble_c32_b2_dvbs2` | 0.64 | 2.98 | 0.21 | 0.78 | 2.42 | 0.32 | GNU Radio dvbs2_physical_cc PL scrambling, the per-symbol switch on R_n (benches/refs/gr-dvbs2-plscramble.c, main at ec1bf15; reference does different work; -O3) |
 | `scramble_c32_b2_fallback` | 1.49 | 6.24 | 0.24 | 1.30 | 7.00 | 0.19 | phasor lookup into a buffer of 256 + VOLK 3.3.0 volk_32fc_x2_multiply_32fc_generic (benches/refs/volk-generic.c, -O3 -ffp-contract=off) |
 | `scramble_c32_b8` | 0.58 | 2.36 | 0.25 | 2.66 | 2.41 | 1.11 | phasor lookup into a buffer of 256 + VOLK 3.3.0 volk_32fc_x2_multiply_32fc_u_avx without FMA (benches/refs/volk-nofma.c, -O3 -ffp-contract=off) |
 | `scramble_c32_b8_fallback` | 0.95 | 6.24 | 0.15 | 3.92 | 7.00 | 0.56 | phasor lookup into a buffer of 256 + VOLK 3.3.0 volk_32fc_x2_multiply_32fc_generic (benches/refs/volk-generic.c, -O3 -ffp-contract=off) |
@@ -1658,53 +1737,53 @@ Reference model `znver4`, counter-model `sapphirerapids`, mode `whole-loop`; exe
 | `am_mod_cq15_fallback` | 0.32 | 2.82 | 0.11 | 0.48 | 2.37 | 0.20 | CMSIS-DSP 1.18.0 arm_scale_q15 by round(c m 32768) (truncating), arm_offset_q15 by c in place and a plain loop to (re, 0) (a composition: CMSIS-DSP has no AM modulator), generic C (-O3 -ffp-contract=off, LOOPUNROLL, avx512) |
 | `am_mod_fallback` | 0.38 | 0.53 | 0.73 | 0.30 | 0.54 | 0.56 | liquid-dsp 1.8.3 ampmodem_modulate_block (LIQUID_AMPMODEM_DSB with the carrier: x * mod_index + 1, no clamp, carrier 1; -O3) |
 | `auto_notch` | 161.09 | 161.09 | 1.00 | 163.36 | 163.36 | 1.00 | sdrk fallback |
-| `band_pulse_detect_block` | 55.21 | 55.21 | 1.00 | 53.08 | 53.08 | 1.00 | sdrk fallback |
+| `band_pulse_detect_block` | 53.15 | 53.15 | 1.00 | 51.10 | 51.10 | 1.00 | sdrk fallback |
 | `bit_descramble_block` | 0.32 | 4.76 | 0.07 | 0.31 | 5.55 | 0.06 | GNU Radio descrambler_bb(0x21, 0, 22): gr::digital::lfsr, one __builtin_parityl per unpacked bit (generic compiler flags) |
-| `bit_descramble_in_place_block` | 1.35 | 4.76 | 0.28 | 1.19 | 5.55 | 0.21 | GNU Radio descrambler_bb(0x21, 0, 22): gr::digital::lfsr, one __builtin_parityl per unpacked bit (generic compiler flags) |
+| `bit_descramble_in_place_block` | 1.36 | 4.76 | 0.28 | 1.19 | 5.55 | 0.21 | GNU Radio descrambler_bb(0x21, 0, 22): gr::digital::lfsr, one __builtin_parityl per unpacked bit (generic compiler flags) |
 | `bit_scramble_block` | 0.77 | 4.41 | 0.17 | 0.74 | 5.18 | 0.14 | GNU Radio scrambler_bb(0x21, 0, 22): gr::digital::lfsr, one __builtin_parityl per unpacked bit (generic compiler flags) |
 | `bit_scramble_in_place_block` | 1.01 | 4.41 | 0.23 | 0.96 | 5.18 | 0.18 | GNU Radio scrambler_bb(0x21, 0, 22): gr::digital::lfsr, one __builtin_parityl per unpacked bit (generic compiler flags) |
 | `channel_bank_channelize` | 783.82 | 783.82 | 1.00 | 97.13 | 97.13 | 1.00 | sdrk fallback |
-| `channel_bank_ddc` | 514.15 | 514.15 | 1.00 | 85.13 | 85.13 | 1.00 | sdrk fallback |
+| `channel_bank_ddc` | 513.98 | 513.98 | 1.00 | 85.10 | 85.10 | 1.00 | sdrk fallback |
 | `channel_select_block` | 0.28 | 0.28 | 1.00 | 1.83 | 1.83 | 1.00 | sdrk fallback |
 | `channelize` | 12.20 | 103.02 | 0.12 | 16.04 | 85.19 | 0.19 | liquid-dsp 1.8.3 firpfbch2_crcf analyzer (benches/refs/liquid-channelizer.c), the SIMD dot products of the level, FFTW 3.3.10 |
 | `channelize_block` | 12.22 | 12.22 | 1.00 | 16.16 | 16.16 | 1.00 | sdrk fallback |
 | `channelize_fallback` | 37.56 | 105.93 | 0.35 | 32.73 | 118.74 | 0.28 | liquid-dsp 1.8.3 firpfbch2_crcf analyzer (benches/refs/liquid-channelizer.c), portable dot products, liquid's own FFT |
 | `correlate_block` | 7.62 | 7.62 | 1.00 | 5.50 | 5.50 | 1.00 | sdrk fallback |
 | `costas` | 55.09 | 55.09 | 1.00 | 68.07 | 68.07 | 1.00 | sdrk fallback |
-| `costas_fallback` | 55.09 | 68.92 | 0.80 | 68.07 | 66.44 | 1.02 | GNU Radio costas_loop_cc (costas_loop_cc_impl.cc of gr-digital, generic compiler flags) |
-| `costas_qam1024` | 127.43 | 127.43 | 1.00 | 148.41 | 148.41 | 1.00 | sdrk fallback |
-| `costas_qam1024_fallback` | 127.43 | 208.56 | 0.61 | 148.41 | 254.51 | 0.58 | GNU Radio constellation_receiver_cb with constellation_rect 1024-QAM (constellation_receiver_cb_impl.cc and constellation.cc of gr-digital, generic compiler flags) |
-| `costas_qam16` | 119.37 | 119.37 | 1.00 | 137.41 | 137.41 | 1.00 | sdrk fallback |
-| `costas_qam16_fallback` | 119.37 | 158.66 | 0.75 | 137.41 | 172.94 | 0.79 | GNU Radio constellation_receiver_cb with constellation_rect 16-QAM (constellation_receiver_cb_impl.cc and constellation.cc of gr-digital, generic compiler flags) |
-| `costas_qam256` | 127.62 | 127.62 | 1.00 | 148.60 | 148.60 | 1.00 | sdrk fallback |
-| `costas_qam256_fallback` | 127.62 | 161.72 | 0.79 | 148.60 | 178.01 | 0.83 | GNU Radio constellation_receiver_cb with constellation_rect 256-QAM (constellation_receiver_cb_impl.cc and constellation.cc of gr-digital, generic compiler flags) |
-| `costas_qam64` | 121.33 | 121.33 | 1.00 | 140.37 | 140.37 | 1.00 | sdrk fallback |
-| `costas_qam64_fallback` | 121.33 | 159.16 | 0.76 | 140.37 | 173.49 | 0.81 | GNU Radio constellation_receiver_cb with constellation_rect 64-QAM (constellation_receiver_cb_impl.cc and constellation.cc of gr-digital, generic compiler flags) |
+| `costas_fallback` | 55.09 | 68.66 | 0.80 | 68.07 | 66.16 | 1.03 | GNU Radio costas_loop_cc (costas_loop_cc_impl.cc of gr-digital, generic compiler flags) |
+| `costas_qam1024` | 127.33 | 127.33 | 1.00 | 148.31 | 148.31 | 1.00 | sdrk fallback |
+| `costas_qam1024_fallback` | 127.33 | 208.62 | 0.61 | 148.31 | 254.58 | 0.58 | GNU Radio constellation_receiver_cb with constellation_rect 1024-QAM (constellation_receiver_cb_impl.cc and constellation.cc of gr-digital, generic compiler flags) |
+| `costas_qam16` | 119.28 | 119.28 | 1.00 | 137.31 | 137.31 | 1.00 | sdrk fallback |
+| `costas_qam16_fallback` | 119.28 | 158.59 | 0.75 | 137.31 | 172.86 | 0.79 | GNU Radio constellation_receiver_cb with constellation_rect 16-QAM (constellation_receiver_cb_impl.cc and constellation.cc of gr-digital, generic compiler flags) |
+| `costas_qam256` | 127.65 | 127.65 | 1.00 | 148.63 | 148.63 | 1.00 | sdrk fallback |
+| `costas_qam256_fallback` | 127.65 | 161.83 | 0.79 | 148.63 | 178.14 | 0.83 | GNU Radio constellation_receiver_cb with constellation_rect 256-QAM (constellation_receiver_cb_impl.cc and constellation.cc of gr-digital, generic compiler flags) |
+| `costas_qam64` | 121.28 | 121.28 | 1.00 | 140.32 | 140.32 | 1.00 | sdrk fallback |
+| `costas_qam64_fallback` | 121.28 | 159.13 | 0.76 | 140.32 | 173.45 | 0.81 | GNU Radio constellation_receiver_cb with constellation_rect 64-QAM (constellation_receiver_cb_impl.cc and constellation.cc of gr-digital, generic compiler flags) |
 | `crc16_ccitt_false` | 11.81 | 13.17 | 0.90 | 12.80 | 16.19 | 0.79 | GNU Radio gr::digital::crc: one 256-entry uint64_t table, a 64-bit remainder, one lookup per byte (generic compiler flags) |
 | `crc16_x25` | 7.05 | 10.38 | 0.68 | 8.04 | 9.40 | 0.86 | GNU Radio gr::digital::crc: one 256-entry uint64_t table, a 64-bit remainder, one lookup per byte (generic compiler flags) |
 | `crc24_adsb` | 11.04 | 13.17 | 0.84 | 12.04 | 16.19 | 0.74 | GNU Radio gr::digital::crc: one 256-entry uint64_t table, a 64-bit remainder, one lookup per byte (generic compiler flags) |
 | `crc32` | 7.05 | 10.38 | 0.68 | 8.04 | 9.40 | 0.86 | GNU Radio gr::digital::crc: one 256-entry uint64_t table, a 64-bit remainder, one lookup per byte (generic compiler flags) |
-| `equalize` | 104.01 | 104.01 | 1.00 | 146.19 | 146.19 | 1.00 | sdrk fallback |
-| `equalize_fallback` | 104.01 | 929.60 | 0.11 | 146.19 | 220.19 | 0.66 | GNU Radio linear_equalizer with adaptive_algorithm_nlms (linear_equalizer_impl.cc of gr-digital, VOLK generic dot products, generic compiler flags) |
+| `equalize` | 104.01 | 1094.85 | 0.09 | 146.19 | 323.95 | 0.45 | GNU Radio linear_equalizer with adaptive_algorithm_nlms (linear_equalizer_impl.cc of gr-digital, VOLK's dispatched dot products of the level with the aligned tap copies of fir_filter) |
+| `equalize_fallback` | 104.01 | 929.61 | 0.11 | 146.19 | 220.19 | 0.66 | GNU Radio linear_equalizer with adaptive_algorithm_nlms (linear_equalizer_impl.cc of gr-digital, VOLK generic dot products, generic compiler flags) |
 | `equalize_qam1024` | 125.31 | 125.31 | 1.00 | 173.38 | 173.38 | 1.00 | sdrk fallback |
 | `equalize_qam1024_fallback` | 125.31 | 937.23 | 0.13 | 173.38 | 277.16 | 0.63 | GNU Radio linear_equalizer with adaptive_algorithm_nlms on constellation_rect 1024-QAM (linear_equalizer_impl.cc and constellation.cc of gr-digital, VOLK generic dot products, generic compiler flags) |
-| `equalize_qam16` | 121.27 | 121.27 | 1.00 | 169.39 | 169.39 | 1.00 | sdrk fallback |
-| `equalize_qam16_fallback` | 121.27 | 938.01 | 0.13 | 169.39 | 277.22 | 0.61 | GNU Radio linear_equalizer with adaptive_algorithm_nlms on constellation_rect 16-QAM (linear_equalizer_impl.cc and constellation.cc of gr-digital, VOLK generic dot products, generic compiler flags) |
+| `equalize_qam16` | 121.27 | 1100.18 | 0.11 | 169.39 | 328.53 | 0.52 | GNU Radio linear_equalizer with adaptive_algorithm_nlms on constellation_rect 16-QAM (linear_equalizer_impl.cc and constellation.cc of gr-digital, VOLK's dispatched dot products of the level with the aligned tap copies of fir_filter) |
+| `equalize_qam16_fallback` | 121.27 | 938.01 | 0.13 | 169.39 | 277.23 | 0.61 | GNU Radio linear_equalizer with adaptive_algorithm_nlms on constellation_rect 16-QAM (linear_equalizer_impl.cc and constellation.cc of gr-digital, VOLK generic dot products, generic compiler flags) |
 | `equalize_qam256` | 125.31 | 125.31 | 1.00 | 173.38 | 173.38 | 1.00 | sdrk fallback |
-| `equalize_qam256_fallback` | 125.31 | 938.01 | 0.13 | 173.38 | 277.22 | 0.63 | GNU Radio linear_equalizer with adaptive_algorithm_nlms on constellation_rect 256-QAM (linear_equalizer_impl.cc and constellation.cc of gr-digital, VOLK generic dot products, generic compiler flags) |
-| `equalize_qam64` | 121.24 | 121.24 | 1.00 | 168.37 | 168.37 | 1.00 | sdrk fallback |
-| `equalize_qam64_fallback` | 121.24 | 938.01 | 0.13 | 168.37 | 277.22 | 0.61 | GNU Radio linear_equalizer with adaptive_algorithm_nlms on constellation_rect 64-QAM (linear_equalizer_impl.cc and constellation.cc of gr-digital, VOLK generic dot products, generic compiler flags) |
+| `equalize_qam256_fallback` | 125.31 | 938.01 | 0.13 | 173.38 | 277.23 | 0.63 | GNU Radio linear_equalizer with adaptive_algorithm_nlms on constellation_rect 256-QAM (linear_equalizer_impl.cc and constellation.cc of gr-digital, VOLK generic dot products, generic compiler flags) |
+| `equalize_qam64` | 121.24 | 1100.18 | 0.11 | 168.37 | 328.53 | 0.51 | GNU Radio linear_equalizer with adaptive_algorithm_nlms on constellation_rect 64-QAM (linear_equalizer_impl.cc and constellation.cc of gr-digital, VOLK's dispatched dot products of the level with the aligned tap copies of fir_filter) |
+| `equalize_qam64_fallback` | 121.24 | 938.01 | 0.13 | 168.37 | 277.23 | 0.61 | GNU Radio linear_equalizer with adaptive_algorithm_nlms on constellation_rect 64-QAM (linear_equalizer_impl.cc and constellation.cc of gr-digital, VOLK generic dot products, generic compiler flags) |
 | `frame_decode` | 5.69 | 5.69 | 1.00 | 6.18 | 6.18 | 1.00 | sdrk fallback |
 | `frame_decode_block` | 6.90 | 6.90 | 1.00 | 5.79 | 5.79 | 1.00 | sdrk fallback |
 | `frame_decode_four_block` | 22.08 | 22.08 | 1.00 | 21.17 | 21.17 | 1.00 | sdrk fallback |
 | `frame_encode_block` | 1.62 | 1.62 | 1.00 | 1.72 | 1.72 | 1.00 | sdrk fallback |
-| `gauss_noise_c32` | 1.64 | 187.38 | 0.01 | 3.09 | 192.51 | 0.02 | liquid-dsp 1.8.3 crandnf times sigma (libc rand(), f32 Box-Muller with sqrtf, logf and cexpf; no random access, no bit-exact sequence; reference does different work; -O3) |
-| `gauss_noise_c32_fallback` | 10.68 | 187.38 | 0.06 | 18.59 | 192.51 | 0.10 | liquid-dsp 1.8.3 crandnf times sigma (libc rand(), f32 Box-Muller with sqrtf, logf and cexpf; no random access, no bit-exact sequence; reference does different work; -O3) |
+| `gauss_noise_c32` | 1.64 | 187.46 | 0.01 | 3.09 | 192.60 | 0.02 | liquid-dsp 1.8.3 crandnf times sigma (libc rand(), f32 Box-Muller with sqrtf, logf and cexpf; no random access, no bit-exact sequence; reference does different work; -O3) |
+| `gauss_noise_c32_fallback` | 10.68 | 187.46 | 0.06 | 18.59 | 192.60 | 0.10 | liquid-dsp 1.8.3 crandnf times sigma (libc rand(), f32 Box-Muller with sqrtf, logf and cexpf; no random access, no bit-exact sequence; reference does different work; -O3) |
 | `gauss_noise_c32_fastnoise` | 1.64 | 4.04 | 0.41 | 3.09 | 6.09 | 0.51 | GNU Radio fastnoise_source_c, amplitude sigma * sqrt(2) (benches/refs/gr-fastnoise.c, main at ec1bf15: one xoroshiro128+ draw and a copy from a pool of 8192 precomputed values per sample, no normal mapping, no random access; reference does less work; -O3) |
-| `gauss_noise_f32` | 0.84 | 116.16 | 0.01 | 1.56 | 124.65 | 0.01 | liquid-dsp 1.8.3 randnf times sigma (libc rand(), f32 Box-Muller with sqrtf, logf and sinf; no random access, no bit-exact sequence; reference does different work; -O3) |
-| `gauss_noise_f32_fallback` | 5.34 | 116.16 | 0.05 | 9.30 | 124.65 | 0.07 | liquid-dsp 1.8.3 randnf times sigma (libc rand(), f32 Box-Muller with sqrtf, logf and sinf; no random access, no bit-exact sequence; reference does different work; -O3) |
+| `gauss_noise_f32` | 0.84 | 116.24 | 0.01 | 1.56 | 124.74 | 0.01 | liquid-dsp 1.8.3 randnf times sigma (libc rand(), f32 Box-Muller with sqrtf, logf and sinf; no random access, no bit-exact sequence; reference does different work; -O3) |
+| `gauss_noise_f32_fallback` | 5.34 | 116.24 | 0.05 | 9.30 | 124.74 | 0.07 | liquid-dsp 1.8.3 randnf times sigma (libc rand(), f32 Box-Muller with sqrtf, logf and sinf; no random access, no bit-exact sequence; reference does different work; -O3) |
 | `gauss_noise_f32_fastnoise` | 0.84 | 4.05 | 0.21 | 1.56 | 6.10 | 0.26 | GNU Radio fastnoise_source_f, amplitude sigma (benches/refs/gr-fastnoise.c, main at ec1bf15: one xoroshiro128+ draw and a copy from a pool of 8192 precomputed values per sample, no normal mapping, no random access; reference does less work; -O3) |
-| `gauss_noise_f32_ziggurat` | 0.84 | 9.83 | 0.09 | 1.56 | 10.44 | 0.15 | rand_distr 0.5.1 StandardNormal as f32 times sigma over rand 0.9.5 SmallRng (Ziggurat in f64 with rejection: a variable number of draws per value, no random access, no bit-exact sequence across platforms; reference does different work) |
+| `gauss_noise_f32_ziggurat` | 0.84 | 9.82 | 0.09 | 1.56 | 10.43 | 0.15 | rand_distr 0.5.1 StandardNormal as f32 times sigma over rand 0.9.5 SmallRng (Ziggurat in f64 with rejection: a variable number of draws per value, no random access, no bit-exact sequence across platforms; reference does different work) |
 | `gauss_noise_q15` | 1.04 | 9.98 | 0.10 | 1.83 | 9.20 | 0.20 | sdrk fallback |
 | `gauss_noise_q15_fallback` | 9.98 | 9.98 | 1.00 | 9.20 | 9.20 | 1.00 | sdrk fallback |
 | `halfband_decimate` | 2.58 | 107.89 | 0.02 | 3.44 | 34.07 | 0.10 | liquid-dsp 1.8.3 resamp2_crcf_decim_execute (dotprod_crcf) with its AVX-512F dot product (-O3 -ffp-contract=off, avx512) |
@@ -1728,24 +1807,34 @@ Reference model `znver4`, counter-model `sapphirerapids`, mode `whole-loop`; exe
 | `preemph_limit` | 19.13 | 19.13 | 1.00 | 12.17 | 12.17 | 1.00 | sdrk fallback |
 | `preemph_limit_q15` | 26.71 | 26.71 | 1.00 | 18.69 | 18.69 | 1.00 | sdrk fallback |
 | `preemph_limit_stereo` | 15.64 | 15.64 | 1.00 | 13.07 | 13.07 | 1.00 | sdrk fallback |
-| `psk_mod_block` | 4.66 | 4.66 | 1.00 | 3.57 | 3.57 | 1.00 | sdrk fallback |
-| `pulse_match_block` | 11.01 | 11.01 | 1.00 | 6.23 | 6.23 | 1.00 | sdrk fallback |
-| `pulse_shape_block` | 3.91 | 3.91 | 1.00 | 2.86 | 2.86 | 1.00 | sdrk fallback |
+| `psk_demod_block` | 35.14 | 1156.12 | 0.03 | 33.62 | 415.04 | 0.08 | GNU Radio fir_filter_ccf + symbol_sync_cc + costas_loop_cc + constellation_decoder_cb (the sum of the blocks of the receiver chain, generic compiler flags; no acquisition and no lock watches) |
+| `psk_mod_block` | 4.66 | 216.63 | 0.02 | 3.57 | 302.04 | 0.01 | GNU Radio constellation_modulator as the sum of its blocks: pack_k_bits_bb + chunks_to_symbols_bc + pfb_arb_resampler_ccf (32 filters of 88 taps and their derivative filters), VOLK's dispatched dot product of the level |
+| `psk_mod_block_liquid` | 4.66 | 49.54 | 0.09 | 3.57 | 57.22 | 0.06 | liquid-dsp 1.8.3 modemcf_modulate (arbitrary-constellation modem) + firinterp_crcf (the root-raised cosine of the block), the SIMD dot products of the level (the portable loop at simd128) |
+| `pulse_match_block` | 10.99 | 878.24 | 0.01 | 6.23 | 178.86 | 0.03 | GNU Radio fir_filter_ccf (fir_filter_ccf_impl.cc of gr-filter) with VOLK's dispatched dot product of the level (volk_32fc_32f_dot_prod_32fc_a, the aligned tap copies of fir_filter) |
+| `pulse_match_block_liquid` | 10.99 | 73.62 | 0.15 | 6.23 | 69.98 | 0.09 | liquid-dsp 1.8.3 firfilt_crcf (firfilt.proto.c), the SIMD dot product of the level (the portable loop at simd128) |
+| `pulse_shape_block` | 3.91 | 168.93 | 0.02 | 2.86 | 86.35 | 0.03 | GNU Radio interp_fir_filter_ccf (interp_fir_filter_impl.cc of gr-filter) with VOLK's dispatched dot product of the level (volk_32fc_32f_dot_prod_32fc_a, the aligned tap copies of fir_filter) |
+| `pulse_shape_block_liquid` | 3.91 | 47.79 | 0.08 | 2.86 | 55.35 | 0.05 | liquid-dsp 1.8.3 firinterp_crcf (firinterp.proto.c, firpfb.proto.c), the SIMD dot products of the level (the portable loop at simd128) |
 | `qam_acquire_block` | 26.62 | 26.62 | 1.00 | 30.30 | 30.30 | 1.00 | sdrk fallback |
-| `qam_demod_block` | 62.63 | 62.63 | 1.00 | 71.19 | 71.19 | 1.00 | sdrk fallback |
-| `qam_demod_qam256_block` | 64.11 | 64.11 | 1.00 | 73.02 | 73.02 | 1.00 | sdrk fallback |
-| `qam_demod_search_block` | 65.99 | 65.99 | 1.00 | 75.04 | 75.04 | 1.00 | sdrk fallback |
-| `qam_frame_decode_block` | 74.15 | 74.15 | 1.00 | 82.32 | 82.32 | 1.00 | sdrk fallback |
+| `qam_demod_block` | 59.62 | 1287.05 | 0.05 | 65.02 | 463.62 | 0.14 | GNU Radio fir_filter_ccf + symbol_sync_cc + linear_equalizer + constellation_receiver_cb (the sum of the blocks of the receiver chain, generic compiler flags and VOLK generic dot products; no acquisition, no blind equalizer stage and no lock watches) |
+| `qam_demod_qam256_block` | 61.08 | 61.08 | 1.00 | 66.84 | 66.84 | 1.00 | sdrk fallback |
+| `qam_demod_search_block` | 62.95 | 62.99 | 1.00 | 68.84 | 68.90 | 1.00 | sdrk fallback |
+| `qam_frame_decode_block` | 71.06 | 71.06 | 1.00 | 76.04 | 76.04 | 1.00 | sdrk fallback |
 | `qam_frame_encode_block` | 5.02 | 5.02 | 1.00 | 4.12 | 4.12 | 1.00 | sdrk fallback |
-| `qam_mod_block` | 4.17 | 4.17 | 1.00 | 3.21 | 3.21 | 1.00 | sdrk fallback |
-| `qam_mod_qam256_block` | 4.41 | 4.41 | 1.00 | 3.54 | 3.54 | 1.00 | sdrk fallback |
+| `qam_mod_block` | 4.17 | 217.02 | 0.02 | 3.21 | 302.57 | 0.01 | GNU Radio constellation_modulator as the sum of its blocks: pack_k_bits_bb + chunks_to_symbols_bc + pfb_arb_resampler_ccf (32 filters of 88 taps and their derivative filters), VOLK's dispatched dot product of the level |
+| `qam_mod_block_liquid` | 4.17 | 50.05 | 0.08 | 3.21 | 57.98 | 0.06 | liquid-dsp 1.8.3 modemcf_modulate (arbitrary-constellation modem) + firinterp_crcf (the root-raised cosine of the block), the SIMD dot products of the level (the portable loop at simd128) |
+| `qam_mod_qam256_block` | 4.41 | 217.79 | 0.02 | 3.54 | 303.62 | 0.01 | GNU Radio constellation_modulator as the sum of its blocks: pack_k_bits_bb + chunks_to_symbols_bc + pfb_arb_resampler_ccf (32 filters of 88 taps and their derivative filters), VOLK's dispatched dot product of the level |
+| `qam_mod_qam256_block_liquid` | 4.41 | 51.08 | 0.09 | 3.54 | 59.51 | 0.06 | liquid-dsp 1.8.3 modemcf_modulate (arbitrary-constellation modem) + firinterp_crcf (the root-raised cosine of the block), the SIMD dot products of the level (the portable loop at simd128) |
 | `qam_soft_bits_qam1024` | 2.05 | 2.05 | 1.00 | 2.06 | 2.06 | 1.00 | sdrk fallback |
-| `qam_soft_bits_qam16` | 0.36 | 0.43 | 0.84 | 0.33 | 0.52 | 0.63 | sdrk fallback |
+| `qam_soft_bits_qam16` | 0.36 | 1224.82 | 0.00 | 0.33 | 1330.90 | 0.00 | GNU Radio constellation_soft_decoder_cf with calc_soft_dec (constellation.cc of gr-digital; the exact log-likelihood ratio over all points, npwr 1, not max-log; no vector allocation per symbol, so faster than GNU Radio's object code) |
+| `qam_soft_bits_qam16_liquid` | 0.36 | 157.17 | 0.00 | 0.33 | 172.10 | 0.00 | liquid-dsp 1.8.3 modemcf_demodulate_soft of its own QAM modem (modem_common.proto.c; soft bytes with liquid's scale and labelling; the hard symbol and the soft bits per symbol) |
+| `qam_soft_bits_qam16_lut` | 0.36 | 56.64 | 0.01 | 0.33 | 55.46 | 0.01 | GNU Radio constellation_soft_decoder_cf with the look-up table of gen_soft_dec_lut (precision 8, npwr 1; constellation.cc of gr-digital; exact log-likelihood ratio, not max-log; the table lookup and a copy of 2 to 3 floats per symbol, no vector allocation) |
 | `qam_soft_bits_qam256` | 1.21 | 1.21 | 1.00 | 1.01 | 1.01 | 1.00 | sdrk fallback |
-| `qam_soft_bits_qam64` | 0.77 | 0.79 | 0.97 | 0.77 | 0.80 | 0.95 | sdrk fallback |
+| `qam_soft_bits_qam64` | 0.77 | 4356.96 | 0.00 | 0.77 | 4764.87 | 0.00 | GNU Radio constellation_soft_decoder_cf with calc_soft_dec (constellation.cc of gr-digital; the exact log-likelihood ratio over all points, npwr 1, not max-log; no vector allocation per symbol, so faster than GNU Radio's object code) |
+| `qam_soft_bits_qam64_liquid` | 0.77 | 209.23 | 0.00 | 0.77 | 220.38 | 0.00 | liquid-dsp 1.8.3 modemcf_demodulate_soft of its own QAM modem (modem_common.proto.c; soft bytes with liquid's scale and labelling; the hard symbol and the soft bits per symbol) |
+| `qam_soft_bits_qam64_lut` | 0.77 | 56.64 | 0.01 | 0.77 | 55.46 | 0.01 | GNU Radio constellation_soft_decoder_cf with the look-up table of gen_soft_dec_lut (precision 8, npwr 1; constellation.cc of gr-digital; exact log-likelihood ratio, not max-log; the table lookup and a copy of 2 to 3 floats per symbol, no vector allocation) |
 | `qam_soft_bits_qpsk` | 0.14 | 0.26 | 0.52 | 0.13 | 0.20 | 0.67 | sdrk fallback |
 | `rds_decode_block` | 7.20 | 7.20 | 1.00 | 7.96 | 7.96 | 1.00 | sdrk fallback |
-| `rds_demod_block` | 477.58 | 477.33 | 1.00 | 50.81 | 50.79 | 1.00 | sdrk fallback |
+| `rds_demod_block` | 476.92 | 476.92 | 1.00 | 50.29 | 50.29 | 1.00 | sdrk fallback |
 | `rds_shape` | 42.06 | 42.06 | 1.00 | 39.42 | 39.42 | 1.00 | sdrk fallback |
 | `real_to_complex` | 2.00 | 53.98 | 0.04 | 1.57 | 23.02 | 0.07 | liquid-dsp 1.8.3 firhilbf_decim_execute_block (dotprod_rrrf) with its AVX-512F dot product (-O3 -ffp-contract=off, avx512) |
 | `real_to_complex_cq15` | 4.30 | 220.92 | 0.02 | 5.04 | 25.98 | 0.19 | libairspy 1.0.10 iqconverter_int16 (truncating >> 15, 32-bit accumulator, the odd samples halved), conversion without remove_dc (-O3 -ffp-contract=off, avx512) |
@@ -1761,12 +1850,22 @@ Reference model `znver4`, counter-model `sapphirerapids`, mode `whole-loop`; exe
 | `stereo_matrix_fallback` | 0.48 | 0.60 | 0.80 | 0.54 | 0.53 | 1.02 | CMSIS-DSP 1.18.0 arm_add_f32 (d + d), arm_add_f32 (s + d2), arm_sub_f32 (s - d2) on planar data, generic C (-O3 -ffp-contract=off, LOOPUNROLL, avx512) |
 | `stereo_pll_fallback` | 61.34 | 56.30 | 1.09 | 74.40 | 78.06 | 0.95 | liquid-dsp 1.8.3 nco_crcf (LIQUID_VCO_INTERP): sincos at theta and 2 theta from the 1024-entry table, nco_crcf_adjust_frequency and nco_crcf_adjust_phase (double modulo in _constrain), nco_crcf_step; no lock detector, no integrator limit (-O3 -ffp-contract=off, avx512) |
 | `stereo_pll_q15_fallback` | 37.04 | 45.61 | 0.81 | 38.05 | 34.89 | 1.09 | CMSIS-DSP 1.18.0 arm_cos_q15 and arm_sin_q15 (twice) per sample in the loop of the kernel (the oscillator only: CMSIS-DSP has no PLL), generic C (-O3 -ffp-contract=off, LOOPUNROLL, avx512) |
-| `symbol_demap_qam16_block` | 0.36 | 0.36 | 1.00 | 0.33 | 0.33 | 1.00 | sdrk fallback |
+| `symbol_demap_qam16_block` | 0.36 | 1224.82 | 0.00 | 0.33 | 1330.90 | 0.00 | GNU Radio constellation_soft_decoder_cf with calc_soft_dec (constellation.cc of gr-digital; the exact log-likelihood ratio over all points, npwr 1, not max-log; no vector allocation per symbol, so faster than GNU Radio's object code) |
+| `symbol_demap_qam16_block_liquid` | 0.36 | 157.17 | 0.00 | 0.33 | 172.10 | 0.00 | liquid-dsp 1.8.3 modemcf_demodulate_soft of its own QAM modem (modem_common.proto.c; soft bytes with liquid's scale and labelling; the hard symbol and the soft bits per symbol) |
+| `symbol_demap_qam16_block_lut` | 0.36 | 47.18 | 0.01 | 0.33 | 35.46 | 0.01 | GNU Radio constellation_soft_decoder_cf with the look-up table of gen_soft_dec_lut (precision 8, npwr 1; constellation.cc of gr-digital; exact log-likelihood ratio, not max-log; the table lookup and a copy of 2 to 3 floats per symbol, no vector allocation) |
 | `symbol_demap_qam256_block` | 1.21 | 1.21 | 1.00 | 1.01 | 1.01 | 1.00 | sdrk fallback |
-| `symbol_demap_qam64_block` | 0.77 | 0.77 | 1.00 | 0.77 | 0.77 | 1.00 | sdrk fallback |
-| `symbol_map_block` | 1.28 | 1.28 | 1.00 | 2.17 | 2.17 | 1.00 | sdrk fallback |
-| `symbol_sync` | 28.82 | 28.82 | 1.00 | 39.81 | 39.81 | 1.00 | sdrk fallback |
-| `symbol_sync_real` | 14.40 | 14.40 | 1.00 | 19.92 | 19.92 | 1.00 | sdrk fallback |
+| `symbol_demap_qam64_block` | 0.77 | 4356.96 | 0.00 | 0.77 | 4764.87 | 0.00 | GNU Radio constellation_soft_decoder_cf with calc_soft_dec (constellation.cc of gr-digital; the exact log-likelihood ratio over all points, npwr 1, not max-log; no vector allocation per symbol, so faster than GNU Radio's object code) |
+| `symbol_demap_qam64_block_liquid` | 0.77 | 209.33 | 0.00 | 0.77 | 220.52 | 0.00 | liquid-dsp 1.8.3 modemcf_demodulate_soft of its own QAM modem (modem_common.proto.c; soft bytes with liquid's scale and labelling; the hard symbol and the soft bits per symbol) |
+| `symbol_demap_qam64_block_lut` | 0.77 | 56.64 | 0.01 | 0.77 | 55.46 | 0.01 | GNU Radio constellation_soft_decoder_cf with the look-up table of gen_soft_dec_lut (precision 8, npwr 1; constellation.cc of gr-digital; exact log-likelihood ratio, not max-log; the table lookup and a copy of 2 to 3 floats per symbol, no vector allocation) |
+| `symbol_map_block` | 1.28 | 10.17 | 0.13 | 2.17 | 11.66 | 0.19 | GNU Radio pack_k_bits_bb + chunks_to_symbols_bc (pack_k_bits.cc of gr-blocks, chunks_to_symbols_impl.cc of gr-digital), the table of the points of the block, generic compiler flags |
+| `symbol_map_block_liquid` | 1.28 | 17.26 | 0.07 | 2.17 | 20.14 | 0.11 | liquid-dsp 1.8.3 modemcf_modulate on the arbitrary-constellation modem of the points of the block (modem_arb.proto.c), the bits packed by the wrapper |
+| `symbol_map_block_qam64` | 2.40 | 13.29 | 0.18 | 3.55 | 15.92 | 0.22 | GNU Radio pack_k_bits_bb + chunks_to_symbols_bc (pack_k_bits.cc of gr-blocks, chunks_to_symbols_impl.cc of gr-digital), the table of the points of the block, generic compiler flags |
+| `symbol_map_block_qam64_liquid` | 2.40 | 21.34 | 0.11 | 3.55 | 26.23 | 0.14 | liquid-dsp 1.8.3 modemcf_modulate on the arbitrary-constellation modem of the points of the block (modem_arb.proto.c), the bits packed by the wrapper |
+| `symbol_map_block_qpsk` | 5.19 | 7.05 | 0.74 | 5.03 | 7.40 | 0.68 | GNU Radio pack_k_bits_bb + chunks_to_symbols_bc (pack_k_bits.cc of gr-blocks, chunks_to_symbols_impl.cc of gr-digital), the table of the points of the block, generic compiler flags |
+| `symbol_map_block_qpsk_liquid` | 5.19 | 13.18 | 0.39 | 5.03 | 14.05 | 0.36 | liquid-dsp 1.8.3 modemcf_modulate on the arbitrary-constellation modem of the points of the block (modem_arb.proto.c), the bits packed by the wrapper |
+| `symbol_sync` | 23.21 | 23.21 | 1.00 | 27.84 | 27.84 | 1.00 | sdrk fallback |
+| `symbol_sync_fallback` | 23.21 | 36.87 | 0.63 | 27.84 | 36.52 | 0.76 | GNU Radio symbol_sync_cc (symbol_sync_cc_impl.cc of gr-digital, TED_GARDNER, IR_MMSE_8TAP, generic compiler flags; reference does different work: an 8-tap MMSE interpolator against our 4-point Lagrange polynomial) |
+| `symbol_sync_real` | 11.28 | 11.28 | 1.00 | 13.78 | 13.78 | 1.00 | sdrk fallback |
 | `xcorr_fft_n4096` | 9.11 | 854.02 | 0.01 | 6.21 | 115.30 | 0.05 | liquid-dsp 1.8.3 fftfilt_cccf (benches/refs/liquid-fftfilt.c), FFTW 3.3.10 |
 | `xcorr_fft_n4096_fallback` | 64.05 | 7488.43 | 0.01 | 57.48 | 872.20 | 0.07 | liquid-dsp 1.8.3 fftfilt_cccf (benches/refs/liquid-fftfilt.c), liquid's own FFT |
 | `xcorr_fft_n512` | 7.61 | 839.33 | 0.01 | 5.49 | 100.11 | 0.05 | liquid-dsp 1.8.3 fftfilt_cccf (benches/refs/liquid-fftfilt.c), FFTW 3.3.10 |
@@ -1812,7 +1911,7 @@ Reference model `cortex-a72`, counter-model `cortex-a76`, mode `whole-loop`; exe
 | `scramble_c32_b1` | 1.71 | 4.43 | 0.39 | 1.33 | 4.18 | 0.32 | +-1.0 sequence from the index bits into a buffer of 256 + volk_32fc_32f_multiply_32fc (VOLK 3.3.0 dispatcher; the form of srsRAN srsran_scrambling_c) |
 | `scramble_c32_b1_fallback` | 1.83 | 4.22 | 0.43 | 1.45 | 3.96 | 0.37 | +-1.0 sequence from the index bits into a buffer of 256 + VOLK 3.3.0 volk_32fc_32f_multiply_32fc_generic (benches/refs/volk-generic.c, -O3 -ffp-contract=off) |
 | `scramble_c32_b2` | 3.04 | 8.52 | 0.36 | 2.46 | 6.76 | 0.36 | phasor lookup into a buffer of 256 + VOLK 3.3.0 volk_32fc_x2_multiply_32fc_neon without FMA (benches/refs/volk-nofma.c, -O3 -ffp-contract=off) |
-| `scramble_c32_b2_dvbs2` | 3.04 | 6.18 | 0.49 | 2.46 | 6.79 | 0.36 | GNU Radio dvbs2_physical_cc PL scrambling, the per-symbol switch on R_n (benches/refs/gr-dvbs2-plscramble.c, main at ec1bf15; reference does different work; -O3) |
+| `scramble_c32_b2_dvbs2` | 3.04 | 6.18 | 0.49 | 2.46 | 6.80 | 0.36 | GNU Radio dvbs2_physical_cc PL scrambling, the per-symbol switch on R_n (benches/refs/gr-dvbs2-plscramble.c, main at ec1bf15; reference does different work; -O3) |
 | `scramble_c32_b2_fallback` | 3.93 | 11.23 | 0.35 | 2.92 | 11.21 | 0.26 | phasor lookup into a buffer of 256 + VOLK 3.3.0 volk_32fc_x2_multiply_32fc_generic (benches/refs/volk-generic.c, -O3 -ffp-contract=off) |
 | `scramble_c32_b8` | 5.51 | 8.52 | 0.65 | 3.54 | 6.76 | 0.52 | phasor lookup into a buffer of 256 + VOLK 3.3.0 volk_32fc_x2_multiply_32fc_neon without FMA (benches/refs/volk-nofma.c, -O3 -ffp-contract=off) |
 | `scramble_c32_b8_fallback` | 8.14 | 11.23 | 0.73 | 9.08 | 11.21 | 0.81 | phasor lookup into a buffer of 256 + VOLK 3.3.0 volk_32fc_x2_multiply_32fc_generic (benches/refs/volk-generic.c, -O3 -ffp-contract=off) |
@@ -1952,7 +2051,7 @@ Reference model `cortex-a72`, counter-model `cortex-a76`, mode `whole-loop`; exe
 | `am_mod_cq15_fallback` | 1.72 | 4.30 | 0.40 | 1.33 | 4.49 | 0.30 | CMSIS-DSP 1.18.0 arm_scale_q15 by round(c m 32768) (truncating), arm_offset_q15 by c in place and a plain loop to (re, 0) (a composition: CMSIS-DSP has no AM modulator), generic C (-O3 -ffp-contract=off, LOOPUNROLL, neon) |
 | `am_mod_fallback` | 2.91 | 1.28 | 2.27 | 1.52 | 1.03 | 1.48 | liquid-dsp 1.8.3 ampmodem_modulate_block (LIQUID_AMPMODEM_DSB with the carrier: x * mod_index + 1, no clamp, carrier 1; -O3) |
 | `auto_notch` | 263.70 | 263.70 | 1.00 | 208.69 | 208.69 | 1.00 | sdrk fallback |
-| `band_pulse_detect_block` | 92.63 | 92.63 | 1.00 | 80.11 | 80.11 | 1.00 | sdrk fallback |
+| `band_pulse_detect_block` | 89.93 | 89.93 | 1.00 | 77.43 | 77.43 | 1.00 | sdrk fallback |
 | `bit_descramble_block` | 1.97 | 8.10 | 0.24 | 1.73 | 8.08 | 0.21 | GNU Radio descrambler_bb(0x21, 0, 22): gr::digital::lfsr, one __builtin_parityl per unpacked bit (generic compiler flags) |
 | `bit_descramble_in_place_block` | 3.34 | 8.10 | 0.41 | 3.24 | 8.08 | 0.40 | GNU Radio descrambler_bb(0x21, 0, 22): gr::digital::lfsr, one __builtin_parityl per unpacked bit (generic compiler flags) |
 | `bit_scramble_block` | 2.70 | 8.12 | 0.33 | 2.36 | 8.09 | 0.29 | GNU Radio scrambler_bb(0x21, 0, 22): gr::digital::lfsr, one __builtin_parityl per unpacked bit (generic compiler flags) |
@@ -1965,41 +2064,41 @@ Reference model `cortex-a72`, counter-model `cortex-a76`, mode `whole-loop`; exe
 | `channelize_fallback` | 97.98 | 221.93 | 0.44 | 80.80 | 165.45 | 0.49 | liquid-dsp 1.8.3 firpfbch2_crcf analyzer (benches/refs/liquid-channelizer.c), portable dot products, liquid's own FFT |
 | `correlate_block` | 44.05 | 44.05 | 1.00 | 30.56 | 30.56 | 1.00 | sdrk fallback |
 | `costas` | 86.13 | 86.13 | 1.00 | 54.09 | 54.09 | 1.00 | sdrk fallback |
-| `costas_fallback` | 86.13 | 82.40 | 1.05 | 54.09 | 75.07 | 0.72 | GNU Radio costas_loop_cc (costas_loop_cc_impl.cc of gr-digital, generic compiler flags) |
-| `costas_qam1024` | 163.11 | 163.11 | 1.00 | 109.73 | 109.73 | 1.00 | sdrk fallback |
-| `costas_qam1024_fallback` | 163.11 | 268.19 | 0.61 | 109.73 | 256.75 | 0.43 | GNU Radio constellation_receiver_cb with constellation_rect 1024-QAM (constellation_receiver_cb_impl.cc and constellation.cc of gr-digital, generic compiler flags) |
-| `costas_qam16` | 153.34 | 153.34 | 1.00 | 102.23 | 102.23 | 1.00 | sdrk fallback |
-| `costas_qam16_fallback` | 153.34 | 194.19 | 0.79 | 102.23 | 175.14 | 0.58 | GNU Radio constellation_receiver_cb with constellation_rect 16-QAM (constellation_receiver_cb_impl.cc and constellation.cc of gr-digital, generic compiler flags) |
-| `costas_qam256` | 163.07 | 163.07 | 1.00 | 109.13 | 109.13 | 1.00 | sdrk fallback |
-| `costas_qam256_fallback` | 163.07 | 199.16 | 0.82 | 109.13 | 180.54 | 0.60 | GNU Radio constellation_receiver_cb with constellation_rect 256-QAM (constellation_receiver_cb_impl.cc and constellation.cc of gr-digital, generic compiler flags) |
-| `costas_qam64` | 146.24 | 146.24 | 1.00 | 110.18 | 110.18 | 1.00 | sdrk fallback |
-| `costas_qam64_fallback` | 146.24 | 194.82 | 0.75 | 110.18 | 175.71 | 0.63 | GNU Radio constellation_receiver_cb with constellation_rect 64-QAM (constellation_receiver_cb_impl.cc and constellation.cc of gr-digital, generic compiler flags) |
+| `costas_fallback` | 86.13 | 82.06 | 1.05 | 54.09 | 74.73 | 0.72 | GNU Radio costas_loop_cc (costas_loop_cc_impl.cc of gr-digital, generic compiler flags) |
+| `costas_qam1024` | 163.08 | 163.08 | 1.00 | 109.88 | 109.88 | 1.00 | sdrk fallback |
+| `costas_qam1024_fallback` | 163.08 | 268.24 | 0.61 | 109.88 | 256.78 | 0.43 | GNU Radio constellation_receiver_cb with constellation_rect 1024-QAM (constellation_receiver_cb_impl.cc and constellation.cc of gr-digital, generic compiler flags) |
+| `costas_qam16` | 153.38 | 153.38 | 1.00 | 102.26 | 102.26 | 1.00 | sdrk fallback |
+| `costas_qam16_fallback` | 153.38 | 194.14 | 0.79 | 102.26 | 175.11 | 0.58 | GNU Radio constellation_receiver_cb with constellation_rect 16-QAM (constellation_receiver_cb_impl.cc and constellation.cc of gr-digital, generic compiler flags) |
+| `costas_qam256` | 163.08 | 163.08 | 1.00 | 109.03 | 109.03 | 1.00 | sdrk fallback |
+| `costas_qam256_fallback` | 163.08 | 199.25 | 0.82 | 109.03 | 180.58 | 0.60 | GNU Radio constellation_receiver_cb with constellation_rect 256-QAM (constellation_receiver_cb_impl.cc and constellation.cc of gr-digital, generic compiler flags) |
+| `costas_qam64` | 146.21 | 146.21 | 1.00 | 110.16 | 110.16 | 1.00 | sdrk fallback |
+| `costas_qam64_fallback` | 146.21 | 194.79 | 0.75 | 110.16 | 175.70 | 0.63 | GNU Radio constellation_receiver_cb with constellation_rect 64-QAM (constellation_receiver_cb_impl.cc and constellation.cc of gr-digital, generic compiler flags) |
 | `crc16_ccitt_false` | 10.13 | 10.16 | 1.00 | 7.10 | 9.15 | 0.78 | GNU Radio gr::digital::crc: one 256-entry uint64_t table, a 64-bit remainder, one lookup per byte (generic compiler flags) |
 | `crc16_x25` | 8.11 | 8.17 | 0.99 | 7.10 | 7.15 | 0.99 | GNU Radio gr::digital::crc: one 256-entry uint64_t table, a 64-bit remainder, one lookup per byte (generic compiler flags) |
 | `crc24_adsb` | 8.10 | 10.16 | 0.80 | 7.09 | 9.15 | 0.78 | GNU Radio gr::digital::crc: one 256-entry uint64_t table, a 64-bit remainder, one lookup per byte (generic compiler flags) |
 | `crc32` | 8.11 | 8.17 | 0.99 | 7.10 | 7.16 | 0.99 | GNU Radio gr::digital::crc: one 256-entry uint64_t table, a 64-bit remainder, one lookup per byte (generic compiler flags) |
-| `equalize` | 216.21 | 216.21 | 1.00 | 183.98 | 183.98 | 1.00 | sdrk fallback |
+| `equalize` | 216.21 | 329.80 | 0.66 | 183.98 | 359.68 | 0.51 | GNU Radio linear_equalizer with adaptive_algorithm_nlms (linear_equalizer_impl.cc of gr-digital, VOLK's dispatched dot products of the level with the aligned tap copies of fir_filter) |
 | `equalize_fallback` | 216.21 | 228.84 | 0.94 | 183.98 | 236.11 | 0.78 | GNU Radio linear_equalizer with adaptive_algorithm_nlms (linear_equalizer_impl.cc of gr-digital, VOLK generic dot products, generic compiler flags) |
 | `equalize_qam1024` | 252.46 | 252.46 | 1.00 | 186.09 | 186.09 | 1.00 | sdrk fallback |
-| `equalize_qam1024_fallback` | 252.46 | 244.41 | 1.03 | 186.09 | 243.20 | 0.77 | GNU Radio linear_equalizer with adaptive_algorithm_nlms on constellation_rect 1024-QAM (linear_equalizer_impl.cc and constellation.cc of gr-digital, VOLK generic dot products, generic compiler flags) |
-| `equalize_qam16` | 229.29 | 229.29 | 1.00 | 190.02 | 190.02 | 1.00 | sdrk fallback |
-| `equalize_qam16_fallback` | 229.29 | 244.41 | 0.94 | 190.02 | 243.20 | 0.78 | GNU Radio linear_equalizer with adaptive_algorithm_nlms on constellation_rect 16-QAM (linear_equalizer_impl.cc and constellation.cc of gr-digital, VOLK generic dot products, generic compiler flags) |
+| `equalize_qam1024_fallback` | 252.46 | 244.41 | 1.03 | 186.09 | 243.21 | 0.77 | GNU Radio linear_equalizer with adaptive_algorithm_nlms on constellation_rect 1024-QAM (linear_equalizer_impl.cc and constellation.cc of gr-digital, VOLK generic dot products, generic compiler flags) |
+| `equalize_qam16` | 229.29 | 357.37 | 0.64 | 190.02 | 388.90 | 0.49 | GNU Radio linear_equalizer with adaptive_algorithm_nlms on constellation_rect 16-QAM (linear_equalizer_impl.cc and constellation.cc of gr-digital, VOLK's dispatched dot products of the level with the aligned tap copies of fir_filter) |
+| `equalize_qam16_fallback` | 229.29 | 244.41 | 0.94 | 190.02 | 243.21 | 0.78 | GNU Radio linear_equalizer with adaptive_algorithm_nlms on constellation_rect 16-QAM (linear_equalizer_impl.cc and constellation.cc of gr-digital, VOLK generic dot products, generic compiler flags) |
 | `equalize_qam256` | 252.46 | 252.46 | 1.00 | 186.09 | 186.09 | 1.00 | sdrk fallback |
-| `equalize_qam256_fallback` | 252.46 | 244.41 | 1.03 | 186.09 | 243.20 | 0.77 | GNU Radio linear_equalizer with adaptive_algorithm_nlms on constellation_rect 256-QAM (linear_equalizer_impl.cc and constellation.cc of gr-digital, VOLK generic dot products, generic compiler flags) |
-| `equalize_qam64` | 244.37 | 244.37 | 1.00 | 189.01 | 189.01 | 1.00 | sdrk fallback |
-| `equalize_qam64_fallback` | 244.37 | 244.41 | 1.00 | 189.01 | 243.20 | 0.78 | GNU Radio linear_equalizer with adaptive_algorithm_nlms on constellation_rect 64-QAM (linear_equalizer_impl.cc and constellation.cc of gr-digital, VOLK generic dot products, generic compiler flags) |
+| `equalize_qam256_fallback` | 252.46 | 244.41 | 1.03 | 186.09 | 243.21 | 0.77 | GNU Radio linear_equalizer with adaptive_algorithm_nlms on constellation_rect 256-QAM (linear_equalizer_impl.cc and constellation.cc of gr-digital, VOLK generic dot products, generic compiler flags) |
+| `equalize_qam64` | 244.37 | 357.37 | 0.68 | 189.01 | 388.90 | 0.49 | GNU Radio linear_equalizer with adaptive_algorithm_nlms on constellation_rect 64-QAM (linear_equalizer_impl.cc and constellation.cc of gr-digital, VOLK's dispatched dot products of the level with the aligned tap copies of fir_filter) |
+| `equalize_qam64_fallback` | 244.37 | 244.41 | 1.00 | 189.01 | 243.21 | 0.78 | GNU Radio linear_equalizer with adaptive_algorithm_nlms on constellation_rect 64-QAM (linear_equalizer_impl.cc and constellation.cc of gr-digital, VOLK generic dot products, generic compiler flags) |
 | `frame_decode` | 8.84 | 8.84 | 1.00 | 10.38 | 10.38 | 1.00 | sdrk fallback |
 | `frame_decode_block` | 8.81 | 8.81 | 1.00 | 9.48 | 9.48 | 1.00 | sdrk fallback |
 | `frame_decode_four_block` | 47.75 | 47.75 | 1.00 | 45.47 | 45.47 | 1.00 | sdrk fallback |
 | `frame_encode_block` | 2.11 | 2.11 | 1.00 | 1.97 | 1.97 | 1.00 | sdrk fallback |
-| `gauss_noise_c32` | 15.80 | 326.06 | 0.05 | 14.11 | 289.10 | 0.05 | liquid-dsp 1.8.3 crandnf times sigma (libc rand(), f32 Box-Muller with sqrtf, logf and cexpf; no random access, no bit-exact sequence; reference does different work; -O3) |
-| `gauss_noise_c32_fallback` | 27.54 | 326.06 | 0.08 | 20.98 | 289.10 | 0.07 | liquid-dsp 1.8.3 crandnf times sigma (libc rand(), f32 Box-Muller with sqrtf, logf and cexpf; no random access, no bit-exact sequence; reference does different work; -O3) |
+| `gauss_noise_c32` | 15.80 | 326.12 | 0.05 | 14.11 | 289.13 | 0.05 | liquid-dsp 1.8.3 crandnf times sigma (libc rand(), f32 Box-Muller with sqrtf, logf and cexpf; no random access, no bit-exact sequence; reference does different work; -O3) |
+| `gauss_noise_c32_fallback` | 27.54 | 326.12 | 0.08 | 20.98 | 289.13 | 0.07 | liquid-dsp 1.8.3 crandnf times sigma (libc rand(), f32 Box-Muller with sqrtf, logf and cexpf; no random access, no bit-exact sequence; reference does different work; -O3) |
 | `gauss_noise_c32_fastnoise` | 15.80 | 5.04 | 3.13 | 14.11 | 5.04 | 2.80 | GNU Radio fastnoise_source_c, amplitude sigma * sqrt(2) (benches/refs/gr-fastnoise.c, main at ec1bf15: one xoroshiro128+ draw and a copy from a pool of 8192 precomputed values per sample, no normal mapping, no random access; reference does less work; -O3) |
-| `gauss_noise_f32` | 7.92 | 211.34 | 0.04 | 7.07 | 188.63 | 0.04 | liquid-dsp 1.8.3 randnf times sigma (libc rand(), f32 Box-Muller with sqrtf, logf and sinf; no random access, no bit-exact sequence; reference does different work; -O3) |
-| `gauss_noise_f32_fallback` | 13.77 | 211.34 | 0.07 | 10.50 | 188.63 | 0.06 | liquid-dsp 1.8.3 randnf times sigma (libc rand(), f32 Box-Muller with sqrtf, logf and sinf; no random access, no bit-exact sequence; reference does different work; -O3) |
+| `gauss_noise_f32` | 7.92 | 211.38 | 0.04 | 7.07 | 188.65 | 0.04 | liquid-dsp 1.8.3 randnf times sigma (libc rand(), f32 Box-Muller with sqrtf, logf and sinf; no random access, no bit-exact sequence; reference does different work; -O3) |
+| `gauss_noise_f32_fallback` | 13.77 | 211.38 | 0.07 | 10.50 | 188.65 | 0.06 | liquid-dsp 1.8.3 randnf times sigma (libc rand(), f32 Box-Muller with sqrtf, logf and sinf; no random access, no bit-exact sequence; reference does different work; -O3) |
 | `gauss_noise_f32_fastnoise` | 7.92 | 5.04 | 1.57 | 7.07 | 5.04 | 1.40 | GNU Radio fastnoise_source_f, amplitude sigma (benches/refs/gr-fastnoise.c, main at ec1bf15: one xoroshiro128+ draw and a copy from a pool of 8192 precomputed values per sample, no normal mapping, no random access; reference does less work; -O3) |
-| `gauss_noise_f32_ziggurat` | 7.92 | 13.31 | 0.59 | 7.07 | 15.05 | 0.47 | rand_distr 0.5.1 StandardNormal as f32 times sigma over rand 0.9.5 SmallRng (Ziggurat in f64 with rejection: a variable number of draws per value, no random access, no bit-exact sequence across platforms; reference does different work) |
-| `gauss_noise_q15` | 8.15 | 10.65 | 0.76 | 6.80 | 10.51 | 0.65 | sdrk fallback |
+| `gauss_noise_f32_ziggurat` | 7.92 | 13.30 | 0.60 | 7.07 | 15.03 | 0.47 | rand_distr 0.5.1 StandardNormal as f32 times sigma over rand 0.9.5 SmallRng (Ziggurat in f64 with rejection: a variable number of draws per value, no random access, no bit-exact sequence across platforms; reference does different work) |
+| `gauss_noise_q15` | 8.15 | 10.65 | 0.77 | 6.80 | 10.51 | 0.65 | sdrk fallback |
 | `gauss_noise_q15_fallback` | 10.65 | 10.65 | 1.00 | 10.51 | 10.51 | 1.00 | sdrk fallback |
 | `halfband_decimate` | 13.17 | 84.75 | 0.16 | 12.58 | 83.63 | 0.15 | liquid-dsp 1.8.3 resamp2_crcf_decim_execute (dotprod_crcf) with its NEON dot product (-O3 -ffp-contract=off, neon) |
 | `halfband_decimate_cq15` | 16.38 | 29.04 | 0.56 | 15.23 | 25.78 | 0.59 | sdrk fallback |
@@ -2022,24 +2121,34 @@ Reference model `cortex-a72`, counter-model `cortex-a76`, mode `whole-loop`; exe
 | `preemph_limit` | 15.43 | 15.43 | 1.00 | 15.41 | 15.41 | 1.00 | sdrk fallback |
 | `preemph_limit_q15` | 55.11 | 55.11 | 1.00 | 40.70 | 40.70 | 1.00 | sdrk fallback |
 | `preemph_limit_stereo` | 24.12 | 24.12 | 1.00 | 22.90 | 22.90 | 1.00 | sdrk fallback |
-| `psk_mod_block` | 14.05 | 14.05 | 1.00 | 13.05 | 13.05 | 1.00 | sdrk fallback |
-| `pulse_match_block` | 48.91 | 48.91 | 1.00 | 31.64 | 31.64 | 1.00 | sdrk fallback |
-| `pulse_shape_block` | 13.05 | 13.05 | 1.00 | 11.83 | 11.83 | 1.00 | sdrk fallback |
+| `psk_demod_block` | 81.89 | 277.55 | 0.30 | 55.84 | 272.91 | 0.20 | GNU Radio fir_filter_ccf + symbol_sync_cc + costas_loop_cc + constellation_decoder_cb (the sum of the blocks of the receiver chain, generic compiler flags; no acquisition and no lock watches) |
+| `psk_mod_block` | 14.05 | 332.40 | 0.04 | 13.06 | 264.83 | 0.05 | GNU Radio constellation_modulator as the sum of its blocks: pack_k_bits_bb + chunks_to_symbols_bc + pfb_arb_resampler_ccf (32 filters of 88 taps and their derivative filters), VOLK's dispatched dot product of the level |
+| `psk_mod_block_liquid` | 14.05 | 110.13 | 0.13 | 13.06 | 109.07 | 0.12 | liquid-dsp 1.8.3 modemcf_modulate (arbitrary-constellation modem) + firinterp_crcf (the root-raised cosine of the block), the SIMD dot products of the level (the portable loop at simd128) |
+| `pulse_match_block` | 48.91 | 173.40 | 0.28 | 31.64 | 129.18 | 0.24 | GNU Radio fir_filter_ccf (fir_filter_ccf_impl.cc of gr-filter) with VOLK's dispatched dot product of the level (volk_32fc_32f_dot_prod_32fc_a, the aligned tap copies of fir_filter) |
+| `pulse_match_block_liquid` | 48.91 | 296.38 | 0.17 | 31.64 | 246.95 | 0.13 | liquid-dsp 1.8.3 firfilt_crcf (firfilt.proto.c), the SIMD dot product of the level (the portable loop at simd128) |
+| `pulse_shape_block` | 13.05 | 79.64 | 0.16 | 11.83 | 52.71 | 0.22 | GNU Radio interp_fir_filter_ccf (interp_fir_filter_impl.cc of gr-filter) with VOLK's dispatched dot product of the level (volk_32fc_32f_dot_prod_32fc_a, the aligned tap copies of fir_filter) |
+| `pulse_shape_block_liquid` | 13.05 | 107.19 | 0.12 | 11.83 | 106.13 | 0.11 | liquid-dsp 1.8.3 firinterp_crcf (firinterp.proto.c, firpfb.proto.c), the SIMD dot products of the level (the portable loop at simd128) |
 | `qam_acquire_block` | 61.73 | 61.73 | 1.00 | 48.39 | 48.39 | 1.00 | sdrk fallback |
-| `qam_demod_block` | 127.48 | 127.48 | 1.00 | 91.73 | 91.73 | 1.00 | sdrk fallback |
-| `qam_demod_qam256_block` | 131.74 | 131.74 | 1.00 | 92.39 | 92.39 | 1.00 | sdrk fallback |
-| `qam_demod_search_block` | 136.79 | 136.79 | 1.00 | 100.44 | 100.44 | 1.00 | sdrk fallback |
-| `qam_frame_decode_block` | 152.17 | 152.17 | 1.00 | 115.25 | 115.25 | 1.00 | sdrk fallback |
+| `qam_demod_block` | 121.49 | 322.25 | 0.38 | 88.29 | 315.54 | 0.28 | GNU Radio fir_filter_ccf + symbol_sync_cc + linear_equalizer + constellation_receiver_cb (the sum of the blocks of the receiver chain, generic compiler flags and VOLK generic dot products; no acquisition, no blind equalizer stage and no lock watches) |
+| `qam_demod_qam256_block` | 125.74 | 125.74 | 1.00 | 88.91 | 88.91 | 1.00 | sdrk fallback |
+| `qam_demod_search_block` | 130.89 | 130.89 | 1.00 | 96.89 | 96.89 | 1.00 | sdrk fallback |
+| `qam_frame_decode_block` | 146.14 | 146.14 | 1.00 | 111.79 | 111.79 | 1.00 | sdrk fallback |
 | `qam_frame_encode_block` | 15.16 | 15.16 | 1.00 | 14.13 | 14.13 | 1.00 | sdrk fallback |
-| `qam_mod_block` | 14.04 | 14.04 | 1.00 | 13.08 | 13.08 | 1.00 | sdrk fallback |
-| `qam_mod_qam256_block` | 14.65 | 14.65 | 1.00 | 13.93 | 13.93 | 1.00 | sdrk fallback |
+| `qam_mod_block` | 14.04 | 333.28 | 0.04 | 13.08 | 265.71 | 0.05 | GNU Radio constellation_modulator as the sum of its blocks: pack_k_bits_bb + chunks_to_symbols_bc + pfb_arb_resampler_ccf (32 filters of 88 taps and their derivative filters), VOLK's dispatched dot product of the level |
+| `qam_mod_block_liquid` | 14.04 | 110.64 | 0.13 | 13.08 | 109.57 | 0.12 | liquid-dsp 1.8.3 modemcf_modulate (arbitrary-constellation modem) + firinterp_crcf (the root-raised cosine of the block), the SIMD dot products of the level (the portable loop at simd128) |
+| `qam_mod_qam256_block` | 14.65 | 335.05 | 0.04 | 13.93 | 267.47 | 0.05 | GNU Radio constellation_modulator as the sum of its blocks: pack_k_bits_bb + chunks_to_symbols_bc + pfb_arb_resampler_ccf (32 filters of 88 taps and their derivative filters), VOLK's dispatched dot product of the level |
+| `qam_mod_qam256_block_liquid` | 14.65 | 111.66 | 0.13 | 13.93 | 110.59 | 0.13 | liquid-dsp 1.8.3 modemcf_modulate (arbitrary-constellation modem) + firinterp_crcf (the root-raised cosine of the block), the SIMD dot products of the level (the portable loop at simd128) |
 | `qam_soft_bits_qam1024` | 15.10 | 15.10 | 1.00 | 9.08 | 9.08 | 1.00 | sdrk fallback |
-| `qam_soft_bits_qam16` | 3.03 | 3.03 | 1.00 | 2.03 | 2.03 | 1.00 | sdrk fallback |
+| `qam_soft_bits_qam16` | 3.03 | 1757.11 | 0.00 | 2.03 | 1412.59 | 0.00 | GNU Radio constellation_soft_decoder_cf with calc_soft_dec (constellation.cc of gr-digital; the exact log-likelihood ratio over all points, npwr 1, not max-log; no vector allocation per symbol, so faster than GNU Radio's object code) |
+| `qam_soft_bits_qam16_liquid` | 3.03 | 280.89 | 0.01 | 2.03 | 301.70 | 0.01 | liquid-dsp 1.8.3 modemcf_demodulate_soft of its own QAM modem (modem_common.proto.c; soft bytes with liquid's scale and labelling; the hard symbol and the soft bits per symbol) |
+| `qam_soft_bits_qam16_lut` | 3.03 | 44.47 | 0.07 | 2.03 | 45.96 | 0.04 | GNU Radio constellation_soft_decoder_cf with the look-up table of gen_soft_dec_lut (precision 8, npwr 1; constellation.cc of gr-digital; exact log-likelihood ratio, not max-log; the table lookup and a copy of 2 to 3 floats per symbol, no vector allocation) |
 | `qam_soft_bits_qam256` | 6.05 | 6.04 | 1.00 | 4.29 | 4.28 | 1.00 | sdrk fallback |
-| `qam_soft_bits_qam64` | 4.54 | 4.54 | 1.00 | 3.03 | 3.03 | 1.00 | sdrk fallback |
+| `qam_soft_bits_qam64` | 4.54 | 6285.06 | 0.00 | 3.03 | 5351.51 | 0.00 | GNU Radio constellation_soft_decoder_cf with calc_soft_dec (constellation.cc of gr-digital; the exact log-likelihood ratio over all points, npwr 1, not max-log; no vector allocation per symbol, so faster than GNU Radio's object code) |
+| `qam_soft_bits_qam64_liquid` | 4.54 | 334.63 | 0.01 | 3.03 | 361.03 | 0.01 | liquid-dsp 1.8.3 modemcf_demodulate_soft of its own QAM modem (modem_common.proto.c; soft bytes with liquid's scale and labelling; the hard symbol and the soft bits per symbol) |
+| `qam_soft_bits_qam64_lut` | 4.54 | 44.47 | 0.10 | 3.03 | 45.96 | 0.07 | GNU Radio constellation_soft_decoder_cf with the look-up table of gen_soft_dec_lut (precision 8, npwr 1; constellation.cc of gr-digital; exact log-likelihood ratio, not max-log; the table lookup and a copy of 2 to 3 floats per symbol, no vector allocation) |
 | `qam_soft_bits_qpsk` | 1.78 | 1.78 | 1.00 | 1.53 | 1.53 | 1.00 | sdrk fallback |
 | `rds_decode_block` | 12.14 | 12.14 | 1.00 | 13.67 | 13.67 | 1.00 | sdrk fallback |
-| `rds_demod_block` | 54.78 | 54.78 | 1.00 | 49.56 | 49.56 | 1.00 | sdrk fallback |
+| `rds_demod_block` | 54.29 | 54.29 | 1.00 | 49.29 | 49.29 | 1.00 | sdrk fallback |
 | `rds_shape` | 53.93 | 53.93 | 1.00 | 47.22 | 47.22 | 1.00 | sdrk fallback |
 | `real_to_complex` | 10.14 | 86.75 | 0.12 | 8.59 | 76.87 | 0.11 | liquid-dsp 1.8.3 firhilbf_decim_execute_block (dotprod_rrrf) with its NEON dot product (-O3 -ffp-contract=off, neon) |
 | `real_to_complex_cq15` | 10.68 | 17.90 | 0.60 | 8.74 | 17.14 | 0.51 | libairspy 1.0.10 iqconverter_int16 (truncating >> 15, 32-bit accumulator, the odd samples halved), conversion without remove_dc (-O3 -ffp-contract=off, neon) |
@@ -2055,12 +2164,22 @@ Reference model `cortex-a72`, counter-model `cortex-a76`, mode `whole-loop`; exe
 | `stereo_matrix_fallback` | 1.90 | 3.83 | 0.50 | 1.39 | 3.07 | 0.45 | CMSIS-DSP 1.18.0 arm_add_f32 (d + d), arm_add_f32 (s + d2), arm_sub_f32 (s - d2) on planar data, generic C (-O3 -ffp-contract=off, LOOPUNROLL, neon) |
 | `stereo_pll_fallback` | 84.51 | 86.93 | 0.97 | 56.44 | 57.23 | 0.99 | liquid-dsp 1.8.3 nco_crcf (LIQUID_VCO_INTERP): sincos at theta and 2 theta from the 1024-entry table, nco_crcf_adjust_frequency and nco_crcf_adjust_phase (double modulo in _constrain), nco_crcf_step; no lock detector, no integrator limit (-O3 -ffp-contract=off, neon) |
 | `stereo_pll_q15_fallback` | 41.07 | 100.31 | 0.41 | 39.08 | 88.00 | 0.44 | CMSIS-DSP 1.18.0 arm_cos_q15 and arm_sin_q15 (twice) per sample in the loop of the kernel (the oscillator only: CMSIS-DSP has no PLL), generic C (-O3 -ffp-contract=off, LOOPUNROLL, neon) |
-| `symbol_demap_qam16_block` | 3.04 | 3.04 | 1.00 | 2.03 | 2.03 | 1.00 | sdrk fallback |
+| `symbol_demap_qam16_block` | 3.04 | 1757.10 | 0.00 | 2.03 | 1412.58 | 0.00 | GNU Radio constellation_soft_decoder_cf with calc_soft_dec (constellation.cc of gr-digital; the exact log-likelihood ratio over all points, npwr 1, not max-log; no vector allocation per symbol, so faster than GNU Radio's object code) |
+| `symbol_demap_qam16_block_liquid` | 3.04 | 280.88 | 0.01 | 2.03 | 301.69 | 0.01 | liquid-dsp 1.8.3 modemcf_demodulate_soft of its own QAM modem (modem_common.proto.c; soft bytes with liquid's scale and labelling; the hard symbol and the soft bits per symbol) |
+| `symbol_demap_qam16_block_lut` | 3.04 | 44.47 | 0.07 | 2.03 | 45.96 | 0.04 | GNU Radio constellation_soft_decoder_cf with the look-up table of gen_soft_dec_lut (precision 8, npwr 1; constellation.cc of gr-digital; exact log-likelihood ratio, not max-log; the table lookup and a copy of 2 to 3 floats per symbol, no vector allocation) |
 | `symbol_demap_qam256_block` | 6.06 | 6.06 | 1.00 | 4.29 | 4.29 | 1.00 | sdrk fallback |
-| `symbol_demap_qam64_block` | 4.55 | 4.55 | 1.00 | 3.04 | 3.04 | 1.00 | sdrk fallback |
-| `symbol_map_block` | 7.08 | 7.08 | 1.00 | 9.07 | 9.07 | 1.00 | sdrk fallback |
-| `symbol_sync` | 47.13 | 47.13 | 1.00 | 28.58 | 28.58 | 1.00 | sdrk fallback |
-| `symbol_sync_real` | 20.41 | 20.41 | 1.00 | 12.03 | 12.03 | 1.00 | sdrk fallback |
+| `symbol_demap_qam64_block` | 4.55 | 6285.06 | 0.00 | 3.04 | 5351.51 | 0.00 | GNU Radio constellation_soft_decoder_cf with calc_soft_dec (constellation.cc of gr-digital; the exact log-likelihood ratio over all points, npwr 1, not max-log; no vector allocation per symbol, so faster than GNU Radio's object code) |
+| `symbol_demap_qam64_block_liquid` | 4.55 | 337.22 | 0.01 | 3.04 | 361.39 | 0.01 | liquid-dsp 1.8.3 modemcf_demodulate_soft of its own QAM modem (modem_common.proto.c; soft bytes with liquid's scale and labelling; the hard symbol and the soft bits per symbol) |
+| `symbol_demap_qam64_block_lut` | 4.55 | 44.47 | 0.10 | 3.04 | 45.96 | 0.07 | GNU Radio constellation_soft_decoder_cf with the look-up table of gen_soft_dec_lut (precision 8, npwr 1; constellation.cc of gr-digital; exact log-likelihood ratio, not max-log; the table lookup and a copy of 2 to 3 floats per symbol, no vector allocation) |
+| `symbol_map_block` | 7.08 | 22.59 | 0.31 | 9.07 | 21.73 | 0.42 | GNU Radio pack_k_bits_bb + chunks_to_symbols_bc (pack_k_bits.cc of gr-blocks, chunks_to_symbols_impl.cc of gr-digital), the table of the points of the block, generic compiler flags |
+| `symbol_map_block_liquid` | 7.08 | 25.31 | 0.28 | 9.07 | 26.29 | 0.35 | liquid-dsp 1.8.3 modemcf_modulate on the arbitrary-constellation modem of the points of the block (modem_arb.proto.c), the bits packed by the wrapper |
+| `symbol_map_block_qam64` | 10.09 | 29.68 | 0.34 | 12.07 | 28.81 | 0.42 | GNU Radio pack_k_bits_bb + chunks_to_symbols_bc (pack_k_bits.cc of gr-blocks, chunks_to_symbols_impl.cc of gr-digital), the table of the points of the block, generic compiler flags |
+| `symbol_map_block_qam64_liquid` | 10.09 | 29.39 | 0.34 | 12.07 | 30.36 | 0.40 | liquid-dsp 1.8.3 modemcf_modulate on the arbitrary-constellation modem of the points of the block (modem_arb.proto.c), the bits packed by the wrapper |
+| `symbol_map_block_qpsk` | 7.08 | 15.50 | 0.46 | 8.81 | 14.65 | 0.60 | GNU Radio pack_k_bits_bb + chunks_to_symbols_bc (pack_k_bits.cc of gr-blocks, chunks_to_symbols_impl.cc of gr-digital), the table of the points of the block, generic compiler flags |
+| `symbol_map_block_qpsk_liquid` | 7.08 | 21.23 | 0.33 | 8.81 | 22.22 | 0.40 | liquid-dsp 1.8.3 modemcf_modulate on the arbitrary-constellation modem of the points of the block (modem_arb.proto.c), the bits packed by the wrapper |
+| `symbol_sync` | 35.91 | 35.91 | 1.00 | 22.00 | 22.00 | 1.00 | sdrk fallback |
+| `symbol_sync_fallback` | 35.91 | 37.11 | 0.97 | 22.00 | 29.01 | 0.76 | GNU Radio symbol_sync_cc (symbol_sync_cc_impl.cc of gr-digital, TED_GARDNER, IR_MMSE_8TAP, generic compiler flags; reference does different work: an 8-tap MMSE interpolator against our 4-point Lagrange polynomial) |
+| `symbol_sync_real` | 17.29 | 17.29 | 1.00 | 10.16 | 10.16 | 1.00 | sdrk fallback |
 | `xcorr_fft_n4096` | 51.90 | 144.73 | 0.36 | 35.61 | 112.25 | 0.32 | liquid-dsp 1.8.3 fftfilt_cccf (benches/refs/liquid-fftfilt.c), FFTW 3.3.10 |
 | `xcorr_fft_n4096_fallback` | 113.30 | 451.32 | 0.25 | 112.39 | 482.83 | 0.23 | liquid-dsp 1.8.3 fftfilt_cccf (benches/refs/liquid-fftfilt.c), liquid's own FFT |
 | `xcorr_fft_n512` | 44.05 | 113.11 | 0.39 | 30.56 | 96.13 | 0.32 | liquid-dsp 1.8.3 fftfilt_cccf (benches/refs/liquid-fftfilt.c), FFTW 3.3.10 |

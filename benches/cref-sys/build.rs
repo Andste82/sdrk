@@ -4,17 +4,16 @@
 //! `has_grfmmod`, `has_grquaddemod`, `has_grdeemph`, `has_grcrc`, `has_grscrambler`, `has_grsnrest`, `has_grcostas`, `has_grsymsync`, `has_grvolk`, `has_grequalizer`, `has_grconstellation`, `has_liquiddc`, `has_liquidnco`, `has_liquidam`, `has_liquidrandn`, `has_grfastnoise`, `has_grdvbs2`, `has_kfr`, `has_cmsis`,
 //! `has_cmsisdsp`, `has_liquidhb`, `has_airspy`, `has_volknofma`, `has_volkgeneric`) unset, and its wrapper then reports that the library is not available.
 //!
-//! The biquad references (KFR, CMSIS-DSP), the other CMSIS-DSP references and the halfband references
+//! FFTW, the biquad references (KFR, CMSIS-DSP), the other CMSIS-DSP references and the halfband references
 //! (liquid-dsp, libairspy) exist once per SIMD
-//! level (`libkfrbq-<level>.a`, `libcmsisbq-<level>.a`, `libcmsisdsp-<level>.a`, `libliquidhb-<level>.a`, `libairspy-<level>.a`): the level is the one the target features of this build select, the
+//! level (`libfftw3f-<level>.a`, `libkfrbq-<level>.a`, `libcmsisbq-<level>.a`, `libcmsisdsp-<level>.a`, `libliquidhb-<level>.a`, `libairspy-<level>.a`): the level is the one the target features of this build select, the
 //! same rule as `sdrk-backend-simd` uses for our kernels, so that both sides of a comparison are
 //! compiled for the same instruction set. The level is exported as `SDRK_BIQUAD_REF_LEVEL`.
 
 use std::path::PathBuf;
 
 /// The libraries: cfg name, archive name below `<prefix>/lib`, link name.
-const LIBRARIES: [(&str, &str, &str); 23] = [
-    ("has_fftw", "libfftw3f.a", "fftw3f"),
+const LIBRARIES: [(&str, &str, &str); 22] = [
     ("has_kissfft", "libkissfft16.a", "kissfft16"),
     ("has_ne10", "libNE10.a", "NE10"),
     ("has_gragc", "libgragc.a", "gragc"),
@@ -44,7 +43,8 @@ const LIBRARIES: [(&str, &str, &str); 23] = [
 ];
 
 /// The per-level libraries: cfg name, link name without the level.
-const LEVEL_LIBRARIES: [(&str, &str); 7] = [
+const LEVEL_LIBRARIES: [(&str, &str); 8] = [
+    ("has_fftw", "fftw3f"),
     ("has_kfr", "kfrbq"),
     ("has_cmsis", "cmsisbq"),
     ("has_cmsisdsp", "cmsisdsp"),

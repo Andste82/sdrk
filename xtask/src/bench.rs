@@ -1129,8 +1129,10 @@ pub struct LevelPlan {
     pub fft_c32: (Reference, &'static [Reference]),
     /// The judged comparison of the real-input FFT and the informational ones.
     pub rfft: (Reference, &'static [Reference]),
-    /// Informational comparisons of the CQ15 FFT next to `KissFFT`.
-    pub fft_cq15_extra: &'static [Reference],
+    /// The judged comparison of the CQ15 FFT and the informational ones: `KissFFT` (scalar C)
+    /// where no SIMD library has an int16 FFT of the level, Ne10's int16 NEON transform at
+    /// `neon` (D2781).
+    pub fft_cq15: (Reference, &'static [Reference]),
     /// KFR is built for this level and gates the f32 and C32 biquads (D15); without it
     /// CMSIS-DSP does.
     pub kfr: bool,
@@ -1143,6 +1145,9 @@ pub struct LevelPlan {
 const RUSTFFT: (Reference, &[Reference]) = (Reference::RustFft, &[]);
 /// rustfft's real-input planner (`realfft`), our fallback as information.
 const REALFFT: (Reference, &[Reference]) = (Reference::RustFft, &[Reference::Fallback]);
+
+/// `KissFFT` (`FIXED_POINT=16`), the CQ15 FFT of the levels without a SIMD int16 FFT library.
+const KISSFFT: (Reference, &[Reference]) = (Reference::KissFft, &[]);
 
 /// All levels, in the order they run.
 pub const PLANS: [LevelPlan; 7] = [
@@ -1163,7 +1168,7 @@ pub const PLANS: [LevelPlan; 7] = [
         ),
         // FFTW's real-input transform out of place, as the complex one (D3).
         rfft: (Reference::Fftw, &[Reference::RustFft, Reference::Fallback]),
-        fft_cq15_extra: &[],
+        fft_cq15: KISSFFT,
         kfr: true,
         baseline: None,
     },
@@ -1177,10 +1182,11 @@ pub const PLANS: [LevelPlan; 7] = [
         refs: "x86_64",
         volk_pin: VolkPin::Sse42,
         fft_c32: RUSTFFT,
-        // FFTW has no codelets above SSE2, so it runs the code of `sse2` here, and its real-input
-        // transform is the stronger reference at this level.
+        // FFTW has no codelets between SSE2 and AVX, so its build for this level has the SSE2
+        // codelets of `sse2` (compiled for `sse4.2`, D2780), and its real-input transform is the
+        // stronger reference at this level.
         rfft: (Reference::Fftw, &[Reference::RustFft, Reference::Fallback]),
-        fft_cq15_extra: &[],
+        fft_cq15: KISSFFT,
         kfr: true,
         baseline: None,
     },
@@ -1195,7 +1201,7 @@ pub const PLANS: [LevelPlan; 7] = [
         volk_pin: VolkPin::Avx2,
         fft_c32: RUSTFFT,
         rfft: REALFFT,
-        fft_cq15_extra: &[],
+        fft_cq15: KISSFFT,
         kfr: true,
         baseline: None,
     },
@@ -1210,7 +1216,7 @@ pub const PLANS: [LevelPlan; 7] = [
         volk_pin: VolkPin::Avx2,
         fft_c32: RUSTFFT,
         rfft: REALFFT,
-        fft_cq15_extra: &[],
+        fft_cq15: KISSFFT,
         kfr: true,
         baseline: Some("avx2"),
     },
@@ -1227,7 +1233,7 @@ pub const PLANS: [LevelPlan; 7] = [
         volk_pin: VolkPin::Default,
         fft_c32: RUSTFFT,
         rfft: REALFFT,
-        fft_cq15_extra: &[],
+        fft_cq15: KISSFFT,
         kfr: true,
         baseline: None,
     },
@@ -1242,7 +1248,7 @@ pub const PLANS: [LevelPlan; 7] = [
         volk_pin: VolkPin::Neon,
         fft_c32: (Reference::RustFft, &[Reference::Fftw]),
         rfft: (Reference::RustFft, &[Reference::Fftw, Reference::Fallback]),
-        fft_cq15_extra: &[Reference::Ne10],
+        fft_cq15: (Reference::Ne10, &[Reference::KissFft]),
         kfr: true,
         baseline: None,
     },
@@ -1257,12 +1263,141 @@ pub const PLANS: [LevelPlan; 7] = [
         volk_pin: VolkPin::Default,
         fft_c32: RUSTFFT,
         rfft: REALFFT,
-        fft_cq15_extra: &[],
+        fft_cq15: KISSFFT,
         // KFR in its Emscripten configuration (sse41 over SIMD128, benches/refs/build.sh, D29).
         kfr: true,
         baseline: None,
     },
 ];
+
+/// The SIMD level a build is compiled for (G7 of the maintainer's measurement order of
+/// 2026-11-24, D2782): `Scalar` where only portable C runs (whatever the compiler flags:
+/// auto-vectorization does not make a SIMD library), otherwise a level of [`PLANS`].
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub enum SimdLevel {
+    /// Portable or scalar code.
+    Scalar,
+    /// The SIMD code of a level (`sse2`, `sse4.2`, `avx2`, `avx512`, `neon`, `simd128`).
+    Level(&'static str),
+}
+
+impl SimdLevel {
+    /// The rank within the platform of the level: `scalar` 0, then `sse2` 1, `sse4.2` 2,
+    /// `avx2` 3, `avx512` 4 on x86-64 and `neon` 1 on aarch64, `simd128` 1 on wasm32.
+    #[must_use]
+    pub fn rank(self) -> u8 {
+        match self {
+            SimdLevel::Scalar => 0,
+            SimdLevel::Level("sse4.2") => 2,
+            SimdLevel::Level("avx2" | "avx2-runtime") => 3,
+            SimdLevel::Level("avx512") => 4,
+            SimdLevel::Level(_) => 1,
+        }
+    }
+
+    /// The name in the findings and the manifest of `benches/refs/build.sh`.
+    #[must_use]
+    pub fn name(self) -> &'static str {
+        match self {
+            SimdLevel::Scalar => "scalar",
+            SimdLevel::Level(level) => level,
+        }
+    }
+}
+
+/// The entries whose measured side runs no SIMD code at any level: the protocol entries of
+/// `sdrk-proto` (no backends, [`proto`]) that a scalar library judges, and `squelch` `C32`
+/// (the SIMD backend has no squelch; ours runs the fallback at every level). A scalar library
+/// is like with like for them (D2782). `the_scalar_entries_have_no_simd_backend` keeps the list
+/// true.
+pub const SCALAR_ENTRIES: [&str; 9] = [
+    "squelch",
+    "crc16_ccitt_false",
+    "crc16_x25",
+    "crc32",
+    "crc24_adsb",
+    "bit_scramble_block",
+    "bit_descramble_block",
+    "bit_scramble_in_place_block",
+    "bit_descramble_in_place_block",
+];
+
+/// The SIMD level of the code that an entry measures at `plan`'s level: [`SimdLevel::Scalar`]
+/// for a fallback entry and the entries of [`SCALAR_ENTRIES`], the level otherwise (at a level
+/// with a baseline, `avx2-runtime`, the baseline level).
+#[must_use]
+pub fn measured_level(plan: &LevelPlan, spec: &KernelSpec) -> SimdLevel {
+    if spec.family.is_fallback_entry() || SCALAR_ENTRIES.contains(&spec.name) {
+        SimdLevel::Scalar
+    } else {
+        SimdLevel::Level(plan.baseline.unwrap_or(plan.level))
+    }
+}
+
+/// The SIMD level that the build of `reference` used for `spec` at `plan`'s level is compiled
+/// for (G7, D2782), as `benches/refs/build.sh` records it in the manifest of the references
+/// (`simd_level` of every library): the level where the build is compiled for the level and
+/// runs the library's SIMD code of that level (FFTW's codelets up to the level, VOLK's machine
+/// of the level, liquid-dsp's dot product of the level, KFR's architecture of the level,
+/// rustfft's planner of the CPU, Ne10's NEON transform), `scalar` where it runs portable C
+/// (CMSIS-DSP's generic C, the GNU Radio loops, KissFFT, VOLK's `generic` protokernels,
+/// liquid-dsp's portable dot product and its own FFT, libairspy's int16 converter,
+/// `rand_distr`). `None` for our own code.
+#[must_use]
+pub fn reference_level(
+    reference: Reference,
+    plan: &LevelPlan,
+    spec: &KernelSpec,
+) -> Option<SimdLevel> {
+    let level = SimdLevel::Level(plan.level);
+    let wasm = plan.refs == "wasm32";
+    Some(match reference {
+        Reference::Fallback | Reference::OwnLevel(_) | Reference::OwnKernel(_) => return None,
+        // VOLK's machine of the level (the pinned `volk_config`); on wasm32 only the generic
+        // protokernels. The protokernel without fused operations is compiled for the level.
+        Reference::Volk | Reference::VolkNoFma if !wasm => level,
+        // rustfft has no planner below SSE4.1 (D3); elsewhere it runs its planner of the CPU.
+        Reference::RustFft if plan.level != "sse2" => level,
+        // FFTW per level on x86-64 (D2780), the NEON codelets on aarch64; none on wasm32.
+        Reference::Fftw | Reference::FftwInPlace | Reference::Kfr | Reference::Ne10 => level,
+        // GNU Radio's equalizers call VOLK's dispatched dot products of the level.
+        Reference::GnuRadio if spec.family == Family::OwnVsGnuRadioSimd && !wasm => level,
+        // liquid-dsp's SIMD dot product of the level (SSE, AVX, AVX-512F, NEON; the real one
+        // from SSE3, so the portable loop at `sse2`) with FFTW; on wasm32 the portable loop.
+        Reference::Liquid
+            if !wasm
+                && matches!(
+                    spec.family,
+                    Family::HalfbandLiquid
+                        | Family::HilbertLiquid
+                        | Family::ChannelizeLiquid
+                        | Family::XcorrLiquid
+                        | Family::OwnVsLiquid
+                )
+                && !(plan.level == "sse2"
+                    && (spec.family == Family::HilbertLiquid
+                        || spec.name == "halfband_decimate_real")) =>
+        {
+            level
+        }
+        // libairspy's SSE2 float converter (x86-64 only).
+        Reference::Libairspy
+            if spec.family == Family::HilbertAirspy && plan.platform.starts_with("x86_64") =>
+        {
+            SimdLevel::Level("sse2")
+        }
+        Reference::Volk
+        | Reference::VolkNoFma
+        | Reference::VolkGeneric
+        | Reference::GnuRadio
+        | Reference::RustFft
+        | Reference::KissFft
+        | Reference::Cmsis
+        | Reference::Liquid
+        | Reference::Libairspy
+        | Reference::RandDistr => SimdLevel::Scalar,
+    })
+}
 
 /// The judged comparison of a kernel on a level and the informational ones.
 #[must_use]
@@ -1305,7 +1440,7 @@ fn family_comparisons(plan: &LevelPlan, spec: &KernelSpec) -> (Reference, Vec<Re
         }
         Family::OwnVsLiquid => (Reference::Liquid, vec![Reference::Fallback]),
         Family::FftC32 => (plan.fft_c32.0, plan.fft_c32.1.to_vec()),
-        Family::FftCq15 => (Reference::KissFft, plan.fft_cq15_extra.to_vec()),
+        Family::FftCq15 => (plan.fft_cq15.0, plan.fft_cq15.1.to_vec()),
         Family::RealFft => (plan.rfft.0, plan.rfft.1.to_vec()),
         Family::Own | Family::Workload | Family::FallbackOwn => (Reference::Fallback, Vec::new()),
         Family::Kfr if plan.kfr => (Reference::Kfr, vec![Reference::Cmsis]),
@@ -2661,7 +2796,11 @@ mod tests {
         );
         assert_eq!(
             comparisons(plan("neon"), kernel("fft_cq15_1024")),
-            (Reference::KissFft, vec![Reference::Ne10])
+            (Reference::Ne10, vec![Reference::KissFft])
+        );
+        assert_eq!(
+            comparisons(plan("avx2"), kernel("fft_cq15_1024_default")),
+            (Reference::KissFft, Vec::new())
         );
         assert_eq!(
             comparisons(plan("avx2"), kernel("fm_mod")),

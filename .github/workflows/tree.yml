@@ -834,6 +834,9 @@ jobs:
           "$HOME/.cargo/bin/rustup" toolchain install
       - uses: Swatinem/rust-cache@v2
         with:
+          # The dependencies only: the workspace crates are rebuilt (D2784).
+          cache-targets: "true"
+          cache-workspace-crates: "false"
           shared-key: count-wasm32
           save-if: ${{ github.ref == 'refs/heads/main' }}
       - name: Cache the C references
@@ -906,6 +909,9 @@ jobs:
           "$HOME/.cargo/bin/rustup" toolchain install
       - uses: Swatinem/rust-cache@v2
         with:
+          # The dependencies only: the workspace crates are rebuilt (D2784).
+          cache-targets: "true"
+          cache-workspace-crates: "false"
           shared-key: count-m4
           save-if: ${{ github.ref == 'refs/heads/main' }}
       - name: Cache the C references

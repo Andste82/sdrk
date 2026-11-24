@@ -1,0 +1,46 @@
+# Deletes the outdated Rust caches of main (D2784). Swatinem/rust-cache keys a cache as
+# `<restore key>-<lock hash>`, the restore key being its prefix, the shared key and the hash of
+# the environment; a new Cargo.lock saves a new cache beside the old one, so the 10 GB of the
+# repository filled with copies per lock hash. Called after a successful run on main (ci.yml,
+# nightly.yml): of the rust caches of main with the same restore key, only the newest stays.
+name: prune-caches
+
+on:
+  workflow_call:
+
+permissions:
+  contents: read
+
+jobs:
+  prune:
+    name: prune rust caches
+    runs-on: ubuntu-24.04
+    timeout-minutes: 10
+    permissions:
+      actions: write
+    steps:
+      - name: Delete the rust caches of main with an outdated lock hash
+        shell: bash
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          gh cache list --repo "$GITHUB_REPOSITORY" --ref refs/heads/main --limit 1000 \
+            --json id,key,createdAt \
+            --jq '.[] | select(.key | startswith("v0-rust-")) | [.id, .key, .createdAt] | @tsv' > caches.tsv
+          echo "rust caches of main: $(wc -l < caches.tsv)"
+          python3 - <<'PY' > outdated.txt
+          import collections, sys
+          groups = collections.defaultdict(list)
+          for line in open("caches.tsv"):
+              cid, key, created = line.rstrip("\n").split("\t")
+              groups[key.rsplit("-", 1)[0]].append((created, cid, key))
+          for restore, caches in sorted(groups.items()):
+              caches.sort()
+              print(f"keep {caches[-1][2]}", file=sys.stderr)
+              for created, cid, key in caches[:-1]:
+                  print(cid, key)
+          PY
+          while read -r id key; do
+            echo "delete $key"
+            gh cache delete "$id" --repo "$GITHUB_REPOSITORY"
+          done < outdated.txt

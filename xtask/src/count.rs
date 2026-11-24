@@ -1754,7 +1754,9 @@ pub fn comparisons(plan: &LevelPlan, spec: &KernelSpec) -> (Reference, Vec<Refer
 
 fn family_comparisons(plan: &LevelPlan, spec: &KernelSpec) -> (Reference, Vec<Reference>) {
     match spec.family {
-        Family::VolkNative if plan.refs == "wasm32" => (Reference::Fallback, Vec::new()),
+        Family::VolkNative | Family::OwnVsGnuRadioSimd if plan.refs == "wasm32" => {
+            (Reference::Fallback, Vec::new())
+        }
         Family::VolkNoFma if matches!(plan.level, "avx2" | "avx512" | "neon") => {
             let mut extras = vec![Reference::VolkNoFma];
             if plan.cheapest_volk {
@@ -1783,10 +1785,10 @@ fn family_comparisons(plan: &LevelPlan, spec: &KernelSpec) -> (Reference, Vec<Re
             }
             (Reference::Volk, extras)
         }
-        Family::GnuRadio => (Reference::GnuRadio, vec![Reference::Fallback]),
+        Family::GnuRadio | Family::OwnVsGnuRadioSimd => {
+            (Reference::GnuRadio, vec![Reference::Fallback])
+        }
         Family::OwnVsLiquid => (Reference::Liquid, vec![Reference::Fallback]),
-        Family::OwnVsGnuRadioSimd if plan.refs == "wasm32" => (Reference::Fallback, Vec::new()),
-        Family::OwnVsGnuRadioSimd => (Reference::GnuRadio, vec![Reference::Fallback]),
         Family::FftC32 => (plan.fft_c32.0, plan.fft_c32.1.to_vec()),
         Family::FftCq15 => (Reference::KissFft, plan.fft_cq15_extra.to_vec()),
         Family::RealFft => (plan.rfft.0, plan.rfft.1.to_vec()),

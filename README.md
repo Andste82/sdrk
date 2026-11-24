@@ -1,4 +1,4 @@
-<p align="center"><img src="assets/sdrk-logo.png" alt="SDRk Logo"></p>
+<p align="center"><img src="assets/sdrk-logo.webp" alt="SDRk Logo"></p>
 
 # SDRk
 

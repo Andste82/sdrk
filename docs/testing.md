@@ -184,12 +184,12 @@ check                              gate: fmt · deny · clippy (x86-64, wasm32-w
 │   └── test_m4_qemu_selfcheck     a failing case must fail the run (pr: when xtask/ or targets/ changed)    [pr]
 ├── build_m55_qemu, build_rv32_qemu (emulator image; the ESP32 targets are paused in CI, D201)
 ├── test_emu                       m4 full; m55, rv32 quick and full                                          [full]
-├── measure_nightly                measure.yml: cycles per sample of every entry and level with a core model,
-│                                  the gates in cycles and the drift against benches/results/cycles (D2709)  [full]
 ├── count_wasm32, count_m4_qemu    instruction counts where no core model exists (simd128, Cortex-M4)        [full]
 └── sweep_x64_linux (sse2 | sse4.2 | avx2), sweep_x64_linux_sde_avx512 (4 parts), sweep_arm64_linux (native),
     sweep_wasm32, sweep_fallback_int: convert_out for every f32, mag CQ15 for every raw pair                  [full]
 ```
+
+`nightly.yml` also runs `measure_nightly` (`measure.yml`, D2709): the cycles per sample of every entry and level with a core model, the gates in cycles and the drift against `benches/results/cycles`; `measure_only` runs it alone for a selection (`kernels`, `levels`).
 
 The test programs are built once per platform. The build job packs them with `cargo nextest archive`; the test job of the same platform downloads the archive, extracts it into its checkout (the same path, so the paths the tests compiled in stay valid) and runs it without building. nextest does not run doc tests, so `build_x64_linux` runs them with `cargo test --doc`. The jobs that need other flags (fixed levels, the fallback, the sweeps in release) build themselves; their cargo caches are separate.
 

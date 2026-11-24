@@ -1,9 +1,9 @@
 # The cycle measurement in CI (M13.1 §4, D2709): `cargo measure` with the corrected llvm-mca
 # (D942) for the chosen entries, levels and platforms, in the pinned container that is the
 # reference environment of the committed results `benches/results/cycles` (maintainer,
-# 2026-11-24). The nightly run calls it for every entry (the job `measure_nightly` of
-# tree.yml, scope `full`); `gh workflow run measure.yml --ref <branch> -f kernels=... -f
-# levels=...` measures a selection.
+# 2026-11-24). Called by nightly.yml as the job `measure_nightly`: every entry in the nightly
+# run, a selection by hand with `gh workflow run nightly.yml --ref <branch> -f
+# measure_only=true -f kernels="<names>" -f levels="<levels>"` (without the rest of the tree).
 #
 #   llvm_mca      builds llvm-mca 23.1.1 with assets/llvm-mca-23.1.1-sdrk-sched.patch, cached
 #                 by the patch, the LLVM version, the image and the snapshot
@@ -18,24 +18,6 @@ name: measure
 
 on:
   workflow_call:
-    inputs:
-      kernels:
-        description: "`all`, or kernel names separated by spaces (each selects its entries as `cargo measure <kernel>`)."
-        type: string
-        default: all
-      levels:
-        description: "`all`, or levels separated by spaces (sse2 sse4.2 avx2 avx2-runtime avx512 neon)."
-        type: string
-        default: all
-      shards:
-        description: Partitions per level when every entry is measured.
-        type: number
-        default: 4
-      repeat:
-        description: Measure every partition twice and fail unless both results are identical.
-        type: boolean
-        default: false
-  workflow_dispatch:
     inputs:
       kernels:
         description: "`all`, or kernel names separated by spaces (each selects its entries as `cargo measure <kernel>`)."

@@ -1,6 +1,9 @@
 # The nightly run: the whole CI tree (tree.yml) with scope `full`, that is every pull-request
-# job plus the long jobs (sweeps, emulators with the full profile, every instruction count,
-# fuzzing, the long run). When main has not changed since the last green nightly run, the pull-request tests are skipped and
+# job plus the long jobs (sweeps, emulators with the full profile, the instruction counts of
+# wasm32 and the Cortex-M4, fuzzing, the long run), and the cycle measurement of every entry
+# (measure.yml, `measure_nightly`, D2709). By hand on a branch, `measure_only` runs the cycle
+# measurement alone, of the entries `kernels` at the levels `levels` (`gh workflow run
+# nightly.yml --ref <branch> -f measure_only=true -f kernels="fir agc" -f levels="avx2 neon"`). When main has not changed since the last green nightly run, the pull-request tests are skipped and
 # only the long jobs run (except on Sunday, so that a change of the environment, a new
 # toolchain or runner image, still shows within a week). A failure opens or updates an issue.
 name: nightly
@@ -14,6 +17,26 @@ on:
     inputs:
       skip_pr_nodes:
         description: Skip the tests that every pull request runs.
+        type: boolean
+        default: false
+      measure_only:
+        description: Only the cycle measurement (measure_nightly), without the tree.
+        type: boolean
+        default: false
+      kernels:
+        description: "Cycle measurement: `all`, or kernel names separated by spaces."
+        type: string
+        default: all
+      levels:
+        description: "Cycle measurement: `all`, or levels separated by spaces."
+        type: string
+        default: all
+      shards:
+        description: "Cycle measurement: partitions per level when every entry is measured."
+        type: number
+        default: 4
+      repeat:
+        description: "Cycle measurement: every partition twice, identical results required (I13.1-1)."
         type: boolean
         default: false
 
@@ -56,16 +79,26 @@ jobs:
 
   tree:
     needs: delta
+    if: ${{ !inputs.measure_only }}
     uses: ./.github/workflows/tree.yml
     secrets: inherit
     with:
       scope: full
       skip_pr_nodes: ${{ needs.delta.outputs.skip_pr_nodes == 'true' }}
 
+  measure_nightly:
+    # The scheduled runs have no inputs: every entry on every level.
+    uses: ./.github/workflows/measure.yml
+    with:
+      kernels: ${{ inputs.kernels || 'all' }}
+      levels: ${{ inputs.levels || 'all' }}
+      shards: ${{ inputs.shards || 4 }}
+      repeat: ${{ inputs.repeat || false }}
+
   report:
     # A failed nightly run opens an issue, or adds a comment to the open one.
     name: report
-    needs: tree
+    needs: [tree, measure_nightly]
     if: failure() && github.ref == 'refs/heads/main'
     runs-on: ubuntu-24.04
     timeout-minutes: 10

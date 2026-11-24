@@ -21,6 +21,14 @@ mod kfr_ffi {
         );
         pub fn sdrk_kfr_biquad_f32_free(handle: *mut c_void);
         pub fn sdrk_kfr_biquad_arch() -> *const c_char;
+        pub fn sdrk_kfr_iir1_f32_new(coefs: *const [f32; 5]) -> *mut c_void;
+        pub fn sdrk_kfr_iir1_f32_run(
+            handle: *mut c_void,
+            input: *const f32,
+            output: *mut f32,
+            n: usize,
+        );
+        pub fn sdrk_kfr_iir1_f32_free(handle: *mut c_void);
     }
 }
 
@@ -89,6 +97,59 @@ impl Drop for KfrBiquad {
     fn drop(&mut self) {
         // SAFETY: the handle came from `sdrk_kfr_biquad_f32_new` and is freed once.
         unsafe { kfr_ffi::sdrk_kfr_biquad_f32_free(self.handle) }
+    }
+}
+
+/// KFR's `iir` with one section (`iir_state<float, 1>`, D2902): one real channel, a first-order
+/// recursion written as a biquad section with the unused taps zero (the DC blocker, the
+/// de-emphasis). Consecutive calls continue the stream.
+pub struct KfrIir1 {
+    #[cfg(has_kfr)]
+    handle: *mut core::ffi::c_void,
+}
+
+impl KfrIir1 {
+    /// The section `coefs` (`[b0, b1, b2, a1, a2]`); `None` without KFR.
+    #[must_use]
+    pub fn new(coefs: [f32; 5]) -> Option<Self> {
+        #[cfg(has_kfr)]
+        {
+            // SAFETY: `coefs` holds five floats; the shim copies them.
+            let handle = unsafe { kfr_ffi::sdrk_kfr_iir1_f32_new(&raw const coefs) };
+            (!handle.is_null()).then_some(KfrIir1 { handle })
+        }
+        #[cfg(not(has_kfr))]
+        {
+            let _ = coefs;
+            None
+        }
+    }
+
+    /// Filters `input` into `output`.
+    ///
+    /// # Panics
+    /// If the lengths differ.
+    pub fn run(&mut self, input: &[f32], output: &mut [f32]) {
+        assert_eq!(input.len(), output.len(), "KFR iir1: length mismatch");
+        #[cfg(has_kfr)]
+        // SAFETY: the handle is valid until `drop`; both buffers hold `len` floats and do not
+        // overlap (an exclusive borrow of the output).
+        unsafe {
+            kfr_ffi::sdrk_kfr_iir1_f32_run(
+                self.handle,
+                input.as_ptr(),
+                output.as_mut_ptr(),
+                input.len(),
+            );
+        }
+    }
+}
+
+#[cfg(has_kfr)]
+impl Drop for KfrIir1 {
+    fn drop(&mut self) {
+        // SAFETY: the handle came from `sdrk_kfr_iir1_f32_new` and is freed once.
+        unsafe { kfr_ffi::sdrk_kfr_iir1_f32_free(self.handle) }
     }
 }
 

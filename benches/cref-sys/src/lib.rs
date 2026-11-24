@@ -13,7 +13,11 @@
 //! - [`GrPwrSquelchCc`]: the `pwr_squelch_cc` loop of GNU Radio (GPL-3.0-or-later), the
 //!   reference of the `C32` `squelch`.
 //! - [`KfrBiquad`]: the biquad cascade of KFR 7 (`kfr::iir`, GPL-2.0-or-later), the SIMD
-//!   reference of `biquad` and `biquad_real`.
+//!   reference of `biquad` and `biquad_real`; [`KfrIir1`]: its one-section form, the SIMD
+//!   reference of `dc_block`, `dc_block_real` and `deemphasis` (D2902).
+//! - [`kfr_ops`]: KFR's element-wise expressions, compiled for the level (D2785, D2900, D2901).
+//! - [`sleef`]: SLEEF 3.9.0's vectorized `log10f`, `atan2f` and `sincosf` of the level
+//!   (BSL-1.0, D2903).
 //! - [`CmsisBiquad`]: the biquad cascades of CMSIS-DSP in generic C (Apache-2.0), the scalar
 //!   reference of the biquad fallbacks.
 //! - [`cmsis_dsp`]: the scalar references of the fallback round from CMSIS-DSP in generic C
@@ -52,7 +56,10 @@
 //!   multiply-add, the protokernels compiled with `-ffp-contract=off` for the levels `avx2`,
 //!   `avx512` and `neon` (LGPL-3.0-or-later).
 //! - [`volk_generic`]: VOLK 3.3.0's portable `generic` interleave and deinterleave
-//!   protokernels, compiled with `-O3 -ffp-contract=off` for every level (LGPL-3.0-or-later).
+//!   protokernels, its float-to-integer conversions and the conjugate product and `atan2f` of
+//!   `quad_demod`, compiled with `-O3 -ffp-contract=off` for every level (LGPL-3.0-or-later).
+//! - [`LiquidRresampCrcf`], [`LiquidRresampRrrf`]: liquid-dsp's rational-rate resamplers with
+//!   the portable dot product (MIT), the scalar references of the resample fallbacks (D2904).
 //!
 //! `benches/refs/build.sh` builds the static libraries; `build.rs` links the ones it finds. A
 //! constructor returns `None` when its library is not linked. All of them use the interleaved
@@ -72,17 +79,18 @@ mod liquid_am;
 mod liquid_fir;
 mod liquid_nco;
 mod liquid_randn;
+pub mod sleef;
 pub mod volk_generic;
 pub mod volk_nofma;
 
-pub use biquad::{BIQUAD_REF_LEVEL, CmsisBiquad, KfrBiquad};
+pub use biquad::{BIQUAD_REF_LEVEL, CmsisBiquad, KfrBiquad, KfrIir1};
 pub use channelizer::{Firpfbch2Build, LiquidFirpfbch2};
 pub use fftfilt::{FftfiltBuild, LiquidFftfilt};
 pub use gnuradio::{
     CostasLoopState, GR_MMSE_STEPS, GrChunksToSymbols, GrConstellationReceiverCb, GrCostasLoopCc,
-    GrCrc, GrFirBank, GrPfbArb, GrFirFilterCcf, GrFmDeemph, GrFrequencyModulatorFc, GrLinearEqualizer,
-    GrLinearEqualizerRect, GrMpskSnrEstCc, GrQuadratureDemodCf, GrRect, GrRotator, GrScrambler,
-    GrSoftDecoder, GrSymbolSyncCc, gr_constellation_decoder_qpsk,
+    GrCrc, GrFirBank, GrFirFilterCcf, GrFmDeemph, GrFrequencyModulatorFc, GrLinearEqualizer,
+    GrLinearEqualizerRect, GrMpskSnrEstCc, GrPfbArb, GrQuadratureDemodCf, GrRect, GrRotator,
+    GrScrambler, GrSoftDecoder, GrSymbolSyncCc, gr_constellation_decoder_qpsk,
 };
 pub use gr_fastnoise::{GR_FASTNOISE_POOL, GrFastnoiseSourceC, GrFastnoiseSourceF};
 pub use halfband::{
@@ -90,7 +98,10 @@ pub use halfband::{
 };
 pub use liquid::{LiquidDcBlocker, LiquidDcBlockerCrcf};
 pub use liquid_am::LiquidAmpmodem;
-pub use liquid_fir::{LiquidFirfiltCrcf, LiquidFirinterpCrcf, LiquidModemDemod, LiquidModemMap};
+pub use liquid_fir::{
+    LiquidFirfiltCrcf, LiquidFirinterpCrcf, LiquidModemDemod, LiquidModemMap, LiquidRresampCrcf,
+    LiquidRresampRrrf,
+};
 pub use liquid_nco::LiquidNcoPll;
 pub use liquid_randn::LiquidRandn;
 

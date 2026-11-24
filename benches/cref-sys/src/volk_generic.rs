@@ -5,7 +5,10 @@
 //! `deinterleave` fallbacks, and with a phasor lookup the reference of the `C32` `scramble`
 //! fallback ([`multiply_32fc`], M49), and with a `±1.0` sequence that of the `C32` `scramble`
 //! fallback at `bits = 1` ([`multiply_32fc_32f`], M49.1). VOLK has no 16-bit interleave; [`interleave_16ic`] is the
-//! loop of `volk_32f_x2_interleave_32fc_generic` with 16-bit elements.
+//! loop of `volk_32f_x2_interleave_32fc_generic` with 16-bit elements. The float-to-integer
+//! conversions ([`convert_16i`], [`convert_8i`], [`convert_8u`]) are the references of the
+//! `convert_out` fallbacks (D2905), the conjugate product and `atan2f` ([`multiply_conjugate`],
+//! [`atan2`]) that of the `quad_demod` fallback (D2906).
 
 #[cfg(has_volkgeneric)]
 mod ffi {
@@ -44,6 +47,37 @@ mod ffi {
             c: *mut [f32; 2],
             a: *const [f32; 2],
             b: *const f32,
+            n: core::ffi::c_uint,
+        );
+        pub fn sdrk_volk_generic_32f_s32f_convert_16i(
+            out: *mut i16,
+            input: *const f32,
+            scale: f32,
+            n: core::ffi::c_uint,
+        );
+        pub fn sdrk_volk_generic_32f_s32f_convert_8i(
+            out: *mut i8,
+            input: *const f32,
+            scale: f32,
+            n: core::ffi::c_uint,
+        );
+        pub fn sdrk_volk_generic_32f_s32f_x2_convert_8u(
+            out: *mut u8,
+            input: *const f32,
+            scale: f32,
+            bias: f32,
+            n: core::ffi::c_uint,
+        );
+        pub fn sdrk_volk_generic_32fc_x2_multiply_conjugate_32fc(
+            c: *mut [f32; 2],
+            a: *const [f32; 2],
+            b: *const [f32; 2],
+            n: core::ffi::c_uint,
+        );
+        pub fn sdrk_volk_generic_32fc_s32f_atan2_32f(
+            out: *mut f32,
+            c: *const [f32; 2],
+            normalize: f32,
             n: core::ffi::c_uint,
         );
     }
@@ -160,5 +194,87 @@ pub fn multiply_32fc_32f(a: &[[f32; 2]], b: &[f32], out: &mut [[f32; 2]]) -> boo
     }
     #[cfg(not(has_volkgeneric))]
     let _ = n;
+    AVAILABLE
+}
+
+/// `volk_32f_s32f_convert_16i_generic`: `out[i] = rintf(clamp(input[i] * scale))` for the
+/// common length; `false` without the library.
+pub fn convert_16i(input: &[f32], scale: f32, out: &mut [i16]) -> bool {
+    let n = common(input.len(), out.len(), usize::MAX);
+    #[cfg(has_volkgeneric)]
+    // SAFETY: both buffers hold at least `n` elements; the output is a separate mutable slice.
+    unsafe {
+        ffi::sdrk_volk_generic_32f_s32f_convert_16i(out.as_mut_ptr(), input.as_ptr(), scale, n);
+    }
+    #[cfg(not(has_volkgeneric))]
+    let _ = (n, scale);
+    AVAILABLE
+}
+
+/// `volk_32f_s32f_convert_8i_generic`: `out[i] = rintf(clamp(input[i] * scale))` for the common
+/// length; `false` without the library.
+pub fn convert_8i(input: &[f32], scale: f32, out: &mut [i8]) -> bool {
+    let n = common(input.len(), out.len(), usize::MAX);
+    #[cfg(has_volkgeneric)]
+    // SAFETY: as in `convert_16i`.
+    unsafe {
+        ffi::sdrk_volk_generic_32f_s32f_convert_8i(out.as_mut_ptr(), input.as_ptr(), scale, n);
+    }
+    #[cfg(not(has_volkgeneric))]
+    let _ = (n, scale);
+    AVAILABLE
+}
+
+/// `volk_32f_s32f_x2_convert_8u_generic`: `out[i] = rintf(clamp(input[i] * scale + bias))` for
+/// the common length; `false` without the library.
+pub fn convert_8u(input: &[f32], scale: f32, bias: f32, out: &mut [u8]) -> bool {
+    let n = common(input.len(), out.len(), usize::MAX);
+    #[cfg(has_volkgeneric)]
+    // SAFETY: as in `convert_16i`.
+    unsafe {
+        ffi::sdrk_volk_generic_32f_s32f_x2_convert_8u(
+            out.as_mut_ptr(),
+            input.as_ptr(),
+            scale,
+            bias,
+            n,
+        );
+    }
+    #[cfg(not(has_volkgeneric))]
+    let _ = (n, scale, bias);
+    AVAILABLE
+}
+
+/// `volk_32fc_x2_multiply_conjugate_32fc_generic`: `out[i] = a[i] * conj(b[i])` for the common
+/// length; `false` without the library.
+pub fn multiply_conjugate(a: &[[f32; 2]], b: &[[f32; 2]], out: &mut [[f32; 2]]) -> bool {
+    let n = common(a.len(), b.len(), out.len());
+    #[cfg(has_volkgeneric)]
+    // SAFETY: every buffer holds at least `n` complex samples; the output is a separate mutable
+    // slice, so it aliases no input.
+    unsafe {
+        ffi::sdrk_volk_generic_32fc_x2_multiply_conjugate_32fc(
+            out.as_mut_ptr(),
+            a.as_ptr(),
+            b.as_ptr(),
+            n,
+        );
+    }
+    #[cfg(not(has_volkgeneric))]
+    let _ = n;
+    AVAILABLE
+}
+
+/// `volk_32fc_s32f_atan2_32f_generic`: `out[i] = atan2f(c[i][1], c[i][0]) / normalize` (libm's
+/// `atan2f`) for the common length; `false` without the library.
+pub fn atan2(c: &[[f32; 2]], normalize: f32, out: &mut [f32]) -> bool {
+    let n = common(c.len(), out.len(), usize::MAX);
+    #[cfg(has_volkgeneric)]
+    // SAFETY: both buffers hold at least `n` elements; the output is a separate mutable slice.
+    unsafe {
+        ffi::sdrk_volk_generic_32fc_s32f_atan2_32f(out.as_mut_ptr(), c.as_ptr(), normalize, n);
+    }
+    #[cfg(not(has_volkgeneric))]
+    let _ = (n, normalize);
     AVAILABLE
 }

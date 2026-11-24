@@ -4,7 +4,9 @@
 //! complex samples in and out, real taps, with liquid's own dot product: the SIMD loop of the
 //! level (SSE, AVX, AVX-512F, NEON; the portable loop at `simd128`) or, on request, the
 //! portable loop. Both are built with the taps of the caller (SDRk's, so that the accuracy of
-//! both sides is comparable).
+//! both sides is comparable). The rational-rate resamplers [`LiquidRresampCrcf`] and
+//! [`LiquidRresampRrrf`] (`rresamp_crcf`, `rresamp_rrrf`, `benches/refs/liquid-rresamp.c`) run the
+//! portable dot product: the scalar references of the resample fallbacks (D2904).
 
 use core::ffi::{c_int, c_uint, c_void};
 
@@ -26,6 +28,32 @@ mod ffi {
             x: *mut [f32; 2],
             n: c_uint,
             y: *mut [f32; 2],
+        );
+        pub fn sdrk_liquid_rresamp_crcf_create(
+            h: *const f32,
+            p: c_uint,
+            q: c_uint,
+            m: c_uint,
+        ) -> *mut c_void;
+        pub fn sdrk_liquid_rresamp_crcf_destroy(q: *mut c_void);
+        pub fn sdrk_liquid_rresamp_crcf_execute_block(
+            q: *mut c_void,
+            x: *mut [f32; 2],
+            n: c_uint,
+            y: *mut [f32; 2],
+        );
+        pub fn sdrk_liquid_rresamp_rrrf_create(
+            h: *const f32,
+            p: c_uint,
+            q: c_uint,
+            m: c_uint,
+        ) -> *mut c_void;
+        pub fn sdrk_liquid_rresamp_rrrf_destroy(q: *mut c_void);
+        pub fn sdrk_liquid_rresamp_rrrf_execute_block(
+            q: *mut c_void,
+            x: *mut f32,
+            n: c_uint,
+            y: *mut f32,
         );
         pub fn sdrk_liquid_firfilt_crcf_create(
             h: *const f32,
@@ -381,3 +409,82 @@ impl Drop for LiquidModemDemod {
         unsafe { ffi::sdrk_liquid_modem_destroy(self.q) }
     }
 }
+
+macro_rules! rresamp {
+    ($name:ident, $sample:ty, $create:ident, $destroy:ident, $execute:ident, $what:literal) => {
+        #[doc = concat!("liquid's `", $what, "` (`P / Q` over a filter bank of `P` branches of `2 m` taps,")]
+        /// the portable dot product): `P` outputs per `Q` inputs, zero history at the start.
+        pub struct $name {
+            #[cfg_attr(not(has_liquidhb), allow(dead_code))]
+            q: *mut c_void,
+            p: usize,
+            d: usize,
+        }
+
+        // SAFETY: the C object owns its buffers and is used by one thread at a time.
+        unsafe impl Send for $name {}
+
+        impl $name {
+            #[doc = concat!("`", $what, "_create(p, q, m, h)` with the `2 p m` taps `h`; `None` without the")]
+            /// library or for taps of another length.
+            #[must_use]
+            pub fn new(h: &[f32], p: usize, q: usize, m: usize) -> Option<Self> {
+                if p == 0 || q == 0 || m == 0 || h.len() != 2 * p * m {
+                    return None;
+                }
+                #[cfg(has_liquidhb)]
+                {
+                    // SAFETY: `h` holds `2 p m` values, which the call copies.
+                    let r = unsafe { ffi::$create(h.as_ptr(), count(p), count(q), count(m)) };
+                    (!r.is_null()).then_some(Self { q: r, p, d: q })
+                }
+                #[cfg(not(has_liquidhb))]
+                None
+            }
+
+            /// `y.len() / P` primitive blocks: `Q` inputs each from `x`, `P` outputs each into `y`.
+            ///
+            /// # Panics
+            /// If `y` is no multiple of `P` or `x` is shorter than its blocks need.
+            pub fn execute(&mut self, x: &mut [$sample], y: &mut [$sample]) {
+                assert!(
+                    y.len() % self.p == 0 && x.len() >= y.len() / self.p * self.d,
+                    "liquid rresamp: lengths"
+                );
+                let n = count(y.len() / self.p);
+                #[cfg(has_liquidhb)]
+                // SAFETY: `x` holds at least `Q n` samples (liquid only reads them), `y` `P n`.
+                unsafe {
+                    ffi::$execute(self.q, x.as_mut_ptr(), n, y.as_mut_ptr());
+                }
+                #[cfg(not(has_liquidhb))]
+                let _ = n;
+            }
+        }
+
+        #[cfg(has_liquidhb)]
+        impl Drop for $name {
+            fn drop(&mut self) {
+                // SAFETY: the object came from the constructor and is destroyed once.
+                unsafe { ffi::$destroy(self.q) }
+            }
+        }
+    };
+}
+
+rresamp!(
+    LiquidRresampCrcf,
+    [f32; 2],
+    sdrk_liquid_rresamp_crcf_create,
+    sdrk_liquid_rresamp_crcf_destroy,
+    sdrk_liquid_rresamp_crcf_execute_block,
+    "rresamp_crcf"
+);
+rresamp!(
+    LiquidRresampRrrf,
+    f32,
+    sdrk_liquid_rresamp_rrrf_create,
+    sdrk_liquid_rresamp_rrrf_destroy,
+    sdrk_liquid_rresamp_rrrf_execute_block,
+    "rresamp_rrrf"
+);

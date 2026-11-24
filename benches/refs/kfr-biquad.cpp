@@ -8,6 +8,13 @@
 // `s2 = b2 x - a2 y` per section. Consecutive calls continue the stream: KFR keeps the state of
 // the sections, including the look-ahead of its cascade, in the handle.
 //
+// The one-section handles (`sdrk_kfr_iir1_f32_*`, an `iir_state<float, 1>`) are KFR's form of a
+// first-order recursion (D2902): the DC blocker `y = x - x1 + r y1` (`b = [1, -1, 0]`,
+// `a1 = -r`) and the de-emphasis `y = alpha x + (1 - alpha) y1` (`b = [alpha, 0, 0]`,
+// `a1 = alpha - 1`) as one biquad section with the unused taps zero. KFR's own `dcremove` is the
+// same recursion as `expression_iir<1>`; the cascade keeps the one section in a vector of one
+// lane, so the recursion runs one sample at a time, as every library runs it.
+//
 // The file is compiled without exceptions and RTTI, and allocates with aligned_alloc and
 // placement new, so it needs no C++ run-time library (the state is a plain aggregate of
 // vectors). The filter loop itself throws nothing, so this does not change its code.
@@ -24,6 +31,8 @@ namespace
 constexpr std::size_t sections = 2;
 using state_t                  = kfr::iir_state<float, sections>;
 constexpr std::size_t align    = alignof(state_t) < 64 ? 64 : alignof(state_t);
+using state1_t                 = kfr::iir_state<float, 1>;
+constexpr std::size_t align1   = alignof(state1_t) < 64 ? 64 : alignof(state1_t);
 } // namespace
 
 extern "C"
@@ -58,6 +67,33 @@ extern "C"
         if (handle == nullptr)
             return;
         static_cast<state_t*>(handle)->~state_t();
+        std::free(handle);
+    }
+
+    // A handle for the one section `coefs` (`[b0, b1, b2, a1, a2]`, a0 = 1), or null if the
+    // allocation fails.
+    void* sdrk_kfr_iir1_f32_new(const float* coefs)
+    {
+        kfr::biquad_section<float> bq[1] = { kfr::biquad_section<float>(1.0f, coefs[3], coefs[4],
+                                                                         coefs[0], coefs[1], coefs[2]) };
+        void* memory = std::aligned_alloc(align1, (sizeof(state1_t) + align1 - 1) / align1 * align1);
+        if (memory == nullptr)
+            return nullptr;
+        return new (memory) state1_t(kfr::iir_params<float, 1>(bq, 1));
+    }
+
+    // Filters `n` samples of `input` into `output` (distinct buffers).
+    void sdrk_kfr_iir1_f32_run(void* handle, const float* input, float* output, std::size_t n)
+    {
+        state1_t& state                = *static_cast<state1_t*>(handle);
+        kfr::make_univector(output, n) = kfr::iir(kfr::make_univector(input, n), std::ref(state));
+    }
+
+    void sdrk_kfr_iir1_f32_free(void* handle)
+    {
+        if (handle == nullptr)
+            return;
+        static_cast<state1_t*>(handle)->~state1_t();
         std::free(handle);
     }
 

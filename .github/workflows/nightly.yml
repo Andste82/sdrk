@@ -92,8 +92,8 @@ jobs:
     with:
       kernels: ${{ inputs.kernels || 'all' }}
       levels: ${{ inputs.levels || 'all' }}
-      shards: ${{ inputs.shards || 4 }}
-      repeat: ${{ inputs.repeat || false }}
+      shards: ${{ format('{0}', inputs.shards || 4) }}
+      repeat: ${{ inputs.repeat == true }}
 
   report:
     # A failed nightly run opens an issue, or adds a comment to the open one.

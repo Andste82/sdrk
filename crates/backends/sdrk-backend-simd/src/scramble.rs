@@ -443,29 +443,30 @@ mod x86 {
         _mm_and_si128, _mm_andnot_ps, _mm_andnot_si128, _mm_blendv_epi8, _mm_blendv_ps,
         _mm_castps_si128, _mm_castsi128_ps, _mm_cvtepu8_epi32, _mm_cvtsi32_si128,
         _mm_cvtsi64_si128, _mm_madd_epi16, _mm_mul_ps, _mm_or_ps, _mm_or_si128, _mm_packs_epi32,
-        _mm_set_epi64x, _mm_set1_epi32, _mm_setr_epi8, _mm_setzero_si128, _mm_shuffle_epi8,
-        _mm_shuffle_epi32, _mm_shuffle_ps, _mm_shufflehi_epi16, _mm_shufflelo_epi16,
-        _mm_sign_epi32, _mm_slli_epi32, _mm_srai_epi16, _mm_srai_epi32, _mm_srl_epi32,
-        _mm_srli_epi32, _mm_sub_epi32, _mm_sub_ps, _mm_subs_epi16, _mm_unpackhi_epi16,
-        _mm_unpackhi_epi64, _mm_unpackhi_ps, _mm_unpacklo_epi8, _mm_unpacklo_epi16,
-        _mm_unpacklo_ps, _mm_xor_ps, _mm_xor_si128, _mm256_add_epi32, _mm256_add_ps,
-        _mm256_and_si256, _mm256_blendv_epi8, _mm256_blendv_ps, _mm256_broadcastsi128_si256,
-        _mm256_castps_si256, _mm256_castsi256_ps, _mm256_cvtepu8_epi32, _mm256_madd_epi16,
-        _mm256_mul_ps, _mm256_packs_epi32, _mm256_permute4x64_epi64, _mm256_permutevar8x32_epi32,
-        _mm256_set_epi64x, _mm256_set_m128i, _mm256_set1_epi32, _mm256_shuffle_epi8,
-        _mm256_shuffle_ps, _mm256_sign_epi32, _mm256_slli_epi32, _mm256_srai_epi32,
-        _mm256_srl_epi32, _mm256_sub_ps, _mm256_subs_epi16, _mm256_unpackhi_ps, _mm256_unpacklo_ps,
-        _mm256_xor_ps, _mm256_xor_si256, _mm512_add_epi32, _mm512_add_ps, _mm512_and_si512,
-        _mm512_broadcast_i32x4, _mm512_castpd_ps, _mm512_castps_pd, _mm512_castps_si512,
-        _mm512_castsi512_ps, _mm512_cvtepu8_epi32, _mm512_cvtepu8_epi64, _mm512_i32gather_epi32,
-        _mm512_loadu_si512, _mm512_madd_epi16, _mm512_mask_blend_epi32, _mm512_mask_blend_epi64,
-        _mm512_mask_blend_pd, _mm512_mask_i32gather_ps, _mm512_mask_ror_epi32,
-        _mm512_mask_sub_epi32, _mm512_mask_sub_epi64, _mm512_mul_ps, _mm512_or_si512,
-        _mm512_packs_epi32, _mm512_permute_ps, _mm512_permutex2var_epi32,
-        _mm512_permutex2var_epi64, _mm512_permutex2var_ps, _mm512_permutexvar_epi32,
-        _mm512_permutexvar_epi64, _mm512_set1_epi32, _mm512_set1_epi64, _mm512_setzero_ps,
-        _mm512_setzero_si512, _mm512_shuffle_epi8, _mm512_slli_epi32, _mm512_slli_epi64,
-        _mm512_srai_epi32, _mm512_srl_epi32, _mm512_srl_epi64, _mm512_sub_ps, _mm512_subs_epi16,
+        _mm_set_epi64x, _mm_set1_epi8, _mm_set1_epi32, _mm_setr_epi8, _mm_setzero_si128,
+        _mm_shuffle_epi8, _mm_shuffle_epi32, _mm_shuffle_ps, _mm_shufflehi_epi16,
+        _mm_shufflelo_epi16, _mm_sign_epi32, _mm_slli_epi32, _mm_srai_epi16, _mm_srai_epi32,
+        _mm_srl_epi32, _mm_srli_epi32, _mm_sub_epi8, _mm_sub_epi32, _mm_sub_ps, _mm_subs_epi16,
+        _mm_unpackhi_epi16, _mm_unpackhi_epi64, _mm_unpackhi_ps, _mm_unpacklo_epi8,
+        _mm_unpacklo_epi16, _mm_unpacklo_ps, _mm_xor_ps, _mm_xor_si128, _mm256_add_epi32,
+        _mm256_add_ps, _mm256_and_si256, _mm256_blendv_epi8, _mm256_blendv_ps,
+        _mm256_broadcastsi128_si256, _mm256_castps_si256, _mm256_castsi256_ps,
+        _mm256_cvtepu8_epi32, _mm256_madd_epi16, _mm256_mul_ps, _mm256_packs_epi32,
+        _mm256_permute4x64_epi64, _mm256_permutevar8x32_epi32, _mm256_set_epi64x, _mm256_set_m128i,
+        _mm256_set1_epi32, _mm256_shuffle_epi8, _mm256_shuffle_ps, _mm256_sign_epi32,
+        _mm256_slli_epi32, _mm256_srai_epi32, _mm256_srl_epi32, _mm256_sub_ps, _mm256_subs_epi16,
+        _mm256_unpackhi_ps, _mm256_unpacklo_ps, _mm256_xor_ps, _mm256_xor_si256, _mm512_add_epi32,
+        _mm512_add_ps, _mm512_and_si512, _mm512_broadcast_i32x4, _mm512_castpd_ps,
+        _mm512_castps_pd, _mm512_castps_si512, _mm512_castsi512_ps, _mm512_cvtepu8_epi32,
+        _mm512_cvtepu8_epi64, _mm512_i32gather_epi32, _mm512_loadu_si512, _mm512_madd_epi16,
+        _mm512_mask_blend_epi32, _mm512_mask_blend_epi64, _mm512_mask_blend_pd,
+        _mm512_mask_i32gather_ps, _mm512_mask_ror_epi32, _mm512_mask_sub_epi32,
+        _mm512_mask_sub_epi64, _mm512_mul_ps, _mm512_or_si512, _mm512_packs_epi32,
+        _mm512_permute_ps, _mm512_permutex2var_epi32, _mm512_permutex2var_epi64,
+        _mm512_permutex2var_ps, _mm512_permutexvar_epi32, _mm512_permutexvar_epi64,
+        _mm512_set1_epi32, _mm512_set1_epi64, _mm512_setzero_ps, _mm512_setzero_si512,
+        _mm512_shuffle_epi8, _mm512_slli_epi32, _mm512_slli_epi64, _mm512_srai_epi32,
+        _mm512_srl_epi32, _mm512_srl_epi64, _mm512_sub_ps, _mm512_subs_epi16,
         _mm512_test_epi32_mask, _mm512_test_epi64_mask, _mm512_xor_si512,
     };
 
@@ -473,7 +474,8 @@ mod x86 {
     use fearless_simd::{f32x4, f32x8, f32x16, i16x8, i16x16, i16x32, u8x16, u32x8, u32x16};
 
     use super::{
-        A_Q15, AB_Q15, B_Q15, C_F32, CS_C32, Plan, Q_NEG, Q_SIGN_IM, Q_SIGN_RE, Q_SWAP, S_F32, at,
+        A_Q15, AB_Q15, B_Q15, C_F32, CS_C32, ENTRIES, Plan, Q_NEG, Q_SIGN_IM, Q_SIGN_RE, Q_SWAP,
+        S_F32, at,
     };
 
     /// `2^14`, the rounding constant of the `Q15` product.
@@ -1018,6 +1020,66 @@ mod x86 {
         )
     }
 
+    /// The constants of the per-sample loads of AVX2 ([`Avx2Form::Loads`]): `k = (±p) & mask`
+    /// in byte lanes (`2^b − 1` fits a byte for `b ≤ 8`), and the `2^8` table words from the
+    /// offset `2^b`, which `k` indexes without a bound check.
+    #[derive(Clone, Copy)]
+    struct Loads8 {
+        /// All ones for `inverse`, else 0 (`k = (p ^ m) − m`).
+        neg: __m128i,
+        mask: __m128i,
+        words: &'static [u64; 256],
+    }
+
+    #[target_feature(enable = "avx2")]
+    #[inline]
+    fn loads8(plan: &Plan, t: &'static [u64; ENTRIES]) -> Loads8 {
+        static NONE: [u64; 256] = [0; 256];
+        let base = plan.base as usize;
+        Loads8 {
+            neg: _mm_set1_epi8(plan.neg as i8),
+            mask: _mm_set1_epi8(plan.mask as i8),
+            // `2^b ≤ 256`: the words `2^b .. 2^b + 256` are in the table.
+            words: t
+                .get(base..base + 256)
+                .and_then(|w| w.try_into().ok())
+                .unwrap_or(&NONE),
+        }
+    }
+
+    /// The table words of eight phase bytes, the entries of [`Plan::entry`]: `k` of the eight
+    /// bytes in one vector (`vpxor`, `vpsubb`, `vpand`), moved to a general register with one
+    /// `vmovq`, each byte of it the index of one 64-bit load. Written as the compiler chose,
+    /// the indices took a different form in each build: the `avx2` build computed four of them
+    /// in a vector and four in general registers, with a test of `inverse` per sample, the
+    /// build with the level detected at run time computed all eight in vectors and moved each
+    /// out with a `vpextrw` (two micro-ops, one of them on the shuffle port that the loads'
+    /// `vmovlhps`/`vinsertf128` already fill), 1.34 / 1.45 (`C32`) and 1.22 / 1.53 (`CQ15`)
+    /// times the cycles of the `avx2` build at `b = 8` (I13.1-3). The `vmovq` is an `asm!`
+    /// block, so that neither build turns the byte extraction back into vector extractions.
+    #[target_feature(enable = "avx2")]
+    #[inline]
+    fn words8(p: [u8; 8], c: Loads8) -> [u64; 8] {
+        let v = _mm_cvtsi64_si128(i64::from_le_bytes(p));
+        let k = _mm_and_si128(_mm_sub_epi8(_mm_xor_si128(v, c.neg), c.neg), c.mask);
+        let w: u64;
+        // SAFETY: `vmovq` reads one `xmm` register and writes one general register; it touches
+        // no memory, no stack and no flags, and AVX is a target feature of this function.
+        unsafe {
+            core::arch::asm!(
+                "vmovq {w}, {k}",
+                w = out(reg) w,
+                k = in(xmm_reg) k,
+                options(pure, nomem, nostack, preserves_flags)
+            );
+        }
+        core::array::from_fn(|i| {
+            // A byte indexes the 256 words: no bound check.
+            let k = usize::from((w >> (8 * i)) as u8);
+            c.words.get(k).copied().unwrap_or_default()
+        })
+    }
+
     fearless_simd::kernel!(
         pub(super) fn cq15_avx2(t: Avx2, x: &[i16], p: &[u8], y: &mut [i16], plan: &Plan) -> usize {
             let c = idx256(plan);
@@ -1032,6 +1094,7 @@ mod x86 {
                 let round = _mm256_set1_epi32(ROUND);
                 let la = lookup256(plan.slice(&A_Q15));
                 let lb = lookup256(plan.slice(&B_Q15));
+                let lw = loads8(plan, &AB_Q15);
                 let mut body = |xv: &[i16; 16], pv: &[u8; 8], yv: &mut [i16; 16], form| {
                     let xr: __m256i = i16x16::from_slice(t, xv).into();
                     let (a, b) = match form {
@@ -1041,7 +1104,7 @@ mod x86 {
                         }
                         Avx2Form::Loads => {
                             // Lanes `[0 1 2 3 | 4 5 6 7]`: the words in the order 0 1 4 5, 2 3 6 7.
-                            let w = entries(pv, plan).map(|e| at(&AB_Q15, e));
+                            let w = words8(*pv, lw);
                             let (a, b) = pairs8([w[0], w[1], w[4], w[5], w[2], w[3], w[6], w[7]]);
                             (_mm256_castps_si256(a), _mm256_castps_si256(b))
                         }
@@ -1156,6 +1219,7 @@ mod x86 {
             let sign = _mm256_set1_epi32(i32::MIN);
             let lc = lookup256(bytemuck::cast_slice(plan.slice(&C_F32)));
             let ls = lookup256(bytemuck::cast_slice(plan.slice(&S_F32)));
+            let lw = loads8(plan, &CS_C32);
             let (xs, _) = x.as_chunks::<16>();
             let (ps, _) = p.as_chunks::<8>();
             let (ys, _) = y.as_chunks_mut::<16>();
@@ -1180,7 +1244,7 @@ mod x86 {
                                     _mm256_castsi256_ps(get256(&ls, k)),
                                 )
                             }
-                            Avx2Form::Loads => pairs8(entries(pv, plan).map(|e| at(&CS_C32, e))),
+                            Avx2Form::Loads => pairs8(words8(*pv, lw)),
                         };
                         (
                             _mm256_sub_ps(_mm256_mul_ps(re, cv), _mm256_mul_ps(im, sv)),

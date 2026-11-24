@@ -36,7 +36,7 @@ use sdrk_core::kernels::spectrum::{Mag, MagSq, PowerDb, Window};
 use sdrk_core::{C32, CQ15, Q15, Result};
 
 use crate::Simd;
-use crate::level::dispatch;
+use crate::level::{dispatch, dispatch_fn};
 use crate::util::check_len;
 
 /// Vectors per iteration of the main loops. On wasm32 LLVM no longer unrolls the inner loop of
@@ -340,12 +340,20 @@ fn mag_sq_q15_level<S: SimdToken>(simd: S, input: &[i16], out: &mut [i16]) -> us
     0
 }
 
+// The entry, one function per level (see `dispatch_fn!`): with the level detected at run time,
+// `dispatch!` ran 102 instructions per call around the loop at AVX2 against 67 in the build
+// with the level fixed (the same loop), 1.024 / 1.020 times its cycles per sample at 4096
+// samples per call (I13.1-3).
+dispatch_fn!(
+    fn run_mag_sq_q15(x: &[i16], y: &mut [i16]) => mag_sq_q15
+);
+
 impl MagSq<CQ15> for Simd {
     fn mag_sq(&self, input: &[CQ15], output: &mut [Q15]) -> Result<()> {
         check_len(input.len(), output.len())?;
         let x: &[i16] = bytemuck::cast_slice(input);
         let y: &mut [i16] = bytemuck::cast_slice_mut(output);
-        dispatch!(simd => mag_sq_q15(simd, x, y));
+        run_mag_sq_q15(x, y);
         Ok(())
     }
 }

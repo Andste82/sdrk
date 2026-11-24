@@ -36,10 +36,7 @@ on:
         type: boolean
         default: false
 
-concurrency:
-  group: measure-${{ github.ref }}-${{ inputs.kernels }}-${{ inputs.levels }}
-  cancel-in-progress: false
-
+# No concurrency group of its own: the caller's (nightly.yml) serializes the runs of a ref.
 permissions:
   contents: read
 

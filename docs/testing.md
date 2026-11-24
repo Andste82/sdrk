@@ -145,7 +145,7 @@ CI is three workflow files. `ci.yml` runs on pull requests and on pushes to `mai
 | pull request | `ci.yml` | `scope` (what changed), then the tree with scope `pr`: `check`, every build and the tests marked `pr` below. A pull request that only changes Markdown files no test reads runs `check` only |
 | `gh workflow run nightly.yml --ref <branch>` | `nightly.yml` | the tree with scope `full` on any branch, for example before merging a change of the CI or of a long-running job |
 | push to `main` | `ci.yml` | `smoke` (build, `xtask check`, `bare-metal`, the unit tests). The pull request has tested the same tree, because a branch must be up to date with `main` before it is merged |
-| every night | `nightly.yml` | the tree with scope `full`: every `pr` job and the jobs marked `full`. When `main` is unchanged since the last green nightly run, the `pr` tests are skipped and only the `full` jobs run, except on Sunday |
+| every night | `nightly.yml` | the tree with scope `full`: every `pr` job and the jobs marked `full`. When `main` is unchanged since the last nightly run whose tree jobs all passed, the `pr` tests and the cycle measurement are skipped and only the `full` jobs run, except on Sunday (D2743) |
 | Sunday night | `nightly.yml` | as every night, with the `pr` tests always |
 | manual (`workflow_dispatch`) | `nightly.yml` | as at night; the input chooses whether the `pr` tests are skipped |
 
@@ -169,15 +169,15 @@ check                              gate: fmt · deny · clippy (x86-64, wasm32-w
 │   ├── fuzz                       pipeline_json, five minutes                                                [full]
 │   └── soak                       the ten-minute long_run_no_drift                                           [full]
 ├── build_x64_linux_sde_avx512     target-cpu=sapphirerapids, profile emulated, nextest archive
-│   ├── test_x64_linux_sde_avx512  the suite under SDE, two partitions                                        [pr]
+│   ├── test_x64_linux_sde_avx512  the suite under SDE, three partitions                                      [pr]
 │   └── test_x64_linux_sde_avx512_fixed_arch   the backend with AVX-512 fixed at compile time                 [pr]
 ├── build_x64_win                  clippy · xtask check · bare-metal · nextest archive · unit tests
 │   └── test_x64_win               the whole suite from the archive                                           [pr]
 ├── build_arm64_linux              clippy · bare-metal · nextest archive · unit tests
-│   ├── test_arm64_linux           the whole suite from the archive, SDRK_EXPECT_LEVEL=neon                   [pr]
+│   ├── test_arm64_linux           the suite from the archive, two partitions, SDRK_EXPECT_LEVEL=neon         [pr]
 │   ├── test_arm64_linux_fallback  --cfg sdrk_fallback_only                                                   [pr]
 │   └── test_arm64_linux_fixed_arch  neon without std, with and without the tables                            [pr]
-├── test_wasm32                    WASI under wasmtime: scalar, simd128, relaxed SIMD, the static tables
+├── test_wasm32                    WASI under wasmtime, one job each: scalar, simd128, relaxed SIMD, the static tables
 ├── test_wasm_web                  the package in Node, Chrome and Firefox, JavaScript tests on the tarball
 ├── build_wasm_pkg                 the package on arm64_linux and x64_win
 ├── build_m4_qemu                  the suite on the Cortex-M4F, quick profile

@@ -22,7 +22,8 @@
 //!   (port bound / cycles), the bottleneck class and the coverage. Only the ratio of ours to the
 //!   comparison on one model means something; the absolute cycles are no hardware figures.
 //!   `avx2-runtime` (the run-time detection of the level, on the models of `avx2`) is compared
-//!   with our own entry in the fixed `avx2` build (D2702).
+//!   with our own entry in the fixed `avx2` build (D2702), as information; `cargo xtask check
+//!   cycles` judges it against the library of the `avx2` record (D2764).
 //!   Per entry also the accuracy of both sides on the same workload: the SNR against the f64
 //!   reference of the measurement binary (`snr_db`, D34, D2749), judged by
 //!   `cargo xtask check cycles`.

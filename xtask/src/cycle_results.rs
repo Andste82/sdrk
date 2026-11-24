@@ -5,8 +5,8 @@
 //! level of the platform: the file is written anew). One record per entry and level with a core
 //! model: the comparison, the samples of the counted calls and, on the reference model and the
 //! counter-model of the level, the cycles per sample of ours and of the comparison (the library
-//! reference of D32, `sdrk fallback` where there is none, our `avx2` build for `avx2-runtime`)
-//! with the ratio, the efficiency and the coverage, in the judged cycle mode (`whole-loop`), and
+//! reference of D32, `sdrk fallback` where there is none; our `avx2` build for `avx2-runtime`, as
+//! information, whose gate takes the library from the `avx2` record, D2764) with the ratio, the efficiency and the coverage, in the judged cycle mode (`whole-loop`), and
 //! the SNR in dB of both sides against the f64 reference (`snr_db`, D34, D2749); on
 //! the levels with a branch simulation (D1611) the branches and mispredictions per sample of
 //! both sides and the cost `cycles + mispredictions × penalty` on both models (D1612). An entry
@@ -148,7 +148,7 @@ fn level_header(level: &str, block_counts: &Value) -> anyhow::Result<Map<String,
         json!(if crate::branches::simulated_level(level) {
             "valgrind cachegrind --branch-sim=yes on the x86-64 build of the level"
         } else if level == "avx2-runtime" {
-            "not simulated: judged against our own avx2 build (D2702)"
+            "not simulated: the run-time-detection build of avx2 (D2702)"
         } else if level == "avx512" {
             "not simulated: Valgrind runs no AVX-512 (I44-16)"
         } else {

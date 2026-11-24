@@ -51,9 +51,6 @@ pub struct Caps {
     pub warn: f64,
     /// The goal; results record whether an entry reaches it.
     pub goal: f64,
-    /// Limit of a level with run-time detection against our own numbers of the level it
-    /// detects (the cost of the dispatch).
-    pub runtime: f64,
 }
 
 impl Default for Caps {
@@ -63,7 +60,6 @@ impl Default for Caps {
             dev: 1.50,
             warn: 1.10,
             goal: 1.00,
-            runtime: 1.02,
         }
     }
 }
@@ -112,6 +108,7 @@ pub struct Limit {
     pub own_target: Option<f64>,
 }
 
+#[cfg(test)]
 impl Limit {
     /// A `release` entry without waivers.
     #[must_use]
@@ -162,7 +159,6 @@ impl Limits {
                     "dev" => caps.dev = x,
                     "warn" => caps.warn = x,
                     "goal" => caps.goal = x,
-                    "runtime" => caps.runtime = x,
                     _ => bail!("limits.json: unknown cap `_limits.{name}`"),
                 }
             }
@@ -1201,7 +1197,7 @@ fn write_results(
             "k": K,
             "samples": N,
             "counted": "(count(k = K) - count(k = 0)) / (K * samples), minus the restore of the input for the FFTs",
-            "limits": { "release": caps.release, "dev": caps.dev, "warn": caps.warn, "goal": caps.goal, "runtime": caps.runtime },
+            "limits": { "release": caps.release, "dev": caps.dev, "warn": caps.warn, "goal": caps.goal },
         },
         "host_cpu": host_cpu,
         "references": references,
@@ -1280,7 +1276,6 @@ mod tests {
         dev: 1.50,
         warn: 1.10,
         goal: 1.00,
-        runtime: 1.02,
     };
 
     fn limit(status: Status, waiver: Option<&str>, accuracy: Option<&str>) -> Limit {

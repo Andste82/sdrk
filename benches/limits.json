@@ -1,11 +1,10 @@
 {
-  "_comment": "Release state per kernel and level (decision D14, judged in simulated cycles per sample since M13.1, D2708). On every level with a core model (`sse2`, `sse4.2`, `avx2`, `avx512`, `neon`) `cargo xtask check cycles` judges the committed results benches/results/cycles: `release` entries must stay within `_limits.release` times the cycles per sample of the comparison on both the reference model and the counter-model of the level, `dev` entries within `_limits.dev`; a ratio above `_limits.warn` and a `dev` entry within it (ready for `release`) are reported, and `_limits.goal` is reported per entry. At `simd128` (no core model) `cargo xtask count --platform wasm32` judges the instructions per sample the same way. `info` entries are reported and never judged; their `waiver` text says why the comparison is not fair. A `waiver` on a `release` or `dev` entry names the open item in docs/open-items.md that tracks a limit that is not met yet; it never hides the numbers. The level `avx2-runtime` is judged against our own `avx2` build in cycles with `_limits.runtime` (D2702); entries for it are needed only to relax that. A `cycle_waiver` on a SIMD entry and level exempts it from the gate of D321 (`cargo xtask check cycles`: the entry must not be slower than its `_fallback` entry on the reference model or the counter-model); its text gives the reason and names the open item in docs/open-items.md, and the check fails on a waiver whose gap is closed. Every entry was re-judged in cycles once with the full measurement of the CI measurement job (D2745, D2746): an entry over its cap went from `release` to `dev` only with an open item that names its numbers (I13.1-4 to I13.1-8, I24-3), never with a relaxed limit, and a `dev` entry within the release limit became `release`. Every judged record carries the SNR of ours and of the comparison against the f64 reference (`snr_db`, D2749): ours more than 1 dB below the comparison fails unless an `accuracy_waiver` gives the reason or the open item (D34). An `accuracy_trade` keeps a `release` entry above `_limits.release` at `release` while ours is at least 3 dB more accurate than the comparison, the comparison is below 100 dB (where accuracy is scarce; above it a few dB more have no practical effect) and ours is at most 1.20 times the comparison on both models (the maintainer's decision D2760: 3 dB better must not mean that we may be slow); its text names both SNR figures and the ratios. See docs/performance.md.",
+  "_comment": "Release state per kernel and level (decision D14, judged in simulated cycles per sample since M13.1, D2708). On every level with a core model (`sse2`, `sse4.2`, `avx2`, `avx2-runtime`, `avx512`, `neon`) `cargo xtask check cycles` judges the committed results benches/results/cycles: `release` entries must stay within `_limits.release` times the cycles per sample of the comparison on both the reference model and the counter-model of the level, `dev` entries within `_limits.dev`; a ratio above `_limits.warn` and a `dev` entry within it (ready for `release`) are reported, and `_limits.goal` is reported per entry. At `simd128` (no core model) `cargo xtask count --platform wasm32` judges the instructions per sample the same way. `info` entries are reported and never judged; their `waiver` text says why the comparison is not fair. A `waiver` on a `release` or `dev` entry names the open item in docs/open-items.md that tracks a limit that is not met yet; it never hides the numbers. The level `avx2-runtime` is judged like every level against the reference library and needs its own entries (the maintainer's decision D2764): the gate takes the library's cycles and SNR from the `avx2` record of the entry (the same workload on the same models); an entry whose `avx2` comparison is our own fallback is `info`, as at `avx2`. The ratio of the run-time-detection build to our own fixed `avx2` build is information, never a status. D321 is a check, never a status; a `cycle_waiver` on a SIMD entry and level exempts it from that check (`cargo xtask check cycles`: the entry must not be slower than its `_fallback` entry on the reference model or the counter-model); its text gives the reason and names the open item in docs/open-items.md, and the check fails on a waiver whose gap is closed. Every entry was re-judged in cycles once with the full measurement of the CI measurement job (D2745, D2746): an entry over its cap went from `release` to `dev` only with an open item that names its numbers (I13.1-7, I13.1-8, I24-3; `avx2-runtime` re-judged against the library by D2765), never with a relaxed limit, and a `dev` entry within the release limit became `release`. Every judged record carries the SNR of ours and of the comparison against the f64 reference (`snr_db`, D2749): ours more than 1 dB below the comparison fails unless an `accuracy_waiver` gives the reason or the open item (D34). An `accuracy_trade` keeps a `release` entry above `_limits.release` at `release` while ours is at least 3 dB more accurate than the comparison, the comparison is below 100 dB (where accuracy is scarce; above it a few dB more have no practical effect) and ours is at most 1.20 times the comparison on both models (the maintainer's decision D2760: 3 dB better must not mean that we may be slow); its text names both SNR figures and the ratios. See docs/performance.md.",
   "_limits": {
     "release": 1.1,
     "dev": 1.5,
     "warn": 1.1,
-    "goal": 1.0,
-    "runtime": 1.02
+    "goal": 1.0
   },
   "convert_cs8": {
     "sse2": {
@@ -15,6 +14,9 @@
       "status": "release"
     },
     "avx2": {
+      "status": "release"
+    },
+    "avx2-runtime": {
       "status": "release"
     },
     "avx512": {
@@ -37,6 +39,9 @@
     "avx2": {
       "status": "release"
     },
+    "avx2-runtime": {
+      "status": "release"
+    },
     "avx512": {
       "status": "release"
     },
@@ -57,6 +62,9 @@
     "avx2": {
       "status": "release"
     },
+    "avx2-runtime": {
+      "status": "release"
+    },
     "avx512": {
       "status": "release"
     },
@@ -75,6 +83,9 @@
       "status": "release"
     },
     "avx2": {
+      "status": "release"
+    },
+    "avx2-runtime": {
       "status": "release"
     },
     "avx512": {
@@ -107,7 +118,7 @@
       "status": "release"
     },
     "avx2-runtime": {
-      "status": "dev"
+      "status": "release"
     }
   },
   "convert_cq15_cu8": {
@@ -130,7 +141,7 @@
       "status": "release"
     },
     "avx2-runtime": {
-      "status": "dev"
+      "status": "release"
     }
   },
   "convert_out_cs16": {
@@ -141,6 +152,9 @@
       "status": "release"
     },
     "avx2": {
+      "status": "release"
+    },
+    "avx2-runtime": {
       "status": "release"
     },
     "avx512": {
@@ -163,6 +177,9 @@
     "avx2": {
       "status": "release"
     },
+    "avx2-runtime": {
+      "status": "release"
+    },
     "avx512": {
       "status": "release"
     },
@@ -181,6 +198,9 @@
       "status": "dev"
     },
     "avx2": {
+      "status": "dev"
+    },
+    "avx2-runtime": {
       "status": "dev"
     },
     "avx512": {
@@ -203,6 +223,9 @@
     "avx2": {
       "status": "release"
     },
+    "avx2-runtime": {
+      "status": "release"
+    },
     "avx512": {
       "status": "release"
     },
@@ -223,6 +246,9 @@
     "avx2": {
       "status": "release"
     },
+    "avx2-runtime": {
+      "status": "dev"
+    },
     "avx512": {
       "status": "release"
     },
@@ -241,6 +267,9 @@
       "status": "dev"
     },
     "avx2": {
+      "status": "dev"
+    },
+    "avx2-runtime": {
       "status": "dev"
     },
     "avx512": {
@@ -263,6 +292,9 @@
       "waiver": "VOLK has no SSE implementation of `rotator2`: the dispatcher of its `sse4_2_64_mmx` machine takes the scalar `generic` protokernel, so the comparison is information"
     },
     "avx2": {
+      "status": "release"
+    },
+    "avx2-runtime": {
       "status": "release"
     },
     "avx512": {
@@ -288,6 +320,10 @@
     "avx2": {
       "status": "info",
       "waiver": "no established fixed-point rotator exists to compare with (VOLK and GNU Radio rotate in float only, CMSIS-DSP has no NCO, IPP is not available), so the comparison with our own fallback is information (D32), and so is CMSIS-DSP's scalar composition (`arm_cos_q15`/`arm_sin_q15` per sample, `arm_cmplx_mult_cmplx_q15`) shown beside it; the branch is judged by its efficiency (simulated cycles against the port bound in `cargo measure rotate_cq15`)"
+    },
+    "avx2-runtime": {
+      "status": "info",
+      "waiver": "no reference library at `avx2`: the comparison of the `avx2` record is our own fallback, so the entry is information at `avx2-runtime` as at `avx2` and judged by its efficiency (D32, D2764); its cycles against our fixed `avx2` build are information as well. The reason at `avx2`: no established fixed-point rotator exists to compare with (VOLK and GNU Radio rotate in float only, CMSIS-DSP has no NCO, IPP is not available), so the comparison with our own fallback is information (D32), and so is CMSIS-DSP's scalar composition (`arm_cos_q15`/`arm_sin_q15` per sample, `arm_cmplx_mult_cmplx_q15`) shown beside it; the branch is judged by its efficiency (simulated cycles against the port bound in `cargo measure rotate_cq15`)"
     },
     "avx512": {
       "status": "info",
@@ -352,6 +388,9 @@
     "avx2": {
       "status": "release"
     },
+    "avx2-runtime": {
+      "status": "release"
+    },
     "avx512": {
       "status": "release"
     },
@@ -389,8 +428,8 @@
       "waiver": "no established library has a SIMD `CQ15` FIR with real `Q15` taps on our levels (VOLK's `volk_16ic_x2_dot_prod_16ic` takes complex taps and saturates its 16-bit sums, GNU Radio has no 16-bit FIR); the comparison is our own fallback, reported as information, and the branch is judged by its efficiency (D32)"
     },
     "avx2-runtime": {
-      "status": "dev",
-      "waiver": "the run-time-detection build runs the one-output-at-a-time SIMD branch, the fixed `avx2` build the grouped fallback (hotfix D65; the fallback is compiled for the level of the build, so a build that detects AVX2 at run time keeps the branch: its fallback would be SSE2 code); simulated in CI (D2745, whole-loop): 84.10 / 98.96 cycles per sample against 40.62 / 61.15 of the fixed `avx2` build on `znver3` / `alderlake` (2.07 / 1.62); open item I13.1-6, until a grouped SIMD branch replaces both"
+      "status": "info",
+      "waiver": "no reference library at `avx2`: the comparison of the `avx2` record is our own fallback, so the entry is information at `avx2-runtime` as at `avx2` and judged by its efficiency (D32, D2764); its cycles against our fixed `avx2` build are information as well. The reason at `avx2`: no established library has a SIMD `CQ15` FIR with real `Q15` taps on our levels (VOLK's `volk_16ic_x2_dot_prod_16ic` takes complex taps and saturates its 16-bit sums, GNU Radio has no 16-bit FIR); the comparison is our own fallback, reported as information, and the branch is judged by its efficiency (D32); at this level the kernel runs the fallback (hotfix D65: its one-output-at-a-time SIMD branch took more simulated cycles than the grouped fallback on both core models of the level), so the entry compares the fallback with itself and reads 1.00 until a grouped SIMD branch replaces it"
     }
   },
   "fir_decimate": {
@@ -401,6 +440,9 @@
       "status": "release"
     },
     "avx2": {
+      "status": "release"
+    },
+    "avx2-runtime": {
       "status": "release"
     },
     "avx512": {
@@ -427,6 +469,10 @@
       "status": "info",
       "waiver": "no established library has a SIMD `CQ15` FIR with real `Q15` taps on our levels (VOLK's `volk_16ic_x2_dot_prod_16ic` takes complex taps and saturates its 16-bit sums, GNU Radio has no 16-bit FIR); the comparison is our own fallback, reported as information, and the branch is judged by its efficiency (D32); at this level the kernel runs the fallback (hotfix D65: its one-output-at-a-time SIMD branch took more simulated cycles than the grouped fallback on both core models of the level), so the entry compares the fallback with itself and reads 1.00 until a grouped SIMD branch replaces it"
     },
+    "avx2-runtime": {
+      "status": "info",
+      "waiver": "no reference library at `avx2`: the comparison of the `avx2` record is our own fallback, so the entry is information at `avx2-runtime` as at `avx2` and judged by its efficiency (D32, D2764); its cycles against our fixed `avx2` build are information as well. The reason at `avx2`: no established library has a SIMD `CQ15` FIR with real `Q15` taps on our levels (VOLK's `volk_16ic_x2_dot_prod_16ic` takes complex taps and saturates its 16-bit sums, GNU Radio has no 16-bit FIR); the comparison is our own fallback, reported as information, and the branch is judged by its efficiency (D32); at this level the kernel runs the fallback (hotfix D65: its one-output-at-a-time SIMD branch took more simulated cycles than the grouped fallback on both core models of the level), so the entry compares the fallback with itself and reads 1.00 until a grouped SIMD branch replaces it"
+    },
     "avx512": {
       "status": "info",
       "waiver": "no established library has a SIMD `CQ15` FIR with real `Q15` taps on our levels (VOLK's `volk_16ic_x2_dot_prod_16ic` takes complex taps and saturates its 16-bit sums, GNU Radio has no 16-bit FIR); the comparison is our own fallback, reported as information, and the branch is judged by its efficiency (D32)"
@@ -450,6 +496,9 @@
     "avx2": {
       "status": "release"
     },
+    "avx2-runtime": {
+      "status": "release"
+    },
     "avx512": {
       "status": "release"
     },
@@ -469,6 +518,9 @@
       "status": "release"
     },
     "avx2": {
+      "status": "release"
+    },
+    "avx2-runtime": {
       "status": "release"
     },
     "avx512": {
@@ -508,8 +560,8 @@
       "waiver": "no established library has a SIMD `CQ15` FIR with real `Q15` taps on our levels (VOLK's `volk_16ic_x2_dot_prod_16ic` takes complex taps and saturates its 16-bit sums, GNU Radio has no 16-bit FIR); the comparison is our own fallback, reported as information, and the branch is judged by its efficiency (D32)"
     },
     "avx2-runtime": {
-      "status": "dev",
-      "waiver": "the run-time-detection build runs the one-output-at-a-time SIMD branch, the fixed `avx2` build the grouped fallback (hotfix D65; the fallback is compiled for the level of the build, so a build that detects AVX2 at run time keeps the branch: its fallback would be SSE2 code); simulated in CI (D2745, whole-loop): 97.70 / 110.63 cycles per sample against 52.45 / 71.49 of the fixed `avx2` build on `znver3` / `alderlake` (1.86 / 1.55); open item I13.1-6, until a grouped SIMD branch replaces both"
+      "status": "info",
+      "waiver": "no reference library at `avx2`: the comparison of the `avx2` record is our own fallback, so the entry is information at `avx2-runtime` as at `avx2` and judged by its efficiency (D32, D2764); its cycles against our fixed `avx2` build are information as well. The reason at `avx2`: no established library has a SIMD `CQ15` FIR with real `Q15` taps on our levels (VOLK's `volk_16ic_x2_dot_prod_16ic` takes complex taps and saturates its 16-bit sums, GNU Radio has no 16-bit FIR); the comparison is our own fallback, reported as information, and the branch is judged by its efficiency (D32); at this level the kernel runs the fallback (hotfix D65: its one-output-at-a-time SIMD branch took more simulated cycles than the grouped fallback on both core models of the level), so the entry compares the fallback with itself and reads 1.00 until a grouped SIMD branch replaces it"
     }
   },
   "resample": {
@@ -520,6 +572,9 @@
       "status": "release"
     },
     "avx2": {
+      "status": "release"
+    },
+    "avx2-runtime": {
       "status": "release"
     },
     "avx512": {
@@ -546,6 +601,10 @@
       "status": "info",
       "waiver": "no established library has a SIMD `CQ15` FIR with real `Q15` taps on our levels (VOLK's `volk_16ic_x2_dot_prod_16ic` takes complex taps and saturates its 16-bit sums, GNU Radio has no 16-bit FIR); the comparison is our own fallback, reported as information, and the branch is judged by its efficiency (D32); at this level the kernel runs the fallback (hotfix D65: its one-output-at-a-time SIMD branch took more simulated cycles than the grouped fallback on both core models of the level), so the entry compares the fallback with itself and reads 1.00 until a grouped SIMD branch replaces it"
     },
+    "avx2-runtime": {
+      "status": "info",
+      "waiver": "no reference library at `avx2`: the comparison of the `avx2` record is our own fallback, so the entry is information at `avx2-runtime` as at `avx2` and judged by its efficiency (D32, D2764); its cycles against our fixed `avx2` build are information as well. The reason at `avx2`: no established library has a SIMD `CQ15` FIR with real `Q15` taps on our levels (VOLK's `volk_16ic_x2_dot_prod_16ic` takes complex taps and saturates its 16-bit sums, GNU Radio has no 16-bit FIR); the comparison is our own fallback, reported as information, and the branch is judged by its efficiency (D32); at this level the kernel runs the fallback (hotfix D65: its one-output-at-a-time SIMD branch took more simulated cycles than the grouped fallback on both core models of the level), so the entry compares the fallback with itself and reads 1.00 until a grouped SIMD branch replaces it"
+    },
     "avx512": {
       "status": "info",
       "waiver": "no established library has a SIMD `CQ15` FIR with real `Q15` taps on our levels (VOLK's `volk_16ic_x2_dot_prod_16ic` takes complex taps and saturates its 16-bit sums, GNU Radio has no 16-bit FIR); the comparison is our own fallback, reported as information, and the branch is judged by its efficiency (D32)"
@@ -569,6 +628,9 @@
     "avx2": {
       "status": "release"
     },
+    "avx2-runtime": {
+      "status": "release"
+    },
     "avx512": {
       "status": "release"
     },
@@ -588,6 +650,9 @@
       "status": "release"
     },
     "avx2": {
+      "status": "release"
+    },
+    "avx2-runtime": {
       "status": "release"
     },
     "avx512": {
@@ -627,8 +692,8 @@
       "waiver": "no established library has a SIMD `Q15` real polyphase filter or dot product on our levels (VOLK has no 16-bit real dot product, GNU Radio no 16-bit real polyphase filter); the comparison is our own fallback, reported as information, and the branch is judged by its efficiency (D32); at this level the kernel runs the fallback (hotfix D65: its one-output-at-a-time SIMD branch took more instructions than the grouped fallback, the measure of `simd128` (D33)), so the entry compares the fallback with itself and reads 1.00 until a grouped SIMD branch replaces it"
     },
     "avx2-runtime": {
-      "status": "dev",
-      "waiver": "the run-time-detection build runs the one-output-at-a-time SIMD branch, the fixed `avx2` build the grouped fallback (hotfix D65; the fallback is compiled for the level of the build, so a build that detects AVX2 at run time keeps the branch: its fallback would be SSE2 code); simulated in CI (D2745, whole-loop): 60.92 / 67.03 cycles per sample against 42.13 / 38.06 of the fixed `avx2` build on `znver3` / `alderlake` (1.45 / 1.76); open item I13.1-6, until a grouped SIMD branch replaces both"
+      "status": "info",
+      "waiver": "no reference library at `avx2`: the comparison of the `avx2` record is our own fallback, so the entry is information at `avx2-runtime` as at `avx2` and judged by its efficiency (D32, D2764); its cycles against our fixed `avx2` build are information as well. The reason at `avx2`: no established library has a SIMD `Q15` real polyphase filter or dot product on our levels (VOLK has no 16-bit real dot product, GNU Radio no 16-bit real polyphase filter); the comparison is our own fallback, reported as information, and the branch is judged by its efficiency (D32); at this level the kernel runs the fallback (hotfix D65: its one-output-at-a-time SIMD branch took more simulated cycles than the grouped fallback on both core models of the level), so the entry compares the fallback with itself and reads 1.00 until a grouped SIMD branch replaces it"
     }
   },
   "resample_real_q15": {
@@ -643,6 +708,10 @@
     "avx2": {
       "status": "info",
       "waiver": "no established library has a SIMD `Q15` real polyphase filter or dot product on our levels (VOLK has no 16-bit real dot product, GNU Radio no 16-bit real polyphase filter); the comparison is our own fallback, reported as information, and the branch is judged by its efficiency (D32)"
+    },
+    "avx2-runtime": {
+      "status": "info",
+      "waiver": "no reference library at `avx2`: the comparison of the `avx2` record is our own fallback, so the entry is information at `avx2-runtime` as at `avx2` and judged by its efficiency (D32, D2764); its cycles against our fixed `avx2` build are information as well. The reason at `avx2`: no established library has a SIMD `Q15` real polyphase filter or dot product on our levels (VOLK has no 16-bit real dot product, GNU Radio no 16-bit real polyphase filter); the comparison is our own fallback, reported as information, and the branch is judged by its efficiency (D32)"
     },
     "avx512": {
       "status": "info",
@@ -665,6 +734,9 @@
       "status": "release"
     },
     "avx2": {
+      "status": "release"
+    },
+    "avx2-runtime": {
       "status": "release"
     },
     "avx512": {
@@ -690,6 +762,10 @@
       "status": "info",
       "waiver": "no established SIMD library computes the squared magnitude of CQ15 samples into Q15 with the rounding and saturation of `sat16(round_shift(re^2 + im^2, 15))` (VOLK has none; CMSIS-DSP's `arm_cmplx_mag_squared_q15` is scalar generic C in Q3.13 and gates the fallback entry `mag_sq_q15_fallback`), so our fallback is the comparison, which is information under D32. The branch is judged by its efficiency: at `avx2` 0.14 and 0.18 cycles per sample on znver3 and alderlake (whole-loop), efficiency 0.96 and 0.73, one multiply-add of adjacent pairs, a rounding add and shift and a saturating narrowing per vector"
     },
+    "avx2-runtime": {
+      "status": "info",
+      "waiver": "no reference library at `avx2`: the comparison of the `avx2` record is our own fallback, so the entry is information at `avx2-runtime` as at `avx2` and judged by its efficiency (D32, D2764); its cycles against our fixed `avx2` build are information as well. The reason at `avx2`: no established SIMD library computes the squared magnitude of CQ15 samples into Q15 with the rounding and saturation of `sat16(round_shift(re^2 + im^2, 15))` (VOLK has none; CMSIS-DSP's `arm_cmplx_mag_squared_q15` is scalar generic C in Q3.13 and gates the fallback entry `mag_sq_q15_fallback`), so our fallback is the comparison, which is information under D32. The branch is judged by its efficiency: at `avx2` 0.14 and 0.18 cycles per sample on znver3 and alderlake (whole-loop), efficiency 0.96 and 0.73, one multiply-add of adjacent pairs, a rounding add and shift and a saturating narrowing per vector"
+    },
     "avx512": {
       "status": "info",
       "waiver": "no established SIMD library computes the squared magnitude of CQ15 samples into Q15 with the rounding and saturation of `sat16(round_shift(re^2 + im^2, 15))` (VOLK has none; CMSIS-DSP's `arm_cmplx_mag_squared_q15` is scalar generic C in Q3.13 and gates the fallback entry `mag_sq_q15_fallback`), so our fallback is the comparison, which is information under D32. The branch is judged by its efficiency: at `avx2` 0.14 and 0.18 cycles per sample on znver3 and alderlake (whole-loop), efficiency 0.96 and 0.73, one multiply-add of adjacent pairs, a rounding add and shift and a saturating narrowing per vector"
@@ -711,6 +787,9 @@
       "status": "release"
     },
     "avx2": {
+      "status": "release"
+    },
+    "avx2-runtime": {
       "status": "release"
     },
     "avx512": {
@@ -750,7 +829,8 @@
       "waiver": "no established library has a complex-by-real Q15 multiply with the rounding of `q15_mul`, so our fallback is the comparison; under D32 that is information, and the SIMD branch is judged by its efficiency; at `avx2` (whole-loop simulation) it takes 0.22 / 0.21 cycles per sample on znver3 / alderlake against the fallback's 0.56 / 0.56 (2.6 / 2.7 times faster), with an efficiency of 0.62 on znver3 (latency bound) and 0.85 on alderlake; at `simd128` it needs 3.95 instructions per sample against the fallback's 9.91 (2.5 times fewer)"
     },
     "avx2-runtime": {
-      "status": "dev"
+      "status": "info",
+      "waiver": "no reference library at `avx2`: the comparison of the `avx2` record is our own fallback, so the entry is information at `avx2-runtime` as at `avx2` and judged by its efficiency (D32, D2764); its cycles against our fixed `avx2` build are information as well. The reason at `avx2`: no established library has a complex-by-real Q15 multiply with the rounding of `q15_mul`, so our fallback is the comparison; under D32 that is information, and the SIMD branch is judged by its efficiency; simulated in CI (D2745, whole-loop): 0.22 / 0.21 cycles per sample against 0.56 / 0.56 of the comparison on `znver3` / `alderlake` (0.39 / 0.37)"
     }
   },
   "power_db": {
@@ -764,6 +844,10 @@
     "avx2": {
       "status": "info",
       "waiver": "VOLK's SIMD `log2` (`volk_32f_log2_32f`) is a polynomial of another accuracy class: 152.0 dB of ours (bit-exact with `libm::log10f`, as the fallback) against 141.6 dB of VOLK on the measured input; reaching its cost would mean losing accuracy (D34), so the comparison is information; the SIMD branch is judged by its efficiency and against the fallback"
+    },
+    "avx2-runtime": {
+      "status": "info",
+      "waiver": "the library comparison of the `avx2` record (volk_32f_log2_32f + volk_32f_s32f_multiply_32f + volk_32f_s32f_add_32f) is information at `avx2`, so the entry is information at `avx2-runtime` as well (D2764); its cycles against our fixed `avx2` build are information too. The reason at `avx2`: VOLK's SIMD `log2` (`volk_32f_log2_32f`) is a polynomial of another accuracy class: 152.0 dB of ours (bit-exact with `libm::log10f`, as the fallback) against 141.6 dB of VOLK on the measured input; reaching its cost would mean losing accuracy (D34), so the comparison is information; the SIMD branch is judged by its efficiency and against the fallback"
     },
     "avx512": {
       "status": "info",
@@ -804,7 +888,8 @@
       "waiver": "no established library has a decibel conversion of Q15 powers, so our fallback is the comparison; under D32 that is information. The SIMD branch is bit-exact with the fallback; at `avx2` it runs blocks of 32 samples in three passes and needs 1.92 and 1.89 cycles per sample on znver3 and alderlake (whole-loop) against 3.05 and 2.46 of the fallback, efficiency 0.59 and 0.66 (latency: the division in the middle of the `log10f` steps makes a chain longer than the out-of-order window; the passes cut it into three)"
     },
     "avx2-runtime": {
-      "status": "dev"
+      "status": "info",
+      "waiver": "no reference library at `avx2`: the comparison of the `avx2` record is our own fallback, so the entry is information at `avx2-runtime` as at `avx2` and judged by its efficiency (D32, D2764); its cycles against our fixed `avx2` build are information as well. The reason at `avx2`: no established library has a decibel conversion of Q15 powers, so our fallback is the comparison; under D32 that is information. The SIMD branch is bit-exact with the fallback; at `avx2` it runs blocks of 32 samples in three passes and needs 1.92 and 1.89 cycles per sample on znver3 and alderlake (whole-loop) against 3.05 and 2.46 of the fallback, efficiency 0.59 and 0.66 (latency: the division in the middle of the `log10f` steps makes a chain longer than the out-of-order window; the passes cut it into three)"
     }
   },
   "mag_sq_fallback": {
@@ -985,6 +1070,9 @@
     "avx2": {
       "status": "release"
     },
+    "avx2-runtime": {
+      "status": "release"
+    },
     "avx512": {
       "status": "release"
     },
@@ -1022,7 +1110,8 @@
       "waiver": "`quad_demod` `CQ15` has no established SIMD reference (VOLK, KFR, CMSIS-DSP and GNU Radio have no fixed-point FM discriminator in SIMD); the comparison is our own fallback, which is not a fair gate for a SIMD branch (D32), so the entry is information and judged by its efficiency; the fallback itself is gated against CMSIS-DSP (`quad_demod_cq15_fallback`)"
     },
     "avx2-runtime": {
-      "status": "dev"
+      "status": "info",
+      "waiver": "no reference library at `avx2`: the comparison of the `avx2` record is our own fallback, so the entry is information at `avx2-runtime` as at `avx2` and judged by its efficiency (D32, D2764); its cycles against our fixed `avx2` build are information as well. The reason at `avx2`: `quad_demod` `CQ15` has no established SIMD reference (VOLK, KFR, CMSIS-DSP and GNU Radio have no fixed-point FM discriminator in SIMD); the comparison is our own fallback, which is not a fair gate for a SIMD branch (D32), so the entry is information and judged by its efficiency; the fallback itself is gated against CMSIS-DSP (`quad_demod_cq15_fallback`)"
     }
   },
   "fm_mod": {
@@ -1051,7 +1140,8 @@
       "waiver": "no SIMD library has an FM modulator; GNU Radio's `frequency_modulator_fc` is a scalar loop (`f32` phase folded with `fmodf`, `gr::fxpt` table of 1024 entries, a lower accuracy class), so it is no fair gate for a SIMD branch and the comparison with it and with our fallback is information (D32); the branch is judged by its efficiency (simulated cycles against the port bound), the fallback by the entry `fm_mod_fallback`"
     },
     "avx2-runtime": {
-      "status": "dev"
+      "status": "info",
+      "waiver": "the library comparison of the `avx2` record (GNU Radio frequency_modulator_fc) is information at `avx2`, so the entry is information at `avx2-runtime` as well (D2764); its cycles against our fixed `avx2` build are information too. The reason at `avx2`: no SIMD library has an FM modulator; GNU Radio's `frequency_modulator_fc` is a scalar loop (`f32` phase folded with `fmodf`, `gr::fxpt` table of 1024 entries, a lower accuracy class), so it is no fair gate for a SIMD branch and the comparison with it and with our fallback is information (D32); the branch is judged by its efficiency (simulated cycles against the port bound), the fallback by the entry `fm_mod_fallback`"
     }
   },
   "fm_mod_cq15": {
@@ -1080,7 +1170,8 @@
       "waiver": "`fm_mod` `CQ15` has no established reference (VOLK, GNU Radio, CMSIS-DSP, KFR and liquid-dsp have no fixed-point FM modulator); the comparison is our own fallback, which is not a fair gate for a SIMD branch, so the entry is information only (D32), and so is CMSIS-DSP's scalar composition (`arm_cos_q15`/`arm_sin_q15` per sample) shown beside it; the branch is judged by its efficiency"
     },
     "avx2-runtime": {
-      "status": "dev"
+      "status": "info",
+      "waiver": "no reference library at `avx2`: the comparison of the `avx2` record is our own fallback, so the entry is information at `avx2-runtime` as at `avx2` and judged by its efficiency (D32, D2764); its cycles against our fixed `avx2` build are information as well. The reason at `avx2`: `fm_mod` `CQ15` has no established reference (VOLK, GNU Radio, CMSIS-DSP, KFR and liquid-dsp have no fixed-point FM modulator); the comparison is our own fallback, which is not a fair gate for a SIMD branch, so the entry is information only (D32), and so is CMSIS-DSP's scalar composition (`arm_cos_q15`/`arm_sin_q15` per sample) shown beside it; the branch is judged by its efficiency"
     }
   },
   "fm_mod_fallback": {
@@ -1143,7 +1234,7 @@
       "status": "release"
     },
     "avx2-runtime": {
-      "status": "dev"
+      "status": "release"
     }
   },
   "fft_1024": {
@@ -1154,6 +1245,9 @@
       "status": "release"
     },
     "avx2": {
+      "status": "release"
+    },
+    "avx2-runtime": {
       "status": "release"
     },
     "avx512": {
@@ -1174,6 +1268,9 @@
       "status": "release"
     },
     "avx2": {
+      "status": "release"
+    },
+    "avx2-runtime": {
       "status": "release"
     },
     "avx512": {
@@ -1206,7 +1303,7 @@
       "status": "release"
     },
     "avx2-runtime": {
-      "status": "dev"
+      "status": "release"
     }
   },
   "fft_cq15_1024_default": {
@@ -1229,7 +1326,7 @@
       "status": "release"
     },
     "avx2-runtime": {
-      "status": "dev"
+      "status": "release"
     }
   },
   "fft_cq15_1024_full_scale": {
@@ -1240,6 +1337,9 @@
       "status": "release"
     },
     "avx2": {
+      "status": "release"
+    },
+    "avx2-runtime": {
       "status": "release"
     },
     "avx512": {
@@ -1272,7 +1372,7 @@
       "status": "release"
     },
     "avx2-runtime": {
-      "status": "dev"
+      "status": "release"
     }
   },
   "squelch": {
@@ -1295,8 +1395,7 @@
       "status": "release"
     },
     "avx2-runtime": {
-      "status": "info",
-      "waiver": "`squelch` is not accelerated: the run-time-detection build runs the fallback compiled for the baseline x86-64 target, the `avx2` build the same code compiled for AVX2 (VEX encoding, different register allocation), so their counts differ by code generation only; reported as information"
+      "status": "release"
     }
   },
   "squelch_cq15": {
@@ -1326,7 +1425,7 @@
     },
     "avx2-runtime": {
       "status": "info",
-      "waiver": "`squelch` is not accelerated: the run-time-detection build runs the fallback compiled for the baseline x86-64 target, the `avx2` build the same code compiled for AVX2 (VEX encoding, different register allocation), so their counts differ by code generation only; reported as information"
+      "waiver": "no reference library at `avx2`: the comparison of the `avx2` record is our own fallback, so the entry is information at `avx2-runtime` as at `avx2` and judged by its efficiency (D32, D2764); its cycles against our fixed `avx2` build are information as well. The reason at `avx2`: `squelch` is not accelerated (a first-order recursion on the previous average, and the gate decision depends on it, so it stays with the fallback); the comparison is our own fallback, reported as information"
     }
   },
   "mag": {
@@ -1337,6 +1436,9 @@
       "status": "release"
     },
     "avx2": {
+      "status": "release"
+    },
+    "avx2-runtime": {
       "status": "release"
     },
     "avx512": {
@@ -1358,6 +1460,9 @@
       "status": "release"
     },
     "avx2": {
+      "status": "release"
+    },
+    "avx2-runtime": {
       "status": "release"
     },
     "avx512": {
@@ -1391,7 +1496,7 @@
       "status": "release"
     },
     "avx2-runtime": {
-      "status": "dev"
+      "status": "release"
     }
   },
   "agc_cq15": {
@@ -1421,7 +1526,7 @@
     },
     "avx2-runtime": {
       "status": "info",
-      "waiver": "`agc` `CQ15` is not accelerated: the run-time-detection build runs the fallback compiled for the baseline x86-64 target, the `avx2` build the same code compiled for AVX2 (VEX encoding, different register allocation), so their counts differ by code generation only; reported as information"
+      "waiver": "no reference library at `avx2`: the comparison of the `avx2` record is our own fallback, so the entry is information at `avx2-runtime` as at `avx2` and judged by its efficiency (D32, D2764); its cycles against our fixed `avx2` build are information as well. The reason at `avx2`: `agc` `CQ15` is not accelerated (per-sample feedback: the gain of every sample depends on the output of the previous one, so it stays with the fallback; only `C32` computes its magnitudes and output products in vectors); the comparison is our own fallback, reported as information"
     }
   },
   "dc_block_real": {
@@ -1451,7 +1556,7 @@
     },
     "avx2-runtime": {
       "status": "info",
-      "waiver": "`dc_block_real` `f32`: the run-time-detection build dispatches to the same generic code of the `f64` block scan as the `avx2` build; the fixed cost of the dispatch per call and the code generation of the scalar remainder differ; reported as information"
+      "waiver": "no reference library at `avx2`: the comparison of the `avx2` record is our own fallback, so the entry is information at `avx2-runtime` as at `avx2` and judged by its efficiency (D32, D2764); its cycles against our fixed `avx2` build are information as well. The reason at `avx2`: `dc_block_real` `f32` runs the `f64` block scan of the SIMD backend (maintainer decision of 2026-10-29: a tolerance kernel); no SIMD library has a block-scan form of this first-order recursion (VOLK, KFR and CMSIS-DSP have none), so the comparison is our own fallback, which is not a fair gate for a SIMD branch (D32), and the branch is judged by its simulated cycles and its efficiency (docs/performance.md); reported as information"
     }
   },
   "dc_block_real_q15": {
@@ -1481,7 +1586,7 @@
     },
     "avx2-runtime": {
       "status": "info",
-      "waiver": "`dc_block_real` is not accelerated: the run-time-detection build runs the fallback compiled for the baseline x86-64 target, the `avx2` build the same code compiled for AVX2 (VEX encoding, different register allocation), so their counts differ by code generation only; reported as information"
+      "waiver": "no reference library at `avx2`: the comparison of the `avx2` record is our own fallback, so the entry is information at `avx2-runtime` as at `avx2` and judged by its efficiency (D32, D2764); its cycles against our fixed `avx2` build are information as well. The reason at `avx2`: `dc_block_real` is not accelerated (a first-order recursion on the previous output, as `dc_block`, so it stays with the fallback); the comparison is our own fallback, reported as information"
     }
   },
   "deemphasis": {
@@ -1511,7 +1616,7 @@
     },
     "avx2-runtime": {
       "status": "info",
-      "waiver": "`deemphasis` `f32`: the run-time-detection build dispatches to the same generic code of the `f64` block scan as the `avx2` build; the fixed cost of the dispatch per call and the code generation of the scalar remainder differ; reported as information"
+      "waiver": "no reference library at `avx2`: the comparison of the `avx2` record is our own fallback, so the entry is information at `avx2-runtime` as at `avx2` and judged by its efficiency (D32, D2764); its cycles against our fixed `avx2` build are information as well. The reason at `avx2`: `deemphasis` `f32` runs the `f64` block scan of the SIMD backend (maintainer decision of 2026-10-29: a tolerance kernel); no SIMD library has a block-scan form of this first-order recursion (VOLK, KFR and CMSIS-DSP have none), so the comparison is our own fallback, which is not a fair gate for a SIMD branch (D32), and the branch is judged by its simulated cycles and its efficiency (docs/performance.md); reported as information"
     }
   },
   "deemphasis_q15": {
@@ -1541,7 +1646,7 @@
     },
     "avx2-runtime": {
       "status": "info",
-      "waiver": "`deemphasis` is not accelerated: the run-time-detection build runs the fallback compiled for the baseline x86-64 target, the `avx2` build the same code compiled for AVX2 (VEX encoding, different register allocation), so their counts differ by code generation only; reported as information"
+      "waiver": "no reference library at `avx2`: the comparison of the `avx2` record is our own fallback, so the entry is information at `avx2-runtime` as at `avx2` and judged by its efficiency (D32, D2764); its cycles against our fixed `avx2` build are information as well. The reason at `avx2`: `deemphasis` is not accelerated (a first-order recursion on the previous output: every output needs the one before it, and a block formulation would change the bits that the facade must share with the fallback), so it stays with the fallback; no established scalar library is linked yet (GNU Radio `fm_deemph` runs the generic `iir_filter_ffd`); the comparison is our own fallback, reported as information"
     }
   },
   "dc_block": {
@@ -1571,7 +1676,7 @@
     },
     "avx2-runtime": {
       "status": "info",
-      "waiver": "`dc_block` `C32`: the run-time-detection build dispatches to the same generic code of the `f64` block scan as the `avx2` build; the fixed cost of the dispatch per call and the code generation of the scalar remainder differ; reported as information"
+      "waiver": "no reference library at `avx2`: the comparison of the `avx2` record is our own fallback, so the entry is information at `avx2-runtime` as at `avx2` and judged by its efficiency (D32, D2764); its cycles against our fixed `avx2` build are information as well. The reason at `avx2`: `dc_block` `C32` runs the `f64` block scan of the SIMD backend (maintainer decision of 2026-10-29: a tolerance kernel); no SIMD library has a block-scan form of this first-order recursion (VOLK, KFR and CMSIS-DSP have none), so the comparison is our own fallback, which is not a fair gate for a SIMD branch (D32), and the branch is judged by its simulated cycles and its efficiency (docs/performance.md); reported as information"
     }
   },
   "dc_block_cq15": {
@@ -1601,7 +1706,7 @@
     },
     "avx2-runtime": {
       "status": "info",
-      "waiver": "`dc_block` is not accelerated: the run-time-detection build runs the fallback compiled for the baseline x86-64 target, the `avx2` build the same code compiled for AVX2 (VEX encoding, different register allocation), so their counts differ by code generation only; reported as information"
+      "waiver": "no reference library at `avx2`: the comparison of the `avx2` record is our own fallback, so the entry is information at `avx2-runtime` as at `avx2` and judged by its efficiency (D32, D2764); its cycles against our fixed `avx2` build are information as well. The reason at `avx2`: `dc_block` is not accelerated (a first-order recursion on the previous output per component: every output needs the one before it, and a block formulation would change the bits that the facade must share with the fallback), so it stays with the fallback; no established scalar library is linked yet; the comparison is our own fallback, reported as information"
     }
   },
   "biquad": {
@@ -1612,6 +1717,9 @@
       "status": "release"
     },
     "avx2": {
+      "status": "release"
+    },
+    "avx2-runtime": {
       "status": "release"
     },
     "avx512": {
@@ -1637,6 +1745,10 @@
       "status": "info",
       "waiver": "`biquad` `CQ15` has no equivalent SIMD reference (KFR, CMSIS-DSP, IPP and VOLK have no SIMD Q15 biquad); the comparison is our own fallback, which is not a fair gate for a SIMD branch, so the entry is information only (D21); the fallback itself is gated against CMSIS-DSP (`biquad_cq15_fallback`)"
     },
+    "avx2-runtime": {
+      "status": "info",
+      "waiver": "no reference library at `avx2`: the comparison of the `avx2` record is our own fallback, so the entry is information at `avx2-runtime` as at `avx2` and judged by its efficiency (D32, D2764); its cycles against our fixed `avx2` build are information as well. The reason at `avx2`: `biquad` `CQ15` has no equivalent SIMD reference (KFR, CMSIS-DSP, IPP and VOLK have no SIMD Q15 biquad); the comparison is our own fallback, which is not a fair gate for a SIMD branch, so the entry is information only (D21); the fallback itself is gated against CMSIS-DSP (`biquad_cq15_fallback`)"
+    },
     "avx512": {
       "status": "info",
       "waiver": "`biquad` `CQ15` has no equivalent SIMD reference (KFR, CMSIS-DSP, IPP and VOLK have no SIMD Q15 biquad); the comparison is our own fallback, which is not a fair gate for a SIMD branch, so the entry is information only (D21); the fallback itself is gated against CMSIS-DSP (`biquad_cq15_fallback`)"
@@ -1658,6 +1770,9 @@
       "status": "release"
     },
     "avx2": {
+      "status": "release"
+    },
+    "avx2-runtime": {
       "status": "release"
     },
     "avx512": {
@@ -1696,8 +1811,8 @@
       "waiver": "`biquad_real` `Q15` has no equivalent SIMD reference (KFR, CMSIS-DSP, IPP and VOLK have no SIMD Q15 biquad); the comparison is our own fallback, which is not a fair gate for a SIMD branch, so the entry is information only (D21); the fallback itself is gated against CMSIS-DSP (`biquad_real_q15_fallback`)"
     },
     "avx2-runtime": {
-      "status": "dev",
-      "waiver": "open item I13.1-5: simulated in CI (D2745, whole-loop): 14.39 / 15.84 cycles per sample against 8.18 / 10.21 of the fixed `avx2` build on `znver3` / `alderlake` (1.76 / 1.55), above the `dev` limit"
+      "status": "info",
+      "waiver": "no reference library at `avx2`: the comparison of the `avx2` record is our own fallback, so the entry is information at `avx2-runtime` as at `avx2` and judged by its efficiency (D32, D2764); its cycles against our fixed `avx2` build are information as well. The reason at `avx2`: `biquad_real` `Q15` has no equivalent SIMD reference (KFR, CMSIS-DSP, IPP and VOLK have no SIMD Q15 biquad); the comparison is our own fallback, which is not a fair gate for a SIMD branch, so the entry is information only (D21); the fallback itself is gated against CMSIS-DSP (`biquad_real_q15_fallback`)"
     }
   },
   "biquad_fallback": {
@@ -2086,6 +2201,9 @@
     "avx2": {
       "status": "release"
     },
+    "avx2-runtime": {
+      "status": "release"
+    },
     "avx512": {
       "status": "release"
     },
@@ -2123,7 +2241,8 @@
       "waiver": "no established library has a `CQ15` dot product with real `Q15` taps and an exact 64-bit sum (VOLK's `volk_16ic_x2_dot_prod_16ic` takes complex taps and sums in saturating 16-bit lanes); the comparison is our own fallback, which is not a fair gate for a SIMD branch (D32), so the entry is information only; the branch is judged by its efficiency"
     },
     "avx2-runtime": {
-      "status": "release"
+      "status": "info",
+      "waiver": "no reference library at `avx2`: the comparison of the `avx2` record is our own fallback, so the entry is information at `avx2-runtime` as at `avx2` and judged by its efficiency (D32, D2764); its cycles against our fixed `avx2` build are information as well. The reason at `avx2`: no established library has a `CQ15` dot product with real `Q15` taps and an exact 64-bit sum (VOLK's `volk_16ic_x2_dot_prod_16ic` takes complex taps and sums in saturating 16-bit lanes); the comparison is our own fallback, which is not a fair gate for a SIMD branch (D32), so the entry is information only; the branch is judged by its efficiency"
     }
   },
   "dot_real": {
@@ -2147,7 +2266,7 @@
       "waiver": "VOLK's wasm32 build (`benches/refs/volk-wasm.c`, the `generic` protokernels, D12) has no `volk_32f_x2_dot_prod_32f`; the comparison is our own fallback, which is not a fair gate for a SIMD branch (D32), so the entry is information only"
     },
     "avx2-runtime": {
-      "status": "dev"
+      "status": "release"
     }
   },
   "dot_real_q15": {
@@ -2176,7 +2295,8 @@
       "waiver": "no established SIMD library has a `Q15` dot product with an exact 64-bit sum (VOLK has no real 16-bit dot product; CMSIS-DSP's `arm_dot_prod_q15` is scalar C on these levels); the comparison is our own fallback, which is not a fair gate for a SIMD branch (D32), so the entry is information only; the branch is judged by its efficiency"
     },
     "avx2-runtime": {
-      "status": "dev"
+      "status": "info",
+      "waiver": "no reference library at `avx2`: the comparison of the `avx2` record is our own fallback, so the entry is information at `avx2-runtime` as at `avx2` and judged by its efficiency (D32, D2764); its cycles against our fixed `avx2` build are information as well. The reason at `avx2`: no established SIMD library has a `Q15` dot product with an exact 64-bit sum (VOLK has no real 16-bit dot product; CMSIS-DSP's `arm_dot_prod_q15` is scalar C on these levels); the comparison is our own fallback, which is not a fair gate for a SIMD branch (D32), so the entry is information only; the branch is judged by its efficiency"
     }
   },
   "scale": {
@@ -2200,7 +2320,7 @@
       "waiver": "VOLK's wasm32 build (`benches/refs/volk-wasm.c`, the `generic` protokernels, D12) has no `volk_32f_s32f_multiply_32f`; the comparison is our own fallback, which is not a fair gate for a SIMD branch (D32), so the entry is information only"
     },
     "avx2-runtime": {
-      "status": "dev"
+      "status": "release"
     }
   },
   "scale_cq15": {
@@ -2229,7 +2349,8 @@
       "waiver": "no established SIMD library scales 16-bit complex samples with the rounding and saturation of `q15_mul` (VOLK has no 16-bit scaling of this kind); the comparison is our own fallback, which is not a fair gate for a SIMD branch (D32), so the entry is information only; the branch is judged by its efficiency"
     },
     "avx2-runtime": {
-      "status": "dev"
+      "status": "info",
+      "waiver": "no reference library at `avx2`: the comparison of the `avx2` record is our own fallback, so the entry is information at `avx2-runtime` as at `avx2` and judged by its efficiency (D32, D2764); its cycles against our fixed `avx2` build are information as well. The reason at `avx2`: no established SIMD library scales 16-bit complex samples with the rounding and saturation of `q15_mul` (VOLK has no 16-bit scaling of this kind); the comparison is our own fallback, which is not a fair gate for a SIMD branch (D32), so the entry is information only; the branch is judged by its efficiency"
     }
   },
   "quad_demod_fallback": {
@@ -2901,6 +3022,9 @@
       "status": "release",
       "own_target": 0.6
     },
+    "avx2-runtime": {
+      "status": "release"
+    },
     "avx512": {
       "status": "release",
       "own_target": 0.6
@@ -2929,6 +3053,10 @@
       "status": "info",
       "waiver": "no established library has a SIMD halfband decimator for `CQ15` on our levels (liquid-dsp's `resamp2` is float only, CMSIS-DSP has no halfband decimator and its `arm_fir_q15` is generic C); the comparison is our own fallback, reported as information, and the branch is judged by its efficiency (D32, D21); the fallback itself is gated against the CMSIS-DSP composition in `halfband_decimate_cq15_fallback` (D69)",
       "own_target": 0.6
+    },
+    "avx2-runtime": {
+      "status": "info",
+      "waiver": "no reference library at `avx2`: the comparison of the `avx2` record is our own fallback, so the entry is information at `avx2-runtime` as at `avx2` and judged by its efficiency (D32, D2764); its cycles against our fixed `avx2` build are information as well. The reason at `avx2`: no established library has a SIMD halfband decimator for `CQ15` on our levels (liquid-dsp's `resamp2` is float only, CMSIS-DSP has no halfband decimator and its `arm_fir_q15` is generic C); the comparison is our own fallback, reported as information, and the branch is judged by its efficiency (D32, D21); the fallback itself is gated against the CMSIS-DSP composition in `halfband_decimate_cq15_fallback` (D69)"
     },
     "avx512": {
       "status": "info",
@@ -2966,7 +3094,7 @@
       "status": "release"
     },
     "avx2-runtime": {
-      "status": "dev"
+      "status": "release"
     }
   },
   "halfband_decimate_real_q15": {
@@ -2981,6 +3109,10 @@
     "avx2": {
       "status": "info",
       "waiver": "no established library has a SIMD halfband decimator for `Q15` on our levels (liquid-dsp's `resamp2` is float only, CMSIS-DSP has no halfband decimator and its `arm_fir_q15` is generic C); the comparison is our own fallback, reported as information, and the branch is judged by its efficiency (D32, D21); the fallback itself is gated against the CMSIS-DSP composition in `halfband_decimate_real_q15_fallback` (D69)"
+    },
+    "avx2-runtime": {
+      "status": "info",
+      "waiver": "no reference library at `avx2`: the comparison of the `avx2` record is our own fallback, so the entry is information at `avx2-runtime` as at `avx2` and judged by its efficiency (D32, D2764); its cycles against our fixed `avx2` build are information as well. The reason at `avx2`: no established library has a SIMD halfband decimator for `Q15` on our levels (liquid-dsp's `resamp2` is float only, CMSIS-DSP has no halfband decimator and its `arm_fir_q15` is generic C); the comparison is our own fallback, reported as information, and the branch is judged by its efficiency (D32, D21); the fallback itself is gated against the CMSIS-DSP composition in `halfband_decimate_real_q15_fallback` (D69)"
     },
     "avx512": {
       "status": "info",
@@ -3021,7 +3153,7 @@
       "own_target": 1.1
     },
     "avx2-runtime": {
-      "status": "dev"
+      "status": "release"
     }
   },
   "real_to_complex_airspy": {
@@ -3044,6 +3176,10 @@
       "status": "info",
       "waiver": "provisional (D70, open item I23-1): libairspy 1.0.10's `iqconverter_int16` is the only established `CQ15` `real_to_complex` but a lower accuracy class (truncating `>> 15`, a 32-bit accumulator, the odd samples halved, the centre tap fixed at 0.5); whether the entry is `release` with an accuracy waiver (as D58) or `info` (as D56) is the maintainer's decision, `info` until then; the measured numbers are in docs/open-items.md",
       "own_target": 1.1
+    },
+    "avx2-runtime": {
+      "status": "info",
+      "waiver": "the library comparison of the `avx2` record (libairspy 1.0.10 iqconverter_int16) is information at `avx2`, so the entry is information at `avx2-runtime` as well (D2764); its cycles against our fixed `avx2` build are information too. The reason at `avx2`: provisional (D70, open item I23-1): libairspy 1.0.10's `iqconverter_int16` is the only established `CQ15` `real_to_complex` but a lower accuracy class (truncating `>> 15`, a 32-bit accumulator, the odd samples halved, the centre tap fixed at 0.5); whether the entry is `release` with an accuracy waiver (as D58) or `info` (as D56) is the maintainer's decision, `info` until then; the measured numbers are in docs/open-items.md"
     },
     "avx512": {
       "status": "info",
@@ -3302,6 +3438,9 @@
     "avx2": {
       "status": "release"
     },
+    "avx2-runtime": {
+      "status": "release"
+    },
     "avx512": {
       "status": "release"
     },
@@ -3338,7 +3477,8 @@
       "waiver": "`stereo_matrix` `CQ15` has no fair SIMD reference (VOLK has `volk_16ic_deinterleave_16i_x2` and `volk_16i_x2_add_saturated_16i`, but no saturating subtraction and no 16-bit interleave; CMSIS-DSP's `arm_add_q15` / `arm_sub_q15` are generic C on planar data); the comparison is our own fallback, which is not a fair gate for a SIMD branch (D33), and the CMSIS-DSP composition is shown beside it as information; the branch is judged by its efficiency (simulated cycles against the port bound, as the `Q15` biquads, D21); the fallback itself is gated against CMSIS-DSP (`stereo_matrix_cq15_fallback`)"
     },
     "avx2-runtime": {
-      "status": "dev"
+      "status": "info",
+      "waiver": "no reference library at `avx2`: the comparison of the `avx2` record is our own fallback, so the entry is information at `avx2-runtime` as at `avx2` and judged by its efficiency (D32, D2764); its cycles against our fixed `avx2` build are information as well. The reason at `avx2`: `stereo_matrix` `CQ15` has no fair SIMD reference (VOLK has `volk_16ic_deinterleave_16i_x2` and `volk_16i_x2_add_saturated_16i`, but no saturating subtraction and no 16-bit interleave; CMSIS-DSP's `arm_add_q15` / `arm_sub_q15` are generic C on planar data); the comparison is our own fallback, which is not a fair gate for a SIMD branch (D33), and the CMSIS-DSP composition is shown beside it as information; the branch is judged by its efficiency (simulated cycles against the port bound, as the `Q15` biquads, D21); the fallback itself is gated against CMSIS-DSP (`stereo_matrix_cq15_fallback`)"
     }
   },
   "stereo_matrix_fallback": {
@@ -3460,7 +3600,7 @@
     },
     "avx2-runtime": {
       "status": "info",
-      "waiver": "`preemph_limit` is not accelerated: the run-time-detection build runs the fallback compiled for the baseline x86-64 target, the `avx2` build the same code compiled for AVX2 (VEX encoding, different register allocation), so their counts differ by code generation only; reported as information"
+      "waiver": "no reference library at `avx2`: the comparison of the `avx2` record is our own fallback, so the entry is information at `avx2-runtime` as at `avx2` and judged by its efficiency (D32, D2764); its cycles against our fixed `avx2` build are information as well. The reason at `avx2`: `preemph_limit` is not accelerated (the one-pole pre-emphasis is a recursion on the previous input and output, and the envelope of the limiter depends on the previous sample, whose gain depends on the envelope: every sample needs the one before it, and a block formulation would change the bits that the facade must share with the fallback), so it stays with the fallback; no library has a peak limiter of this kind (GNU Radio `fm_preemph` and liquid-dsp `iirfilt` cover the pre-emphasis only), so the comparison is our own fallback, reported as information"
     }
   },
   "preemph_limit_q15": {
@@ -3490,7 +3630,7 @@
     },
     "avx2-runtime": {
       "status": "info",
-      "waiver": "`preemph_limit` is not accelerated: the run-time-detection build runs the fallback compiled for the baseline x86-64 target, the `avx2` build the same code compiled for AVX2 (VEX encoding, different register allocation), so their counts differ by code generation only; reported as information"
+      "waiver": "no reference library at `avx2`: the comparison of the `avx2` record is our own fallback, so the entry is information at `avx2-runtime` as at `avx2` and judged by its efficiency (D32, D2764); its cycles against our fixed `avx2` build are information as well. The reason at `avx2`: `preemph_limit` is not accelerated (the one-pole pre-emphasis is a recursion on the previous input and output, and the envelope of the limiter depends on the previous sample, whose gain depends on the envelope: every sample needs the one before it, and a block formulation would change the bits that the facade must share with the fallback), so it stays with the fallback; no library has a peak limiter of this kind (GNU Radio `fm_preemph` and liquid-dsp `iirfilt` cover the pre-emphasis only), so the comparison is our own fallback, reported as information"
     }
   },
   "add": {
@@ -3513,7 +3653,7 @@
       "status": "release"
     },
     "avx2-runtime": {
-      "status": "dev"
+      "status": "release"
     }
   },
   "add_cq15": {
@@ -3536,7 +3676,7 @@
       "status": "release"
     },
     "avx2-runtime": {
-      "status": "dev"
+      "status": "release"
     }
   },
   "add_real": {
@@ -3559,7 +3699,7 @@
       "status": "release"
     },
     "avx2-runtime": {
-      "status": "dev"
+      "status": "release"
     }
   },
   "add_real_q15": {
@@ -3582,8 +3722,7 @@
       "status": "release"
     },
     "avx2-runtime": {
-      "status": "release",
-      "waiver": "the same loop as the fixed `avx2` build, and the whole call runs in the dispatched function (D332); what remains is the fixed cost of the run-time dispatch per call (the loads and compares of the detected level, the argument moves, the call, `vzeroupper` and the return); simulated in CI (D2745, whole-loop): 0.10 / 0.07 cycles per sample against 0.10 / 0.07 of the fixed `avx2` build on `znver3` / `alderlake` (1.05 / 1.04). Cutting it needs a cheaper dispatch for every kernel with a new use of `unsafe` (D1); accepted with decision D339, open item I30-2"
+      "status": "release"
     }
   },
   "mul": {
@@ -3594,6 +3733,9 @@
       "status": "release"
     },
     "avx2": {
+      "status": "release"
+    },
+    "avx2-runtime": {
       "status": "release"
     },
     "avx512": {
@@ -3626,7 +3768,7 @@
       "status": "release"
     },
     "avx2-runtime": {
-      "status": "dev"
+      "status": "release"
     }
   },
   "interleave": {
@@ -3637,6 +3779,9 @@
       "status": "release"
     },
     "avx2": {
+      "status": "release"
+    },
+    "avx2-runtime": {
       "status": "release"
     },
     "avx512": {
@@ -3659,6 +3804,9 @@
     "avx2": {
       "status": "release"
     },
+    "avx2-runtime": {
+      "status": "release"
+    },
     "avx512": {
       "status": "release"
     },
@@ -3677,6 +3825,9 @@
       "status": "release"
     },
     "avx2": {
+      "status": "release"
+    },
+    "avx2-runtime": {
       "status": "release"
     },
     "avx512": {
@@ -3988,6 +4139,10 @@
       "status": "info",
       "waiver": "provisional"
     },
+    "avx2-runtime": {
+      "status": "info",
+      "waiver": "no reference library at `avx2`: the comparison of the `avx2` record is our own fallback, so the entry is information at `avx2-runtime` as at `avx2` and judged by its efficiency (D32, D2764); its cycles against our fixed `avx2` build are information as well. The reason at `avx2`: provisional"
+    },
     "avx512": {
       "status": "info",
       "waiver": "provisional"
@@ -4027,7 +4182,8 @@
       "waiver": "provisional"
     },
     "avx2-runtime": {
-      "status": "dev"
+      "status": "info",
+      "waiver": "no reference library at `avx2`: the comparison of the `avx2` record is our own fallback, so the entry is information at `avx2-runtime` as at `avx2` and judged by its efficiency (D32, D2764); its cycles against our fixed `avx2` build are information as well. The reason at `avx2`: provisional"
     }
   },
   "interleave_cq15": {
@@ -4042,6 +4198,10 @@
     "avx2": {
       "status": "info",
       "waiver": "provisional"
+    },
+    "avx2-runtime": {
+      "status": "info",
+      "waiver": "no reference library at `avx2`: the comparison of the `avx2` record is our own fallback, so the entry is information at `avx2-runtime` as at `avx2` and judged by its efficiency (D32, D2764); its cycles against our fixed `avx2` build are information as well. The reason at `avx2`: provisional"
     },
     "avx512": {
       "status": "info",
@@ -4069,6 +4229,10 @@
       "status": "info",
       "waiver": "provisional"
     },
+    "avx2-runtime": {
+      "status": "info",
+      "waiver": "no reference library at `avx2`: the comparison of the `avx2` record is our own fallback, so the entry is information at `avx2-runtime` as at `avx2` and judged by its efficiency (D32, D2764); its cycles against our fixed `avx2` build are information as well. The reason at `avx2`: provisional"
+    },
     "avx512": {
       "status": "info",
       "waiver": "provisional"
@@ -4094,6 +4258,10 @@
     "avx2": {
       "status": "info",
       "waiver": "provisional"
+    },
+    "avx2-runtime": {
+      "status": "info",
+      "waiver": "no reference library at `avx2`: the comparison of the `avx2` record is our own fallback, so the entry is information at `avx2-runtime` as at `avx2` and judged by its efficiency (D32, D2764); its cycles against our fixed `avx2` build are information as well. The reason at `avx2`: provisional"
     },
     "avx512": {
       "status": "info",
@@ -4135,7 +4303,7 @@
     },
     "avx2-runtime": {
       "status": "info",
-      "waiver": "`noise_blank` is not accelerated: the run-time-detection build runs the fallback compiled for the baseline x86-64 target, the `avx2` build the same code compiled for AVX2 (VEX encoding, different register allocation), so their counts differ by code generation only; reported as information"
+      "waiver": "no reference library at `avx2`: the comparison of the `avx2` record is our own fallback, so the entry is information at `avx2-runtime` as at `avx2` and judged by its efficiency (D32, D2764); its cycles against our fixed `avx2` build are information as well. The reason at `avx2`: `noise_blank` is not accelerated (the impulse decision of every sample compares its power with the average of the samples before it, the average then moves by a first-order recursion whose target depends on that decision, and the blanking counter and the delay line carry over from sample to sample, so it stays with the fallback); no library has a noise blanker of this kind, so the comparison is our own fallback, reported as information"
     }
   },
   "noise_blank_cq15": {
@@ -4165,7 +4333,7 @@
     },
     "avx2-runtime": {
       "status": "info",
-      "waiver": "`noise_blank` is not accelerated: the run-time-detection build runs the fallback compiled for the baseline x86-64 target, the `avx2` build the same code compiled for AVX2 (VEX encoding, different register allocation), so their counts differ by code generation only; reported as information"
+      "waiver": "no reference library at `avx2`: the comparison of the `avx2` record is our own fallback, so the entry is information at `avx2-runtime` as at `avx2` and judged by its efficiency (D32, D2764); its cycles against our fixed `avx2` build are information as well. The reason at `avx2`: `noise_blank` is not accelerated (the impulse decision of every sample compares its power with the average of the samples before it, the average then moves by a first-order recursion whose target depends on that decision, and the blanking counter and the delay line carry over from sample to sample, so it stays with the fallback); no library has a noise blanker of this kind, so the comparison is our own fallback, reported as information"
     }
   },
   "auto_notch": {
@@ -4195,7 +4363,7 @@
     },
     "avx2-runtime": {
       "status": "info",
-      "waiver": "`auto_notch` is not accelerated: the run-time-detection build runs the fallback compiled for the baseline x86-64 target, the `avx2` build the same code compiled for AVX2 (VEX encoding, different register allocation), so their counts differ by code generation only; reported as information"
+      "waiver": "no reference library at `avx2`: the comparison of the `avx2` record is our own fallback, so the entry is information at `avx2-runtime` as at `avx2` and judged by its efficiency (D32, D2764); its cycles against our fixed `avx2` build are information as well. The reason at `avx2`: `auto_notch` is not accelerated (a normalized LMS filter: the weights of every sample are the ones the previous sample's error updated, so the prediction of a sample needs the update of the one before it, and the sums run in a fixed ascending order that the facade must share bit for bit with the fallback, so it stays with the fallback); the comparison is our own fallback, reported as information"
     }
   },
   "am_mod": {
@@ -4210,6 +4378,10 @@
     "avx2": {
       "status": "info",
       "waiver": "no SIMD library has an AM modulator (VOLK, KFR and CMSIS-DSP have none; liquid-dsp's `ampmodem` is scalar C and gates `am_mod_fallback`), so the comparison is our own fallback, reported as information with the efficiency verdict; the `C32` entry of the SIMD backend is the loop of the fallback compiled at the level of the dispatch (D429)"
+    },
+    "avx2-runtime": {
+      "status": "info",
+      "waiver": "no reference library at `avx2`: the comparison of the `avx2` record is our own fallback, so the entry is information at `avx2-runtime` as at `avx2` and judged by its efficiency (D32, D2764); its cycles against our fixed `avx2` build are information as well. The reason at `avx2`: no SIMD library has an AM modulator (VOLK, KFR and CMSIS-DSP have none; liquid-dsp's `ampmodem` is scalar C and gates `am_mod_fallback`), so the comparison is our own fallback, reported as information with the efficiency verdict; the `C32` entry of the SIMD backend is the loop of the fallback compiled at the level of the dispatch (D429)"
     },
     "avx512": {
       "status": "info",
@@ -4236,6 +4408,10 @@
     "avx2": {
       "status": "info",
       "waiver": "no SIMD library has an AM modulator with the `Q15` rounding of the contract (two rounded products and a saturating sum); the comparison is our own fallback, reported as information with the efficiency verdict, and the CMSIS-DSP composition (`arm_scale_q15`, `arm_offset_q15`, a plain loop to `(re, 0)`) as information"
+    },
+    "avx2-runtime": {
+      "status": "info",
+      "waiver": "no reference library at `avx2`: the comparison of the `avx2` record is our own fallback, so the entry is information at `avx2-runtime` as at `avx2` and judged by its efficiency (D32, D2764); its cycles against our fixed `avx2` build are information as well. The reason at `avx2`: no SIMD library has an AM modulator with the `Q15` rounding of the contract (two rounded products and a saturating sum); the comparison is our own fallback, reported as information with the efficiency verdict, and the CMSIS-DSP composition (`arm_scale_q15`, `arm_offset_q15`, a plain loop to `(re, 0)`) as information"
     },
     "avx512": {
       "status": "info",
@@ -4321,7 +4497,7 @@
     },
     "avx2-runtime": {
       "status": "info",
-      "waiver": "`preemph_limit_stereo` is not accelerated: the run-time-detection build runs the fallback compiled for the baseline x86-64 target, the `avx2` build the same code compiled for AVX2 (VEX encoding, different register allocation), so their counts differ by code generation only; reported as information"
+      "waiver": "no reference library at `avx2`: the comparison of the `avx2` record is our own fallback, so the entry is information at `avx2-runtime` as at `avx2` and judged by its efficiency (D32, D2764); its cycles against our fixed `avx2` build are information as well. The reason at `avx2`: `preemph_limit_stereo` is not accelerated (the one-pole pre-emphasis of each channel is a recursion on its previous input and output, and the one envelope of both channels depends on the previous sample, whose common gain depends on the envelope: every sample needs the one before it, and a block formulation would change the bits that the facade must share with the fallback), so it stays with the fallback; no library has a stereo peak limiter with a linked gain (GNU Radio `fm_preemph` and liquid-dsp `iirfilt` cover the pre-emphasis only), so the comparison is our own fallback, reported as information"
     }
   },
   "stereo_encode": {
@@ -4351,7 +4527,7 @@
     },
     "avx2-runtime": {
       "status": "info",
-      "waiver": "`stereo_encode` is not accelerated: the run-time-detection build runs the fallback compiled for the baseline x86-64 target, the `avx2` build the same code compiled for AVX2 (VEX encoding, different register allocation), so their counts differ by code generation only; reported as information"
+      "waiver": "no reference library at `avx2`: the comparison of the `avx2` record is our own fallback, so the entry is information at `avx2-runtime` as at `avx2` and judged by its efficiency (D32, D2764); its cycles against our fixed `avx2` build are information as well. The reason at `avx2`: `stereo_encode` is not accelerated (the pilot `sin(phi)` and the subcarrier `sin(2 phi)` are two lookups with interpolation in the tables of `rotate` at the running 32-bit phase of the oscillator, a gather per sample that the facade shares bit for bit with the fallback), so it stays with the fallback; no library has a stereo multiplex encoder (GNU Radio composes it from blocks in Python, liquid-dsp and VOLK have no such kernel), so the comparison is our own fallback, reported as information"
     }
   },
   "rds_shape": {
@@ -4381,7 +4557,7 @@
     },
     "avx2-runtime": {
       "status": "info",
-      "waiver": "`rds_shape` is not accelerated: the run-time-detection build runs the fallback compiled for the baseline x86-64 target, the `avx2` build the same code compiled for AVX2 (VEX encoding, different register allocation), so their counts differ by code generation only; reported as information"
+      "waiver": "no reference library at `avx2`: the comparison of the `avx2` record is our own fallback, so the entry is information at `avx2-runtime` as at `avx2` and judged by its efficiency (D32, D2764); its cycles against our fixed `avx2` build are information as well. The reason at `avx2`: `rds_shape` is not accelerated (four lookups with linear interpolation in the pulse table per sample at a position computed in f64 with one division, and a bit window that moves through a callback about every 162 samples at 192 kHz; the facade shares it bit for bit with the fallback, D757), so it stays with the fallback; neither GNU Radio nor liquid-dsp has an RDS modulator in-tree, so the comparison is our own fallback, reported as information"
     }
   },
   "stereo_encode_rds": {
@@ -4411,7 +4587,7 @@
     },
     "avx2-runtime": {
       "status": "info",
-      "waiver": "`stereo_encode_rds` is not accelerated: the run-time-detection build runs the fallback compiled for the baseline x86-64 target, the `avx2` build the same code compiled for AVX2 (VEX encoding, different register allocation), so their counts differ by code generation only; reported as information"
+      "waiver": "no reference library at `avx2`: the comparison of the `avx2` record is our own fallback, so the entry is information at `avx2-runtime` as at `avx2` and judged by its efficiency (D32, D2764); its cycles against our fixed `avx2` build are information as well. The reason at `avx2`: `stereo_encode_rds` is not accelerated (the three sines `sin(phi)`, `sin(2 phi)` and `sin(3 phi)` are lookups with interpolation in the tables of `rotate` at the running 32-bit phase of the oscillator, a gather per sample that the facade shares bit for bit with the fallback, as `stereo_encode`), so it stays with the fallback; no library has a stereo multiplex encoder with RDS (GNU Radio composes it from blocks in Python, liquid-dsp and VOLK have no such kernel), so the comparison is our own fallback, reported as information"
     }
   },
   "crc16_ccitt_false": {
@@ -4434,8 +4610,7 @@
       "status": "release"
     },
     "avx2-runtime": {
-      "status": "info",
-      "waiver": "`crc16_ccitt_false` is not accelerated: the run-time-detection build runs the code compiled for the baseline x86-64 target, the `avx2` build the same code compiled for AVX2, so their counts differ by code generation only; reported as information"
+      "status": "release"
     }
   },
   "crc16_x25": {
@@ -4458,8 +4633,7 @@
       "status": "release"
     },
     "avx2-runtime": {
-      "status": "info",
-      "waiver": "`crc16_x25` is not accelerated: the run-time-detection build runs the code compiled for the baseline x86-64 target, the `avx2` build the same code compiled for AVX2, so their counts differ by code generation only; reported as information"
+      "status": "release"
     }
   },
   "crc32": {
@@ -4482,8 +4656,7 @@
       "status": "release"
     },
     "avx2-runtime": {
-      "status": "info",
-      "waiver": "`crc32` is not accelerated: the run-time-detection build runs the code compiled for the baseline x86-64 target, the `avx2` build the same code compiled for AVX2, so their counts differ by code generation only; reported as information"
+      "status": "release"
     }
   },
   "crc24_adsb": {
@@ -4506,8 +4679,7 @@
       "status": "release"
     },
     "avx2-runtime": {
-      "status": "info",
-      "waiver": "`crc24_adsb` is not accelerated: the run-time-detection build runs the code compiled for the baseline x86-64 target, the `avx2` build the same code compiled for AVX2, so their counts differ by code generation only; reported as information"
+      "status": "release"
     }
   },
   "frame_decode": {
@@ -4537,7 +4709,7 @@
     },
     "avx2-runtime": {
       "status": "info",
-      "waiver": "`frame_decode` is not accelerated: the run-time-detection build runs the code compiled for the baseline x86-64 target, the `avx2` build the same code compiled for AVX2, so their counts differ by code generation only; reported as information"
+      "waiver": "no reference library at `avx2`: the comparison of the `avx2` record is our own fallback, so the entry is information at `avx2-runtime` as at `avx2` and judged by its efficiency (D32, D2764); its cycles against our fixed `avx2` build are information as well. The reason at `avx2`: `frame_decode` has no SIMD branch: `sdrk_proto::frame::Decoder` is a bit-serial state machine (the sync search shifts one bit at a time, the frame body depends on the length byte read before), and no library of the C references has this framing, so the comparison is our own code, reported as information (cycles per bit); Efficiency verdict (D2547): no library has this entry at the level; the whole-loop efficiency and its bottleneck are in `docs/performance.md`"
     }
   },
   "frame_encode_block": {
@@ -4567,7 +4739,7 @@
     },
     "avx2-runtime": {
       "status": "info",
-      "waiver": "`frame_encode_block` is not accelerated: the run-time-detection build runs the code compiled for the baseline x86-64 target, the `avx2` build the same code compiled for AVX2, so their counts differ by code generation only; reported as information"
+      "waiver": "no reference library at `avx2`: the comparison of the `avx2` record is our own fallback, so the entry is information at `avx2-runtime` as at `avx2` and judged by its efficiency (D32, D2764); its cycles against our fixed `avx2` build are information as well. The reason at `avx2`: `frame_encode_block` has no SIMD branch: the block `frame_encode` walks the frame bit by bit (`sdrk_proto::frame::FrameBits`: preamble, sync word, length, payload and CRC, each bit picked from its byte) and writes one `±1.0` per bit; the work per sample is a byte lookup and a shift, the output store is the only stream. No library of the C references has this framing, so the comparison is our own code, reported as information (cycles per output sample, one sample per bit); Efficiency verdict (D2547): no library has this entry at the level; the whole-loop efficiency and its bottleneck are in `docs/performance.md`"
     }
   },
   "frame_decode_block": {
@@ -4597,7 +4769,7 @@
     },
     "avx2-runtime": {
       "status": "info",
-      "waiver": "`frame_decode_block` is not accelerated: the run-time-detection build runs the code compiled for the baseline x86-64 target, the `avx2` build the same code compiled for AVX2, so their counts differ by code generation only; reported as information"
+      "waiver": "no reference library at `avx2`: the comparison of the `avx2` record is our own fallback, so the entry is information at `avx2-runtime` as at `avx2` and judged by its efficiency (D32, D2764); its cycles against our fixed `avx2` build are information as well. The reason at `avx2`: `frame_decode_block` has no SIMD branch: the block `frame_decode` slices each soft bit and feeds the bit-serial state machine `sdrk_proto::frame::Decoder` (the sync search shifts one bit at a time, the frame body depends on the length byte read before). No library of the C references has this framing, so the comparison is our own code, reported as information (cycles per input sample, one soft bit per sample); Efficiency verdict (D2547): no library has this entry at the level; the whole-loop efficiency and its bottleneck are in `docs/performance.md`"
     }
   },
   "symbol_sync": {
@@ -4627,7 +4799,7 @@
     },
     "avx2-runtime": {
       "status": "info",
-      "waiver": "`symbol_sync` is not accelerated: the run-time-detection build runs the fallback compiled for the baseline x86-64 target, the `avx2` build the same code compiled for AVX2 (VEX encoding, different register allocation), so their counts differ by code generation only; reported as information"
+      "waiver": "no reference library at `avx2`: the comparison of the `avx2` record is our own fallback, so the entry is information at `avx2-runtime` as at `avx2` and judged by its efficiency (D32, D2764); its cycles against our fixed `avx2` build are information as well. The reason at `avx2`: `symbol_sync` (`C32`, Gardner at 4.1 samples per symbol) is not accelerated (every strobe position is the previous one plus the period and the loop correction of the previous timing error, so the strobes, the cubic interpolations at them and the detector form one sample-by-sample recursion, and it stays with the fallback); no library runs this loop (GNU Radio's `symbol_sync` interpolates with an 8-tap MMSE or a polyphase filter bank, liquid-dsp's `symsync` with a polyphase matched filter bank, not with a 4-point cubic Lagrange polynomial, D562), so the comparison is our own fallback, reported as information; Efficiency verdict (D2547): no library has this entry at the level; the whole-loop efficiency and its bottleneck are in `docs/performance.md`"
     }
   },
   "symbol_sync_real": {
@@ -4657,7 +4829,7 @@
     },
     "avx2-runtime": {
       "status": "info",
-      "waiver": "`symbol_sync` is not accelerated: the run-time-detection build runs the fallback compiled for the baseline x86-64 target, the `avx2` build the same code compiled for AVX2 (VEX encoding, different register allocation), so their counts differ by code generation only; reported as information"
+      "waiver": "no reference library at `avx2`: the comparison of the `avx2` record is our own fallback, so the entry is information at `avx2-runtime` as at `avx2` and judged by its efficiency (D32, D2764); its cycles against our fixed `avx2` build are information as well. The reason at `avx2`: `symbol_sync` (`f32`, Gardner at 8 samples per symbol) is not accelerated (every strobe position is the previous one plus the period and the loop correction of the previous timing error, so the strobes, the cubic interpolations at them and the detector form one sample-by-sample recursion, and it stays with the fallback); no library runs this loop (GNU Radio's `symbol_sync` interpolates with an 8-tap MMSE or a polyphase filter bank, liquid-dsp's `symsync` with a polyphase matched filter bank, not with a 4-point cubic Lagrange polynomial, D562), so the comparison is our own fallback, reported as information; Efficiency verdict (D2547): no library has this entry at the level; the whole-loop efficiency and its bottleneck are in `docs/performance.md`"
     }
   },
   "symbol_sync_fallback": {
@@ -4713,7 +4885,7 @@
     },
     "avx2-runtime": {
       "status": "info",
-      "waiver": "`costas` is not accelerated: the run-time-detection build runs the fallback compiled for the baseline x86-64 target, the `avx2` build the same code compiled for AVX2 (VEX encoding, different register allocation), so their counts differ by code generation only; reported as information"
+      "waiver": "no reference library at `avx2`: the comparison of the `avx2` record is our own fallback, so the entry is information at `avx2-runtime` as at `avx2` and judged by its efficiency (D32, D2764); its cycles against our fixed `avx2` build are information as well. The reason at `avx2`: `costas` (`C32`, QPSK with one sample per symbol) is not accelerated (the NCO phase of every symbol is the previous one plus the frequency integrator and the proportional correction of the previous detector output, so the table lookup, the derotation, the detector and the lock metric form one symbol-by-symbol recursion, and it stays with the fallback); the facade entry is the fallback, so the comparison is our own fallback, reported as information; the fallback is counted against GNU Radio's `costas_loop_cc` in `costas_fallback` (D607); GNU Radio has no SIMD path for this loop; the efficiency verdict is in D2544: bound by the latency of the symbol-to-symbol recursion at every level, no SIMD path is missing"
     }
   },
   "costas_fallback": {
@@ -4763,7 +4935,7 @@
     },
     "avx2-runtime": {
       "status": "info",
-      "waiver": "`rds_demod_block` picks the SIMD paths of its kernels at run time in the run-time-detection build and calls them through the dispatch, while the `avx2` build calls them directly, so their counts differ by the dispatch and the code generation; reported as information"
+      "waiver": "no reference library at `avx2`: the comparison of the `avx2` record is our own fallback, so the entry is information at `avx2-runtime` as at `avx2` and judged by its efficiency (D32, D2764); its cycles against our fixed `avx2` build are information as well. The reason at `avx2`: `rds_demod_block` is the composite block `rds_demod` (M41): its time goes to the kernels it calls through the facade (`interleave`, `rotate` and `fir_decimate`, which have SIMD paths at this level, then `symbol_sync` and `costas` at the decimated rate of 20 kHz and the chip rate of 2375 Hz, which stay with the fallback) and the scalar biphase decoding at 2375 chips per second, about 1 % of the input rate, which gains nothing from SIMD (D678). No library of the C references has this block, so the comparison is our own code, reported as information (cycles per input sample of the 240 kHz multiplex)"
     }
   },
   "rds_decode_block": {
@@ -4793,7 +4965,7 @@
     },
     "avx2-runtime": {
       "status": "info",
-      "waiver": "`rds_decode_block` is not accelerated: the run-time-detection build runs the code compiled for the baseline x86-64 target, the `avx2` build the same code compiled for AVX2, so their counts differ by code generation only; reported as information"
+      "waiver": "no reference library at `avx2`: the comparison of the `avx2` record is our own fallback, so the entry is information at `avx2-runtime` as at `avx2` and judged by its efficiency (D32, D2764); its cycles against our fixed `avx2` build are information as well. The reason at `avx2`: `rds_decode_block` has no SIMD branch: the block `rds_decode` slices each soft bit, shifts it into a 26-bit register and updates the syndrome with a recurrence over GF(2) (each step depends on the syndrome before), then compares it with the offset words; one bit per sample at 1187.5 bit/s (D678). No library of the C references has this block, so the comparison is our own code, reported as information (cycles per input sample, one soft bit per sample)"
     }
   },
   "dot_complex": {
@@ -4868,7 +5040,7 @@
     },
     "avx2-runtime": {
       "status": "info",
-      "waiver": "`equalize`: every backend runs the fallback's loop (D841); the run-time-detection build runs it compiled for the baseline x86-64 target, the `avx2` build the same code compiled for AVX2, so the counts differ by code generation only; reported as information (D823)"
+      "waiver": "the library comparison of the `avx2` record (GNU Radio linear_equalizer with adaptive_algorithm_nlms) is information at `avx2`, so the entry is information at `avx2-runtime` as well (D2764); its cycles against our fixed `avx2` build are information too. The reason at `avx2`: `equalize` (`C32`, 11 taps, QPSK, the block defaults): the comparison at the levels with SIMD is GNU Radio's `linear_equalizer` with `adaptive_algorithm_nlms` with VOLK's dispatcher (the dot products of the level: `volk_32fc_x2_dot_prod_32fc_a` with the aligned tap copies of `fir_filter`, `volk_32fc_x2_conjugate_dot_prod_32fc`; `benches/refs/gr-equalizer.c` built with `-DSDRK_GR_VOLK`, issue #169); our fallback is information. It is `info` because the loops are different work (D841: every backend runs the fallback's loop; GNU Radio updates every tap in every aligned copy), and a gap above 10 % would be an open item"
     }
   },
   "equalize_fallback": {
@@ -4918,7 +5090,7 @@
     },
     "avx2-runtime": {
       "status": "info",
-      "waiver": "`morse_encode_block` is not accelerated: the run-time-detection build runs the code compiled for the baseline x86-64 target, the `avx2` build the same code compiled for AVX2, so their counts differ by code generation only; reported as information"
+      "waiver": "no reference library at `avx2`: the comparison of the `avx2` record is our own fallback, so the entry is information at `avx2-runtime` as at `avx2` and judged by its efficiency (D32, D2764); its cycles against our fixed `avx2` build are information as well. The reason at `avx2`: `morse_encode_block` has no SIMD branch: the block `morse_encode` takes the units of the Morse encoder one at a time, keeps the position of the unit grid in a counter and shapes the edges with a raised cosine (one cosine per sample of an edge); each output depends on the key state and the edge of the sample before. No library of the C references has this block, so the comparison is our own code, reported as information (cycles per output sample, the key envelope at 8 kHz)"
     }
   },
   "morse_decode_block": {
@@ -4948,7 +5120,7 @@
     },
     "avx2-runtime": {
       "status": "info",
-      "waiver": "`morse_decode_block` is not accelerated: the run-time-detection build runs the code compiled for the baseline x86-64 target, the `avx2` build the same code compiled for AVX2, so their counts differ by code generation only; reported as information"
+      "waiver": "no reference library at `avx2`: the comparison of the `avx2` record is our own fallback, so the entry is information at `avx2-runtime` as at `avx2` and judged by its efficiency (D32, D2764); its cycles against our fixed `avx2` build are information as well. The reason at `avx2`: `morse_decode_block` has no SIMD branch: the block `morse_decode` smooths the envelope with a one-pole filter, tracks the signal and noise levels, applies the threshold with hysteresis, merges short runs and counts the runs for the Morse decoder, one sample after the other with the state of the sample before. No library of the C references has this block, so the comparison is our own code, reported as information (cycles per input sample, the envelope at 8 kHz)"
     }
   },
   "channelize": {
@@ -5022,7 +5194,7 @@
     },
     "avx2-runtime": {
       "status": "info",
-      "waiver": "`channelize_block` runs the kernel through the facade, which the run-time-detection build dispatches to the AVX2 path of the kernel at run time; the block code around it is compiled for the baseline x86-64 target; reported as information (D928)"
+      "waiver": "no reference library at `avx2`: the comparison of the `avx2` record is our own fallback, so the entry is information at `avx2-runtime` as at `avx2` and judged by its efficiency (D32, D2764); its cycles against our fixed `avx2` build are information as well. The reason at `avx2`: `channelize_block` is the block `channelize` around the kernel `channelize` (16 channels, 8 taps per branch, the workload of the kernel entry): its SIMD path is the kernel's, judged against liquid-dsp's `firpfbch2_crcf` in the entries `channelize` and `channelize_fallback`; the block adds only the check of the lane view and the step count. No library has the block itself, so the entry is our own code, reported as information (cycles per input sample; ours and fallback run the same block code, D928)"
     }
   },
   "channel_select_block": {
@@ -5052,7 +5224,7 @@
     },
     "avx2-runtime": {
       "status": "info",
-      "waiver": "`channel_select_block` is not accelerated: the run-time-detection build runs the code compiled for the baseline x86-64 target, the `avx2` build the same code compiled for AVX2, so their counts differ by code generation only; reported as information"
+      "waiver": "no reference library at `avx2`: the comparison of the `avx2` record is our own fallback, so the entry is information at `avx2-runtime` as at `avx2` and judged by its efficiency (D32, D2764); its cycles against our fixed `avx2` build are information as well. The reason at `avx2`: `channel_select_block` has no SIMD branch: the block `channel_select` copies one lane of every time step (a strided copy of one value in 16, 4096 steps per call); no library of the C references has a lane-to-stream block, so the comparison is our own code, reported as information (cycles per output sample, D928)"
     }
   },
   "channel_bank_channelize": {
@@ -5082,7 +5254,7 @@
     },
     "avx2-runtime": {
       "status": "info",
-      "waiver": "`channel_bank_channelize` runs the kernel `channelize` through the facade, which the run-time-detection build dispatches to the AVX2 path at run time; the block code around it is compiled for the baseline x86-64 target; reported as information (D930)"
+      "waiver": "no reference library at `avx2`: the comparison of the `avx2` record is our own fallback, so the entry is information at `avx2-runtime` as at `avx2` and judged by its efficiency (D32, D2764); its cycles against our fixed `avx2` build are information as well. The reason at `avx2`: `channel_bank_channelize` is M45 test 9: eight PMR446 channels from 200 kS/s through one `channelize` block (16 channels, 24 taps per branch, 0.4 / 0.6) and eight `channel_select` blocks, per input sample; it is compared with `channel_bank_ddc` (eight `ddc` blocks for the same channels and filter edges), not with a library: the library comparison of the channelizer is the kernel entry `channelize` against liquid-dsp's `firpfbch2_crcf`. Our own code, reported as information (cycles per input sample; ours and fallback run the same block code, D930)"
     }
   },
   "channel_bank_ddc": {
@@ -5112,7 +5284,7 @@
     },
     "avx2-runtime": {
       "status": "info",
-      "waiver": "`channel_bank_ddc` runs the kernel `ddc` through the facade, which the run-time-detection build dispatches to the AVX2 path at run time; the block code around it is compiled for the baseline x86-64 target; reported as information (D930)"
+      "waiver": "no reference library at `avx2`: the comparison of the `avx2` record is our own fallback, so the entry is information at `avx2-runtime` as at `avx2` and judged by its efficiency (D32, D2764); its cycles against our fixed `avx2` build are information as well. The reason at `avx2`: `channel_bank_ddc` is M45 test 9: the eight PMR446 channels of `channel_bank_channelize` from 200 kS/s through eight `ddc` blocks (decimation 8, the -6 dB point at 6.25 kHz, transition 2.5 kHz, 60 dB: 290 taps each), per input sample; it is the comparison of `channel_bank_channelize`, not judged against a library (the `ddc` kernel has its own entries). Our own code, reported as information (cycles per input sample; ours and fallback run the same block code, D930)"
     }
   },
   "band_pulse_detect_block": {
@@ -5142,7 +5314,7 @@
     },
     "avx2-runtime": {
       "status": "info",
-      "waiver": "`band_pulse_detect_block` is not accelerated beyond the kernel `mag`: the run-time-detection build runs the code compiled for the baseline x86-64 target with `mag` detected at run time, the `avx2` build the same code compiled for AVX2, so their counts differ by code generation only; reported as information"
+      "waiver": "no reference library at `avx2`: the comparison of the `avx2` record is our own fallback, so the entry is information at `avx2-runtime` as at `avx2` and judged by its efficiency (D32, D2764); its cycles against our fixed `avx2` build are information as well. The reason at `avx2`: `band_pulse_detect_block` has no SIMD branch of its own: the block `band_pulse_detect` calls the kernel `mag` once per piece over all lanes and runs the envelope low-pass, the noise level and the trigger of every lane as a plain loop over the 16 lanes of a step, and the detector of the busy lanes in scalar code, one sample after the other with the state of the sample before. No non-GPL library has a band pulse detector on the lanes of a channelizer (rtl_433's pulse_detect_package is GPL and is not used or linked, D962), so the comparison is our own code, reported as information (cycles per lane value, 16 lanes at 250 kHz; D962, D963)"
     }
   },
   "qam_soft_bits_qam16": {
@@ -5157,6 +5329,10 @@
     "avx2": {
       "status": "info",
       "waiver": "`qam_soft_bits_qam16` is the kernel `qam_soft_bits` (M44 §2, I44-1, D1412) with 16-QAM: per input symbol the 4 piecewise-linear max-log soft bits, with a hand-written SIMD path per level (D1414), bit-exact with the fallback; compared with GNU Radio's `constellation_soft_decoder_cf` with `calc_soft_dec` (the exact log-likelihood ratio over all points with `expf` and `logf`, npwr 1) (issue #169, D2549), as information: the reference does different work (a closed-form max-log on the integer grid against a search over all `M` points or a table, and different soft-bit scales and, for liquid, labelling), no library has a SIMD soft decoder, so the comparison is the library's scalar code against our entry at every level; our fallback is information too; the other references have their own entries (`qam_soft_bits_qam16_lut`, `qam_soft_bits_qam16_liquid`)"
+    },
+    "avx2-runtime": {
+      "status": "info",
+      "waiver": "the library comparison of the `avx2` record (GNU Radio constellation_soft_decoder_cf with calc_soft_dec) is information at `avx2`, so the entry is information at `avx2-runtime` as well (D2764); its cycles against our fixed `avx2` build are information too. The reason at `avx2`: `qam_soft_bits_qam16` is the kernel `qam_soft_bits` (M44 §2, I44-1, D1412) with 16-QAM: per input symbol the 4 piecewise-linear max-log soft bits, with a hand-written SIMD path per level (D1414), bit-exact with the fallback; compared with GNU Radio's `constellation_soft_decoder_cf` with `calc_soft_dec` (the exact log-likelihood ratio over all points with `expf` and `logf`, npwr 1) (issue #169, D2549), as information: the reference does different work (a closed-form max-log on the integer grid against a search over all `M` points or a table, and different soft-bit scales and, for liquid, labelling), no library has a SIMD soft decoder, so the comparison is the library's scalar code against our entry at every level; our fallback is information too; the other references have their own entries (`qam_soft_bits_qam16_lut`, `qam_soft_bits_qam16_liquid`)"
     },
     "avx512": {
       "status": "info",
@@ -5184,6 +5360,10 @@
       "status": "info",
       "waiver": "`qam_soft_bits_qam16_lut` is the kernel `qam_soft_bits` (M44 §2, I44-1, D1412) with 16-QAM: per input symbol the 4 piecewise-linear max-log soft bits, with a hand-written SIMD path per level (D1414), bit-exact with the fallback; compared with GNU Radio's `constellation_soft_decoder_cf` with the look-up table of `gen_soft_dec_lut` (precision 8, npwr 1: the exact log-likelihood ratio at the table cells) (issue #169, D2549), as information: the reference does different work (a closed-form max-log on the integer grid against a search over all `M` points or a table, and different soft-bit scales and, for liquid, labelling), no library has a SIMD soft decoder, so the comparison is the library's scalar code against our entry at every level; our fallback is information too; the other references have their own entries (`qam_soft_bits_qam16`, `qam_soft_bits_qam16_liquid`)"
     },
+    "avx2-runtime": {
+      "status": "info",
+      "waiver": "the library comparison of the `avx2` record (GNU Radio constellation_soft_decoder_cf with the look-up table of gen_soft_dec_lut) is information at `avx2`, so the entry is information at `avx2-runtime` as well (D2764); its cycles against our fixed `avx2` build are information too. The reason at `avx2`: `qam_soft_bits_qam16_lut` is the kernel `qam_soft_bits` (M44 §2, I44-1, D1412) with 16-QAM: per input symbol the 4 piecewise-linear max-log soft bits, with a hand-written SIMD path per level (D1414), bit-exact with the fallback; compared with GNU Radio's `constellation_soft_decoder_cf` with the look-up table of `gen_soft_dec_lut` (precision 8, npwr 1: the exact log-likelihood ratio at the table cells) (issue #169, D2549), as information: the reference does different work (a closed-form max-log on the integer grid against a search over all `M` points or a table, and different soft-bit scales and, for liquid, labelling), no library has a SIMD soft decoder, so the comparison is the library's scalar code against our entry at every level; our fallback is information too; the other references have their own entries (`qam_soft_bits_qam16`, `qam_soft_bits_qam16_liquid`)"
+    },
     "avx512": {
       "status": "info",
       "waiver": "`qam_soft_bits_qam16_lut` is the kernel `qam_soft_bits` (M44 §2, I44-1, D1412) with 16-QAM: per input symbol the 4 piecewise-linear max-log soft bits, with a hand-written SIMD path per level (D1414), bit-exact with the fallback; compared with GNU Radio's `constellation_soft_decoder_cf` with the look-up table of `gen_soft_dec_lut` (precision 8, npwr 1: the exact log-likelihood ratio at the table cells) (issue #169, D2549), as information: the reference does different work (a closed-form max-log on the integer grid against a search over all `M` points or a table, and different soft-bit scales and, for liquid, labelling), no library has a SIMD soft decoder, so the comparison is the library's scalar code against our entry at every level; our fallback is information too; the other references have their own entries (`qam_soft_bits_qam16`, `qam_soft_bits_qam16_liquid`)"
@@ -5209,6 +5389,10 @@
     "avx2": {
       "status": "info",
       "waiver": "`qam_soft_bits_qam16_liquid` is the kernel `qam_soft_bits` (M44 §2, I44-1, D1412) with 16-QAM: per input symbol the 4 piecewise-linear max-log soft bits, with a hand-written SIMD path per level (D1414), bit-exact with the fallback; compared with liquid-dsp's `modemcf_demodulate_soft` of its own QAM modem (soft bytes with liquid's scale and labelling) (issue #169, D2549), as information: the reference does different work (a closed-form max-log on the integer grid against a search over all `M` points or a table, and different soft-bit scales and, for liquid, labelling), no library has a SIMD soft decoder, so the comparison is the library's scalar code against our entry at every level; our fallback is information too; the other references have their own entries (`qam_soft_bits_qam16`, `qam_soft_bits_qam16_lut`)"
+    },
+    "avx2-runtime": {
+      "status": "info",
+      "waiver": "the library comparison of the `avx2` record (liquid-dsp 1.8.3 modemcf_demodulate_soft of its own QAM modem) is information at `avx2`, so the entry is information at `avx2-runtime` as well (D2764); its cycles against our fixed `avx2` build are information too. The reason at `avx2`: `qam_soft_bits_qam16_liquid` is the kernel `qam_soft_bits` (M44 §2, I44-1, D1412) with 16-QAM: per input symbol the 4 piecewise-linear max-log soft bits, with a hand-written SIMD path per level (D1414), bit-exact with the fallback; compared with liquid-dsp's `modemcf_demodulate_soft` of its own QAM modem (soft bytes with liquid's scale and labelling) (issue #169, D2549), as information: the reference does different work (a closed-form max-log on the integer grid against a search over all `M` points or a table, and different soft-bit scales and, for liquid, labelling), no library has a SIMD soft decoder, so the comparison is the library's scalar code against our entry at every level; our fallback is information too; the other references have their own entries (`qam_soft_bits_qam16`, `qam_soft_bits_qam16_lut`)"
     },
     "avx512": {
       "status": "info",
@@ -5236,6 +5420,10 @@
       "status": "info",
       "waiver": "`qam_soft_bits_qam64` is the kernel `qam_soft_bits` (M44 §2, I44-1, D1412) with 64-QAM: per input symbol the 6 piecewise-linear max-log soft bits, with a hand-written SIMD path per level (D1414), bit-exact with the fallback; compared with GNU Radio's `constellation_soft_decoder_cf` with `calc_soft_dec` (the exact log-likelihood ratio over all points with `expf` and `logf`, npwr 1) (issue #169, D2549), as information: the reference does different work (a closed-form max-log on the integer grid against a search over all `M` points or a table, and different soft-bit scales and, for liquid, labelling), no library has a SIMD soft decoder, so the comparison is the library's scalar code against our entry at every level; our fallback is information too; the other references have their own entries (`qam_soft_bits_qam64_lut`, `qam_soft_bits_qam64_liquid`)"
     },
+    "avx2-runtime": {
+      "status": "info",
+      "waiver": "the library comparison of the `avx2` record (GNU Radio constellation_soft_decoder_cf with calc_soft_dec) is information at `avx2`, so the entry is information at `avx2-runtime` as well (D2764); its cycles against our fixed `avx2` build are information too. The reason at `avx2`: `qam_soft_bits_qam64` is the kernel `qam_soft_bits` (M44 §2, I44-1, D1412) with 64-QAM: per input symbol the 6 piecewise-linear max-log soft bits, with a hand-written SIMD path per level (D1414), bit-exact with the fallback; compared with GNU Radio's `constellation_soft_decoder_cf` with `calc_soft_dec` (the exact log-likelihood ratio over all points with `expf` and `logf`, npwr 1) (issue #169, D2549), as information: the reference does different work (a closed-form max-log on the integer grid against a search over all `M` points or a table, and different soft-bit scales and, for liquid, labelling), no library has a SIMD soft decoder, so the comparison is the library's scalar code against our entry at every level; our fallback is information too; the other references have their own entries (`qam_soft_bits_qam64_lut`, `qam_soft_bits_qam64_liquid`)"
+    },
     "avx512": {
       "status": "info",
       "waiver": "`qam_soft_bits_qam64` is the kernel `qam_soft_bits` (M44 §2, I44-1, D1412) with 64-QAM: per input symbol the 6 piecewise-linear max-log soft bits, with a hand-written SIMD path per level (D1414), bit-exact with the fallback; compared with GNU Radio's `constellation_soft_decoder_cf` with `calc_soft_dec` (the exact log-likelihood ratio over all points with `expf` and `logf`, npwr 1) (issue #169, D2549), as information: the reference does different work (a closed-form max-log on the integer grid against a search over all `M` points or a table, and different soft-bit scales and, for liquid, labelling), no library has a SIMD soft decoder, so the comparison is the library's scalar code against our entry at every level; our fallback is information too; the other references have their own entries (`qam_soft_bits_qam64_lut`, `qam_soft_bits_qam64_liquid`)"
@@ -5261,6 +5449,10 @@
     "avx2": {
       "status": "info",
       "waiver": "`qam_soft_bits_qam64_lut` is the kernel `qam_soft_bits` (M44 §2, I44-1, D1412) with 64-QAM: per input symbol the 6 piecewise-linear max-log soft bits, with a hand-written SIMD path per level (D1414), bit-exact with the fallback; compared with GNU Radio's `constellation_soft_decoder_cf` with the look-up table of `gen_soft_dec_lut` (precision 8, npwr 1: the exact log-likelihood ratio at the table cells) (issue #169, D2549), as information: the reference does different work (a closed-form max-log on the integer grid against a search over all `M` points or a table, and different soft-bit scales and, for liquid, labelling), no library has a SIMD soft decoder, so the comparison is the library's scalar code against our entry at every level; our fallback is information too; the other references have their own entries (`qam_soft_bits_qam64`, `qam_soft_bits_qam64_liquid`)"
+    },
+    "avx2-runtime": {
+      "status": "info",
+      "waiver": "the library comparison of the `avx2` record (GNU Radio constellation_soft_decoder_cf with the look-up table of gen_soft_dec_lut) is information at `avx2`, so the entry is information at `avx2-runtime` as well (D2764); its cycles against our fixed `avx2` build are information too. The reason at `avx2`: `qam_soft_bits_qam64_lut` is the kernel `qam_soft_bits` (M44 §2, I44-1, D1412) with 64-QAM: per input symbol the 6 piecewise-linear max-log soft bits, with a hand-written SIMD path per level (D1414), bit-exact with the fallback; compared with GNU Radio's `constellation_soft_decoder_cf` with the look-up table of `gen_soft_dec_lut` (precision 8, npwr 1: the exact log-likelihood ratio at the table cells) (issue #169, D2549), as information: the reference does different work (a closed-form max-log on the integer grid against a search over all `M` points or a table, and different soft-bit scales and, for liquid, labelling), no library has a SIMD soft decoder, so the comparison is the library's scalar code against our entry at every level; our fallback is information too; the other references have their own entries (`qam_soft_bits_qam64`, `qam_soft_bits_qam64_liquid`)"
     },
     "avx512": {
       "status": "info",
@@ -5288,6 +5480,10 @@
       "status": "info",
       "waiver": "`qam_soft_bits_qam64_liquid` is the kernel `qam_soft_bits` (M44 §2, I44-1, D1412) with 64-QAM: per input symbol the 6 piecewise-linear max-log soft bits, with a hand-written SIMD path per level (D1414), bit-exact with the fallback; compared with liquid-dsp's `modemcf_demodulate_soft` of its own QAM modem (soft bytes with liquid's scale and labelling) (issue #169, D2549), as information: the reference does different work (a closed-form max-log on the integer grid against a search over all `M` points or a table, and different soft-bit scales and, for liquid, labelling), no library has a SIMD soft decoder, so the comparison is the library's scalar code against our entry at every level; our fallback is information too; the other references have their own entries (`qam_soft_bits_qam64`, `qam_soft_bits_qam64_lut`)"
     },
+    "avx2-runtime": {
+      "status": "info",
+      "waiver": "the library comparison of the `avx2` record (liquid-dsp 1.8.3 modemcf_demodulate_soft of its own QAM modem) is information at `avx2`, so the entry is information at `avx2-runtime` as well (D2764); its cycles against our fixed `avx2` build are information too. The reason at `avx2`: `qam_soft_bits_qam64_liquid` is the kernel `qam_soft_bits` (M44 §2, I44-1, D1412) with 64-QAM: per input symbol the 6 piecewise-linear max-log soft bits, with a hand-written SIMD path per level (D1414), bit-exact with the fallback; compared with liquid-dsp's `modemcf_demodulate_soft` of its own QAM modem (soft bytes with liquid's scale and labelling) (issue #169, D2549), as information: the reference does different work (a closed-form max-log on the integer grid against a search over all `M` points or a table, and different soft-bit scales and, for liquid, labelling), no library has a SIMD soft decoder, so the comparison is the library's scalar code against our entry at every level; our fallback is information too; the other references have their own entries (`qam_soft_bits_qam64`, `qam_soft_bits_qam64_lut`)"
+    },
     "avx512": {
       "status": "info",
       "waiver": "`qam_soft_bits_qam64_liquid` is the kernel `qam_soft_bits` (M44 §2, I44-1, D1412) with 64-QAM: per input symbol the 6 piecewise-linear max-log soft bits, with a hand-written SIMD path per level (D1414), bit-exact with the fallback; compared with liquid-dsp's `modemcf_demodulate_soft` of its own QAM modem (soft bytes with liquid's scale and labelling) (issue #169, D2549), as information: the reference does different work (a closed-form max-log on the integer grid against a search over all `M` points or a table, and different soft-bit scales and, for liquid, labelling), no library has a SIMD soft decoder, so the comparison is the library's scalar code against our entry at every level; our fallback is information too; the other references have their own entries (`qam_soft_bits_qam64`, `qam_soft_bits_qam64_lut`)"
@@ -5314,6 +5510,10 @@
       "status": "info",
       "waiver": "`qam_soft_bits_qpsk` is the kernel `qam_soft_bits` (M44 §2, M44.2 §2, D1503, D1504) with 4-QAM (`qpsk`, M44.2: there is no `qam4`): per input symbol the 2 piecewise-linear max-log soft bits (the soft bits of one bit per axis in the grid units of every square QAM, D1515), with the SIMD instance of each level chosen by its cycles (D1504), bit-exact with the fallback. No library computes the same soft bits (liquid-dsp's `modemcf_demodulate_soft` and GNU Radio's `calc_soft_dec` search the constellation points for the exact max-log or log-sum value, other work, D1201), so the comparison is our own fallback, reported as information (cycles per input symbol); the paths are judged by their efficiency and must not be slower than the fallback (D1415)"
     },
+    "avx2-runtime": {
+      "status": "info",
+      "waiver": "no reference library at `avx2`: the comparison of the `avx2` record is our own fallback, so the entry is information at `avx2-runtime` as at `avx2` and judged by its efficiency (D32, D2764); its cycles against our fixed `avx2` build are information as well. The reason at `avx2`: `qam_soft_bits_qpsk` is the kernel `qam_soft_bits` (M44 §2, M44.2 §2, D1503, D1504) with 4-QAM (`qpsk`, M44.2: there is no `qam4`): per input symbol the 2 piecewise-linear max-log soft bits (the soft bits of one bit per axis in the grid units of every square QAM, D1515), with the SIMD instance of each level chosen by its cycles (D1504), bit-exact with the fallback. No library computes the same soft bits (liquid-dsp's `modemcf_demodulate_soft` and GNU Radio's `calc_soft_dec` search the constellation points for the exact max-log or log-sum value, other work, D1201), so the comparison is our own fallback, reported as information (cycles per input symbol); the paths are judged by their efficiency and must not be slower than the fallback (D1415)"
+    },
     "avx512": {
       "status": "info",
       "waiver": "`qam_soft_bits_qpsk` is the kernel `qam_soft_bits` (M44 §2, M44.2 §2, D1503, D1504) with 4-QAM (`qpsk`, M44.2: there is no `qam4`): per input symbol the 2 piecewise-linear max-log soft bits (the soft bits of one bit per axis in the grid units of every square QAM, D1515), with the SIMD instance of each level chosen by its cycles (D1504), bit-exact with the fallback. No library computes the same soft bits (liquid-dsp's `modemcf_demodulate_soft` and GNU Radio's `calc_soft_dec` search the constellation points for the exact max-log or log-sum value, other work, D1201), so the comparison is our own fallback, reported as information (cycles per input symbol); the paths are judged by their efficiency and must not be slower than the fallback (D1415)"
@@ -5339,6 +5539,10 @@
     "avx2": {
       "status": "info",
       "waiver": "`qam_soft_bits_qam256` is the kernel `qam_soft_bits` (M44 §2, M44.2 §2, D1503, D1504) with 256-QAM: per input symbol the 8 piecewise-linear max-log soft bits (the recursion over the four bits per axis), with the SIMD instance of each level chosen by its cycles (D1504), bit-exact with the fallback. No library computes the same soft bits (liquid-dsp's `modemcf_demodulate_soft` and GNU Radio's `calc_soft_dec` search the constellation points for the exact max-log or log-sum value, other work, D1201), so the comparison is our own fallback, reported as information (cycles per input symbol); the paths are judged by their efficiency and must not be slower than the fallback (D1415)"
+    },
+    "avx2-runtime": {
+      "status": "info",
+      "waiver": "no reference library at `avx2`: the comparison of the `avx2` record is our own fallback, so the entry is information at `avx2-runtime` as at `avx2` and judged by its efficiency (D32, D2764); its cycles against our fixed `avx2` build are information as well. The reason at `avx2`: `qam_soft_bits_qam256` is the kernel `qam_soft_bits` (M44 §2, M44.2 §2, D1503, D1504) with 256-QAM: per input symbol the 8 piecewise-linear max-log soft bits (the recursion over the four bits per axis), with the SIMD instance of each level chosen by its cycles (D1504), bit-exact with the fallback. No library computes the same soft bits (liquid-dsp's `modemcf_demodulate_soft` and GNU Radio's `calc_soft_dec` search the constellation points for the exact max-log or log-sum value, other work, D1201), so the comparison is our own fallback, reported as information (cycles per input symbol); the paths are judged by their efficiency and must not be slower than the fallback (D1415)"
     },
     "avx512": {
       "status": "info",
@@ -5379,7 +5583,8 @@
       "waiver": "`qam_soft_bits_qam1024` is the kernel `qam_soft_bits` (M44 §2, M44.2 §2, D1503, D1504) with 1024-QAM: per input symbol the 10 piecewise-linear max-log soft bits (the recursion over the five bits per axis), with the SIMD instance of each level chosen by its cycles (D1504), bit-exact with the fallback. No library computes the same soft bits (liquid-dsp's `modemcf_demodulate_soft` and GNU Radio's `calc_soft_dec` search the constellation points for the exact max-log or log-sum value, other work, D1201), so the comparison is our own fallback, reported as information (cycles and instructions per input symbol); the paths are judged by their efficiency and must not be slower than the fallback (D1415)"
     },
     "avx2-runtime": {
-      "status": "dev"
+      "status": "info",
+      "waiver": "no reference library at `avx2`: the comparison of the `avx2` record is our own fallback, so the entry is information at `avx2-runtime` as at `avx2` and judged by its efficiency (D32, D2764); its cycles against our fixed `avx2` build are information as well. The reason at `avx2`: `qam_soft_bits_qam1024` is the kernel `qam_soft_bits` (M44 §2, M44.2 §2, D1503, D1504) with 1024-QAM: per input symbol the 10 piecewise-linear max-log soft bits (the recursion over the five bits per axis), with the SIMD instance of each level chosen by its cycles (D1504), bit-exact with the fallback. No library computes the same soft bits (liquid-dsp's `modemcf_demodulate_soft` and GNU Radio's `calc_soft_dec` search the constellation points for the exact max-log or log-sum value, other work, D1201), so the comparison is our own fallback, reported as information (cycles per input symbol); the paths are judged by their efficiency and must not be slower than the fallback (D1415)"
     }
   },
   "symbol_demap_qam16_block": {
@@ -5394,6 +5599,10 @@
     "avx2": {
       "status": "info",
       "waiver": "`symbol_demap_qam16_block` is the block `symbol_demap` with the constellation `qam16` (M44 §2): per input symbol the 4 piecewise-linear max-log soft bits by the kernel `qam_soft_bits` through the facade (D1412); compared with GNU Radio's `constellation_soft_decoder_cf` with `calc_soft_dec` (the exact log-likelihood ratio over all points with `expf` and `logf`, npwr 1) (issue #169, D2549), as information: the reference does different work (a closed-form max-log on the integer grid against a search over all `M` points or a table, and different soft-bit scales and, for liquid, labelling), no library has a SIMD soft decoder, so the comparison is the library's scalar code against our entry at every level; our fallback is information too; the other references have their own entries (`symbol_demap_qam16_block_lut`, `symbol_demap_qam16_block_liquid`)"
+    },
+    "avx2-runtime": {
+      "status": "info",
+      "waiver": "the library comparison of the `avx2` record (GNU Radio constellation_soft_decoder_cf with calc_soft_dec) is information at `avx2`, so the entry is information at `avx2-runtime` as well (D2764); its cycles against our fixed `avx2` build are information too. The reason at `avx2`: `symbol_demap_qam16_block` is the block `symbol_demap` with the constellation `qam16` (M44 §2): per input symbol the 4 piecewise-linear max-log soft bits by the kernel `qam_soft_bits` through the facade (D1412); compared with GNU Radio's `constellation_soft_decoder_cf` with `calc_soft_dec` (the exact log-likelihood ratio over all points with `expf` and `logf`, npwr 1) (issue #169, D2549), as information: the reference does different work (a closed-form max-log on the integer grid against a search over all `M` points or a table, and different soft-bit scales and, for liquid, labelling), no library has a SIMD soft decoder, so the comparison is the library's scalar code against our entry at every level; our fallback is information too; the other references have their own entries (`symbol_demap_qam16_block_lut`, `symbol_demap_qam16_block_liquid`)"
     },
     "avx512": {
       "status": "info",
@@ -5421,6 +5630,10 @@
       "status": "info",
       "waiver": "`symbol_demap_qam16_block_lut` is the block `symbol_demap` with the constellation `qam16` (M44 §2): per input symbol the 4 piecewise-linear max-log soft bits by the kernel `qam_soft_bits` through the facade (D1412); compared with GNU Radio's `constellation_soft_decoder_cf` with the look-up table of `gen_soft_dec_lut` (precision 8, npwr 1: the exact log-likelihood ratio at the table cells) (issue #169, D2549), as information: the reference does different work (a closed-form max-log on the integer grid against a search over all `M` points or a table, and different soft-bit scales and, for liquid, labelling), no library has a SIMD soft decoder, so the comparison is the library's scalar code against our entry at every level; our fallback is information too; the other references have their own entries (`symbol_demap_qam16_block`, `symbol_demap_qam16_block_liquid`)"
     },
+    "avx2-runtime": {
+      "status": "info",
+      "waiver": "the library comparison of the `avx2` record (GNU Radio constellation_soft_decoder_cf with the look-up table of gen_soft_dec_lut) is information at `avx2`, so the entry is information at `avx2-runtime` as well (D2764); its cycles against our fixed `avx2` build are information too. The reason at `avx2`: `symbol_demap_qam16_block_lut` is the block `symbol_demap` with the constellation `qam16` (M44 §2): per input symbol the 4 piecewise-linear max-log soft bits by the kernel `qam_soft_bits` through the facade (D1412); compared with GNU Radio's `constellation_soft_decoder_cf` with the look-up table of `gen_soft_dec_lut` (precision 8, npwr 1: the exact log-likelihood ratio at the table cells) (issue #169, D2549), as information: the reference does different work (a closed-form max-log on the integer grid against a search over all `M` points or a table, and different soft-bit scales and, for liquid, labelling), no library has a SIMD soft decoder, so the comparison is the library's scalar code against our entry at every level; our fallback is information too; the other references have their own entries (`symbol_demap_qam16_block`, `symbol_demap_qam16_block_liquid`)"
+    },
     "avx512": {
       "status": "info",
       "waiver": "`symbol_demap_qam16_block_lut` is the block `symbol_demap` with the constellation `qam16` (M44 §2): per input symbol the 4 piecewise-linear max-log soft bits by the kernel `qam_soft_bits` through the facade (D1412); compared with GNU Radio's `constellation_soft_decoder_cf` with the look-up table of `gen_soft_dec_lut` (precision 8, npwr 1: the exact log-likelihood ratio at the table cells) (issue #169, D2549), as information: the reference does different work (a closed-form max-log on the integer grid against a search over all `M` points or a table, and different soft-bit scales and, for liquid, labelling), no library has a SIMD soft decoder, so the comparison is the library's scalar code against our entry at every level; our fallback is information too; the other references have their own entries (`symbol_demap_qam16_block`, `symbol_demap_qam16_block_liquid`)"
@@ -5446,6 +5659,10 @@
     "avx2": {
       "status": "info",
       "waiver": "`symbol_demap_qam16_block_liquid` is the block `symbol_demap` with the constellation `qam16` (M44 §2): per input symbol the 4 piecewise-linear max-log soft bits by the kernel `qam_soft_bits` through the facade (D1412); compared with liquid-dsp's `modemcf_demodulate_soft` of its own QAM modem (soft bytes with liquid's scale and labelling) (issue #169, D2549), as information: the reference does different work (a closed-form max-log on the integer grid against a search over all `M` points or a table, and different soft-bit scales and, for liquid, labelling), no library has a SIMD soft decoder, so the comparison is the library's scalar code against our entry at every level; our fallback is information too; the other references have their own entries (`symbol_demap_qam16_block`, `symbol_demap_qam16_block_lut`)"
+    },
+    "avx2-runtime": {
+      "status": "info",
+      "waiver": "the library comparison of the `avx2` record (liquid-dsp 1.8.3 modemcf_demodulate_soft of its own QAM modem) is information at `avx2`, so the entry is information at `avx2-runtime` as well (D2764); its cycles against our fixed `avx2` build are information too. The reason at `avx2`: `symbol_demap_qam16_block_liquid` is the block `symbol_demap` with the constellation `qam16` (M44 §2): per input symbol the 4 piecewise-linear max-log soft bits by the kernel `qam_soft_bits` through the facade (D1412); compared with liquid-dsp's `modemcf_demodulate_soft` of its own QAM modem (soft bytes with liquid's scale and labelling) (issue #169, D2549), as information: the reference does different work (a closed-form max-log on the integer grid against a search over all `M` points or a table, and different soft-bit scales and, for liquid, labelling), no library has a SIMD soft decoder, so the comparison is the library's scalar code against our entry at every level; our fallback is information too; the other references have their own entries (`symbol_demap_qam16_block`, `symbol_demap_qam16_block_lut`)"
     },
     "avx512": {
       "status": "info",
@@ -5473,6 +5690,10 @@
       "status": "info",
       "waiver": "`symbol_demap_qam64_block` is the block `symbol_demap` with the constellation `qam64` (M44 §2): per input symbol the 6 piecewise-linear max-log soft bits by the kernel `qam_soft_bits` through the facade (D1412); compared with GNU Radio's `constellation_soft_decoder_cf` with `calc_soft_dec` (the exact log-likelihood ratio over all points with `expf` and `logf`, npwr 1) (issue #169, D2549), as information: the reference does different work (a closed-form max-log on the integer grid against a search over all `M` points or a table, and different soft-bit scales and, for liquid, labelling), no library has a SIMD soft decoder, so the comparison is the library's scalar code against our entry at every level; our fallback is information too; the other references have their own entries (`symbol_demap_qam64_block_lut`, `symbol_demap_qam64_block_liquid`)"
     },
+    "avx2-runtime": {
+      "status": "info",
+      "waiver": "the library comparison of the `avx2` record (GNU Radio constellation_soft_decoder_cf with calc_soft_dec) is information at `avx2`, so the entry is information at `avx2-runtime` as well (D2764); its cycles against our fixed `avx2` build are information too. The reason at `avx2`: `symbol_demap_qam64_block` is the block `symbol_demap` with the constellation `qam64` (M44 §2): per input symbol the 6 piecewise-linear max-log soft bits by the kernel `qam_soft_bits` through the facade (D1412); compared with GNU Radio's `constellation_soft_decoder_cf` with `calc_soft_dec` (the exact log-likelihood ratio over all points with `expf` and `logf`, npwr 1) (issue #169, D2549), as information: the reference does different work (a closed-form max-log on the integer grid against a search over all `M` points or a table, and different soft-bit scales and, for liquid, labelling), no library has a SIMD soft decoder, so the comparison is the library's scalar code against our entry at every level; our fallback is information too; the other references have their own entries (`symbol_demap_qam64_block_lut`, `symbol_demap_qam64_block_liquid`)"
+    },
     "avx512": {
       "status": "info",
       "waiver": "`symbol_demap_qam64_block` is the block `symbol_demap` with the constellation `qam64` (M44 §2): per input symbol the 6 piecewise-linear max-log soft bits by the kernel `qam_soft_bits` through the facade (D1412); compared with GNU Radio's `constellation_soft_decoder_cf` with `calc_soft_dec` (the exact log-likelihood ratio over all points with `expf` and `logf`, npwr 1) (issue #169, D2549), as information: the reference does different work (a closed-form max-log on the integer grid against a search over all `M` points or a table, and different soft-bit scales and, for liquid, labelling), no library has a SIMD soft decoder, so the comparison is the library's scalar code against our entry at every level; our fallback is information too; the other references have their own entries (`symbol_demap_qam64_block_lut`, `symbol_demap_qam64_block_liquid`)"
@@ -5498,6 +5719,10 @@
     "avx2": {
       "status": "info",
       "waiver": "`symbol_demap_qam64_block_lut` is the block `symbol_demap` with the constellation `qam64` (M44 §2): per input symbol the 6 piecewise-linear max-log soft bits by the kernel `qam_soft_bits` through the facade (D1412); compared with GNU Radio's `constellation_soft_decoder_cf` with the look-up table of `gen_soft_dec_lut` (precision 8, npwr 1: the exact log-likelihood ratio at the table cells) (issue #169, D2549), as information: the reference does different work (a closed-form max-log on the integer grid against a search over all `M` points or a table, and different soft-bit scales and, for liquid, labelling), no library has a SIMD soft decoder, so the comparison is the library's scalar code against our entry at every level; our fallback is information too; the other references have their own entries (`symbol_demap_qam64_block`, `symbol_demap_qam64_block_liquid`)"
+    },
+    "avx2-runtime": {
+      "status": "info",
+      "waiver": "the library comparison of the `avx2` record (GNU Radio constellation_soft_decoder_cf with the look-up table of gen_soft_dec_lut) is information at `avx2`, so the entry is information at `avx2-runtime` as well (D2764); its cycles against our fixed `avx2` build are information too. The reason at `avx2`: `symbol_demap_qam64_block_lut` is the block `symbol_demap` with the constellation `qam64` (M44 §2): per input symbol the 6 piecewise-linear max-log soft bits by the kernel `qam_soft_bits` through the facade (D1412); compared with GNU Radio's `constellation_soft_decoder_cf` with the look-up table of `gen_soft_dec_lut` (precision 8, npwr 1: the exact log-likelihood ratio at the table cells) (issue #169, D2549), as information: the reference does different work (a closed-form max-log on the integer grid against a search over all `M` points or a table, and different soft-bit scales and, for liquid, labelling), no library has a SIMD soft decoder, so the comparison is the library's scalar code against our entry at every level; our fallback is information too; the other references have their own entries (`symbol_demap_qam64_block`, `symbol_demap_qam64_block_liquid`)"
     },
     "avx512": {
       "status": "info",
@@ -5525,6 +5750,10 @@
       "status": "info",
       "waiver": "`symbol_demap_qam64_block_liquid` is the block `symbol_demap` with the constellation `qam64` (M44 §2): per input symbol the 6 piecewise-linear max-log soft bits by the kernel `qam_soft_bits` through the facade (D1412); compared with liquid-dsp's `modemcf_demodulate_soft` of its own QAM modem (soft bytes with liquid's scale and labelling) (issue #169, D2549), as information: the reference does different work (a closed-form max-log on the integer grid against a search over all `M` points or a table, and different soft-bit scales and, for liquid, labelling), no library has a SIMD soft decoder, so the comparison is the library's scalar code against our entry at every level; our fallback is information too; the other references have their own entries (`symbol_demap_qam64_block`, `symbol_demap_qam64_block_lut`)"
     },
+    "avx2-runtime": {
+      "status": "info",
+      "waiver": "the library comparison of the `avx2` record (liquid-dsp 1.8.3 modemcf_demodulate_soft of its own QAM modem) is information at `avx2`, so the entry is information at `avx2-runtime` as well (D2764); its cycles against our fixed `avx2` build are information too. The reason at `avx2`: `symbol_demap_qam64_block_liquid` is the block `symbol_demap` with the constellation `qam64` (M44 §2): per input symbol the 6 piecewise-linear max-log soft bits by the kernel `qam_soft_bits` through the facade (D1412); compared with liquid-dsp's `modemcf_demodulate_soft` of its own QAM modem (soft bytes with liquid's scale and labelling) (issue #169, D2549), as information: the reference does different work (a closed-form max-log on the integer grid against a search over all `M` points or a table, and different soft-bit scales and, for liquid, labelling), no library has a SIMD soft decoder, so the comparison is the library's scalar code against our entry at every level; our fallback is information too; the other references have their own entries (`symbol_demap_qam64_block`, `symbol_demap_qam64_block_lut`)"
+    },
     "avx512": {
       "status": "info",
       "waiver": "`symbol_demap_qam64_block_liquid` is the block `symbol_demap` with the constellation `qam64` (M44 §2): per input symbol the 6 piecewise-linear max-log soft bits by the kernel `qam_soft_bits` through the facade (D1412); compared with liquid-dsp's `modemcf_demodulate_soft` of its own QAM modem (soft bytes with liquid's scale and labelling) (issue #169, D2549), as information: the reference does different work (a closed-form max-log on the integer grid against a search over all `M` points or a table, and different soft-bit scales and, for liquid, labelling), no library has a SIMD soft decoder, so the comparison is the library's scalar code against our entry at every level; our fallback is information too; the other references have their own entries (`symbol_demap_qam64_block`, `symbol_demap_qam64_block_lut`)"
@@ -5550,6 +5779,10 @@
     "avx2": {
       "status": "info",
       "waiver": "`symbol_demap_qam256_block` is the block `symbol_demap` with the constellation `qam256` (M44.2 §2): per input symbol the 8 piecewise-linear max-log soft bits of 256-QAM by the kernel `qam_soft_bits` through the facade (D1412, D1504; its own entry `qam_soft_bits_qam256` measures the kernel alone). No library computes the same soft bits (liquid-dsp's `modemcf_demodulate_soft` and GNU Radio's `calc_soft_dec` search the constellation points for the exact max-log or log-sum value, other work, D1201), so the entry is our own code, reported as information (cycles per input symbol; ours and fallback run the same block code)"
+    },
+    "avx2-runtime": {
+      "status": "info",
+      "waiver": "no reference library at `avx2`: the comparison of the `avx2` record is our own fallback, so the entry is information at `avx2-runtime` as at `avx2` and judged by its efficiency (D32, D2764); its cycles against our fixed `avx2` build are information as well. The reason at `avx2`: `symbol_demap_qam256_block` is the block `symbol_demap` with the constellation `qam256` (M44.2 §2): per input symbol the 8 piecewise-linear max-log soft bits of 256-QAM by the kernel `qam_soft_bits` through the facade (D1412, D1504; its own entry `qam_soft_bits_qam256` measures the kernel alone). No library computes the same soft bits (liquid-dsp's `modemcf_demodulate_soft` and GNU Radio's `calc_soft_dec` search the constellation points for the exact max-log or log-sum value, other work, D1201), so the entry is our own code, reported as information (cycles per input symbol; ours and fallback run the same block code)"
     },
     "avx512": {
       "status": "info",
@@ -5591,7 +5824,7 @@
     },
     "avx2-runtime": {
       "status": "info",
-      "waiver": "`qam_mod_block` is not accelerated: the run-time-detection build runs the block code compiled for the baseline x86-64 target, the `avx2` build the same code compiled for AVX2, so the entry is `info`; the comparison library is the one of the other levels"
+      "waiver": "the library comparison of the `avx2` record (GNU Radio constellation_modulator as the sum of its blocks: pack_k_bits_bb + chunks_to_symbols_bc + pfb_arb_resampler_ccf) is information at `avx2`, so the entry is information at `avx2-runtime` as well (D2764); its cycles against our fixed `avx2` build are information too. The reason at `avx2`: `qam_mod_block` is the block `qam_mod` with 16-QAM at 8 samples per symbol (M44.1 §4, M44.1.1): per symbol the table lookup of the Gray point, then the root-raised-cosine interpolation of the kernel `fir_interpolate`. The comparison is GNU Radio's `constellation_modulator` (generic_mod) as the sum of its blocks on the same bits: `pack_k_bits_bb` + `chunks_to_symbols_bc` + `pfb_arb_resampler_ccf` (`benches/refs/gr-chunks.c`, `benches/refs/gr-fir.c`: 32 filters of 88 taps with their derivative filters, two dot products per output sample, VOLK's dispatched dot product at the SIMD levels). No library has a SIMD modulator, so the library's code is the comparison at every level and the entry is `info` (the library flow has no pulse of the block's span and no frame state, other work; cycles per output sample; ours and fallback run the same block code)"
     }
   },
   "qam_mod_qam256_block": {
@@ -5621,7 +5854,7 @@
     },
     "avx2-runtime": {
       "status": "info",
-      "waiver": "`qam_mod_qam256_block` is not accelerated: the run-time-detection build runs the block code compiled for the baseline x86-64 target, the `avx2` build the same code compiled for AVX2, so the entry is `info`; the comparison library is the one of the other levels"
+      "waiver": "the library comparison of the `avx2` record (GNU Radio constellation_modulator as the sum of its blocks: pack_k_bits_bb + chunks_to_symbols_bc + pfb_arb_resampler_ccf) is information at `avx2`, so the entry is information at `avx2-runtime` as well (D2764); its cycles against our fixed `avx2` build are information too. The reason at `avx2`: `qam_mod_qam256_block` is the block `qam_mod` with 256-QAM at 8 samples per symbol (M44.1 §4, M44.1.1): per symbol the table lookup of the Gray point, then the root-raised-cosine interpolation of the kernel `fir_interpolate`. The comparison is GNU Radio's `constellation_modulator` (generic_mod) as the sum of its blocks on the same bits: `pack_k_bits_bb` + `chunks_to_symbols_bc` + `pfb_arb_resampler_ccf` (`benches/refs/gr-chunks.c`, `benches/refs/gr-fir.c`: 32 filters of 88 taps with their derivative filters, two dot products per output sample, VOLK's dispatched dot product at the SIMD levels). No library has a SIMD modulator, so the library's code is the comparison at every level and the entry is `info` (the library flow has no pulse of the block's span and no frame state, other work; cycles per output sample; ours and fallback run the same block code)"
     }
   },
   "qam_demod_block": {
@@ -5651,7 +5884,7 @@
     },
     "avx2-runtime": {
       "status": "info",
-      "waiver": "`qam_demod_block` is not accelerated: the run-time-detection build runs the block code compiled for the baseline x86-64 target, the `avx2` build the same code compiled for AVX2, so their counts differ by code generation only; reported as information"
+      "waiver": "the library comparison of the `avx2` record (GNU Radio fir_filter_ccf + symbol_sync_cc + linear_equalizer + constellation_receiver_cb) is information at `avx2`, so the entry is information at `avx2-runtime` as well (D2764); its cycles against our fixed `avx2` build are information too. The reason at `avx2`: `qam_demod_block` is the block `qam_demod` (M44 §4) with 16-QAM at 8 samples per symbol and its defaults (11 equalizer taps): the kernels `fir`, `symbol_sync`, `equalize` and `costas` and the soft bits of `symbol_demap`, each with its own entry (the QAM carrier loop and the equalizer against GNU Radio's `constellation_receiver_cb` and `linear_equalizer`, D1210). No library has the same block (GNU Radio's receiver is a flowgraph of those blocks, liquid-dsp has no QAM receiver object, D1216), so the entry is our own code, reported as information (cycles per input sample; ours and fallback run the same block code); counted against the sum of GNU Radio's blocks on the same input (`fir_filter_ccf` + `symbol_sync_cc` + `linear_equalizer` + `constellation_receiver_cb`, issue #169, D2545), as information: the chain has no acquisition, no blind equalizer stage and no lock watches, and it does not lock on this workload"
     }
   },
   "psk_demod_block": {
@@ -5681,7 +5914,7 @@
     },
     "avx2-runtime": {
       "status": "info",
-      "waiver": "`psk_demod_block` is not accelerated: the run-time-detection build runs the block code compiled for the baseline x86-64 target, the `avx2` build the same code compiled for AVX2, so their counts differ by code generation only; reported as information"
+      "waiver": "the library comparison of the `avx2` record (GNU Radio fir_filter_ccf + symbol_sync_cc + costas_loop_cc + constellation_decoder_cb) is information at `avx2`, so the entry is information at `avx2-runtime` as well (D2764); its cycles against our fixed `avx2` build are information too. The reason at `avx2`: `psk_demod_block` is the block `psk_demod` (M40, M44.1 §8) with coherent QPSK at 8 samples per symbol and its defaults (no equalizer): the kernels `fir`, `symbol_sync` and `costas` and the soft bits of `symbol_demap`, each with its own entry. No library has the same block: GNU Radio's receiver is a flowgraph, so the entry is counted against the sum of its blocks on the same input (`fir_filter_ccf` + `symbol_sync_cc` + `costas_loop_cc` + `constellation_decoder_cb`, issue #169, D2541), as information: the chain has no acquisition and no lock watches, its timing loop interpolates with an 8-tap MMSE filter against our cubic Lagrange polynomial (D2539), and it decodes symbols where the block gives soft bits"
     }
   },
   "qam_demod_qam256_block": {
@@ -5711,7 +5944,7 @@
     },
     "avx2-runtime": {
       "status": "info",
-      "waiver": "`qam_demod_qam256_block` is not accelerated: the run-time-detection build runs the block code compiled for the baseline x86-64 target, the `avx2` build the same code compiled for AVX2, so their counts differ by code generation only; reported as information"
+      "waiver": "no reference library at `avx2`: the comparison of the `avx2` record is our own fallback, so the entry is information at `avx2-runtime` as at `avx2` and judged by its efficiency (D32, D2764); its cycles against our fixed `avx2` build are information as well. The reason at `avx2`: `qam_demod_qam256_block` is the block `qam_demod` (M44.2 §4) with 256-QAM at 8 samples per symbol and its defaults (11 equalizer taps) in the steady state (`Track`, the equalizer in decision mode): the kernels `fir`, `symbol_sync`, `equalize` and `costas` and the soft bits of `symbol_demap`, each with its own entry (the 256-QAM carrier loop and equalizer against GNU Radio's `constellation_receiver_cb` and `linear_equalizer`, D1210, D1524). No library has the same block (GNU Radio's receiver is a flowgraph of those blocks, liquid-dsp has no QAM receiver object, D1216), so the entry is our own code, reported as information (cycles per input sample; ours and fallback run the same block code)"
     }
   },
   "qam_demod_search_block": {
@@ -5741,7 +5974,7 @@
     },
     "avx2-runtime": {
       "status": "info",
-      "waiver": "`qam_demod_search_block` is not accelerated: the run-time-detection build runs the block code compiled for the baseline x86-64 target, the `avx2` build the same code compiled for AVX2, so their counts differ by code generation only; reported as information"
+      "waiver": "no reference library at `avx2`: the comparison of the `avx2` record is our own fallback, so the entry is information at `avx2-runtime` as at `avx2` and judged by its efficiency (D32, D2764); its cycles against our fixed `avx2` build are information as well. The reason at `avx2`: `qam_demod_search_block` is the block `qam_demod` of `qam_demod_block` on noise without a signal, its frequency acquisition searching (the normalized fourth power of every symbol, a 1024-point `fft` and a peak search every 512 symbols, D1422) besides the chain of the steady state. No library has the same block (D1216), so the entry is our own code, reported as information (cycles per input sample; ours and fallback run the same block code); the cost of the search is the difference to `qam_demod_block`"
     }
   },
   "frame_decode_four_block": {
@@ -5771,7 +6004,7 @@
     },
     "avx2-runtime": {
       "status": "info",
-      "waiver": "`frame_decode_four_block` is not accelerated: the run-time-detection build runs the block code compiled for the baseline x86-64 target, the `avx2` build the same code compiled for AVX2, so their counts differ by code generation only; reported as information"
+      "waiver": "no reference library at `avx2`: the comparison of the `avx2` record is our own fallback, so the entry is information at `avx2-runtime` as at `avx2` and judged by its efficiency (D32, D2764); its cycles against our fixed `avx2` build are information as well. The reason at `avx2`: `frame_decode_four_block` is the block `frame_decode` with `rotations` `four` and 4 bits per symbol (M44 §4): per symbol of four soft bits the four inverse rotations and four sync-word registers of `sdrk_proto::frame::Decoder`, a bit-serial state machine in `sdrk-proto` without backends (D496). No library has the test framing, so the entry is our own code, reported as information (cycles per input sample, one soft bit; ours and fallback run the same code); Efficiency verdict (D2547): no library has this entry at the level; the whole-loop efficiency and its bottleneck are in `docs/performance.md`"
     }
   },
   "costas_qam16": {
@@ -5801,7 +6034,7 @@
     },
     "avx2-runtime": {
       "status": "info",
-      "waiver": "`costas_qam16` is not accelerated: the run-time-detection build runs the fallback compiled for the baseline x86-64 target, the `avx2` build the same code compiled for AVX2 (VEX encoding, different register allocation), so their counts differ by code generation only; reported as information"
+      "waiver": "no reference library at `avx2`: the comparison of the `avx2` record is our own fallback, so the entry is information at `avx2-runtime` as at `avx2` and judged by its efficiency (D32, D2764); its cycles against our fixed `avx2` build are information as well. The reason at `avx2`: `costas_qam16` (`C32`, 16-QAM with one sample per symbol, the constellation `qam16` of M44 §3) is not accelerated (the NCO phase of every symbol is the previous one plus the frequency integrator and the proportional correction of the previous detector output, so the table lookup, the derotation, the grid decision, the arctangent of the detector and the lock metric form one symbol-by-symbol recursion, and it stays with the fallback); the facade entry is the fallback, so the comparison is our own fallback, reported as information; the fallback is counted against GNU Radio's `constellation_receiver_cb` in `costas_qam16_fallback` (D1210); GNU Radio has no SIMD path for this loop; the efficiency verdict is in D2544: bound by the latency of the symbol-to-symbol recursion at every level, no SIMD path is missing"
     }
   },
   "costas_qam16_fallback": {
@@ -5851,7 +6084,7 @@
     },
     "avx2-runtime": {
       "status": "info",
-      "waiver": "`equalize_qam16`: every backend runs the fallback's loop (D841); the run-time-detection build runs it compiled for the baseline x86-64 target, the `avx2` build the same code compiled for AVX2, so the counts differ by code generation only; reported as information (D823)"
+      "waiver": "the library comparison of the `avx2` record (GNU Radio linear_equalizer with adaptive_algorithm_nlms on constellation_rect 16-QAM) is information at `avx2`, so the entry is information at `avx2-runtime` as well (D2764); its cycles against our fixed `avx2` build are information too. The reason at `avx2`: `equalize_qam16` (`C32`, 11 taps, the constellation `qam16` of M44, the block defaults otherwise): the comparison at the levels with SIMD is GNU Radio's `linear_equalizer` with `adaptive_algorithm_nlms` on a `constellation_rect` with VOLK's dispatcher (the dot products of the level: `volk_32fc_x2_dot_prod_32fc_a` with the aligned tap copies of `fir_filter`, `volk_32fc_x2_conjugate_dot_prod_32fc`; `benches/refs/gr-equalizer.c` and `gr-constellation.c` built with `-DSDRK_GR_VOLK`, issue #169); our fallback is information. It is `info` because the loops are different work (D841: every backend runs the fallback's loop; GNU Radio updates every tap in every aligned copy), and a gap above 10 % would be an open item"
     }
   },
   "equalize_qam16_fallback": {
@@ -5901,7 +6134,7 @@
     },
     "avx2-runtime": {
       "status": "info",
-      "waiver": "`costas_qam64` is not accelerated: the run-time-detection build runs the fallback compiled for the baseline x86-64 target, the `avx2` build the same code compiled for AVX2 (VEX encoding, different register allocation), so their counts differ by code generation only; reported as information"
+      "waiver": "no reference library at `avx2`: the comparison of the `avx2` record is our own fallback, so the entry is information at `avx2-runtime` as at `avx2` and judged by its efficiency (D32, D2764); its cycles against our fixed `avx2` build are information as well. The reason at `avx2`: `costas_qam64` (`C32`, 64-QAM with one sample per symbol, the constellation `qam64` of M44 §3) is not accelerated (the NCO phase of every symbol is the previous one plus the frequency integrator and the proportional correction of the previous detector output, so the table lookup, the derotation, the grid decision, the arctangent of the detector and the lock metric form one symbol-by-symbol recursion, and it stays with the fallback); the facade entry is the fallback, so the comparison is our own fallback, reported as information; the fallback is counted against GNU Radio's `constellation_receiver_cb` in `costas_qam64_fallback` (D1210); GNU Radio has no SIMD path for this loop; the efficiency verdict is in D2544: bound by the latency of the symbol-to-symbol recursion at every level, no SIMD path is missing"
     }
   },
   "costas_qam64_fallback": {
@@ -5951,7 +6184,7 @@
     },
     "avx2-runtime": {
       "status": "info",
-      "waiver": "`equalize_qam64`: every backend runs the fallback's loop (D841); the run-time-detection build runs it compiled for the baseline x86-64 target, the `avx2` build the same code compiled for AVX2, so the counts differ by code generation only; reported as information (D823)"
+      "waiver": "the library comparison of the `avx2` record (GNU Radio linear_equalizer with adaptive_algorithm_nlms on constellation_rect 64-QAM) is information at `avx2`, so the entry is information at `avx2-runtime` as well (D2764); its cycles against our fixed `avx2` build are information too. The reason at `avx2`: `equalize_qam64` (`C32`, 11 taps, the constellation `qam64` of M44, the block defaults otherwise): the comparison at the levels with SIMD is GNU Radio's `linear_equalizer` with `adaptive_algorithm_nlms` on a `constellation_rect` with VOLK's dispatcher (the dot products of the level: `volk_32fc_x2_dot_prod_32fc_a` with the aligned tap copies of `fir_filter`, `volk_32fc_x2_conjugate_dot_prod_32fc`; `benches/refs/gr-equalizer.c` and `gr-constellation.c` built with `-DSDRK_GR_VOLK`, issue #169); our fallback is information. It is `info` because the loops are different work (D841: every backend runs the fallback's loop; GNU Radio updates every tap in every aligned copy), and a gap above 10 % would be an open item"
     }
   },
   "equalize_qam64_fallback": {
@@ -6001,7 +6234,7 @@
     },
     "avx2-runtime": {
       "status": "info",
-      "waiver": "`costas_qam256` is not accelerated: the run-time-detection build runs the fallback compiled for the baseline x86-64 target, the `avx2` build the same code compiled for AVX2 (VEX encoding, different register allocation), so their counts differ by code generation only; reported as information"
+      "waiver": "no reference library at `avx2`: the comparison of the `avx2` record is our own fallback, so the entry is information at `avx2-runtime` as at `avx2` and judged by its efficiency (D32, D2764); its cycles against our fixed `avx2` build are information as well. The reason at `avx2`: `costas_qam256` (`C32`, 256-QAM with one sample per symbol, the constellation `qam256` of M44.2 §3) is not accelerated (the NCO phase of every symbol is the previous one plus the frequency integrator and the proportional correction of the previous detector output, so the table lookup, the derotation, the grid decision, the arctangent of the detector and the lock metric form one symbol-by-symbol recursion, and it stays with the fallback); the facade entry is the fallback, so the comparison is our own fallback, reported as information; the fallback is measured against GNU Radio's `constellation_receiver_cb` in `costas_qam256_fallback` (D1210, D1524)"
     }
   },
   "costas_qam256_fallback": {
@@ -6051,7 +6284,7 @@
     },
     "avx2-runtime": {
       "status": "info",
-      "waiver": "`costas_qam1024` is not accelerated: the run-time-detection build runs the fallback compiled for the baseline x86-64 target, the `avx2` build the same code compiled for AVX2 (VEX encoding, different register allocation), so their counts differ by code generation only; reported as information"
+      "waiver": "no reference library at `avx2`: the comparison of the `avx2` record is our own fallback, so the entry is information at `avx2-runtime` as at `avx2` and judged by its efficiency (D32, D2764); its cycles against our fixed `avx2` build are information as well. The reason at `avx2`: `costas_qam1024` (`C32`, 1024-QAM with one sample per symbol, the constellation `qam1024` of M44.2 §3) is not accelerated (the NCO phase of every symbol is the previous one plus the frequency integrator and the proportional correction of the previous detector output, so the table lookup, the derotation, the grid decision, the arctangent of the detector and the lock metric form one symbol-by-symbol recursion, and it stays with the fallback); the facade entry is the fallback, so the comparison is our own fallback, reported as information; the fallback is compared with GNU Radio's `constellation_receiver_cb` at 256-QAM, in `costas_qam256_fallback` (the same loop with another grid decision, D1524)"
     }
   },
   "costas_qam1024_fallback": {
@@ -6101,7 +6334,7 @@
     },
     "avx2-runtime": {
       "status": "info",
-      "waiver": "`equalize_qam256`: every backend runs the fallback's loop (D841); the run-time-detection build runs it compiled for the baseline x86-64 target, the `avx2` build the same code compiled for AVX2, so the counts differ by code generation only; reported as information (D823)"
+      "waiver": "no reference library at `avx2`: the comparison of the `avx2` record is our own fallback, so the entry is information at `avx2-runtime` as at `avx2` and judged by its efficiency (D32, D2764); its cycles against our fixed `avx2` build are information as well. The reason at `avx2`: `equalize_qam256` (`C32`, 11 taps, the constellation `qam256` of M44.2, the block defaults otherwise) has no SIMD library reference (D823, D838, D1210): the C translation of GNU Radio's `linear_equalizer` on a `constellation_rect` (`benches/refs/gr-constellation.c`) runs VOLK's generic dot products, the scalar reference of `equalize_qam256_fallback`; every backend runs the fallback's loop (D841), so the comparison is our own fallback, reported as information"
     }
   },
   "equalize_qam256_fallback": {
@@ -6151,7 +6384,7 @@
     },
     "avx2-runtime": {
       "status": "info",
-      "waiver": "`equalize_qam1024`: every backend runs the fallback's loop (D841); the run-time-detection build runs it compiled for the baseline x86-64 target, the `avx2` build the same code compiled for AVX2, so the counts differ by code generation only; reported as information (D823)"
+      "waiver": "no reference library at `avx2`: the comparison of the `avx2` record is our own fallback, so the entry is information at `avx2-runtime` as at `avx2` and judged by its efficiency (D32, D2764); its cycles against our fixed `avx2` build are information as well. The reason at `avx2`: `equalize_qam1024` (`C32`, 11 taps, the constellation `qam1024` of M44.2, the block defaults otherwise) has no SIMD library reference (D823, D838, D1210): the C translation of GNU Radio's `linear_equalizer` on a `constellation_rect` (`benches/refs/gr-constellation.c`) runs VOLK's generic dot products, the scalar reference of `equalize_qam256_fallback` (the same loop with another grid decision, D1524); every backend runs the fallback's loop (D841), so the comparison is our own fallback, reported as information"
     }
   },
   "equalize_qam1024_fallback": {
@@ -6201,7 +6434,7 @@
     },
     "avx2-runtime": {
       "status": "info",
-      "waiver": "`psk_mod_block` is not accelerated: the run-time-detection build runs the block code compiled for the baseline x86-64 target, the `avx2` build the same code compiled for AVX2, so the entry is `info`; the comparison library is the one of the other levels"
+      "waiver": "the library comparison of the `avx2` record (GNU Radio constellation_modulator as the sum of its blocks: pack_k_bits_bb + chunks_to_symbols_bc + pfb_arb_resampler_ccf) is information at `avx2`, so the entry is information at `avx2-runtime` as well (D2764); its cycles against our fixed `avx2` build are information too. The reason at `avx2`: `psk_mod_block` is the block `psk_mod` with coherent QPSK at 8 samples per symbol (M44.1 §4, M44.1.1): per symbol the table lookup of the Gray point, then the root-raised-cosine interpolation of the kernel `fir_interpolate`. The comparison is GNU Radio's `constellation_modulator` (generic_mod) as the sum of its blocks on the same bits: `pack_k_bits_bb` + `chunks_to_symbols_bc` + `pfb_arb_resampler_ccf` (`benches/refs/gr-chunks.c`, `benches/refs/gr-fir.c`: 32 filters of 88 taps with their derivative filters, two dot products per output sample, VOLK's dispatched dot product at the SIMD levels). No library has a SIMD modulator, so the library's code is the comparison at every level and the entry is `info` (the library flow has no pulse of the block's span and no frame state, other work; cycles per output sample; ours and fallback run the same block code)"
     }
   },
   "symbol_map_block": {
@@ -6231,7 +6464,7 @@
     },
     "avx2-runtime": {
       "status": "info",
-      "waiver": "`symbol_map_block` is not accelerated: the run-time-detection build runs the block code compiled for the baseline x86-64 target, the `avx2` build the same code compiled for AVX2, so their counts differ by code generation only; reported as information"
+      "waiver": "the library comparison of the `avx2` record (GNU Radio pack_k_bits_bb + chunks_to_symbols_bc) is information at `avx2`, so the entry is information at `avx2-runtime` as well (D2764); its cycles against our fixed `avx2` build are information too. The reason at `avx2`: `symbol_map_block` is the block `symbol_map` (M44.1 §2.1) with `qam16`, per symbol four bits to the point of the table of `Qam::Qam16`, the first stage of the composites `qam_mod` and `psk_mod`, 4096 symbols per call; compared with GNU Radio's `pack_k_bits_bb` followed by `chunks_to_symbols_bc` with the table of the points of the block (the bits as bytes, made once outside the counted calls) (issue #169, D2548), as information: neither library has the soft-bit decision of the block, and no library has a SIMD mapper (both are table lookups), so the comparison is the library's scalar code against our block at every level; our fallback is information too (ours and fallback run the same block code); the other library has its own entry (`symbol_map_block_liquid`)"
     }
   },
   "symbol_map_block_liquid": {
@@ -6261,7 +6494,7 @@
     },
     "avx2-runtime": {
       "status": "info",
-      "waiver": "`symbol_map_block_liquid` is not accelerated: the run-time-detection build runs the block code compiled for the baseline x86-64 target, the `avx2` build the same code compiled for AVX2, so their counts differ by code generation only; reported as information"
+      "waiver": "the library comparison of the `avx2` record (liquid-dsp 1.8.3 modemcf_modulate on the arbitrary-constellation modem of the points of the block) is information at `avx2`, so the entry is information at `avx2-runtime` as well (D2764); its cycles against our fixed `avx2` build are information too. The reason at `avx2`: `symbol_map_block_liquid` is the block `symbol_map` (M44.1 §2.1) with `qam16`, per symbol four bits to the point of the table of `Qam::Qam16`, the first stage of the composites `qam_mod` and `psk_mod`, 4096 symbols per call; compared with liquid-dsp's `modemcf_modulate` on its arbitrary-constellation modem with the table of the points of the block (the bits as bytes, packed to the symbol by the wrapper) (issue #169, D2548), as information: neither library has the soft-bit decision of the block, and no library has a SIMD mapper (both are table lookups), so the comparison is the library's scalar code against our block at every level; our fallback is information too (ours and fallback run the same block code); the other library has its own entry (`symbol_map_block`)"
     }
   },
   "symbol_map_block_qpsk": {
@@ -6291,7 +6524,7 @@
     },
     "avx2-runtime": {
       "status": "info",
-      "waiver": "`symbol_map_block_qpsk` is not accelerated: the run-time-detection build runs the block code compiled for the baseline x86-64 target, the `avx2` build the same code compiled for AVX2, so their counts differ by code generation only; reported as information"
+      "waiver": "the library comparison of the `avx2` record (GNU Radio pack_k_bits_bb + chunks_to_symbols_bc) is information at `avx2`, so the entry is information at `avx2-runtime` as well (D2764); its cycles against our fixed `avx2` build are information too. The reason at `avx2`: `symbol_map_block_qpsk` is the block `symbol_map` (M44.1 §2.1) with `qpsk`, per symbol two bits to the point `((2 b0 - 1) / sqrt 2, (2 b1 - 1) / sqrt 2)`, the first stage of the composites `qam_mod` and `psk_mod`, 4096 symbols per call; compared with GNU Radio's `pack_k_bits_bb` followed by `chunks_to_symbols_bc` with the table of the points of the block (the bits as bytes, made once outside the counted calls) (issue #169, D2548), as information: neither library has the soft-bit decision of the block, and no library has a SIMD mapper (both are table lookups), so the comparison is the library's scalar code against our block at every level; our fallback is information too (ours and fallback run the same block code); the other library has its own entry (`symbol_map_block_qpsk_liquid`)"
     }
   },
   "symbol_map_block_qpsk_liquid": {
@@ -6321,7 +6554,7 @@
     },
     "avx2-runtime": {
       "status": "info",
-      "waiver": "`symbol_map_block_qpsk_liquid` is not accelerated: the run-time-detection build runs the block code compiled for the baseline x86-64 target, the `avx2` build the same code compiled for AVX2, so their counts differ by code generation only; reported as information"
+      "waiver": "the library comparison of the `avx2` record (liquid-dsp 1.8.3 modemcf_modulate on the arbitrary-constellation modem of the points of the block) is information at `avx2`, so the entry is information at `avx2-runtime` as well (D2764); its cycles against our fixed `avx2` build are information too. The reason at `avx2`: `symbol_map_block_qpsk_liquid` is the block `symbol_map` (M44.1 §2.1) with `qpsk`, per symbol two bits to the point `((2 b0 - 1) / sqrt 2, (2 b1 - 1) / sqrt 2)`, the first stage of the composites `qam_mod` and `psk_mod`, 4096 symbols per call; compared with liquid-dsp's `modemcf_modulate` on its arbitrary-constellation modem with the table of the points of the block (the bits as bytes, packed to the symbol by the wrapper) (issue #169, D2548), as information: neither library has the soft-bit decision of the block, and no library has a SIMD mapper (both are table lookups), so the comparison is the library's scalar code against our block at every level; our fallback is information too (ours and fallback run the same block code); the other library has its own entry (`symbol_map_block_qpsk`)"
     }
   },
   "symbol_map_block_qam64": {
@@ -6351,7 +6584,7 @@
     },
     "avx2-runtime": {
       "status": "info",
-      "waiver": "`symbol_map_block_qam64` is not accelerated: the run-time-detection build runs the block code compiled for the baseline x86-64 target, the `avx2` build the same code compiled for AVX2, so their counts differ by code generation only; reported as information"
+      "waiver": "the library comparison of the `avx2` record (GNU Radio pack_k_bits_bb + chunks_to_symbols_bc) is information at `avx2`, so the entry is information at `avx2-runtime` as well (D2764); its cycles against our fixed `avx2` build are information too. The reason at `avx2`: `symbol_map_block_qam64` is the block `symbol_map` (M44.1 §2.1) with `qam64`, per symbol six bits to the point of the table of `Qam::Qam64`, the first stage of the composites `qam_mod` and `psk_mod`, 4096 symbols per call; compared with GNU Radio's `pack_k_bits_bb` followed by `chunks_to_symbols_bc` with the table of the points of the block (the bits as bytes, made once outside the counted calls) (issue #169, D2548), as information: neither library has the soft-bit decision of the block, and no library has a SIMD mapper (both are table lookups), so the comparison is the library's scalar code against our block at every level; our fallback is information too (ours and fallback run the same block code); the other library has its own entry (`symbol_map_block_qam64_liquid`)"
     }
   },
   "symbol_map_block_qam64_liquid": {
@@ -6381,7 +6614,7 @@
     },
     "avx2-runtime": {
       "status": "info",
-      "waiver": "`symbol_map_block_qam64_liquid` is not accelerated: the run-time-detection build runs the block code compiled for the baseline x86-64 target, the `avx2` build the same code compiled for AVX2, so their counts differ by code generation only; reported as information"
+      "waiver": "the library comparison of the `avx2` record (liquid-dsp 1.8.3 modemcf_modulate on the arbitrary-constellation modem of the points of the block) is information at `avx2`, so the entry is information at `avx2-runtime` as well (D2764); its cycles against our fixed `avx2` build are information too. The reason at `avx2`: `symbol_map_block_qam64_liquid` is the block `symbol_map` (M44.1 §2.1) with `qam64`, per symbol six bits to the point of the table of `Qam::Qam64`, the first stage of the composites `qam_mod` and `psk_mod`, 4096 symbols per call; compared with liquid-dsp's `modemcf_modulate` on its arbitrary-constellation modem with the table of the points of the block (the bits as bytes, packed to the symbol by the wrapper) (issue #169, D2548), as information: neither library has the soft-bit decision of the block, and no library has a SIMD mapper (both are table lookups), so the comparison is the library's scalar code against our block at every level; our fallback is information too (ours and fallback run the same block code); the other library has its own entry (`symbol_map_block_qam64`)"
     }
   },
   "iq_offset_block": {
@@ -6411,7 +6644,7 @@
     },
     "avx2-runtime": {
       "status": "info",
-      "waiver": "`iq_offset_block` is not accelerated: the run-time-detection build runs the block code compiled for the baseline x86-64 target, the `avx2` build the same code compiled for AVX2, so their counts differ by code generation only; reported as information"
+      "waiver": "no reference library at `avx2`: the comparison of the `avx2` record is our own fallback, so the entry is information at `avx2-runtime` as at `avx2` and judged by its efficiency (D32, D2764); its cycles against our fixed `avx2` build are information as well. The reason at `avx2`: `iq_offset_block` is the block `iq_offset` (M44.1 §2.4) with `part` `imag` and 4 samples, the last stage of the composite `psk_mod` with `offset` (OQPSK at 8 samples per symbol): a ring of 4 imaginary parts swapped through every sample, 4096 samples per call. No library has the same block (GNU Radio builds the offset from a `complex_to_float`, a `delay` and a `float_to_complex`; D1216), so the entry is our own code, reported as information (cycles per sample; ours and fallback run the same block code); Efficiency verdict (D2547): no library has this entry at the level; the whole-loop efficiency and its bottleneck are in `docs/performance.md`"
     }
   },
   "qam_acquire_block": {
@@ -6441,7 +6674,7 @@
     },
     "avx2-runtime": {
       "status": "info",
-      "waiver": "`qam_acquire_block` is not accelerated: the run-time-detection build runs the block code compiled for the baseline x86-64 target, the `avx2` build the same code compiled for AVX2, so their counts differ by code generation only; reported as information"
+      "waiver": "no reference library at `avx2`: the comparison of the `avx2` record is our own fallback, so the entry is information at `avx2-runtime` as at `avx2` and judged by its efficiency (D32, D2764); its cycles against our fixed `avx2` build are information as well. The reason at `avx2`: `qam_acquire_block` is the block `qam_acquire` (M44.1 §2.2) with `correct` false while it searches on noise without a signal (the share of the acquisition in `qam_demod_search_block`): per symbol the normalized fourth power, per 512 symbols the 1024-point `fft` (its own entry against its library reference) and the peak search, 4096 symbols per call. No library has the same estimator (GNU Radio and liquid-dsp have no fourth-power acquisition block; D1216), so the entry is our own code, reported as information (cycles per input symbol; ours and fallback run the same block code); Efficiency verdict (D2547): no library has this entry at the level; the whole-loop efficiency and its bottleneck are in `docs/performance.md`"
     }
   },
   "qam_frame_encode_block": {
@@ -6471,7 +6704,7 @@
     },
     "avx2-runtime": {
       "status": "info",
-      "waiver": "`qam_frame_encode_block` is not accelerated: the run-time-detection build runs the block code compiled for the baseline x86-64 target, the `avx2` build the same code compiled for AVX2, so their counts differ by code generation only; reported as information"
+      "waiver": "no reference library at `avx2`: the comparison of the `avx2` record is our own fallback, so the entry is information at `avx2-runtime` as at `avx2` and judged by its efficiency (D32, D2764); its cycles against our fixed `avx2` build are information as well. The reason at `avx2`: `qam_frame_encode_block` is the composite `qam_frame_encode` (M44.1 §7, the flow `qam16_transmitter`): `frame_encode` (4-byte preamble, 32-byte payloads back to back) -> `qam_mod` (16-QAM, 8 samples per symbol, roll-off 0.35, span 10), 4096 output samples per call. Its stages have entries of their own (`frame_encode_block`, `qam_mod_block`, `symbol_map_block`, `fir_interpolate`); no library has the same block (GNU Radio builds the transmitter from separate blocks, D1216), so the entry is our own code, reported as information (cycles per output sample; ours and fallback run the same block code); Efficiency verdict (D2547): no library has this entry at the level; the whole-loop efficiency and its bottleneck are in `docs/performance.md`"
     }
   },
   "qam_frame_decode_block": {
@@ -6501,7 +6734,7 @@
     },
     "avx2-runtime": {
       "status": "info",
-      "waiver": "`qam_frame_decode_block` is not accelerated: the run-time-detection build runs the block code compiled for the baseline x86-64 target, the `avx2` build the same code compiled for AVX2, so their counts differ by code generation only; reported as information"
+      "waiver": "no reference library at `avx2`: the comparison of the `avx2` record is our own fallback, so the entry is information at `avx2-runtime` as at `avx2` and judged by its efficiency (D32, D2764); its cycles against our fixed `avx2` build are information as well. The reason at `avx2`: `qam_frame_decode_block` is the composite `qam_frame_decode` (M44.1 §7, the flow `qam16_receiver`): `qam_demod` (16-QAM at 25 kBd and 200 kHz, the workload of `qam_demod_block`) -> `frame_decode` with `rotations` `four` and the frame watch, 4096 input samples per call carrying 32-byte frames. Its stages have entries of their own (`qam_demod_block`, `frame_decode_four_block`); no library has the same block (GNU Radio's receiver is a flowgraph of blocks, D1216), so the entry is our own code, reported as information (cycles per input sample; ours and fallback run the same block code); Efficiency verdict (D2547): no library has this entry at the level; the whole-loop efficiency and its bottleneck are in `docs/performance.md`"
     }
   },
   "pulse_shape_block": {
@@ -6531,7 +6764,7 @@
     },
     "avx2-runtime": {
       "status": "info",
-      "waiver": "`pulse_shape_block` is not accelerated: the run-time-detection build runs the block code compiled for the baseline x86-64 target, the `avx2` build the same code compiled for AVX2, so their counts differ by code generation only; reported as information"
+      "waiver": "the library comparison of the `avx2` record (GNU Radio interp_fir_filter_ccf) is information at `avx2`, so the entry is information at `avx2-runtime` as well (D2764); its cycles against our fixed `avx2` build are information too. The reason at `avx2`: `pulse_shape_block` is the block `pulse_shape` (M44.1.1 §3.1) with the pulse of `qam_mod_block` (8 samples per symbol, roll-off 0.35, span 10: 81 taps), the second stage of the composites `qam_mod` and `psk_mod`: the root-raised-cosine interpolation of the kernel `fir_interpolate`, on random 16-QAM points, 4096 output samples per call; compared with GNU Radio's `interp_fir_filter_ccf` with VOLK's dispatched dot product of the level (the aligned tap copies of `fir_filter`, `volk_32fc_32f_dot_prod_32fc_a`; VOLK's generic dot product at `simd128`, whose VOLK build has no SIMD) (issue #169, D2546), as information: the library filters the same taps without the design of the block and its rate rule, and our fallback is information too (ours and fallback run the same block code); the other library has its own entry (`pulse_shape_block_liquid`)"
     }
   },
   "pulse_shape_block_liquid": {
@@ -6561,7 +6794,7 @@
     },
     "avx2-runtime": {
       "status": "info",
-      "waiver": "`pulse_shape_block_liquid` is not accelerated: the run-time-detection build runs the block code compiled for the baseline x86-64 target, the `avx2` build the same code compiled for AVX2, so their counts differ by code generation only; reported as information"
+      "waiver": "the library comparison of the `avx2` record (liquid-dsp 1.8.3 firinterp_crcf) is information at `avx2`, so the entry is information at `avx2-runtime` as well (D2764); its cycles against our fixed `avx2` build are information too. The reason at `avx2`: `pulse_shape_block` is the block `pulse_shape` (M44.1.1 §3.1) with the pulse of `qam_mod_block` (8 samples per symbol, roll-off 0.35, span 10: 81 taps), the second stage of the composites `qam_mod` and `psk_mod`: the root-raised-cosine interpolation of the kernel `fir_interpolate`, on random 16-QAM points, 4096 output samples per call; compared with liquid-dsp's `firinterp_crcf` with its dot products of the level (the portable loop at `simd128`) (issue #169, D2546), as information: the library filters the same taps without the design of the block and its rate rule, and our fallback is information too (ours and fallback run the same block code); the other library has its own entry (`pulse_shape_block`)"
     }
   },
   "pulse_match_block": {
@@ -6591,7 +6824,7 @@
     },
     "avx2-runtime": {
       "status": "info",
-      "waiver": "`pulse_match_block` is not accelerated: the run-time-detection build runs the block code compiled for the baseline x86-64 target, the `avx2` build the same code compiled for AVX2, so their counts differ by code generation only; reported as information"
+      "waiver": "the library comparison of the `avx2` record (GNU Radio fir_filter_ccf) is information at `avx2`, so the entry is information at `avx2-runtime` as well (D2764); its cycles against our fixed `avx2` build are information too. The reason at `avx2`: `pulse_match_block` is the block `pulse_match` (M44.1.1 §3.2) with the matched filter of `qam_demod_block` (25 kBd at 200 kHz, roll-off 0.35, span 10: 81 taps), the first stage of the composite `qam_demod`: the kernel `fir`, on the input of `qam_demod_block`, 4096 input samples per call; compared with GNU Radio's `fir_filter_ccf` with VOLK's dispatched dot product of the level (the aligned tap copies of `fir_filter`, `volk_32fc_32f_dot_prod_32fc_a`; VOLK's generic dot product at `simd128`, whose VOLK build has no SIMD) (issue #169, D2546), as information: the library filters the same taps without the design of the block and its rate rule, and our fallback is information too (ours and fallback run the same block code); the other library has its own entry (`pulse_match_block_liquid`)"
     }
   },
   "pulse_match_block_liquid": {
@@ -6621,7 +6854,7 @@
     },
     "avx2-runtime": {
       "status": "info",
-      "waiver": "`pulse_match_block_liquid` is not accelerated: the run-time-detection build runs the block code compiled for the baseline x86-64 target, the `avx2` build the same code compiled for AVX2, so their counts differ by code generation only; reported as information"
+      "waiver": "the library comparison of the `avx2` record (liquid-dsp 1.8.3 firfilt_crcf) is information at `avx2`, so the entry is information at `avx2-runtime` as well (D2764); its cycles against our fixed `avx2` build are information too. The reason at `avx2`: `pulse_match_block` is the block `pulse_match` (M44.1.1 §3.2) with the matched filter of `qam_demod_block` (25 kBd at 200 kHz, roll-off 0.35, span 10: 81 taps), the first stage of the composite `qam_demod`: the kernel `fir`, on the input of `qam_demod_block`, 4096 input samples per call; compared with liquid-dsp's `firfilt_crcf` with its dot products of the level (the portable loop at `simd128`) (issue #169, D2546), as information: the library filters the same taps without the design of the block and its rate rule, and our fallback is information too (ours and fallback run the same block code); the other library has its own entry (`pulse_match_block`)"
     }
   },
   "gauss_noise_c32": {
@@ -6650,7 +6883,8 @@
       "waiver": "liquid-dsp's `crandnf` (benches/refs/liquid-randn.c) does different work than the `gauss_noise` contract (reference does different work, M48 §5): libc `rand()` for the uniform values and Box–Muller in single precision (`sqrtf`, `logf`, `cexpf`) with a rejection loop, no random access, a sequence that depends on the platform's libc; ours runs PCG32 with one draw per real value and the inverse CDF of a 1024-entry table in integers, with the same bits on every target and random access. The row is information, not a gap to close (cycles and instructions per output sample; ours is the SIMD path of the level through the facade)"
     },
     "avx2-runtime": {
-      "status": "release"
+      "status": "info",
+      "waiver": "the library comparison of the `avx2` record (liquid-dsp 1.8.3 crandnf times sigma) is information at `avx2`, so the entry is information at `avx2-runtime` as well (D2764); its cycles against our fixed `avx2` build are information too. The reason at `avx2`: liquid-dsp's `crandnf` (benches/refs/liquid-randn.c) does different work than the `gauss_noise` contract (reference does different work, M48 §5): libc `rand()` for the uniform values and Box–Muller in single precision (`sqrtf`, `logf`, `cexpf`) with a rejection loop, no random access, a sequence that depends on the platform's libc; ours runs PCG32 with one draw per real value and the inverse CDF of a 1024-entry table in integers, with the same bits on every target and random access. The row is information, not a gap to close (cycles per output sample; ours is the SIMD path of the level through the facade)"
     }
   },
   "gauss_noise_f32": {
@@ -6679,7 +6913,8 @@
       "waiver": "liquid-dsp's `randnf` (benches/refs/liquid-randn.c) does different work than the `gauss_noise` contract (reference does different work, M48 §5): libc `rand()` for the uniform values and Box–Muller in single precision (`sqrtf`, `logf`, the sine branch with `sinf`) with a rejection loop, no random access, a sequence that depends on the platform's libc; ours runs PCG32 with one draw per real value and the inverse CDF of a 1024-entry table in integers, with the same bits on every target and random access. The row is information, not a gap to close (cycles and instructions per output sample; ours is the SIMD path of the level through the facade)"
     },
     "avx2-runtime": {
-      "status": "release"
+      "status": "info",
+      "waiver": "the library comparison of the `avx2` record (liquid-dsp 1.8.3 randnf times sigma) is information at `avx2`, so the entry is information at `avx2-runtime` as well (D2764); its cycles against our fixed `avx2` build are information too. The reason at `avx2`: liquid-dsp's `randnf` (benches/refs/liquid-randn.c) does different work than the `gauss_noise` contract (reference does different work, M48 §5): libc `rand()` for the uniform values and Box–Muller in single precision (`sqrtf`, `logf`, the sine branch with `sinf`) with a rejection loop, no random access, a sequence that depends on the platform's libc; ours runs PCG32 with one draw per real value and the inverse CDF of a 1024-entry table in integers, with the same bits on every target and random access. The row is information, not a gap to close (cycles per output sample; ours is the SIMD path of the level through the facade)"
     }
   },
   "gauss_noise_q15": {
@@ -6708,7 +6943,8 @@
       "waiver": "`gauss_noise_q15` is the kernel `gauss_noise` (M48) with `Q15` output, 4096 samples per call: per sample one PCG32 draw, the inverse CDF of the 1024-entry Q17 table and the R7 rounding of `zq · 2^-17 · sigma`, with a lane-parallel SIMD path per level, bit-exact with the fallback. No library makes `Q15` Gaussian noise (liquid-dsp and GNU Radio have float generators only), so the comparison is our own fallback, reported as information (cycles and instructions per output sample); the paths must not be slower than the fallback (D321)"
     },
     "avx2-runtime": {
-      "status": "release"
+      "status": "info",
+      "waiver": "no reference library at `avx2`: the comparison of the `avx2` record is our own fallback, so the entry is information at `avx2-runtime` as at `avx2` and judged by its efficiency (D32, D2764); its cycles against our fixed `avx2` build are information as well. The reason at `avx2`: `gauss_noise_q15` is the kernel `gauss_noise` (M48) with `Q15` output, 4096 samples per call: per sample one PCG32 draw, the inverse CDF of the 1024-entry Q17 table and the R7 rounding of `zq · 2^-17 · sigma`, with a lane-parallel SIMD path per level, bit-exact with the fallback. No library makes `Q15` Gaussian noise (liquid-dsp and GNU Radio have float generators only), so the comparison is our own fallback, reported as information (cycles per output sample); the paths must not be slower than the fallback (D321)"
     }
   },
   "noise_block": {
@@ -6738,7 +6974,7 @@
     },
     "avx2-runtime": {
       "status": "info",
-      "waiver": "`noise_block` is the block code around `gauss_noise`, whose SIMD path the run-time-detection build reaches through the dispatch at AVX2; the block code itself is compiled for the baseline x86-64 target there, so the counts differ by the dispatch and code generation only; reported as information"
+      "waiver": "no reference library at `avx2`: the comparison of the `avx2` record is our own fallback, so the entry is information at `avx2-runtime` as at `avx2` and judged by its efficiency (D32, D2764); its cycles against our fixed `avx2` build are information as well. The reason at `avx2`: `noise_block` is the block `noise` (M48 §6) with the default configuration (`sigma` 0.1, seed 0, stream 1) on a `C32` clock, 4096 output samples per call: one call of the kernel `gauss_noise`, whose entry `gauss_noise_c32` carries the library comparison. No library has the same block (GNU Radio's `noise_source_c` is a source without a clock and with xoroshiro128+), so the entry is our own code, reported as information (cycles per output sample; ours and fallback run the same block code)"
     }
   },
   "gauss_noise_c32_fallback": {
@@ -6918,7 +7154,7 @@
       "waiver": "decision D12: VOLK for wasm32 is its portable `generic` code; it is a fair reference only for `mag_sq` and the conversions, so this comparison (the `±1.0` sequence of the index bits formed into a buffer, then VOLK's generic `volk_32fc_32f_multiply_32fc`; M49.1 §5) is information"
     },
     "avx2-runtime": {
-      "status": "dev"
+      "status": "release"
     }
   },
   "scramble_c32_b2": {
@@ -7020,7 +7256,8 @@
       "waiver": "the composition of the phasor lookup plus CMSIS-DSP's `arm_cmplx_mult_cmplx_q15` (generic C compiled at `-O3` for the level, which the compiler may vectorize) does less work than the `scramble` contract at `bits = 8` (reference does less work, maintainer decision D2092, kept by M49.1 §5): its product truncates each partial product and writes Q3.13 without rounding or saturation, while ours forms the correctly rounded and saturated Q15 product of `rotate` `CQ15` with the table phasor. The row is information, not a gap to close (numbers in docs/performance.md, M49.1)"
     },
     "avx2-runtime": {
-      "status": "release"
+      "status": "info",
+      "waiver": "the library comparison of the `avx2` record (CMSIS-DSP 1.18.0 phasor lookup into a buffer of 256 + arm_cmplx_mult_cmplx_q15) is information at `avx2`, so the entry is information at `avx2-runtime` as well (D2764); its cycles against our fixed `avx2` build are information too. The reason at `avx2`: the composition of the phasor lookup plus CMSIS-DSP's `arm_cmplx_mult_cmplx_q15` (generic C compiled at `-O3` for the level, which the compiler may vectorize) does less work than the `scramble` contract at `bits = 8` (reference does less work, maintainer decision D2092, kept by M49.1 §5): its product truncates each partial product and writes Q3.13 without rounding or saturation, while ours forms the correctly rounded and saturated Q15 product of `rotate` `CQ15` with the table phasor. The row is information, not a gap to close (numbers in docs/performance.md, M49.1)"
     }
   },
   "scramble_c32_b1_fallback": {
@@ -7182,7 +7419,7 @@
     },
     "avx2-runtime": {
       "status": "info",
-      "waiver": "`scramble_block` is the block code around `scramble`, whose SIMD path the run-time-detection build reaches through the dispatch at AVX2; the block code itself (the PRBS index production) is compiled for the baseline x86-64 target there, so the counts differ by the dispatch and code generation only; reported as information"
+      "waiver": "no reference library at `avx2`: the comparison of the `avx2` record is our own fallback, so the entry is information at `avx2-runtime` as at `avx2` and judged by its efficiency (D32, D2764); its cycles against our fixed `avx2` build are information as well. The reason at `avx2`: `scramble_block` is the block `scramble` (M49 §6, index production of M49.1 §4) with `bits = 8` and the default key (`prbs15`, register 1) on `C32`, 4096 samples per call in calls of at most 256: the PRBS indices (8 key bits per sample, 32 key bits per shift-XOR step of a 64-bit window, one byte per sample) and one call of the kernel `scramble` per `process`, whose entries `scramble_c32_b8` and `scramble_cq15_b8` carry the library comparison. No library has the same block, so the entry is our own code, reported as information (cycles per sample; ours and fallback run the same block code)"
     }
   },
   "bit_scramble_block": {
@@ -7205,8 +7442,7 @@
       "status": "release"
     },
     "avx2-runtime": {
-      "status": "info",
-      "waiver": "`bit_scramble_block` is not accelerated: the run-time-detection build runs the code compiled for the baseline x86-64 target, the `avx2` build the same code compiled for AVX2, so their counts differ by code generation only; reported as information"
+      "status": "release"
     }
   },
   "bit_descramble_block": {
@@ -7229,8 +7465,7 @@
       "status": "release"
     },
     "avx2-runtime": {
-      "status": "info",
-      "waiver": "`bit_descramble_block` is not accelerated: the run-time-detection build runs the code compiled for the baseline x86-64 target, the `avx2` build the same code compiled for AVX2, so their counts differ by code generation only; reported as information"
+      "status": "release"
     }
   },
   "bit_scramble_in_place_block": {
@@ -7253,8 +7488,7 @@
       "status": "release"
     },
     "avx2-runtime": {
-      "status": "info",
-      "waiver": "`bit_scramble_in_place_block` is not accelerated: the run-time-detection build runs the code compiled for the baseline x86-64 target, the `avx2` build the same code compiled for AVX2, so their counts differ by code generation only; reported as information"
+      "status": "release"
     }
   },
   "bit_descramble_in_place_block": {
@@ -7277,8 +7511,7 @@
       "status": "release"
     },
     "avx2-runtime": {
-      "status": "info",
-      "waiver": "`bit_descramble_in_place_block` is not accelerated: the run-time-detection build runs the code compiled for the baseline x86-64 target, the `avx2` build the same code compiled for AVX2, so their counts differ by code generation only; reported as information"
+      "status": "release"
     }
   },
   "snr_estimate_block": {
@@ -7308,7 +7541,7 @@
     },
     "avx2-runtime": {
       "status": "info",
-      "waiver": "`snr_estimate_block` is not accelerated: the run-time-detection build runs the code compiled for the baseline x86-64 target, the `avx2` build the same code compiled for AVX2, so their counts differ by code generation only; reported as information"
+      "waiver": "the library comparison of the `avx2` record (GNU Radio mpsk_snr_est_cc(SNR_EST_M2M4, 4096, 0.001): the moments |x|^2 and |x|^4 averaged in double, six cabsf per symbol) is information at `avx2`, so the entry is information at `avx2-runtime` as well (D2764); its cycles against our fixed `avx2` build are information too. The reason at `avx2`: `snr_estimate_block` against GNU Radio's `mpsk_snr_est_cc` with `SNR_EST_M2M4`: reference does different work (moments of |x| averaged in double with a `cabsf` per `abs`, no decisions, a PSK constellation that reads 16-QAM 13.5 dB low; ours decides every symbol and inverts the reading of the decisions, D2504); reported as information"
     }
   },
   "snr_estimate_block_svr": {
@@ -7338,7 +7571,7 @@
     },
     "avx2-runtime": {
       "status": "info",
-      "waiver": "`snr_estimate_block_svr` is not accelerated: the run-time-detection build runs the code compiled for the baseline x86-64 target, the `avx2` build the same code compiled for AVX2, so their counts differ by code generation only; reported as information"
+      "waiver": "the library comparison of the `avx2` record (GNU Radio mpsk_snr_est_cc(SNR_EST_SVR, 4096, 0.001): |x|^4 and |x_n|^2 |x_(n-1)|^2 averaged in double, two cabsf per symbol) is information at `avx2`, so the entry is information at `avx2-runtime` as well (D2764); its cycles against our fixed `avx2` build are information too. The reason at `avx2`: `snr_estimate_block_svr` against GNU Radio's `mpsk_snr_est_cc` with `SNR_EST_SVR`: reference does different work (moments of |x| averaged in double with a `cabsf` per `abs`, no decisions, a PSK constellation that reads 16-QAM 13.5 dB low; ours decides every symbol and inverts the reading of the decisions, D2504); reported as information"
     }
   },
   "xcorr_fft_n512": {
@@ -7456,7 +7689,7 @@
     },
     "avx2-runtime": {
       "status": "info",
-      "waiver": "`correlate_block` runs the kernel through the facade, which the run-time-detection build dispatches to the AVX2 path of the kernel at run time; the block code around it is compiled for the baseline x86-64 target; reported as information"
+      "waiver": "no reference library at `avx2`: the comparison of the `avx2` record is our own fallback, so the entry is information at `avx2-runtime` as at `avx2` and judged by its efficiency (D32, D2764); its cycles against our fixed `avx2` build are information as well. The reason at `avx2`: `correlate_block` is the block `correlate` (M50 §6, the default `prbs7` code: `L` 127, `N` 512, `B` 386) around the kernel `xcorr_fft`: its SIMD path is the kernel's, judged against liquid-dsp's `fftfilt_cccf` in the entries `xcorr_fft_n512` and `xcorr_fft_n512_fallback`; the block adds only the size checks of one call. No library has the block itself, so the entry is our own code, reported as information (cycles per output sample; ours and fallback run the same block code)"
     }
   },
   "qam_mod_block_liquid": {
@@ -7486,7 +7719,7 @@
     },
     "avx2-runtime": {
       "status": "info",
-      "waiver": "`qam_mod_block_liquid` is not accelerated: the run-time-detection build runs the block code compiled for the baseline x86-64 target, the `avx2` build the same code compiled for AVX2, so the entry is `info`; the comparison library is the one of the other levels"
+      "waiver": "the library comparison of the `avx2` record (liquid-dsp 1.8.3 modemcf_modulate) is information at `avx2`, so the entry is information at `avx2-runtime` as well (D2764); its cycles against our fixed `avx2` build are information too. The reason at `avx2`: `qam_mod_block_liquid` is the block `qam_mod` with 16-QAM at 8 samples per symbol (M44.1 §4, M44.1.1): per symbol the table lookup of the Gray point, then the root-raised-cosine interpolation of the kernel `fir_interpolate`. The comparison is liquid-dsp 1.8.3 as the sum of its calls on the same bits: `modemcf_modulate` of the arbitrary-constellation modem (the points of the block) + `firinterp_crcf` with the pulse of the block (`benches/refs/liquid-modem.c`, `benches/refs/liquid-fir.c`; SIMD dot products of the level, the portable loop at `simd128`). The entry is `info` (the library flow has no frame state, other work; cycles per output sample; ours and fallback run the same block code)"
     }
   },
   "qam_mod_qam256_block_liquid": {
@@ -7516,7 +7749,7 @@
     },
     "avx2-runtime": {
       "status": "info",
-      "waiver": "`qam_mod_qam256_block_liquid` is not accelerated: the run-time-detection build runs the block code compiled for the baseline x86-64 target, the `avx2` build the same code compiled for AVX2, so the entry is `info`; the comparison library is the one of the other levels"
+      "waiver": "the library comparison of the `avx2` record (liquid-dsp 1.8.3 modemcf_modulate) is information at `avx2`, so the entry is information at `avx2-runtime` as well (D2764); its cycles against our fixed `avx2` build are information too. The reason at `avx2`: `qam_mod_qam256_block_liquid` is the block `qam_mod` with 256-QAM at 8 samples per symbol (M44.1 §4, M44.1.1): per symbol the table lookup of the Gray point, then the root-raised-cosine interpolation of the kernel `fir_interpolate`. The comparison is liquid-dsp 1.8.3 as the sum of its calls on the same bits: `modemcf_modulate` of the arbitrary-constellation modem (the points of the block) + `firinterp_crcf` with the pulse of the block (`benches/refs/liquid-modem.c`, `benches/refs/liquid-fir.c`; SIMD dot products of the level, the portable loop at `simd128`). The entry is `info` (the library flow has no frame state, other work; cycles per output sample; ours and fallback run the same block code)"
     }
   },
   "psk_mod_block_liquid": {
@@ -7546,7 +7779,7 @@
     },
     "avx2-runtime": {
       "status": "info",
-      "waiver": "`psk_mod_block_liquid` is not accelerated: the run-time-detection build runs the block code compiled for the baseline x86-64 target, the `avx2` build the same code compiled for AVX2, so the entry is `info`; the comparison library is the one of the other levels"
+      "waiver": "the library comparison of the `avx2` record (liquid-dsp 1.8.3 modemcf_modulate) is information at `avx2`, so the entry is information at `avx2-runtime` as well (D2764); its cycles against our fixed `avx2` build are information too. The reason at `avx2`: `psk_mod_block_liquid` is the block `psk_mod` with coherent QPSK at 8 samples per symbol (M44.1 §4, M44.1.1): per symbol the table lookup of the Gray point, then the root-raised-cosine interpolation of the kernel `fir_interpolate`. The comparison is liquid-dsp 1.8.3 as the sum of its calls on the same bits: `modemcf_modulate` of the arbitrary-constellation modem (the points of the block) + `firinterp_crcf` with the pulse of the block (`benches/refs/liquid-modem.c`, `benches/refs/liquid-fir.c`; SIMD dot products of the level, the portable loop at `simd128`). The entry is `info` (the library flow has no frame state, other work; cycles per output sample; ours and fallback run the same block code)"
     }
   }
 }

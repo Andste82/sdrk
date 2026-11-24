@@ -85,11 +85,11 @@ The method is decided (D33) and implemented for every level with a core model (D
 
 ### Gates in detail
 
-`benches/limits.json` names, per kernel and level, `{ "status": "release" | "dev" | "info" }`, and the caps in `_limits` (`release` 1.10, `dev` 1.50, `warn` 1.10, `goal` 1.00, `runtime` 1.02; D14, restated in cycles by D2708). `cargo xtask check cycles` reads the committed results `benches/results/cycles/*.json` (`--results DIR` judges other results, `--partial` a selection) and judges them in two parts: D321 (SIMD against its own fallback) and the release gate (every simulated entry and level against its comparison). The judged number is the ratio of the simulated cycles of the record (`ratio`), not the cost with the mispredictions (D1611 decides between forms of a branch; the cost is recorded beside it).
+`benches/limits.json` names, per kernel and level, `{ "status": "release" | "dev" | "info" }`, and the caps in `_limits` (`release` 1.10, `dev` 1.50, `warn` 1.10, `goal` 1.00; D14, restated in cycles by D2708). `cargo xtask check cycles` reads the committed results `benches/results/cycles/*.json` (`--results DIR` judges other results, `--partial` a selection) and judges them in two parts: D321 (SIMD against its own fallback), a check that decides no status, and the release gate (every simulated entry and level against its comparison, the reference library; the status of an entry comes from this gate alone). The judged number is the ratio of the simulated cycles of the record (`ratio`), not the cost with the mispredictions (D1611 decides between forms of a branch; the cost is recorded beside it).
 
-- `release` needs `ours / comparison ≤ _limits.release` on the reference model **and** the counter-model; `dev` the same with `_limits.dev`; `info` is reported, not judged. `avx2-runtime` is judged against our own `avx2` build with `_limits.runtime` and needs no entry of its own.
+- `release` needs `ours / comparison ≤ _limits.release` on the reference model **and** the counter-model; `dev` the same with `_limits.dev`; `info` is reported, not judged. `avx2-runtime` is judged like every level, against the reference library, and needs an entry of its own (the maintainer's decision D2764): its record holds our cycles of the run-time-detection build and, as information, those of our fixed `avx2` build; the gate takes the library's cycles and SNR from the `avx2` record of the entry (the same workload on the same models `znver3` / `alderlake`; when judged results lack it, from the committed results), with the same caps, the accuracy rule and the accuracy trade. An entry whose comparison at `avx2` is our own fallback has no library and is `info` there, judged by its efficiency, as at `avx2`. Comparisons of our code with our own code (a SIMD entry against our fallback, D321; the run-time-detection build against our fixed `avx2` build) are information and checks, never a status.
 - Every judged record (`release` and `dev`) needs its accuracy, `snr_db` `{ "ours", "comparison" }` in dB against the f64 reference of the measurement binary (999: exact): ours more than 1 dB below the comparison fails unless the entry carries an `"accuracy_waiver"` (D34, D2749). A record without `snr_db` fails.
-- A `release` entry over the release cap may carry an `"accuracy_trade"` text instead of a `waiver` (D2760): it passes, listed as an accuracy trade, while ours is at least 3 dB more accurate than the comparison, the comparison's SNR is below 100 dB and ours is at most 1.20 × the comparison on both models; when one of them no longer holds it fails (an entry above 1.20 × goes to `dev` with an open item, or fails above 1.50, however accurate it is), and within the release cap the trade is a remark. The text names both SNR figures and the ratios. An `accuracy_trade` on a `dev` or `info` entry, beside a `waiver`, or at `avx2-runtime` fails. The tables mark it `(accuracy trade)` in the accuracy column. The maintainer's decisions (D2760): 3 dB, and not slower than 1.20 ×, because "3 dB better must not mean that we may be slow"; and only against a comparison below 100 dB, where accuracy is scarce (typically fixed point `Q15`): above it, as for most `f32` kernels at 137 to 150 dB, a few dB more accuracy have no practical effect and do not justify more cycles.
+- A `release` entry over the release cap may carry an `"accuracy_trade"` text instead of a `waiver` (D2760): it passes, listed as an accuracy trade, while ours is at least 3 dB more accurate than the comparison, the comparison's SNR is below 100 dB and ours is at most 1.20 × the comparison on both models; when one of them no longer holds it fails (an entry above 1.20 × goes to `dev` with an open item, or fails above 1.50, however accurate it is), and within the release cap the trade is a remark. The text names both SNR figures and the ratios. An `accuracy_trade` on a `dev` or `info` entry or beside a `waiver` fails. The tables mark it `(accuracy trade)` in the accuracy column. The maintainer's decisions (D2760): 3 dB, and not slower than 1.20 ×, because "3 dB better must not mean that we may be slow"; and only against a comparison below 100 dB, where accuracy is scarce (typically fixed point `Q15`): above it, as for most `f32` kernels at 137 to 150 dB, a few dB more accuracy have no practical effect and do not justify more cycles.
 - An entry may carry a `"waiver"` (ratio), a `"cycle_waiver"` (D321) or an `"accuracy_waiver"` text. A waiver that names an open item needs that item in `docs/open-items.md` (`cargo xtask release-check`); one that names none states its reason. A waived exceedance is printed and does not fail the command; the numbers are never hidden. A waiver that covers nothing, a `dev` entry within `warn`, and a ratio above `warn` are remarks.
 - A simulated level fails on an entry that is missing from `limits.json`, on a `release` or `dev` entry whose record failed, and on a listed entry without a record.
 - An entry may carry `"own_target"` (a number > 0): the efficiency target of its own-kernel comparison (`ours:<kernel>`, `Reference::OwnKernel`, information), printed as met or missed; it never fails and does not replace the limit of the judged comparison (D102). The `halfband_decimate` entries use 0.60, the `real_to_complex` entries 1.10.
@@ -192,7 +192,7 @@ The f64 golden is the mathematical optimum and the first target; an established 
 | Part | State |
 | --- | --- |
 | Simulated cycles and efficiency | reported by `cargo measure` at `sse2`, `sse4.2` and `avx512` (SDE), `avx2` and `avx2-runtime` (callgrind) and `neon` (QEMU), D68; committed in `benches/results/cycles` (D2704) and gated by `cargo xtask check cycles` (D321, D2708) |
-| Release gate in cycles, every entry re-judged | done (D2708, D2746): every entry re-judged on the full CI measurement of D2745; the entries over their cap are `dev` with open items I13.1-4 to I13.1-8 and I24-3 |
+| Release gate in cycles, every entry re-judged | done (D2708, D2746): every entry re-judged on the full CI measurement of D2745; the entries over their cap are `dev` with open items I13.1-7, I13.1-8 and I24-3; `avx2-runtime` re-judged against the library (D2764, D2765) |
 | Instructions per sample | only `simd128` and Cortex-M4 (D2700); `count accuracy` stays the accuracy check of the `simd128` counts |
 | Fair references for every entry | partly: the entries gated against our own fallback and the kernels without a SIMD branch are listed in issue #20 (groups A to D) |
 | Mispredictions per sample of data-dependent branches (D1611) | `cargo measure --branches` at `sse2`, `sse4.2` and `avx2` with the penalties of D1612 (D1613); `avx512` not branch-simulated, treated as `neon` (D1616), the `cortex-a72` penalty measured (D1628), the `cortex-a76` penalty provisional (open item I44-15) |
@@ -421,7 +421,7 @@ The halfband references (M23, maintainer decisions of 2026-10-31) get SDRk's tap
 
 Simulated cycles per sample of our kernel and of its comparison on the reference model and the counter-model of each level, from the committed `benches/results/cycles/<platform>.json` (`x86_64`, `x86_64-avx512`, `aarch64`). The tables are **generated** by `python3 -I benches/cycle_tables.py` from these files and are never edited by hand (`--check` fails when they differ; CI runs it). The files are written by `cargo measure ... --merge` / `--all`; the record of reference is the artifact `cycle-results` of the full CI measurement ([Determinism and the reference environment](#determinism-and-the-reference-environment)). The tables below are the full CI measurement of 2026-11-24 on commit 484abc1b (D2745: runs 45359765815 for `sse2`, `sse4.2` and `avx512`, 45364395319 for `avx2`, `avx2-runtime` and `neon`).
 
-Per row: ours and the comparison in cycles per sample on both models, the two ratios (ours / comparison, lower is better), the accuracy of both sides (SNR in dB against the f64 reference, ours / comparison, `exact` for an exact result, `(accuracy trade)` for an entry kept `release` by D2760) and the comparison. The status of the entry (`release`, `dev`, `info`), its waivers and the goal are in `benches/limits.json` and judged by `cargo xtask check cycles`; a row without a library comparison (`info`) shows our own fallback or an own kernel as the comparison. An entry that could not be simulated is listed below its table with its note. Only the ratios mean something (D33, D68): the absolute cycles are no hardware figures. Models: `sse2` and `sse4.2` `skylake` / `znver2`, `avx2` and `avx2-runtime` `znver3` / `alderlake`, `avx512` `znver4` / `sapphirerapids`, `neon` `cortex-a72` / `cortex-a76`. The level `avx2-runtime` shows our run-time-detection build against our own `avx2` build (limit 1.02). Cycle mode is `whole-loop`.
+Per row: ours and the comparison in cycles per sample on both models, the two ratios (ours / comparison, lower is better), the accuracy of both sides (SNR in dB against the f64 reference, ours / comparison, `exact` for an exact result, `(accuracy trade)` for an entry kept `release` by D2760) and the comparison. The status of the entry (`release`, `dev`, `info`), its waivers and the goal are in `benches/limits.json` and judged by `cargo xtask check cycles`; a row without a library comparison (`info`) shows our own fallback or an own kernel as the comparison. An entry that could not be simulated is listed below its table with its note. Only the ratios mean something (D33, D68): the absolute cycles are no hardware figures. Models: `sse2` and `sse4.2` `skylake` / `znver2`, `avx2` and `avx2-runtime` `znver3` / `alderlake`, `avx512` `znver4` / `sapphirerapids`, `neon` `cortex-a72` / `cortex-a76`. The level `avx2-runtime` shows our run-time-detection build against the comparison of the `avx2` record of the entry, the reference library as at every level (D2764), with the ratio to our own fixed `avx2` build as an extra column of information. Cycle mode is `whole-loop`.
 
 
 <!-- cycle-tables:begin -->
@@ -1371,197 +1371,199 @@ Reference model `znver3`, counter-model `alderlake`, mode `whole-loop`; executio
 
 Reference model `znver3`, counter-model `alderlake`, mode `whole-loop`; execution counts: valgrind callgrind, execution counts per instruction and taken jumps.
 
-| Entry | ours znver3 (cycles/sample) | comparison znver3 (cycles/sample) | ratio znver3 (ours/comparison) | ours alderlake (cycles/sample) | comparison alderlake (cycles/sample) | ratio alderlake (ours/comparison) | SNR (dB, ours / comparison) | comparison |
-| --- | ---: | ---: | ---: | ---: | ---: | ---: | ---: | --- |
-| `convert_cq15_cs8` | 0.14 | 0.14 | 1.03 | 0.14 | 0.14 | 1.01 | exact / exact | ours at avx2 |
-| `convert_cq15_cu8` | 0.14 | 0.14 | 1.04 | 0.14 | 0.14 | 1.01 | exact / exact | ours at avx2 |
-| `convert_cs16` | 0.26 | 0.26 | 1.01 | 0.27 | 0.27 | 1.01 | exact / exact | ours at avx2 |
-| `convert_cs8` | 0.27 | 0.26 | 1.01 | 0.27 | 0.27 | 1.00 | exact / exact | ours at avx2 |
-| `convert_cu8` | 0.27 | 0.27 | 1.01 | 0.27 | 0.27 | 1.00 | exact / exact | ours at avx2 |
-| `convert_out_cs16` | 0.45 | 0.45 | 1.01 | 0.56 | 0.55 | 1.01 | 95.5 / 95.5 | ours at avx2 |
-| `convert_out_cs8` | 0.43 | 0.43 | 1.00 | 0.56 | 0.56 | 1.00 | 47.3 / 47.3 | ours at avx2 |
-| `convert_out_cu8` | 0.53 | 0.53 | 0.99 | 0.66 | 0.67 | 0.99 | 47.3 / 47.3 | ours at avx2 |
-| `convert_out_real_rs16` | 0.24 | 0.24 | 1.01 | 0.29 | 0.28 | 1.01 | 95.5 / 95.5 | ours at avx2 |
-| `convert_out_real_rs8` | 0.23 | 0.23 | 1.01 | 0.29 | 0.29 | 1.01 | 47.2 / 47.2 | ours at avx2 |
-| `convert_out_real_ru8` | 0.27 | 0.28 | 0.99 | 0.34 | 0.35 | 0.99 | 47.2 / 47.2 | ours at avx2 |
-| `convert_real_rs16` | 0.14 | 0.14 | 1.02 | 0.14 | 0.14 | 1.01 | exact / exact | ours at avx2 |
-| `rotate` | 0.67 | 0.66 | 1.01 | 0.57 | 0.57 | 1.01 | 144.3 / 144.3 | ours at avx2 |
-| `rotate_cq15` | 1.18 | 1.18 | 1.00 | 1.24 | 1.25 | 0.99 | 91.2 / 91.2 | ours at avx2 |
-| `scramble_block` | 3.06 | 2.85 | 1.07 | 4.56 | 3.88 | 1.18 | exact / exact | ours at avx2 |
-| `scramble_c32_b1` | 0.41 | 0.41 | 1.02 | 0.31 | 0.30 | 1.05 | 320.2 / 320.2 | ours at avx2 |
-| `scramble_c32_b2` | 0.96 | 0.95 | 1.01 | 1.05 | 1.04 | 1.01 | 318.7 / 318.7 | ours at avx2 |
-| `scramble_c32_b8` | 1.32 | 1.31 | 1.01 | 1.18 | 1.17 | 1.01 | 147.7 / 147.7 | ours at avx2 |
-| `scramble_cq15_b2` | 0.42 | 0.42 | 1.00 | 0.66 | 0.66 | 1.00 | 318.2 / 318.2 | ours at avx2 |
-| `scramble_cq15_b8` | 1.21 | 1.21 | 1.01 | 1.13 | 1.13 | 1.01 | 92.2 / 92.2 | ours at avx2 |
-| `fir` | 9.64 | 9.63 | 1.00 | 8.85 | 8.85 | 1.00 | 142.1 / 142.1 | ours at avx2 |
-| `fir_cq15` | 84.10 | 40.62 | 2.07 | 98.96 | 61.15 | 1.62 | exact / exact | ours at avx2 |
-| `fir_decimate` | 2.43 | 2.42 | 1.00 | 2.09 | 2.08 | 1.00 | 141.9 / 142.0 | ours at avx2 |
-| `fir_decimate_cq15` | 18.97 | 21.61 | 0.88 | 20.01 | 22.05 | 0.91 | exact / exact | ours at avx2 |
-| `fir_interpolate` | 12.39 | 12.44 | 1.00 | 11.40 | 11.40 | 1.00 | 141.8 / 141.8 | ours at avx2 |
-| `fir_interpolate_cq15` | 97.70 | 52.45 | 1.86 | 110.63 | 71.49 | 1.55 | exact / exact | ours at avx2 |
-| `fir_interpolate_real` | 7.15 | 7.27 | 0.98 | 6.80 | 6.78 | 1.00 | 141.8 / 141.8 | ours at avx2 |
-| `fir_interpolate_real_q15` | 60.92 | 42.13 | 1.45 | 67.03 | 38.06 | 1.76 | exact / exact | ours at avx2 |
-| `fir_interpolate_short` | 3.34 | 3.31 | 1.01 | 3.12 | 3.12 | 1.00 | 145.1 / 145.1 | ours at avx2 |
-| `resample` | 15.10 | 14.92 | 1.01 | 14.19 | 14.17 | 1.00 | 142.3 / 142.2 | ours at avx2 |
-| `resample_cq15` | 97.21 | 117.53 | 0.83 | 110.41 | 113.20 | 0.98 | exact / exact | ours at avx2 |
-| `resample_real` | 9.74 | 9.82 | 0.99 | 9.18 | 9.13 | 1.01 | 142.3 / 142.3 | ours at avx2 |
-| `resample_real_q15` | 60.54 | 60.80 | 1.00 | 66.87 | 66.72 | 1.00 | exact / exact | ours at avx2 |
-| `mag` | 0.77 | 0.76 | 1.01 | 0.77 | 0.76 | 1.01 | 150.5 / 150.5 | ours at avx2 |
-| `mag_q15` | 0.98 | 0.97 | 1.01 | 0.98 | 0.98 | 1.00 | 96.2 / 96.2 | ours at avx2 |
-| `mag_sq` | 0.23 | 0.22 | 1.01 | 0.26 | 0.26 | 1.01 | 149.0 / 149.0 | ours at avx2 |
-| `mag_sq_q15` | 0.14 | 0.14 | 1.01 | 0.18 | 0.18 | 1.01 | 92.8 / 92.8 | ours at avx2 |
-| `quad_demod` | 2.61 | 2.60 | 1.00 | 2.13 | 2.12 | 1.00 | 144.7 / 144.7 | ours at avx2 |
-| `quad_demod_cq15` | 4.47 | 4.40 | 1.01 | 4.11 | 4.01 | 1.02 | 81.2 / 81.2 | ours at avx2 |
-| `fm_mod` | 2.17 | 2.06 | 1.05 | 2.17 | 2.13 | 1.02 | 133.2 / 133.2 | ours at avx2 |
-| `fm_mod_cq15` | 2.05 | 1.93 | 1.06 | 2.21 | 2.16 | 1.02 | 89.4 / 89.4 | ours at avx2 |
-| `squelch` | 9.13 | 9.13 | 1.00 | 10.14 | 10.13 | 1.00 | exact / exact | ours at avx2 |
-| `squelch_cq15` | 6.11 | 5.56 | 1.10 | 9.09 | 6.95 | 1.31 | exact / exact | ours at avx2 |
-| `window` | 0.34 | 0.33 | 1.01 | 0.26 | 0.26 | 1.01 | 151.9 / 151.9 | ours at avx2 |
-| `window_cq15` | 0.23 | 0.22 | 1.04 | 0.22 | 0.21 | 1.04 | 89.0 / 89.0 | ours at avx2 |
-| `power_db` | 1.86 | 1.85 | 1.01 | 1.88 | 1.88 | 1.00 | 151.9 / 151.9 | ours at avx2 |
-| `power_db_q15` | 2.03 | 1.89 | 1.08 | 1.90 | 1.90 | 1.00 | 149.9 / 149.9 | ours at avx2 |
-| `agc` | 16.08 | 13.18 | 1.22 | 21.04 | 14.78 | 1.42 | 119.8 / 119.8 | ours at avx2 |
-| `agc_cq15` | 80.43 | 78.32 | 1.03 | 90.62 | 85.53 | 1.06 | exact / exact | ours at avx2 |
-| `dc_block` | 2.80 | 2.95 | 0.95 | 2.77 | 2.76 | 1.01 | 151.9 / 151.9 | ours at avx2 |
-| `dc_block_cq15` | 8.03 | 6.30 | 1.28 | 8.06 | 6.13 | 1.31 | exact / exact | ours at avx2 |
-| `dc_block_real` | 2.09 | 2.12 | 0.99 | 1.91 | 1.88 | 1.01 | 152.1 / 152.1 | ours at avx2 |
-| `dc_block_real_q15` | 5.10 | 5.62 | 0.91 | 6.11 | 5.56 | 1.10 | exact / exact | ours at avx2 |
-| `deemphasis` | 2.05 | 2.09 | 0.98 | 1.83 | 1.84 | 1.00 | 152.1 / 152.1 | ours at avx2 |
-| `deemphasis_q15` | 7.03 | 5.53 | 1.27 | 7.06 | 5.54 | 1.27 | exact / exact | ours at avx2 |
-| `biquad` | 9.37 | 9.37 | 1.00 | 10.57 | 10.57 | 1.00 | 136.1 / 136.1 | ours at avx2 |
-| `biquad_cq15` | 8.06 | 9.16 | 0.88 | 10.32 | 10.56 | 0.98 | 71.6 / 71.6 | ours at avx2 |
-| `biquad_real` | 9.12 | 9.12 | 1.00 | 10.06 | 10.06 | 1.00 | 136.7 / 136.7 | ours at avx2 |
-| `biquad_real_q15` | 14.39 | 8.18 | 1.76 | 15.84 | 10.21 | 1.55 | 71.5 / 71.5 | ours at avx2 |
-| `dot` | 0.27 | 0.26 | 1.02 | 0.27 | 0.26 | 1.01 | 138.7 / 137.2 | ours at avx2 |
-| `dot_complex` | 0.46 | 0.46 | 0.99 | 0.58 | 0.58 | 1.00 | 127.8 / 127.8 | ours at avx2 |
-| `dot_cq15` | 0.31 | 0.30 | 1.01 | 0.40 | 0.40 | 1.00 | 82.2 / 82.2 | ours at avx2 |
-| `dot_real` | 0.14 | 0.14 | 1.02 | 0.11 | 0.10 | 1.02 | 135.0 / 131.4 | ours at avx2 |
-| `dot_real_q15` | 0.13 | 0.13 | 1.04 | 0.16 | 0.16 | 1.03 | 88.8 / 88.8 | ours at avx2 |
-| `scale` | 0.26 | 0.26 | 1.02 | 0.20 | 0.18 | 1.07 | 151.5 / 151.5 | ours at avx2 |
-| `scale_cq15` | 0.14 | 0.13 | 1.03 | 0.10 | 0.10 | 1.03 | 93.7 / 93.7 | ours at avx2 |
-| `add` | 0.39 | 0.38 | 1.02 | 0.26 | 0.26 | 1.01 | 151.0 / 151.0 | ours at avx2 |
-| `add_cq15` | 0.20 | 0.19 | 1.03 | 0.13 | 0.13 | 1.02 | exact / exact | ours at avx2 |
-| `add_real` | 0.20 | 0.19 | 1.04 | 0.13 | 0.13 | 1.03 | 151.0 / 151.0 | ours at avx2 |
-| `add_real_q15` | 0.10 | 0.10 | 1.05 | 0.07 | 0.07 | 1.04 | exact / exact | ours at avx2 |
-| `mul` | 0.45 | 0.45 | 1.00 | 0.51 | 0.51 | 1.00 | 150.1 / 150.1 | ours at avx2 |
-| `mul_cq15` | 0.51 | 0.51 | 1.00 | 0.63 | 0.63 | 1.00 | 94.4 / 94.4 | ours at avx2 |
-| `mul_real` | 0.20 | 0.19 | 1.03 | 0.13 | 0.13 | 1.02 | 151.8 / 151.8 | ours at avx2 |
-| `mul_real_q15` | 0.10 | 0.10 | 1.05 | 0.09 | 0.09 | 1.05 | 91.6 / 91.6 | ours at avx2 |
-| `interleave` | 0.26 | 0.26 | 1.01 | 0.51 | 0.51 | 1.00 | exact / exact | ours at avx2 |
-| `interleave_cq15` | 0.14 | 0.13 | 1.01 | 0.13 | 0.13 | 1.01 | exact / exact | ours at avx2 |
-| `deinterleave` | 0.26 | 0.26 | 1.01 | 0.26 | 0.26 | 1.00 | exact / exact | ours at avx2 |
-| `deinterleave_cq15` | 0.17 | 0.17 | 1.01 | 0.20 | 0.20 | 1.01 | exact / exact | ours at avx2 |
-| `oscillate` | 1.40 | 1.40 | 1.00 | 1.45 | 1.45 | 1.00 | 133.2 / 133.2 | ours at avx2 |
-| `oscillate_cq15` | 1.90 | 1.90 | 1.00 | 1.50 | 1.49 | 1.00 | 97.8 / 97.8 | ours at avx2 |
-| `fft_1024` | 2.36 | 2.35 | 1.00 | 2.25 | 2.26 | 1.00 | 139.1 / 139.1 | ours at avx2 |
-| `fft_4096` | 2.63 | 2.62 | 1.00 | 2.51 | 2.51 | 1.00 | 138.2 / 138.2 | ours at avx2 |
-| `fft_64` | 2.00 | 1.72 | 1.16 | 2.00 | 1.85 | 1.08 | 140.7 / 140.7 | ours at avx2 |
-| `fft_cq15_1024` | 2.54 | 2.47 | 1.03 | 2.80 | 2.79 | 1.00 | 63.5 / 63.5 | ours at avx2 |
-| `fft_cq15_1024_default` | 2.44 | 2.31 | 1.05 | 2.38 | 2.34 | 1.01 | 46.7 / 46.7 | ours at avx2 |
-| `fft_cq15_1024_full_scale` | 2.44 | 2.41 | 1.01 | 2.46 | 2.45 | 1.00 | 58.9 / 58.9 | ours at avx2 |
-| `rfft_1024` | 2.17 | 2.11 | 1.03 | 2.11 | 2.08 | 1.01 | 138.3 / 138.7 | ours at avx2 |
-| `am_mod` | 0.65 | 0.65 | 1.01 | 0.47 | 0.47 | 1.01 | 150.8 / 150.8 | ours at avx2 |
-| `am_mod_cq15` | 0.20 | 0.20 | 1.02 | 0.21 | 0.21 | 1.02 | 92.7 / 92.7 | ours at avx2 |
-| `auto_notch` | 156.14 | 164.98 | 0.95 | 189.93 | 164.85 | 1.15 | exact / exact | ours at avx2 |
-| `band_pulse_detect_block` | 46.41 | 47.93 | 0.97 | 56.47 | 46.70 | 1.21 | exact / exact | ours at avx2 |
-| `bit_descramble_block` | 0.59 | 0.33 | 1.79 | 0.70 | 0.32 | 2.19 | exact / exact | ours at avx2 |
-| `bit_descramble_in_place_block` | 1.67 | 1.48 | 1.13 | 1.59 | 1.23 | 1.29 | exact / exact | ours at avx2 |
-| `bit_scramble_block` | 1.12 | 0.77 | 1.45 | 1.18 | 0.81 | 1.46 | exact / exact | ours at avx2 |
-| `bit_scramble_in_place_block` | 1.35 | 1.02 | 1.33 | 1.41 | 0.99 | 1.42 | exact / exact | ours at avx2 |
-| `channel_bank_channelize` | 20.71 | 20.88 | 0.99 | 25.62 | 25.55 | 1.00 | 139.1 / 139.1 | ours at avx2 |
-| `channel_bank_ddc` | 72.79 | 73.01 | 1.00 | 66.53 | 65.32 | 1.02 | 140.5 / 140.5 | ours at avx2 |
-| `channel_select_block` | 0.77 | 0.76 | 1.00 | 0.59 | 0.52 | 1.15 | exact / exact | ours at avx2 |
-| `channelize` | 11.96 | 11.83 | 1.01 | 12.63 | 12.74 | 0.99 | 141.2 / 141.2 | ours at avx2 |
-| `channelize_block` | 11.96 | 12.08 | 0.99 | 12.87 | 12.81 | 1.00 | 141.2 / 141.2 | ours at avx2 |
-| `correlate_block` | 7.72 | 7.60 | 1.02 | 7.14 | 7.15 | 1.00 | exact / exact | ours at avx2 |
-| `costas` | 60.19 | 57.69 | 1.04 | 70.16 | 68.20 | 1.03 | exact / exact | ours at avx2 |
-| `costas_qam1024` | 131.27 | 131.34 | 1.00 | 157.92 | 152.10 | 1.04 | exact / exact | ours at avx2 |
-| `costas_qam16` | 132.30 | 124.35 | 1.06 | 159.34 | 148.39 | 1.07 | exact / exact | ours at avx2 |
-| `costas_qam256` | 131.63 | 131.66 | 1.00 | 158.43 | 152.53 | 1.04 | exact / exact | ours at avx2 |
-| `costas_qam64` | 132.21 | 128.23 | 1.03 | 159.23 | 154.25 | 1.03 | exact / exact | ours at avx2 |
-| `crc16_ccitt_false` | 11.55 | 11.81 | 0.98 | 12.54 | 12.80 | 0.98 | exact / exact | ours at avx2 |
-| `crc16_x25` | 7.06 | 7.05 | 1.00 | 8.05 | 8.05 | 1.00 | exact / exact | ours at avx2 |
-| `crc24_adsb` | 11.05 | 11.04 | 1.00 | 12.04 | 12.04 | 1.00 | exact / exact | ours at avx2 |
-| `crc32` | 7.06 | 7.05 | 1.00 | 8.05 | 8.05 | 1.00 | exact / exact | ours at avx2 |
-| `equalize` | 105.10 | 111.94 | 0.94 | 100.09 | 152.23 | 0.66 | exact / exact | ours at avx2 |
-| `equalize_qam1024` | 134.21 | 142.06 | 0.94 | 116.33 | 174.29 | 0.67 | exact / exact | ours at avx2 |
-| `equalize_qam16` | 129.16 | 119.94 | 1.08 | 111.96 | 164.27 | 0.68 | exact / exact | ours at avx2 |
-| `equalize_qam256` | 134.21 | 142.06 | 0.94 | 116.33 | 174.29 | 0.67 | exact / exact | ours at avx2 |
-| `equalize_qam64` | 129.16 | 123.94 | 1.04 | 112.47 | 170.30 | 0.66 | exact / exact | ours at avx2 |
-| `frame_decode` | 6.92 | 5.57 | 1.24 | 6.22 | 6.18 | 1.01 | exact / exact | ours at avx2 |
-| `frame_decode_block` | 6.90 | 6.91 | 1.00 | 5.79 | 5.80 | 1.00 | exact / exact | ours at avx2 |
-| `frame_decode_four_block` | 23.39 | 23.43 | 1.00 | 21.19 | 20.77 | 1.02 | exact / exact | ours at avx2 |
-| `frame_encode_block` | 1.61 | 1.64 | 0.98 | 1.69 | 1.73 | 0.98 | exact / exact | ours at avx2 |
-| `gauss_noise_c32` | 3.42 | 3.42 | 1.00 | 4.97 | 4.97 | 1.00 | exact / exact | ours at avx2 |
-| `gauss_noise_f32` | 1.72 | 1.72 | 1.00 | 2.50 | 2.49 | 1.00 | exact / exact | ours at avx2 |
-| `gauss_noise_q15` | 2.18 | 2.33 | 0.93 | 2.97 | 3.02 | 0.98 | exact / exact | ours at avx2 |
-| `halfband_decimate` | 3.43 | 3.43 | 1.00 | 2.98 | 2.97 | 1.00 | 143.0 / 143.0 | ours at avx2 |
-| `halfband_decimate_cq15` | 6.55 | 6.56 | 1.00 | 7.11 | 7.11 | 1.00 | exact / exact | ours at avx2 |
-| `halfband_decimate_real` | 2.00 | 1.81 | 1.10 | 1.34 | 1.35 | 0.99 | 142.8 / 142.8 | ours at avx2 |
-| `halfband_decimate_real_q15` | 2.98 | 2.94 | 1.01 | 3.84 | 3.82 | 1.01 | exact / exact | ours at avx2 |
-| `iq_offset_block` | 2.02 | 2.89 | 0.70 | 2.28 | 2.95 | 0.77 | exact / exact | ours at avx2 |
-| `morse_decode_block` | 13.35 | 12.77 | 1.05 | 16.29 | 16.08 | 1.01 | exact / exact | ours at avx2 |
-| `morse_encode_block` | 5.27 | 4.44 | 1.19 | 5.43 | 4.49 | 1.21 | exact / exact | ours at avx2 |
-| `noise_blank` | 8.09 | 11.58 | 0.70 | 12.46 | 11.37 | 1.10 | exact / exact | ours at avx2 |
-| `noise_blank_cq15` | 8.51 | 8.48 | 1.00 | 9.31 | 9.30 | 1.00 | exact / exact | ours at avx2 |
-| `noise_block` | 3.42 | 3.42 | 1.00 | 4.97 | 4.97 | 1.00 | exact / exact | ours at avx2 |
-| `preemph_limit` | 16.03 | 15.37 | 1.04 | 15.16 | 13.18 | 1.15 | exact / exact | ours at avx2 |
-| `preemph_limit_q15` | 28.42 | 27.62 | 1.03 | 18.69 | 18.69 | 1.00 | exact / exact | ours at avx2 |
-| `preemph_limit_stereo` | 19.59 | 16.71 | 1.17 | 22.55 | 22.32 | 1.01 | exact / exact | ours at avx2 |
-| `psk_demod_block` | 37.68 | 37.91 | 0.99 | 38.73 | 38.80 | 1.00 | exact / exact | ours at avx2 |
-| `psk_mod_block` | 4.40 | 4.37 | 1.01 | 4.23 | 4.27 | 0.99 | 144.8 / 144.8 | ours at avx2 |
-| `psk_mod_block_liquid` | 4.40 | 4.37 | 1.01 | 4.23 | 4.27 | 0.99 | 144.8 / 144.8 | ours at avx2 |
-| `pulse_match_block` | 12.40 | 12.32 | 1.01 | 11.32 | 11.29 | 1.00 | 142.2 / 142.2 | ours at avx2 |
-| `pulse_match_block_liquid` | 12.40 | 12.32 | 1.01 | 11.32 | 11.29 | 1.00 | 142.2 / 142.2 | ours at avx2 |
-| `pulse_shape_block` | 3.59 | 3.57 | 1.01 | 3.51 | 3.54 | 0.99 | 143.9 / 143.9 | ours at avx2 |
-| `pulse_shape_block_liquid` | 3.59 | 3.57 | 1.01 | 3.51 | 3.54 | 0.99 | 143.9 / 143.9 | ours at avx2 |
-| `qam_acquire_block` | 26.55 | 26.92 | 0.99 | 33.04 | 32.63 | 1.01 | exact / exact | ours at avx2 |
-| `qam_demod_block` | 64.42 | 62.75 | 1.03 | 65.10 | 70.69 | 0.92 | exact / exact | ours at avx2 |
-| `qam_demod_qam256_block` | 65.05 | 66.52 | 0.98 | 65.71 | 72.62 | 0.90 | exact / exact | ours at avx2 |
-| `qam_demod_search_block` | 68.30 | 65.65 | 1.04 | 69.82 | 74.37 | 0.94 | exact / exact | ours at avx2 |
-| `qam_frame_decode_block` | 76.50 | 74.73 | 1.02 | 76.11 | 81.49 | 0.93 | exact / exact | ours at avx2 |
-| `qam_frame_encode_block` | 5.17 | 5.26 | 0.98 | 5.28 | 5.48 | 0.96 | 144.1 / 144.1 | ours at avx2 |
-| `qam_mod_block` | 4.31 | 4.39 | 0.98 | 4.39 | 4.57 | 0.96 | 143.9 / 143.9 | ours at avx2 |
-| `qam_mod_block_liquid` | 4.31 | 4.39 | 0.98 | 4.39 | 4.57 | 0.96 | 143.9 / 143.9 | ours at avx2 |
-| `qam_mod_qam256_block` | 4.89 | 4.96 | 0.99 | 5.12 | 4.74 | 1.08 | 144.3 / 144.3 | ours at avx2 |
-| `qam_mod_qam256_block_liquid` | 4.89 | 4.96 | 0.99 | 5.12 | 4.74 | 1.08 | 144.3 / 144.3 | ours at avx2 |
-| `qam_soft_bits_qam1024` | 4.67 | 5.53 | 0.84 | 4.89 | 4.31 | 1.13 | 146.0 / 146.0 | ours at avx2 |
-| `qam_soft_bits_qam16` | 0.52 | 0.52 | 1.00 | 1.02 | 1.02 | 1.00 | 149.2 / 149.2 | ours at avx2 |
-| `qam_soft_bits_qam16_liquid` | 0.52 | 0.52 | 1.00 | 1.02 | 1.02 | 1.00 | 149.2 / 149.2 | ours at avx2 |
-| `qam_soft_bits_qam16_lut` | 0.52 | 0.52 | 1.00 | 1.02 | 1.02 | 1.00 | 149.2 / 149.2 | ours at avx2 |
-| `qam_soft_bits_qam256` | 2.51 | 2.51 | 1.00 | 4.06 | 4.06 | 1.00 | 144.3 / 144.3 | ours at avx2 |
-| `qam_soft_bits_qam64` | 1.55 | 1.55 | 1.00 | 1.42 | 1.42 | 1.00 | 145.9 / 145.9 | ours at avx2 |
-| `qam_soft_bits_qam64_liquid` | 1.55 | 1.55 | 1.00 | 1.42 | 1.42 | 1.00 | 145.9 / 145.9 | ours at avx2 |
-| `qam_soft_bits_qam64_lut` | 1.55 | 1.55 | 1.00 | 1.42 | 1.42 | 1.00 | 145.9 / 145.9 | ours at avx2 |
-| `qam_soft_bits_qpsk` | 0.27 | 0.26 | 1.02 | 0.20 | 0.20 | 1.01 | 149.9 / 149.9 | ours at avx2 |
-| `rds_decode_block` | 7.77 | 7.28 | 1.07 | 8.56 | 7.98 | 1.07 | exact / exact | ours at avx2 |
-| `rds_demod_block` | 16.79 | 16.60 | 1.01 | 14.72 | 14.43 | 1.02 | exact / exact | ours at avx2 |
-| `rds_shape` | 47.87 | 50.41 | 0.95 | 69.18 | 78.60 | 0.88 | exact / exact | ours at avx2 |
-| `real_to_complex` | 2.55 | 2.49 | 1.02 | 2.30 | 2.27 | 1.01 | 150.3 / 150.3 | ours at avx2 |
-| `real_to_complex_cq15` | 3.63 | 3.61 | 1.01 | 4.93 | 4.87 | 1.01 | exact / exact | ours at avx2 |
-| `snr_estimate_block` | 4.64 | 2.70 | 1.72 | 5.03 | 2.78 | 1.81 | 50.1 / 50.1 | ours at avx2 |
-| `snr_estimate_block_svr` | 4.64 | 2.70 | 1.72 | 5.03 | 2.78 | 1.81 | 50.1 / 50.1 | ours at avx2 |
-| `stereo_encode` | 7.65 | 4.47 | 1.71 | 23.10 | 5.92 | 3.90 | exact / exact | ours at avx2 |
-| `stereo_encode_rds` | 12.50 | 7.17 | 1.74 | 30.19 | 8.91 | 3.39 | exact / exact | ours at avx2 |
-| `stereo_matrix` | 0.33 | 0.32 | 1.01 | 0.45 | 0.45 | 1.01 | 151.3 / 151.3 | ours at avx2 |
-| `stereo_matrix_cq15` | 0.15 | 0.15 | 1.03 | 0.20 | 0.20 | 1.02 | exact / exact | ours at avx2 |
-| `symbol_demap_qam16_block` | 0.52 | 0.52 | 1.00 | 1.02 | 1.02 | 1.00 | 149.2 / 149.2 | ours at avx2 |
-| `symbol_demap_qam16_block_liquid` | 0.52 | 0.52 | 1.00 | 1.02 | 1.02 | 1.00 | 149.2 / 149.2 | ours at avx2 |
-| `symbol_demap_qam16_block_lut` | 0.52 | 0.52 | 1.00 | 1.02 | 1.02 | 1.00 | 149.2 / 149.2 | ours at avx2 |
-| `symbol_demap_qam256_block` | 2.51 | 2.51 | 1.00 | 4.06 | 4.06 | 1.00 | 144.2 / 144.2 | ours at avx2 |
-| `symbol_demap_qam64_block` | 1.55 | 1.55 | 1.00 | 1.43 | 1.42 | 1.00 | 145.8 / 145.8 | ours at avx2 |
-| `symbol_demap_qam64_block_liquid` | 1.55 | 1.55 | 1.00 | 1.43 | 1.42 | 1.00 | 145.8 / 145.8 | ours at avx2 |
-| `symbol_demap_qam64_block_lut` | 1.55 | 1.55 | 1.00 | 1.43 | 1.42 | 1.00 | 145.8 / 145.8 | ours at avx2 |
-| `symbol_map_block` | 4.93 | 5.78 | 0.85 | 6.38 | 7.55 | 0.84 | 152.6 / 152.6 | ours at avx2 |
-| `symbol_map_block_liquid` | 4.93 | 5.78 | 0.85 | 6.38 | 7.55 | 0.84 | 152.6 / 152.6 | ours at avx2 |
-| `symbol_map_block_qam64` | 7.15 | 7.65 | 0.94 | 9.20 | 7.14 | 1.29 | 153.9 / 153.9 | ours at avx2 |
-| `symbol_map_block_qam64_liquid` | 7.15 | 7.65 | 0.94 | 9.20 | 7.14 | 1.29 | 153.9 / 153.9 | ours at avx2 |
-| `symbol_map_block_qpsk` | 5.56 | 5.56 | 1.00 | 5.05 | 5.15 | 0.98 | 155.3 / 155.3 | ours at avx2 |
-| `symbol_map_block_qpsk_liquid` | 5.56 | 5.56 | 1.00 | 5.05 | 5.15 | 0.98 | 155.3 / 155.3 | ours at avx2 |
-| `symbol_sync` | 27.35 | 29.31 | 0.93 | 31.75 | 32.97 | 0.96 | exact / exact | ours at avx2 |
-| `symbol_sync_real` | 13.53 | 14.41 | 0.94 | 17.66 | 16.16 | 1.09 | exact / exact | ours at avx2 |
-| `xcorr_fft_n4096` | 8.66 | 8.60 | 1.01 | 8.03 | 8.00 | 1.00 | 133.9 / 133.9 | ours at avx2 |
-| `xcorr_fft_n512` | 7.72 | 7.60 | 1.02 | 7.14 | 7.15 | 1.00 | 134.6 / 134.8 | ours at avx2 |
+Judged like every level against the reference library: the comparison is the one of the `avx2` record of the entry, its cycles and SNR on the same workload and models (D2764). The column `ours / avx2 build` is ours against our own fixed `avx2` build, information only.
+
+| Entry | ours znver3 (cycles/sample) | comparison znver3 (cycles/sample) | ratio znver3 (ours/comparison) | ours alderlake (cycles/sample) | comparison alderlake (cycles/sample) | ratio alderlake (ours/comparison) | SNR (dB, ours / comparison) | ours / avx2 build (znver3 / alderlake, information) | comparison |
+| --- | ---: | ---: | ---: | ---: | ---: | ---: | ---: | ---: | --- |
+| `convert_cq15_cs8` | 0.14 | 0.14 | 0.99 | 0.14 | 0.18 | 0.77 | exact / exact | 1.03 / 1.01 | volk_8i_convert_16i |
+| `convert_cq15_cu8` | 0.14 | 0.14 | 1.00 | 0.14 | 0.18 | 0.80 | exact / exact | 1.04 / 1.01 | volk_8i_convert_16i on the bytes with the sign bit flipped (the CU8 conversion without its offset) |
+| `convert_cs16` | 0.26 | 0.32 | 0.82 | 0.27 | 0.38 | 0.71 | exact / exact | 1.01 / 1.01 | volk_16i_s32f_convert_32f |
+| `convert_cs8` | 0.27 | 0.48 | 0.56 | 0.27 | 0.32 | 0.85 | exact / exact | 1.01 / 1.00 | volk_8i_s32f_convert_32f |
+| `convert_cu8` | 0.27 | 0.48 | 0.56 | 0.27 | 0.32 | 0.85 | exact / exact | 1.01 / 1.00 | volk_8i_s32f_convert_32f on the bytes with the sign bit flipped (the CU8 conversion without its offset) |
+| `convert_out_cs16` | 0.45 | 0.46 | 0.99 | 0.56 | 0.53 | 1.05 | 95.5 / 95.5 | 1.01 / 1.01 | volk_32f_s32f_convert_16i |
+| `convert_out_cs8` | 0.43 | 0.50 | 0.87 | 0.56 | 0.52 | 1.08 | 47.3 / 47.3 | 1.00 / 1.00 | volk_32f_s32f_convert_8i |
+| `convert_out_cu8` | 0.53 | 0.54 | 0.98 | 0.66 | 0.60 | 1.10 | 47.3 / 47.3 | 0.99 / 0.99 | volk_32f_s32f_x2_convert_8u |
+| `convert_out_real_rs16` | 0.24 | 0.24 | 1.01 | 0.29 | 0.27 | 1.07 | 95.5 / 95.5 | 1.01 / 1.01 | volk_32f_s32f_convert_16i |
+| `convert_out_real_rs8` | 0.23 | 0.25 | 0.90 | 0.29 | 0.26 | 1.10 | 47.2 / 47.2 | 1.01 / 1.01 | volk_32f_s32f_convert_8i |
+| `convert_out_real_ru8` | 0.27 | 0.28 | 0.99 | 0.34 | 0.30 | 1.12 | 47.2 / 47.2 | 0.99 / 0.99 | volk_32f_s32f_x2_convert_8u |
+| `convert_real_rs16` | 0.14 | 0.17 | 0.86 | 0.14 | 0.19 | 0.74 | exact / exact | 1.02 / 1.01 | volk_16i_s32f_convert_32f |
+| `rotate` | 0.67 | 3.19 | 0.21 | 0.57 | 3.05 | 0.19 | 144.3 / 115.0 | 1.01 / 1.01 | volk_32fc_s32fc_x2_rotator2_32fc |
+| `rotate_cq15` | 1.18 | 4.49 | 0.26 | 1.24 | 5.49 | 0.23 | 91.2 / 91.2 | 1.00 / 0.99 | sdrk fallback |
+| `scramble_block` | 3.06 | 2.85 | 1.07 | 4.56 | 3.88 | 1.18 | exact / exact | 1.07 / 1.18 | sdrk fallback |
+| `scramble_c32_b1` | 0.41 | 1.36 | 0.30 | 0.31 | 1.48 | 0.21 | 320.2 / 320.2 | 1.02 / 1.05 | +-1.0 sequence from the index bits into a buffer of 256 + volk_32fc_32f_multiply_32fc (VOLK 3.3.0 dispatcher; the form of srsRAN srsran_scrambling_c) |
+| `scramble_c32_b2` | 0.96 | 2.37 | 0.41 | 1.05 | 2.41 | 0.44 | 318.7 / 318.7 | 1.01 / 1.01 | phasor lookup into a buffer of 256 + VOLK 3.3.0 volk_32fc_x2_multiply_32fc_u_avx without FMA (benches/refs/volk-nofma.c, -O3 -ffp-contract=off) |
+| `scramble_c32_b8` | 1.32 | 2.37 | 0.56 | 1.18 | 2.41 | 0.49 | 147.7 / 147.7 | 1.01 / 1.01 | phasor lookup into a buffer of 256 + VOLK 3.3.0 volk_32fc_x2_multiply_32fc_u_avx without FMA (benches/refs/volk-nofma.c, -O3 -ffp-contract=off) |
+| `scramble_cq15_b2` | 0.42 | 3.15 | 0.13 | 0.66 | 3.31 | 0.20 | 318.2 / 75.9 | 1.00 / 1.00 | CMSIS-DSP 1.18.0 phasor lookup into a buffer of 256 + arm_cmplx_mult_cmplx_q15 (3.13 output), generic C (-O3 -ffp-contract=off, LOOPUNROLL, avx2) |
+| `scramble_cq15_b8` | 1.21 | 3.15 | 0.39 | 1.13 | 3.31 | 0.34 | 92.2 / 72.1 | 1.01 / 1.01 | CMSIS-DSP 1.18.0 phasor lookup into a buffer of 256 + arm_cmplx_mult_cmplx_q15 (3.13 output), generic C (-O3 -ffp-contract=off, LOOPUNROLL, avx2) |
+| `fir` | 9.64 | 58.05 | 0.17 | 8.85 | 72.63 | 0.12 | 142.1 / 142.4 | 1.00 / 1.00 | volk_32fc_32f_dot_prod_32fc_a as GNU Radio's fir_filter_ccf calls it |
+| `fir_cq15` | 84.10 | 40.62 | 2.07 | 98.96 | 61.15 | 1.62 | exact / exact | 2.07 / 1.62 | sdrk fallback |
+| `fir_decimate` | 2.43 | 9.29 | 0.26 | 2.09 | 12.60 | 0.17 | 141.9 / 141.2 | 1.00 / 1.00 | volk_32fc_32f_dot_prod_32fc_a as GNU Radio's fir_filter_ccf (filterNdec) calls it |
+| `fir_decimate_cq15` | 18.97 | 21.61 | 0.88 | 20.01 | 22.05 | 0.91 | exact / exact | 0.88 / 0.91 | sdrk fallback |
+| `fir_interpolate` | 12.39 | 66.84 | 0.19 | 11.40 | 76.70 | 0.15 | 141.8 / 142.5 | 1.00 / 1.00 | volk_32fc_32f_dot_prod_32fc_a per output as GNU Radio's interp_fir_filter_ccf calls it |
+| `fir_interpolate_cq15` | 97.70 | 52.45 | 1.86 | 110.63 | 71.49 | 1.55 | exact / exact | 1.86 / 1.55 | sdrk fallback |
+| `fir_interpolate_real` | 7.15 | 83.60 | 0.09 | 6.80 | 93.79 | 0.07 | 141.8 / 140.7 | 0.98 / 1.00 | volk_32f_x2_dot_prod_32f_a per output as GNU Radio's interp_fir_filter_fff calls it |
+| `fir_interpolate_real_q15` | 60.92 | 42.13 | 1.45 | 67.03 | 38.06 | 1.76 | exact / exact | 1.45 / 1.76 | sdrk fallback |
+| `fir_interpolate_short` | 3.34 | 64.34 | 0.05 | 3.12 | 67.82 | 0.05 | 145.1 / 143.3 | 1.01 / 1.00 | volk_32fc_32f_dot_prod_32fc_a per output as GNU Radio's interp_fir_filter_ccf calls it |
+| `resample` | 15.10 | 68.15 | 0.22 | 14.19 | 77.87 | 0.18 | 142.3 / 142.1 | 1.01 / 1.00 | volk_32fc_32f_dot_prod_32fc_a per output as GNU Radio's rational_resampler_ccf calls it |
+| `resample_cq15` | 97.21 | 117.53 | 0.83 | 110.41 | 113.20 | 0.98 | exact / exact | 0.83 / 0.98 | sdrk fallback |
+| `resample_real` | 9.74 | 84.38 | 0.12 | 9.18 | 94.98 | 0.10 | 142.3 / 140.6 | 0.99 / 1.01 | volk_32f_x2_dot_prod_32f_a per output as GNU Radio's rational_resampler_fff calls it |
+| `resample_real_q15` | 60.54 | 112.73 | 0.54 | 66.87 | 99.45 | 0.67 | exact / exact | 1.00 / 1.00 | sdrk fallback |
+| `mag` | 0.77 | 0.91 | 0.85 | 0.77 | 0.78 | 0.98 | 150.5 / 150.5 | 1.01 / 1.01 | volk_32fc_magnitude_32f |
+| `mag_q15` | 0.98 | 1.06 | 0.92 | 0.98 | 0.92 | 1.07 | 96.2 / 96.2 | 1.01 / 1.00 | volk_16ic_magnitude_16i |
+| `mag_sq` | 0.23 | 0.33 | 0.68 | 0.26 | 0.52 | 0.50 | 149.0 / 149.0 | 1.01 / 1.01 | volk_32fc_magnitude_squared_32f |
+| `mag_sq_q15` | 0.14 | 0.20 | 0.70 | 0.18 | 0.23 | 0.81 | 92.8 / 92.8 | 1.01 / 1.01 | sdrk fallback |
+| `quad_demod` | 2.61 | 3.61 | 0.72 | 2.13 | 3.70 | 0.57 | 144.7 / 126.5 | 1.00 / 1.00 | volk_32fc_x2_multiply_conjugate_32fc + volk_32fc_s32f_atan2_32f |
+| `quad_demod_cq15` | 4.47 | 71.20 | 0.06 | 4.11 | 66.54 | 0.06 | 81.2 / 81.2 | 1.01 / 1.02 | sdrk fallback |
+| `fm_mod` | 2.17 | 105.76 | 0.02 | 2.17 | 25.57 | 0.08 | 133.2 / 96.7 | 1.05 / 1.02 | GNU Radio frequency_modulator_fc (f32 phase folded with fmodf, gr::fxpt sincos; gr-fm-mod.c, generic compiler flags) |
+| `fm_mod_cq15` | 2.05 | 7.53 | 0.27 | 2.21 | 7.91 | 0.28 | 89.4 / 89.4 | 1.06 / 1.02 | sdrk fallback |
+| `squelch` | 9.13 | 20.51 | 0.45 | 10.14 | 15.26 | 0.66 | exact / exact | 1.00 / 1.00 | GNU Radio pwr_squelch_cc (squelch_base_cc_impl.cc of gr-analog, generic compiler flags) |
+| `squelch_cq15` | 6.11 | 5.56 | 1.10 | 9.09 | 6.95 | 1.31 | exact / exact | 1.10 / 1.31 | sdrk fallback |
+| `window` | 0.34 | 0.38 | 0.88 | 0.26 | 0.53 | 0.50 | 151.9 / 151.9 | 1.01 / 1.01 | volk_32fc_32f_multiply_32fc |
+| `window_cq15` | 0.23 | 0.56 | 0.40 | 0.22 | 0.56 | 0.39 | 89.0 / 89.0 | 1.04 / 1.04 | sdrk fallback |
+| `power_db` | 1.86 | 1.18 | 1.58 | 1.88 | 1.52 | 1.24 | 151.9 / 141.6 | 1.01 / 1.00 | volk_32f_log2_32f + volk_32f_s32f_multiply_32f + volk_32f_s32f_add_32f |
+| `power_db_q15` | 2.03 | 3.07 | 0.66 | 1.90 | 2.46 | 0.77 | 149.9 / 149.9 | 1.08 / 1.00 | sdrk fallback |
+| `agc` | 16.08 | 36.12 | 0.45 | 21.04 | 39.15 | 0.54 | 119.8 / 118.9 | 1.22 / 1.42 | GNU Radio agc_cc (agc.h of gr-analog, generic compiler flags) |
+| `agc_cq15` | 80.43 | 78.32 | 1.03 | 90.62 | 85.53 | 1.06 | exact / exact | 1.03 / 1.06 | sdrk fallback |
+| `dc_block` | 2.80 | 7.03 | 0.40 | 2.77 | 9.04 | 0.31 | 151.9 / 120.8 | 0.95 / 1.01 | sdrk fallback |
+| `dc_block_cq15` | 8.03 | 6.30 | 1.28 | 8.06 | 6.13 | 1.31 | exact / exact | 1.28 / 1.31 | sdrk fallback |
+| `dc_block_real` | 2.09 | 7.03 | 0.30 | 1.91 | 9.04 | 0.21 | 152.1 / 124.9 | 0.99 / 1.01 | sdrk fallback |
+| `dc_block_real_q15` | 5.10 | 5.62 | 0.91 | 6.11 | 5.56 | 1.10 | exact / exact | 0.91 / 1.10 | sdrk fallback |
+| `deemphasis` | 2.05 | 9.55 | 0.21 | 1.83 | 11.58 | 0.16 | 152.1 / 145.4 | 0.98 / 1.00 | sdrk fallback |
+| `deemphasis_q15` | 7.03 | 5.53 | 1.27 | 7.06 | 5.54 | 1.27 | exact / exact | 1.27 / 1.27 | sdrk fallback |
+| `biquad` | 9.37 | 20.59 | 0.46 | 10.57 | 19.11 | 0.55 | 136.1 / 136.1 | 1.00 / 1.00 | KFR 7.2.0 kfr::iir, iir_state<float, 2> (avx2, -ffp-contract=off), two calls on planar re and im (deinterleaving not counted) |
+| `biquad_cq15` | 8.06 | 21.19 | 0.38 | 10.32 | 21.26 | 0.49 | 71.6 / 71.6 | 0.88 / 0.98 | sdrk fallback |
+| `biquad_real` | 9.12 | 10.30 | 0.89 | 10.06 | 9.56 | 1.05 | 136.7 / 136.7 | 1.00 / 1.00 | KFR 7.2.0 kfr::iir, iir_state<float, 2> (avx2, -ffp-contract=off) |
+| `biquad_real_q15` | 14.39 | 11.11 | 1.29 | 15.84 | 12.14 | 1.30 | 71.5 / 71.5 | 1.76 / 1.55 | sdrk fallback |
+| `dot` | 0.27 | 0.27 | 0.99 | 0.27 | 0.52 | 0.51 | 138.7 / 134.6 | 1.02 / 1.01 | volk_32fc_32f_dot_prod_32fc |
+| `dot_complex` | 0.46 | 0.78 | 0.58 | 0.58 | 0.78 | 0.74 | 127.8 / 127.0 | 0.99 / 1.00 | VOLK 3.3.0 volk_32fc_x2_dot_prod_32fc_u_avx without FMA (benches/refs/volk-nofma.c, -O3 -ffp-contract=off) |
+| `dot_cq15` | 0.31 | 1.04 | 0.30 | 0.40 | 0.77 | 0.52 | 82.2 / 82.2 | 1.01 / 1.00 | sdrk fallback |
+| `dot_real` | 0.14 | 0.52 | 0.27 | 0.11 | 0.77 | 0.14 | 135.0 / 126.4 | 1.02 / 1.02 | volk_32f_x2_dot_prod_32f |
+| `dot_real_q15` | 0.13 | 0.32 | 0.42 | 0.16 | 0.38 | 0.43 | 88.8 / 88.8 | 1.04 / 1.03 | sdrk fallback |
+| `scale` | 0.26 | 0.27 | 0.96 | 0.20 | 0.29 | 0.69 | 151.5 / 151.5 | 1.02 / 1.07 | volk_32f_s32f_multiply_32f |
+| `scale_cq15` | 0.14 | 0.28 | 0.48 | 0.10 | 0.42 | 0.25 | 93.7 / 93.7 | 1.03 / 1.03 | sdrk fallback |
+| `add` | 0.39 | 0.40 | 0.98 | 0.26 | 0.35 | 0.74 | 151.0 / 151.0 | 1.02 / 1.01 | volk_32fc_x2_add_32fc |
+| `add_cq15` | 0.20 | 0.20 | 0.98 | 0.13 | 0.18 | 0.75 | exact / exact | 1.03 / 1.02 | volk_16i_x2_add_saturated_16i on the 2 n values |
+| `add_real` | 0.20 | 0.20 | 0.98 | 0.13 | 0.18 | 0.76 | 151.0 / 151.0 | 1.04 / 1.03 | volk_32f_x2_add_32f |
+| `add_real_q15` | 0.10 | 0.10 | 0.98 | 0.07 | 0.09 | 0.77 | exact / exact | 1.05 / 1.04 | volk_16i_x2_add_saturated_16i |
+| `mul` | 0.45 | 0.49 | 0.93 | 0.51 | 0.54 | 0.95 | 150.1 / 150.1 | 1.00 / 1.00 | volk_32fc_x2_multiply_32fc |
+| `mul_cq15` | 0.51 | 0.83 | 0.62 | 0.63 | 1.37 | 0.46 | 94.4 / 94.4 | 1.00 / 1.00 | sdrk fallback |
+| `mul_real` | 0.20 | 0.20 | 0.97 | 0.13 | 0.18 | 0.74 | 151.8 / 151.8 | 1.03 / 1.02 | volk_32f_x2_multiply_32f |
+| `mul_real_q15` | 0.10 | 0.28 | 0.37 | 0.09 | 0.39 | 0.23 | 91.6 / 91.6 | 1.05 / 1.05 | sdrk fallback |
+| `interleave` | 0.26 | 0.27 | 0.98 | 0.51 | 0.52 | 0.98 | exact / exact | 1.01 / 1.00 | volk_32f_x2_interleave_32fc |
+| `interleave_cq15` | 0.14 | 0.13 | 1.02 | 0.13 | 0.13 | 1.01 | exact / exact | 1.01 / 1.01 | sdrk fallback |
+| `deinterleave` | 0.26 | 0.39 | 0.67 | 0.26 | 0.40 | 0.65 | exact / exact | 1.01 / 1.00 | volk_32fc_deinterleave_32f_x2 |
+| `deinterleave_cq15` | 0.17 | 0.26 | 0.63 | 0.20 | 0.26 | 0.74 | exact / exact | 1.01 / 1.01 | volk_16ic_deinterleave_16i_x2 |
+| `oscillate` | 1.40 | 2.27 | 0.62 | 1.45 | 4.03 | 0.36 | 133.2 / 133.2 | 1.00 / 1.00 | sdrk fallback |
+| `oscillate_cq15` | 1.90 | 4.51 | 0.42 | 1.50 | 4.80 | 0.31 | 97.8 / 97.8 | 1.00 / 1.00 | sdrk fallback |
+| `fft_1024` | 2.36 | 2.70 | 0.87 | 2.25 | 3.38 | 0.67 | 139.1 / 139.1 | 1.00 / 1.00 | rustfft (FftPlanner, forward, in place) |
+| `fft_4096` | 2.63 | 3.37 | 0.78 | 2.51 | 3.83 | 0.65 | 138.2 / 137.9 | 1.00 / 1.00 | rustfft (FftPlanner, forward, in place) |
+| `fft_64` | 2.00 | 2.04 | 0.98 | 2.00 | 1.89 | 1.06 | 140.7 / 141.4 | 1.16 / 1.08 | rustfft (FftPlanner, forward, in place) |
+| `fft_cq15_1024` | 2.54 | 46.26 | 0.05 | 2.80 | 48.58 | 0.06 | 63.5 / 43.7 | 1.03 / 1.00 | KissFFT FIXED_POINT=16 (kiss_fft, 1/N scaling, out of place) |
+| `fft_cq15_1024_default` | 2.44 | 46.26 | 0.05 | 2.38 | 48.58 | 0.05 | 46.7 / 43.5 | 1.05 / 1.01 | KissFFT FIXED_POINT=16 (kiss_fft, 1/N scaling, out of place) |
+| `fft_cq15_1024_full_scale` | 2.44 | 46.26 | 0.05 | 2.46 | 48.58 | 0.05 | 58.9 / 55.1 | 1.01 / 1.00 | KissFFT FIXED_POINT=16 (kiss_fft, 1/N scaling, out of place) |
+| `rfft_1024` | 2.17 | 2.71 | 0.80 | 2.11 | 2.82 | 0.75 | 138.3 / 138.1 | 1.03 / 1.01 | realfft on rustfft (RealFftPlanner, forward, out of place) |
+| `am_mod` | 0.65 | 0.65 | 1.01 | 0.47 | 0.47 | 1.00 | 150.8 / 150.8 | 1.01 / 1.01 | sdrk fallback |
+| `am_mod_cq15` | 0.20 | 0.43 | 0.48 | 0.21 | 0.56 | 0.37 | 92.7 / 92.7 | 1.02 / 1.02 | sdrk fallback |
+| `auto_notch` | 156.14 | 164.98 | 0.95 | 189.93 | 164.85 | 1.15 | exact / exact | 0.95 / 1.15 | sdrk fallback |
+| `band_pulse_detect_block` | 46.41 | 47.93 | 0.97 | 56.47 | 46.70 | 1.21 | exact / exact | 0.97 / 1.21 | sdrk fallback |
+| `bit_descramble_block` | 0.59 | 4.75 | 0.12 | 0.70 | 5.55 | 0.13 | exact / exact | 1.79 / 2.19 | GNU Radio descrambler_bb(0x21, 0, 22): gr::digital::lfsr, one __builtin_parityl per unpacked bit (generic compiler flags) |
+| `bit_descramble_in_place_block` | 1.67 | 4.75 | 0.35 | 1.59 | 5.55 | 0.29 | exact / exact | 1.13 / 1.29 | GNU Radio descrambler_bb(0x21, 0, 22): gr::digital::lfsr, one __builtin_parityl per unpacked bit (generic compiler flags) |
+| `bit_scramble_block` | 1.12 | 4.41 | 0.25 | 1.18 | 5.18 | 0.23 | exact / exact | 1.45 / 1.46 | GNU Radio scrambler_bb(0x21, 0, 22): gr::digital::lfsr, one __builtin_parityl per unpacked bit (generic compiler flags) |
+| `bit_scramble_in_place_block` | 1.35 | 4.41 | 0.31 | 1.41 | 5.18 | 0.27 | exact / exact | 1.33 / 1.42 | GNU Radio scrambler_bb(0x21, 0, 22): gr::digital::lfsr, one __builtin_parityl per unpacked bit (generic compiler flags) |
+| `channel_bank_channelize` | 20.71 | 20.88 | 0.99 | 25.62 | 25.55 | 1.00 | 139.1 / 139.1 | 0.99 / 1.00 | sdrk fallback |
+| `channel_bank_ddc` | 72.79 | 73.01 | 1.00 | 66.53 | 65.32 | 1.02 | 140.5 / 140.5 | 1.00 / 1.02 | sdrk fallback |
+| `channel_select_block` | 0.77 | 0.76 | 1.00 | 0.59 | 0.52 | 1.15 | exact / exact | 1.00 / 1.15 | sdrk fallback |
+| `channelize` | 11.96 | 119.62 | 0.10 | 12.63 | 101.71 | 0.12 | 141.2 / 141.6 | 1.01 / 0.99 | liquid-dsp 1.8.3 firpfbch2_crcf analyzer (benches/refs/liquid-channelizer.c), the SIMD dot products of the level, FFTW 3.3.10 |
+| `channelize_block` | 11.96 | 12.08 | 0.99 | 12.87 | 12.81 | 1.00 | 141.2 / 141.2 | 0.99 / 1.00 | sdrk fallback |
+| `correlate_block` | 7.72 | 7.60 | 1.02 | 7.14 | 7.15 | 1.00 | exact / exact | 1.02 / 1.00 | sdrk fallback |
+| `costas` | 60.19 | 57.69 | 1.04 | 70.16 | 68.20 | 1.03 | exact / exact | 1.04 / 1.03 | sdrk fallback |
+| `costas_qam1024` | 131.27 | 131.34 | 1.00 | 157.92 | 152.10 | 1.04 | exact / exact | 1.00 / 1.04 | sdrk fallback |
+| `costas_qam16` | 132.30 | 124.35 | 1.06 | 159.34 | 148.39 | 1.07 | exact / exact | 1.06 / 1.07 | sdrk fallback |
+| `costas_qam256` | 131.63 | 131.66 | 1.00 | 158.43 | 152.53 | 1.04 | exact / exact | 1.00 / 1.04 | sdrk fallback |
+| `costas_qam64` | 132.21 | 128.23 | 1.03 | 159.23 | 154.25 | 1.03 | exact / exact | 1.03 / 1.03 | sdrk fallback |
+| `crc16_ccitt_false` | 11.55 | 13.17 | 0.88 | 12.54 | 16.19 | 0.77 | exact / exact | 0.98 / 0.98 | GNU Radio gr::digital::crc: one 256-entry uint64_t table, a 64-bit remainder, one lookup per byte (generic compiler flags) |
+| `crc16_x25` | 7.06 | 10.39 | 0.68 | 8.05 | 9.40 | 0.86 | exact / exact | 1.00 / 1.00 | GNU Radio gr::digital::crc: one 256-entry uint64_t table, a 64-bit remainder, one lookup per byte (generic compiler flags) |
+| `crc24_adsb` | 11.05 | 13.17 | 0.84 | 12.04 | 16.19 | 0.74 | exact / exact | 1.00 / 1.00 | GNU Radio gr::digital::crc: one 256-entry uint64_t table, a 64-bit remainder, one lookup per byte (generic compiler flags) |
+| `crc32` | 7.06 | 10.39 | 0.68 | 8.05 | 9.40 | 0.86 | exact / exact | 1.00 / 1.00 | GNU Radio gr::digital::crc: one 256-entry uint64_t table, a 64-bit remainder, one lookup per byte (generic compiler flags) |
+| `equalize` | 105.10 | 1076.92 | 0.10 | 100.09 | 287.12 | 0.35 | exact / 130.0 | 0.94 / 0.66 | GNU Radio linear_equalizer with adaptive_algorithm_nlms (linear_equalizer_impl.cc of gr-digital, VOLK's dispatched dot products of the level with the aligned tap copies of fir_filter) |
+| `equalize_qam1024` | 134.21 | 142.06 | 0.94 | 116.33 | 174.29 | 0.67 | exact / exact | 0.94 / 0.67 | sdrk fallback |
+| `equalize_qam16` | 129.16 | 1088.28 | 0.12 | 111.96 | 294.40 | 0.38 | exact / 129.6 | 1.08 / 0.68 | GNU Radio linear_equalizer with adaptive_algorithm_nlms on constellation_rect 16-QAM (linear_equalizer_impl.cc and constellation.cc of gr-digital, VOLK's dispatched dot products of the level with the aligned tap copies of fir_filter) |
+| `equalize_qam256` | 134.21 | 142.06 | 0.94 | 116.33 | 174.29 | 0.67 | exact / exact | 0.94 / 0.67 | sdrk fallback |
+| `equalize_qam64` | 129.16 | 1088.28 | 0.12 | 112.47 | 294.40 | 0.38 | exact / 130.7 | 1.04 / 0.66 | GNU Radio linear_equalizer with adaptive_algorithm_nlms on constellation_rect 64-QAM (linear_equalizer_impl.cc and constellation.cc of gr-digital, VOLK's dispatched dot products of the level with the aligned tap copies of fir_filter) |
+| `frame_decode` | 6.92 | 5.57 | 1.24 | 6.22 | 6.18 | 1.01 | exact / exact | 1.24 / 1.01 | sdrk fallback |
+| `frame_decode_block` | 6.90 | 6.91 | 1.00 | 5.79 | 5.80 | 1.00 | exact / exact | 1.00 / 1.00 | sdrk fallback |
+| `frame_decode_four_block` | 23.39 | 23.43 | 1.00 | 21.19 | 20.78 | 1.02 | exact / exact | 1.00 / 1.02 | sdrk fallback |
+| `frame_encode_block` | 1.61 | 1.64 | 0.98 | 1.69 | 1.73 | 0.98 | exact / exact | 0.98 / 0.98 | sdrk fallback |
+| `gauss_noise_c32` | 3.42 | 194.93 | 0.02 | 4.97 | 191.42 | 0.03 | exact / exact | 1.00 / 1.00 | liquid-dsp 1.8.3 crandnf times sigma (libc rand(), f32 Box-Muller with sqrtf, logf and cexpf; no random access, no bit-exact sequence; reference does different work; -O3) |
+| `gauss_noise_f32` | 1.72 | 117.09 | 0.01 | 2.50 | 125.14 | 0.02 | exact / exact | 1.00 / 1.00 | liquid-dsp 1.8.3 randnf times sigma (libc rand(), f32 Box-Muller with sqrtf, logf and sinf; no random access, no bit-exact sequence; reference does different work; -O3) |
+| `gauss_noise_q15` | 2.18 | 10.63 | 0.20 | 2.97 | 9.46 | 0.31 | exact / exact | 0.93 / 0.98 | sdrk fallback |
+| `halfband_decimate` | 3.43 | 87.24 | 0.04 | 2.98 | 34.43 | 0.09 | 143.0 / 143.9 | 1.00 / 1.00 | liquid-dsp 1.8.3 resamp2_crcf_decim_execute (dotprod_crcf) with its AVX dot product (-O3 -ffp-contract=off, avx2) |
+| `halfband_decimate_cq15` | 6.55 | 12.86 | 0.51 | 7.11 | 13.27 | 0.54 | exact / exact | 1.00 / 1.00 | sdrk fallback |
+| `halfband_decimate_real` | 2.00 | 65.32 | 0.03 | 1.34 | 32.31 | 0.04 | 142.8 / 143.8 | 1.10 / 0.99 | liquid-dsp 1.8.3 resamp2_rrrf_decim_execute (dotprod_rrrf) with its AVX dot product (-O3 -ffp-contract=off, avx2) |
+| `halfband_decimate_real_q15` | 2.98 | 11.33 | 0.26 | 3.84 | 10.11 | 0.38 | exact / exact | 1.01 / 1.01 | sdrk fallback |
+| `iq_offset_block` | 2.02 | 2.89 | 0.70 | 2.28 | 2.95 | 0.77 | exact / exact | 0.70 / 0.77 | sdrk fallback |
+| `morse_decode_block` | 13.35 | 12.77 | 1.05 | 16.29 | 16.08 | 1.01 | exact / exact | 1.05 / 1.01 | sdrk fallback |
+| `morse_encode_block` | 5.27 | 4.44 | 1.19 | 5.43 | 4.49 | 1.21 | exact / exact | 1.19 / 1.21 | sdrk fallback |
+| `noise_blank` | 8.09 | 11.58 | 0.70 | 12.46 | 11.37 | 1.10 | exact / exact | 0.70 / 1.10 | sdrk fallback |
+| `noise_blank_cq15` | 8.51 | 8.48 | 1.00 | 9.31 | 9.30 | 1.00 | exact / exact | 1.00 / 1.00 | sdrk fallback |
+| `noise_block` | 3.42 | 3.42 | 1.00 | 4.97 | 4.97 | 1.00 | exact / exact | 1.00 / 1.00 | sdrk fallback |
+| `preemph_limit` | 16.03 | 15.37 | 1.04 | 15.16 | 13.18 | 1.15 | exact / exact | 1.04 / 1.15 | sdrk fallback |
+| `preemph_limit_q15` | 28.42 | 27.62 | 1.03 | 18.69 | 18.69 | 1.00 | exact / exact | 1.03 / 1.00 | sdrk fallback |
+| `preemph_limit_stereo` | 19.59 | 16.71 | 1.17 | 22.55 | 22.32 | 1.01 | exact / exact | 1.17 / 1.01 | sdrk fallback |
+| `psk_demod_block` | 37.68 | 1161.39 | 0.03 | 38.73 | 415.11 | 0.09 | exact / exact | 0.99 / 1.00 | GNU Radio fir_filter_ccf + symbol_sync_cc + costas_loop_cc + constellation_decoder_cb (the sum of the blocks of the receiver chain, generic compiler flags; no acquisition and no lock watches) |
+| `psk_mod_block` | 4.40 | 180.44 | 0.02 | 4.23 | 249.90 | 0.02 | 144.8 / 143.7 | 1.01 / 0.99 | GNU Radio constellation_modulator as the sum of its blocks: pack_k_bits_bb + chunks_to_symbols_bc + pfb_arb_resampler_ccf (32 filters of 88 taps and their derivative filters), VOLK's dispatched dot product of the level |
+| `psk_mod_block_liquid` | 4.40 | 57.11 | 0.08 | 4.23 | 57.04 | 0.07 | 144.8 / 143.6 | 1.01 / 0.99 | liquid-dsp 1.8.3 modemcf_modulate (arbitrary-constellation modem) + firinterp_crcf (the root-raised cosine of the block), the SIMD dot products of the level (the portable loop at simd128) |
+| `pulse_match_block` | 12.40 | 878.31 | 0.01 | 11.32 | 149.29 | 0.08 | 142.2 / 145.7 | 1.01 / 1.00 | GNU Radio fir_filter_ccf (fir_filter_ccf_impl.cc of gr-filter) with VOLK's dispatched dot product of the level (volk_32fc_32f_dot_prod_32fc_a, the aligned tap copies of fir_filter) |
+| `pulse_match_block_liquid` | 12.40 | 109.99 | 0.11 | 11.32 | 94.89 | 0.12 | 142.2 / 143.9 | 1.01 / 1.00 | liquid-dsp 1.8.3 firfilt_crcf (firfilt.proto.c), the SIMD dot product of the level (the portable loop at simd128) |
+| `pulse_shape_block` | 3.59 | 64.78 | 0.06 | 3.51 | 69.12 | 0.05 | 143.9 / 142.6 | 1.01 / 0.99 | GNU Radio interp_fir_filter_ccf (interp_fir_filter_impl.cc of gr-filter) with VOLK's dispatched dot product of the level (volk_32fc_32f_dot_prod_32fc_a, the aligned tap copies of fir_filter) |
+| `pulse_shape_block_liquid` | 3.59 | 55.18 | 0.07 | 3.51 | 55.16 | 0.06 | 143.9 / 142.2 | 1.01 / 0.99 | liquid-dsp 1.8.3 firinterp_crcf (firinterp.proto.c, firpfb.proto.c), the SIMD dot products of the level (the portable loop at simd128) |
+| `qam_acquire_block` | 26.55 | 26.92 | 0.99 | 33.04 | 32.63 | 1.01 | exact / exact | 0.99 / 1.01 | sdrk fallback |
+| `qam_demod_block` | 64.42 | 1192.78 | 0.05 | 65.10 | 455.70 | 0.14 | exact / 0.0 | 1.03 / 0.92 | GNU Radio fir_filter_ccf + symbol_sync_cc + linear_equalizer + constellation_receiver_cb (the sum of the blocks of the receiver chain, generic compiler flags and VOLK generic dot products; no acquisition, no blind equalizer stage and no lock watches) |
+| `qam_demod_qam256_block` | 65.05 | 66.52 | 0.98 | 65.71 | 72.62 | 0.90 | exact / exact | 0.98 / 0.90 | sdrk fallback |
+| `qam_demod_search_block` | 68.30 | 65.65 | 1.04 | 69.82 | 74.37 | 0.94 | exact / exact | 1.04 / 0.94 | sdrk fallback |
+| `qam_frame_decode_block` | 76.50 | 74.73 | 1.02 | 76.11 | 81.50 | 0.93 | exact / exact | 1.02 / 0.93 | sdrk fallback |
+| `qam_frame_encode_block` | 5.17 | 5.26 | 0.98 | 5.28 | 5.48 | 0.96 | 144.1 / 144.1 | 0.98 / 0.96 | sdrk fallback |
+| `qam_mod_block` | 4.31 | 180.83 | 0.02 | 4.39 | 250.43 | 0.02 | 143.9 / 142.1 | 0.98 / 0.96 | GNU Radio constellation_modulator as the sum of its blocks: pack_k_bits_bb + chunks_to_symbols_bc + pfb_arb_resampler_ccf (32 filters of 88 taps and their derivative filters), VOLK's dispatched dot product of the level |
+| `qam_mod_block_liquid` | 4.31 | 57.62 | 0.07 | 4.39 | 57.80 | 0.08 | 143.9 / 138.1 | 0.98 / 0.96 | liquid-dsp 1.8.3 modemcf_modulate (arbitrary-constellation modem) + firinterp_crcf (the root-raised cosine of the block), the SIMD dot products of the level (the portable loop at simd128) |
+| `qam_mod_qam256_block` | 4.89 | 181.61 | 0.03 | 5.12 | 251.49 | 0.02 | 144.3 / 142.6 | 0.99 / 1.08 | GNU Radio constellation_modulator as the sum of its blocks: pack_k_bits_bb + chunks_to_symbols_bc + pfb_arb_resampler_ccf (32 filters of 88 taps and their derivative filters), VOLK's dispatched dot product of the level |
+| `qam_mod_qam256_block_liquid` | 4.89 | 58.64 | 0.08 | 5.12 | 59.33 | 0.09 | 144.3 / 128.3 | 0.99 / 1.08 | liquid-dsp 1.8.3 modemcf_modulate (arbitrary-constellation modem) + firinterp_crcf (the root-raised cosine of the block), the SIMD dot products of the level (the portable loop at simd128) |
+| `qam_soft_bits_qam1024` | 4.67 | 5.53 | 0.84 | 4.89 | 4.31 | 1.13 | 146.0 / 146.0 | 0.84 / 1.13 | sdrk fallback |
+| `qam_soft_bits_qam16` | 0.52 | 1246.72 | 0.00 | 1.02 | 1327.29 | 0.00 | 149.2 / 141.0 | 1.00 / 1.00 | GNU Radio constellation_soft_decoder_cf with calc_soft_dec (constellation.cc of gr-digital; the exact log-likelihood ratio over all points, npwr 1, not max-log; no vector allocation per symbol, so faster than GNU Radio's object code) |
+| `qam_soft_bits_qam16_liquid` | 0.52 | 164.02 | 0.00 | 1.02 | 163.46 | 0.01 | 149.2 / exact | 1.00 / 1.00 | liquid-dsp 1.8.3 modemcf_demodulate_soft of its own QAM modem (modem_common.proto.c; soft bytes with liquid's scale and labelling; the hard symbol and the soft bits per symbol) |
+| `qam_soft_bits_qam16_lut` | 0.52 | 56.48 | 0.01 | 1.02 | 55.13 | 0.02 | 149.2 / 43.0 | 1.00 / 1.00 | GNU Radio constellation_soft_decoder_cf with the look-up table of gen_soft_dec_lut (precision 8, npwr 1; constellation.cc of gr-digital; exact log-likelihood ratio, not max-log; the table lookup and a copy of 2 to 3 floats per symbol, no vector allocation) |
+| `qam_soft_bits_qam256` | 2.51 | 2.51 | 1.00 | 4.06 | 4.05 | 1.00 | 144.3 / 144.3 | 1.00 / 1.00 | sdrk fallback |
+| `qam_soft_bits_qam64` | 1.55 | 4422.74 | 0.00 | 1.42 | 4747.33 | 0.00 | 145.9 / 134.9 | 1.00 / 1.00 | GNU Radio constellation_soft_decoder_cf with calc_soft_dec (constellation.cc of gr-digital; the exact log-likelihood ratio over all points, npwr 1, not max-log; no vector allocation per symbol, so faster than GNU Radio's object code) |
+| `qam_soft_bits_qam64_liquid` | 1.55 | 234.13 | 0.01 | 1.42 | 212.09 | 0.01 | 145.9 / exact | 1.00 / 1.00 | liquid-dsp 1.8.3 modemcf_demodulate_soft of its own QAM modem (modem_common.proto.c; soft bytes with liquid's scale and labelling; the hard symbol and the soft bits per symbol) |
+| `qam_soft_bits_qam64_lut` | 1.55 | 56.48 | 0.03 | 1.42 | 55.13 | 0.03 | 145.9 / 42.0 | 1.00 / 1.00 | GNU Radio constellation_soft_decoder_cf with the look-up table of gen_soft_dec_lut (precision 8, npwr 1; constellation.cc of gr-digital; exact log-likelihood ratio, not max-log; the table lookup and a copy of 2 to 3 floats per symbol, no vector allocation) |
+| `qam_soft_bits_qpsk` | 0.27 | 0.26 | 1.01 | 0.20 | 0.20 | 1.00 | 149.9 / 149.9 | 1.02 / 1.01 | sdrk fallback |
+| `rds_decode_block` | 7.77 | 7.28 | 1.07 | 8.56 | 7.98 | 1.07 | exact / exact | 1.07 / 1.07 | sdrk fallback |
+| `rds_demod_block` | 16.79 | 16.60 | 1.01 | 14.72 | 14.43 | 1.02 | exact / exact | 1.01 / 1.02 | sdrk fallback |
+| `rds_shape` | 47.87 | 50.41 | 0.95 | 69.18 | 78.60 | 0.88 | exact / exact | 0.95 / 0.88 | sdrk fallback |
+| `real_to_complex` | 2.55 | 91.87 | 0.03 | 2.30 | 35.24 | 0.07 | 150.3 / 145.5 | 1.02 / 1.01 | liquid-dsp 1.8.3 firhilbf_decim_execute_block (dotprod_rrrf) with its AVX dot product (-O3 -ffp-contract=off, avx2) |
+| `real_to_complex_cq15` | 3.63 | 7.27 | 0.50 | 4.93 | 8.83 | 0.56 | exact / 81.5 | 1.01 / 1.01 | libairspy 1.0.10 iqconverter_int16 (truncating >> 15, 32-bit accumulator, the odd samples halved), conversion without remove_dc (-O3 -ffp-contract=off, avx2) |
+| `snr_estimate_block` | 4.64 | 50.03 | 0.09 | 5.03 | 57.26 | 0.09 | 50.1 / 0.4 | 1.72 / 1.81 | GNU Radio mpsk_snr_est_cc(SNR_EST_M2M4, 4096, 0.001): the moments \|x\|^2 and \|x\|^4 averaged in double, six cabsf per symbol (reference does different work: no decisions, a PSK kurtosis; generic compiler flags) |
+| `snr_estimate_block_svr` | 4.64 | 71.84 | 0.06 | 5.03 | 78.62 | 0.06 | 50.1 / 0.4 | 1.72 / 1.81 | GNU Radio mpsk_snr_est_cc(SNR_EST_SVR, 4096, 0.001): \|x\|^4 and \|x_n\|^2 \|x_(n-1)\|^2 averaged in double, two cabsf per symbol (reference does different work: no decisions, a PSK constellation; generic compiler flags) |
+| `stereo_encode` | 7.65 | 4.47 | 1.71 | 23.10 | 5.92 | 3.90 | exact / exact | 1.71 / 3.90 | sdrk fallback |
+| `stereo_encode_rds` | 12.50 | 7.17 | 1.74 | 30.19 | 8.91 | 3.39 | exact / exact | 1.74 / 3.39 | sdrk fallback |
+| `stereo_matrix` | 0.33 | 1.26 | 0.26 | 0.45 | 1.45 | 0.31 | 151.3 / 151.3 | 1.01 / 1.01 | VOLK 3.3.0 composition: volk_32fc_deinterleave_32f_x2, volk_32f_x2_add_32f (d + d), volk_32f_x2_add_32f (s + d2), volk_32f_x2_subtract_32f (s - d2), volk_32f_x2_interleave_32fc (five passes over memory) |
+| `stereo_matrix_cq15` | 0.15 | 0.39 | 0.40 | 0.20 | 0.54 | 0.37 | exact / exact | 1.03 / 1.02 | sdrk fallback |
+| `symbol_demap_qam16_block` | 0.52 | 1246.72 | 0.00 | 1.02 | 1327.29 | 0.00 | 149.2 / 141.1 | 1.00 / 1.00 | GNU Radio constellation_soft_decoder_cf with calc_soft_dec (constellation.cc of gr-digital; the exact log-likelihood ratio over all points, npwr 1, not max-log; no vector allocation per symbol, so faster than GNU Radio's object code) |
+| `symbol_demap_qam16_block_liquid` | 0.52 | 164.01 | 0.00 | 1.02 | 163.45 | 0.01 | 149.2 / exact | 1.00 / 1.00 | liquid-dsp 1.8.3 modemcf_demodulate_soft of its own QAM modem (modem_common.proto.c; soft bytes with liquid's scale and labelling; the hard symbol and the soft bits per symbol) |
+| `symbol_demap_qam16_block_lut` | 0.52 | 47.02 | 0.01 | 1.02 | 35.13 | 0.03 | 149.2 / 43.0 | 1.00 / 1.00 | GNU Radio constellation_soft_decoder_cf with the look-up table of gen_soft_dec_lut (precision 8, npwr 1; constellation.cc of gr-digital; exact log-likelihood ratio, not max-log; the table lookup and a copy of 2 to 3 floats per symbol, no vector allocation) |
+| `symbol_demap_qam256_block` | 2.51 | 2.51 | 1.00 | 4.06 | 4.06 | 1.00 | 144.2 / 144.2 | 1.00 / 1.00 | sdrk fallback |
+| `symbol_demap_qam64_block` | 1.55 | 4422.74 | 0.00 | 1.43 | 4747.33 | 0.00 | 145.8 / 134.9 | 1.00 / 1.00 | GNU Radio constellation_soft_decoder_cf with calc_soft_dec (constellation.cc of gr-digital; the exact log-likelihood ratio over all points, npwr 1, not max-log; no vector allocation per symbol, so faster than GNU Radio's object code) |
+| `symbol_demap_qam64_block_liquid` | 1.55 | 234.67 | 0.01 | 1.43 | 212.20 | 0.01 | 145.8 / exact | 1.00 / 1.00 | liquid-dsp 1.8.3 modemcf_demodulate_soft of its own QAM modem (modem_common.proto.c; soft bytes with liquid's scale and labelling; the hard symbol and the soft bits per symbol) |
+| `symbol_demap_qam64_block_lut` | 1.55 | 56.48 | 0.03 | 1.43 | 55.13 | 0.03 | 145.8 / 42.1 | 1.00 / 1.00 | GNU Radio constellation_soft_decoder_cf with the look-up table of gen_soft_dec_lut (precision 8, npwr 1; constellation.cc of gr-digital; exact log-likelihood ratio, not max-log; the table lookup and a copy of 2 to 3 floats per symbol, no vector allocation) |
+| `symbol_map_block` | 4.93 | 10.17 | 0.49 | 6.38 | 11.66 | 0.55 | 152.6 / 152.6 | 0.85 / 0.84 | GNU Radio pack_k_bits_bb + chunks_to_symbols_bc (pack_k_bits.cc of gr-blocks, chunks_to_symbols_impl.cc of gr-digital), the table of the points of the block, generic compiler flags |
+| `symbol_map_block_liquid` | 4.93 | 18.15 | 0.27 | 6.38 | 20.14 | 0.32 | 152.6 / 140.1 | 0.85 / 0.84 | liquid-dsp 1.8.3 modemcf_modulate on the arbitrary-constellation modem of the points of the block (modem_arb.proto.c), the bits packed by the wrapper |
+| `symbol_map_block_qam64` | 7.15 | 13.29 | 0.54 | 9.20 | 15.92 | 0.58 | 153.9 / 153.9 | 0.94 / 1.29 | GNU Radio pack_k_bits_bb + chunks_to_symbols_bc (pack_k_bits.cc of gr-blocks, chunks_to_symbols_impl.cc of gr-digital), the table of the points of the block, generic compiler flags |
+| `symbol_map_block_qam64_liquid` | 7.15 | 22.23 | 0.32 | 9.20 | 26.23 | 0.35 | 153.9 / 139.1 | 0.94 / 1.29 | liquid-dsp 1.8.3 modemcf_modulate on the arbitrary-constellation modem of the points of the block (modem_arb.proto.c), the bits packed by the wrapper |
+| `symbol_map_block_qpsk` | 5.56 | 7.05 | 0.79 | 5.05 | 7.40 | 0.68 | 155.3 / 155.3 | 1.00 / 0.98 | GNU Radio pack_k_bits_bb + chunks_to_symbols_bc (pack_k_bits.cc of gr-blocks, chunks_to_symbols_impl.cc of gr-digital), the table of the points of the block, generic compiler flags |
+| `symbol_map_block_qpsk_liquid` | 5.56 | 14.07 | 0.40 | 5.05 | 14.05 | 0.36 | 155.3 / 155.3 | 1.00 / 0.98 | liquid-dsp 1.8.3 modemcf_modulate on the arbitrary-constellation modem of the points of the block (modem_arb.proto.c), the bits packed by the wrapper |
+| `symbol_sync` | 27.35 | 29.31 | 0.93 | 31.75 | 32.97 | 0.96 | exact / exact | 0.93 / 0.96 | sdrk fallback |
+| `symbol_sync_real` | 13.53 | 14.41 | 0.94 | 17.66 | 16.16 | 1.09 | exact / exact | 0.94 / 1.09 | sdrk fallback |
+| `xcorr_fft_n4096` | 8.66 | 854.13 | 0.01 | 8.03 | 115.28 | 0.07 | 133.9 / 132.1 | 1.01 / 1.00 | liquid-dsp 1.8.3 fftfilt_cccf (benches/refs/liquid-fftfilt.c), FFTW 3.3.10 |
+| `xcorr_fft_n512` | 7.72 | 35.33 | 0.22 | 7.14 | 35.79 | 0.20 | 134.6 / 132.7 | 1.02 / 1.00 | liquid-dsp 1.8.3 fftfilt_cccf (benches/refs/liquid-fftfilt.c), FFTW 3.3.10 |
 
 - Not measured at this level: `convert_cq15_cs8_fallback`, `convert_cq15_cu8_fallback`, `convert_cs16_fallback`, `convert_cs8_fallback`, `convert_cu8_fallback`, `convert_out_cs16_fallback`, `convert_out_cs8_fallback`, `convert_out_cu8_fallback`, `convert_out_real_rs16_fallback`, `convert_out_real_rs8_fallback`, `convert_out_real_ru8_fallback`, `convert_real_rs16_fallback`, `rotate_cq15_fallback`, `rotate_fallback`, `scramble_c32_b1_fallback`, `scramble_c32_b2_dvbs2`, `scramble_c32_b2_fallback`, `scramble_c32_b8_fallback`, `scramble_cq15_b2_fallback`, `scramble_cq15_b8_fallback`, `fir_cq15_fallback`, `fir_decimate_cq15_fallback`, `fir_decimate_fallback`, `fir_fallback`, `fir_interpolate_cq15_fallback`, `fir_interpolate_fallback`, `fir_interpolate_real_fallback`, `fir_interpolate_real_q15_fallback`, `fir_interpolate_short_fallback`, `resample_cq15_fallback`, `resample_fallback`, `resample_real_fallback`, `resample_real_q15_fallback`, `mag_fallback`, `mag_q15_fallback`, `mag_sq_fallback`, `mag_sq_q15_fallback`, `quad_demod_cq15_fallback`, `quad_demod_fallback`, `fm_mod_cq15_fallback`, `fm_mod_fallback`, `window_cq15_fallback`, `window_fallback`, `power_db_fallback`, `power_db_q15_fallback`, `agc_fallback`, `dc_block_fallback`, `dc_block_real_fallback`, `deemphasis_fallback`, `biquad_cq15_fallback`, `biquad_fallback`, `biquad_real_fallback`, `biquad_real_q15_fallback`, `dot_complex_fallback`, `dot_cq15_fallback`, `dot_fallback`, `dot_real_fallback`, `dot_real_q15_fallback`, `scale_cq15_fallback`, `scale_fallback`, `add_cq15_fallback`, `add_fallback`, `add_real_fallback`, `add_real_q15_fallback`, `mul_cq15_fallback`, `mul_fallback`, `mul_real_fallback`, `mul_real_q15_fallback`, `interleave_cq15_fallback`, `interleave_fallback`, `deinterleave_cq15_fallback`, `deinterleave_fallback`, `oscillate_cq15_fallback`, `oscillate_fallback`, `fft_1024_fallback`, `fft_4096_fallback`, `fft_64_fallback`, `fft_cq15_1024_default_fallback`, `fft_cq15_1024_fallback`, `rfft_1024_fallback`, `am_mod_cq15_fallback`, `am_mod_fallback`, `channelize_fallback`, `costas_fallback`, `costas_qam1024_fallback`, `costas_qam16_fallback`, `costas_qam256_fallback`, `costas_qam64_fallback`, `equalize_fallback`, `equalize_qam1024_fallback`, `equalize_qam16_fallback`, `equalize_qam256_fallback`, `equalize_qam64_fallback`, `gauss_noise_c32_fallback`, `gauss_noise_c32_fastnoise`, `gauss_noise_f32_fallback`, `gauss_noise_f32_fastnoise`, `gauss_noise_f32_ziggurat`, `gauss_noise_q15_fallback`, `halfband_decimate_cq15_fallback`, `halfband_decimate_fallback`, `halfband_decimate_real_fallback`, `halfband_decimate_real_q15_fallback`, `halfband_ref_fir_decimate`, `halfband_ref_fir_decimate_cq15`, `halfband_ref_shifted`, `halfband_ref_shifted_cq15`, `real_to_complex_airspy`, `real_to_complex_cq15_fallback`, `real_to_complex_fallback`, `stereo_matrix_cq15_fallback`, `stereo_matrix_fallback`, `stereo_pll_fallback`, `stereo_pll_q15_fallback`, `symbol_sync_fallback`, `xcorr_fft_n4096_fallback`, `xcorr_fft_n512_fallback`.
 
@@ -2686,8 +2688,7 @@ Note that the M4F has a single-precision FPU only: `convert_out_cs16` rounds in 
 The open items of the measurement are in [open-items.md](open-items.md); the ones that decide how far the numbers above can be trusted or are still above a gate:
 
 - **I13.1-1:** the profiles of `cargo measure` are not bit-reproducible from run to run; with the address space fixed in CI (D2710) the spread is below 1.7e-05 relative, not zero (D2747).
-- **I13.1-4, I13.1-5:** `agc` and `biquad_real_q15` at `avx2-runtime` are above 1.02 of the `avx2` build from the simulation of the same loops (decision of the maintainer: info status, or a change of the measuring tool).
-- **I13.1-6 to I13.1-8, I24-3:** the entries over their cap in cycles after the re-judgement of D2746, `dev` with their numbers: 28 at `avx2-runtime` (I13.1-6), 30 fallback entries and levels against their library reference (I13.1-7; three more of D2746 are `release` again by the accuracy trade of D2760, D2762: `fft_cq15_1024_default_fallback` at `sse2`, `halfband_decimate_real_q15_fallback` at `neon`, `quad_demod_cq15_fallback` at `avx512`), 11 SIMD entries and levels (I13.1-8) and `stereo_matrix_fallback` (I24-3).
+- **I13.1-7, I13.1-8, I24-3:** the entries over their cap in cycles after the re-judgement of D2746 and of `avx2-runtime` against the library (D2765), `dev` with their numbers: 30 fallback entries and levels against their library reference (I13.1-7; three more of D2746 are `release` again by the accuracy trade of D2760, D2762: `fft_cq15_1024_default_fallback` at `sse2`, `halfband_decimate_real_q15_fallback` at `neon`, `quad_demod_cq15_fallback` at `avx512`), 14 SIMD entries and levels (I13.1-8, three of them at `avx2-runtime`) and `stereo_matrix_fallback` (I24-3).
 - **I44-15, I44-16:** the `cortex-a76` misprediction penalty is provisional; `avx512` cannot be branch-simulated.
 - **Issue #20** (fair references, groups A to D), **#134** (`Q15` fallbacks above CMSIS-DSP's cycles), **#169** (new references).
 - **Planned:** the `avx512` build and KFR at `x86-64-v4` instead of `sapphirerapids`; SNR regression guards ([kernels.md](kernels.md#accuracy-policy)); the instruction counts of ESP32-P4 and RISC-V when M16 and M17 come.

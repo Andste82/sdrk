@@ -11,7 +11,7 @@
 use crate::Fallback;
 use crate::error::{Error, Result};
 use crate::kernels::symbol_sync::{HIST, SymbolSync, SymbolSyncState, SyncSample, Ted};
-use crate::num::flush_denormal_f64;
+use crate::num::{floor_f64, flush_denormal_f64};
 use crate::timing::Progress;
 use crate::types::C32;
 
@@ -49,12 +49,26 @@ fn window<T: SyncSample>(hist: &[T; HIST], input: &[T], i: usize) -> Result<[T; 
     }
 }
 
-/// The position `t - omega/2` of the mid sample as `(integer part, fraction)`.
+/// The position `t - omega/2` of the mid sample of the strobe at `i + mu` as
+/// `(integer part, fraction)`.
 #[inline]
-fn mid_position<T: SyncSample>(s: &SymbolSyncState<T>) -> Result<(usize, f64)> {
-    let v = s.mu - s.omega * 0.5;
-    let f = libm::floor(v);
-    let i = s.i.checked_add_signed(f as isize).ok_or_else(internal)?;
+fn mid_position(i: usize, mu: f64, omega: f64) -> Result<(usize, f64)> {
+    let v = mu - omega * 0.5;
+    // `-omega / 2 < v < 1` and `v` is never `-0.0` (`mu >= +0.0`), so the floor is the
+    // truncation, one less when it is above `v` (the usual case, `v` is negative).
+    #[allow(clippy::cast_possible_truncation, reason = "|v| < 2^52")]
+    #[allow(clippy::cast_precision_loss, reason = "an integer below 2^52")]
+    let (fi, f) = if v.abs() < 4_503_599_627_370_496.0 {
+        let ti = v as i64;
+        let t = ti as f64;
+        if t > v { (ti - 1, t - 1.0) } else { (ti, t) }
+    } else {
+        let f = floor_f64(v);
+        (f as i64, f)
+    };
+    let i = i
+        .checked_add_signed(isize::try_from(fi).map_err(|_| internal())?)
+        .ok_or_else(internal)?;
     Ok((i, v - f))
 }
 
@@ -66,66 +80,108 @@ fn run<T: SyncSample>(
     let n = input.len();
     let len = n + HIST;
     let gardner = s.ted == Ted::Gardner;
+    // The state of the recursion in locals, written back once: the strobe loop is one chain
+    // from symbol to symbol, and the state in registers keeps stores and loads off it.
+    let hist = s.hist;
+    let (sps, kp, ki, lim) = (s.sps, s.kp, s.ki, s.lim);
+    let q_min = (sps + (-lim)) * 0.25;
+    let (mut i, mut mu, mut omega, mut integ) = (s.i, s.mu, s.omega, s.integ);
+    let (mut y_prev, mut d_prev, mut mid) = (s.y_prev, s.d_prev, s.mid);
+    let (mut mid_ready, mut started) = (s.mid_ready, s.started);
     let mut produced = 0usize;
     for o in output.iter_mut() {
-        if gardner && s.started && !s.mid_ready {
-            let (im, mu) = mid_position(s)?;
+        if gardner && started && !mid_ready {
+            let (im, f) = mid_position(i, mu, omega)?;
             if im + 2 >= len {
                 break;
             }
-            s.mid = T::interp(&window(&s.hist, input, im)?, mu as f32);
-            s.mid_ready = true;
+            mid = T::interp(&window(&hist, input, im)?, f as f32);
+            mid_ready = true;
         }
-        if s.i + 2 >= len {
+        if i + 2 >= len {
             break;
         }
-        let y = T::interp(&window(&s.hist, input, s.i)?, s.mu as f32);
+        let y = T::interp(&window(&hist, input, i)?, mu as f32);
         let e = if gardner {
-            let e = if s.started {
-                T::gardner(s.y_prev, y, s.mid)
+            let e = if started {
+                T::gardner(y_prev, y, mid)
             } else {
                 0.0
             };
-            s.mid_ready = false;
+            mid_ready = false;
             e
         } else {
             let d = T::decide(y);
-            let e = if s.started {
-                T::mm(s.d_prev, y, d, s.y_prev)
+            let e = if started {
+                T::mm(d_prev, y, d, y_prev)
             } else {
                 0.0
             };
-            s.d_prev = d;
+            d_prev = d;
             e
         };
-        s.y_prev = y;
-        s.started = true;
+        y_prev = y;
+        started = true;
         *o = y;
         produced += 1;
         let e = if e.is_finite() { f64::from(e) } else { 0.0 };
-        s.integ = flush_denormal_f64(s.integ + s.ki * e)
-            .max(-s.lim)
-            .min(s.lim);
-        s.omega = s.sps + s.integ;
-        let q = s.omega * 0.25;
-        let v = (s.mu + s.omega) + (s.kp * e).max(-q).min(q);
-        let f = libm::floor(v);
-        s.i = s.i.checked_add(f as usize).ok_or_else(internal)?;
-        s.mu = v - f;
+        // The clamps as written, `x.max(-c).min(c)`, give `x` itself whenever `|x| <= c` (the
+        // values are finite); the test is a branch that is almost always taken the same way,
+        // so the clamps leave the chain from strobe to strobe. `q >= q_min` because
+        // `omega = sps + integ >= sps + (-lim)` (rounding is monotone; `* 0.25` is exact).
+        // `flush_denormal_f64` gives `x` itself when `|x| >= 1e-30`: one test for both.
+        let x = integ + ki * e;
+        let a = x.abs();
+        integ = if a >= 1e-30 && a <= lim {
+            x
+        } else {
+            flush_denormal_f64(x).max(-lim).min(lim)
+        };
+        omega = sps + integ;
+        let p = kp * e;
+        let p = if p.abs() <= q_min {
+            p
+        } else {
+            let q = omega * 0.25;
+            p.max(-q).min(q)
+        };
+        let v = (mu + omega) + p;
+        // `v >= mu + 0.75 omega > 0`, so its floor is the truncation.
+        #[allow(clippy::cast_possible_truncation, reason = "0 < v < 2^52")]
+        #[allow(clippy::cast_precision_loss, reason = "an integer below 2^52")]
+        let (fi, f) = if v < 4_503_599_627_370_496.0 {
+            let ti = v as u64;
+            (ti, ti as f64)
+        } else {
+            let f = floor_f64(v);
+            (f as u64, f)
+        };
+        i = i
+            .checked_add(usize::try_from(fi).map_err(|_| internal())?)
+            .ok_or_else(internal)?;
+        mu = v - f;
     }
     // The next position the loop needs decides what stays.
-    let pending = if gardner && s.started && !s.mid_ready {
-        mid_position(s)?.0
+    let pending = if gardner && started && !mid_ready {
+        mid_position(i, mu, omega)?.0
     } else {
-        s.i
+        i
     };
     let k = pending.checked_sub(1).ok_or_else(internal)?.min(n);
     s.hist = [
-        at(&s.hist, input, k)?,
-        at(&s.hist, input, k + 1)?,
-        at(&s.hist, input, k + 2)?,
+        at(&hist, input, k)?,
+        at(&hist, input, k + 1)?,
+        at(&hist, input, k + 2)?,
     ];
-    s.i -= k;
+    s.i = i - k;
+    s.mu = mu;
+    s.omega = omega;
+    s.integ = integ;
+    s.y_prev = y_prev;
+    s.d_prev = d_prev;
+    s.mid = mid;
+    s.mid_ready = mid_ready;
+    s.started = started;
     Ok(Progress {
         consumed: k,
         produced,

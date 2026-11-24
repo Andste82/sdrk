@@ -60,6 +60,31 @@ pub const fn q15_sub_sat(a: Q15, b: Q15) -> Q15 {
     Q15(a.0.saturating_sub(b.0))
 }
 
+/// `floor(x)`, bit for bit the result of `libm::floor` (also for `-0.0`, NaN and the
+/// infinities), by the truncating conversion to `i64` and a correction of one below zero.
+/// `libm` takes its generic floor on x86-64 and aarch64, an out-of-line call; the conversion is
+/// one instruction there (`cvttsd2si`, `fcvtzs`) and keeps the values of a recursion in
+/// registers (the strobes of `symbol_sync`, issue #169).
+#[inline]
+pub fn floor_f64(x: f64) -> f64 {
+    // 2^52: from here on every f64 is an integer (and NaN and the infinities fail the test).
+    if x.abs() < 4_503_599_627_370_496.0 {
+        #[allow(clippy::cast_possible_truncation, reason = "|x| < 2^52 fits an i64")]
+        #[allow(clippy::cast_precision_loss, reason = "|t| < 2^52 is exact in f64")]
+        let t = x as i64 as f64;
+        if t > x {
+            t - 1.0
+        } else if t == 0.0 {
+            // the sign of the zero of `x` (`-0.0` stays `-0.0`, `0.5` gives `+0.0`)
+            x * 0.0
+        } else {
+            t
+        }
+    } else {
+        x
+    }
+}
+
 /// f64 to Q15: NaN gives 0, otherwise `floor(x * 32768 + 0.5)` clamped to the Q15 range.
 #[inline]
 pub fn q15_from_f64(x: f64) -> Q15 {
@@ -414,7 +439,7 @@ pub fn flush_denormal_f64(x: f64) -> f64 {
 mod tests {
     #![allow(clippy::indexing_slicing)]
 
-    use super::{sqrt_f32, sqrt_f64};
+    use super::{floor_f64, sqrt_f32, sqrt_f64};
     use std::vec::Vec;
 
     /// The roots of `x` through a loop over a slice (the form that vectorizes, as in `mag`), each
@@ -503,5 +528,56 @@ mod tests {
             x.push((b >> 11) as f64);
         }
         check_f64(&x);
+    }
+
+    #[test]
+    fn floor_f64_is_libm_floor_bit_for_bit() {
+        let mut xs: Vec<f64> = Vec::from([
+            0.0,
+            -0.0,
+            0.5,
+            -0.5,
+            1.0,
+            -1.0,
+            0.999_999_999_999_999_9,
+            -0.999_999_999_999_999_9,
+            f64::MIN_POSITIVE,
+            -f64::MIN_POSITIVE,
+            5e-324,
+            -5e-324,
+            4_503_599_627_370_495.5,
+            -4_503_599_627_370_495.5,
+            4_503_599_627_370_496.0,
+            -4_503_599_627_370_496.0,
+            9.007_199_254_740_993e15,
+            1e300,
+            -1e300,
+            f64::MAX,
+            f64::MIN,
+            f64::INFINITY,
+            f64::NEG_INFINITY,
+            f64::NAN,
+        ]);
+        // around the integers and random values over many magnitudes
+        for k in -40i32..=40 {
+            let v = f64::from(k);
+            xs.extend([v, v.next_up(), v.next_down()]);
+        }
+        let mut state = 0x9e37_79b9_7f4a_7c15u64;
+        for _ in 0..200_000 {
+            state ^= state << 13;
+            state ^= state >> 7;
+            state ^= state << 17;
+            xs.push(f64::from_bits(state));
+            #[allow(clippy::cast_precision_loss, reason = "a test value")]
+            xs.push((state >> 11) as f64 / 2_097_152.0 - 2.0e9);
+        }
+        for x in xs {
+            let (a, b) = (floor_f64(x), libm::floor(x));
+            assert!(
+                a.to_bits() == b.to_bits() || (a.is_nan() && b.is_nan()),
+                "floor({x:e}): {a:e} against {b:e}"
+            );
+        }
     }
 }

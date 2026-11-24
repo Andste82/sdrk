@@ -1582,8 +1582,7 @@
       "status": "release"
     },
     "simd128": {
-      "status": "info",
-      "waiver": "`dc_block_real` `f32` runs the `f64` block scan of the SIMD backend (maintainer decision of 2026-10-29: a tolerance kernel); no SIMD library has a block-scan form of this first-order recursion (VOLK, KFR and CMSIS-DSP have none), so the comparison is our own fallback, which is not a fair gate for a SIMD branch (D32), and the branch is judged by its simulated cycles and its efficiency (docs/performance.md); reported as information"
+      "status": "release"
     },
     "avx2-runtime": {
       "status": "release"
@@ -1636,8 +1635,7 @@
       "status": "release"
     },
     "simd128": {
-      "status": "info",
-      "waiver": "`deemphasis` `f32` runs the `f64` block scan of the SIMD backend (maintainer decision of 2026-10-29: a tolerance kernel); no SIMD library has a block-scan form of this first-order recursion (VOLK, KFR and CMSIS-DSP have none), so the comparison is our own fallback, which is not a fair gate for a SIMD branch (D32), and the branch is judged by its simulated cycles and its efficiency (docs/performance.md); reported as information"
+      "status": "release"
     },
     "avx2-runtime": {
       "status": "release"
@@ -1690,8 +1688,7 @@
       "status": "release"
     },
     "simd128": {
-      "status": "info",
-      "waiver": "`dc_block` `C32` runs the fallback at `simd128`: the `f64` block scan of the SIMD backend took more instructions there (36.56 against 26.53 per sample), the measure of wasm32 (D33); the comparison is our own fallback, reported as information"
+      "status": "release"
     },
     "avx2-runtime": {
       "status": "release"
@@ -2081,8 +2078,7 @@
       "status": "release"
     },
     "simd128": {
-      "status": "info",
-      "waiver": "CMSIS-DSP has no rational resampler: the comparison is `arm_fir_interpolate_*` by 3 with the same 192 taps, one 64-tap dot product per output sample as ours, but its outputs of one phase have consecutive windows while those of the 3 / 2 resampler are 2 samples apart (another access pattern, which the fallback cannot vectorize the same way), so the comparison is information (D32); ours / CMSIS-DSP at this level: 1.32 instructions per sample"
+      "status": "release"
     }
   },
   "resample_cq15_fallback": {
@@ -2169,8 +2165,7 @@
       "status": "release"
     },
     "simd128": {
-      "status": "info",
-      "waiver": "CMSIS-DSP has no rational resampler: the comparison is `arm_fir_interpolate_*` by 3 with the same 192 taps, one 64-tap dot product per output sample as ours, but its outputs of one phase have consecutive windows while those of the 3 / 2 resampler are 2 samples apart (another access pattern, which the fallback cannot vectorize the same way), so the comparison is information (D32); ours / CMSIS-DSP at this level: 2.33 instructions per sample"
+      "status": "release"
     }
   },
   "resample_real_q15_fallback": {
@@ -2378,8 +2373,7 @@
       "status": "release"
     },
     "simd128": {
-      "status": "info",
-      "waiver": "GNU Radio's `quadrature_demod_cf` takes `gr::fast_atan2f`, a table interpolation of another accuracy class (114.0 dB against 143.6 dB of ours, which is `libm::atan2f` bit for bit as the contract of the fallback requires); reaching its count would mean losing accuracy (D34), so the comparison is information (CMSIS-DSP's `arm_atan2_f32` chain, 136.6 dB, as information next to it). An inline branch-free form of `libm::atan2f` (round 2) met the count but was slower on the host on narrowband FM input, where libm's interval branches predict well, so the fallback keeps the libm call"
+      "status": "release"
     }
   },
   "quad_demod_cq15_fallback": {
@@ -2753,8 +2747,7 @@
       "status": "release"
     },
     "simd128": {
-      "status": "info",
-      "waiver": "CMSIS-DSP `arm_float_to_q15` truncates toward zero (built without `ARM_MATH_ROUNDING`, the default), another accuracy class than our rounding to the nearest integer with ties to even: 89.4 dB against 95.5 dB of ours on the measured input (D34: we do not trade the rounding for its cost), so the comparison is information; the fallback is judged by its simulated cycles"
+      "status": "release"
     }
   },
   "convert_out_real_rs16_fallback": {
@@ -2774,8 +2767,7 @@
       "status": "release"
     },
     "simd128": {
-      "status": "info",
-      "waiver": "CMSIS-DSP `arm_float_to_q15` truncates toward zero (built without `ARM_MATH_ROUNDING`, the default), another accuracy class than our rounding to the nearest integer with ties to even: 89.4 dB against 95.5 dB of ours on the measured input (D34: we do not trade the rounding for its cost), so the comparison is information; the fallback is judged by its simulated cycles"
+      "status": "release"
     }
   },
   "convert_out_cs8_fallback": {
@@ -2795,8 +2787,7 @@
       "status": "dev"
     },
     "simd128": {
-      "status": "info",
-      "waiver": "CMSIS-DSP `arm_float_to_q7` truncates toward zero (built without `ARM_MATH_ROUNDING`, the default), another accuracy class than our rounding to the nearest integer with ties to even: 41.3 dB against 47.3 dB of ours on the measured input (D34: we do not trade the rounding for its cost), so the comparison is information; the fallback is judged by its simulated cycles"
+      "status": "release"
     }
   },
   "convert_out_real_rs8_fallback": {
@@ -2816,8 +2807,7 @@
       "status": "dev"
     },
     "simd128": {
-      "status": "info",
-      "waiver": "CMSIS-DSP `arm_float_to_q7` truncates toward zero (built without `ARM_MATH_ROUNDING`, the default), another accuracy class than our rounding to the nearest integer with ties to even: 41.3 dB against 47.3 dB of ours on the measured input (D34: we do not trade the rounding for its cost), so the comparison is information; the fallback is judged by its simulated cycles"
+      "status": "release"
     }
   },
   "convert_out_cu8_fallback": {
@@ -2840,8 +2830,7 @@
       "waiver": "1.456 / 1.532 (7.14 / 4.35 against 4.90 / 2.84 cycles per sample on cortex-a72 / cortex-a76, CI run 45490280535) of VOLK's `volk_32f_s32f_x2_convert_8u_generic`, which GCC vectorizes for the level, above the dev limit of 1.50; the fallback's offset-binary conversion is the open item I13.1-14, awaiting the maintainer's decision"
     },
     "simd128": {
-      "status": "info",
-      "waiver": "CMSIS-DSP has no offset binary output and `arm_float_to_q7` truncates toward zero (built without `ARM_MATH_ROUNDING`): it is the CU8 conversion without its offset 127.5 and of another accuracy class than our rounding to the nearest integer with ties to even (41.2 dB against 47.3 dB of ours on the measured input; D34), so the comparison is information; the fallback is judged by its simulated cycles"
+      "status": "release"
     }
   },
   "convert_out_real_ru8_fallback": {
@@ -2864,8 +2853,7 @@
       "waiver": "1.457 / 1.533 (3.58 / 2.18 against 2.46 / 1.42 cycles per sample on cortex-a72 / cortex-a76, CI run 45490280535) of VOLK's `volk_32f_s32f_x2_convert_8u_generic`, which GCC vectorizes for the level, above the dev limit of 1.50; the fallback's offset-binary conversion is the open item I13.1-14, awaiting the maintainer's decision"
     },
     "simd128": {
-      "status": "info",
-      "waiver": "CMSIS-DSP has no offset binary output and `arm_float_to_q7` truncates toward zero (built without `ARM_MATH_ROUNDING`): it is the CU8 conversion without its offset 127.5 and of another accuracy class than our rounding to the nearest integer with ties to even (41.2 dB against 47.3 dB of ours on the measured input; D34), so the comparison is information; the fallback is judged by its simulated cycles"
+      "status": "release"
     }
   },
   "dot_fallback": {
@@ -4173,8 +4161,7 @@
       "status": "release"
     },
     "simd128": {
-      "status": "info",
-      "waiver": "provisional"
+      "status": "release"
     }
   },
   "oscillate": {

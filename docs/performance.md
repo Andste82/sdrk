@@ -1516,16 +1516,16 @@ Reference model `skylake`, counter-model `znver2`, mode `whole-loop`; execution 
 | `channelize_block` | 26.88 | 26.88 | 1.00 | 28.65 | 28.65 | 1.00 | sdrk fallback |
 | `channelize_fallback` | 53.40 | 166.47 | 0.32 | 58.24 | 182.49 | 0.32 | liquid-dsp 1.8.3 firpfbch2_crcf analyzer (benches/refs/liquid-channelizer.c), portable dot products, liquid's own FFT |
 | `correlate_block` | 21.86 | 21.86 | 1.00 | 20.46 | 20.46 | 1.00 | sdrk fallback |
-| `costas` | 75.14 | 75.14 | 1.00 | 63.16 | 63.16 | 1.00 | sdrk fallback |
-| `costas_fallback` | 75.14 | 86.69 | 0.87 | 63.16 | 80.45 | 0.78 | GNU Radio costas_loop_cc (costas_loop_cc_impl.cc of gr-digital, generic compiler flags) |
-| `costas_qam1024` | 155.28 | 155.28 | 1.00 | 139.35 | 139.35 | 1.00 | sdrk fallback |
-| `costas_qam1024_fallback` | 155.39 | 287.25 | 0.54 | 139.45 | 247.13 | 0.56 | GNU Radio constellation_receiver_cb with constellation_rect 1024-QAM (constellation_receiver_cb_impl.cc and constellation.cc of gr-digital, generic compiler flags) |
-| `costas_qam16` | 156.32 | 156.32 | 1.00 | 140.29 | 140.29 | 1.00 | sdrk fallback |
-| `costas_qam16_fallback` | 156.32 | 205.13 | 0.76 | 140.29 | 181.04 | 0.77 | GNU Radio constellation_receiver_cb with constellation_rect 16-QAM (constellation_receiver_cb_impl.cc and constellation.cc of gr-digital, generic compiler flags) |
-| `costas_qam256` | 155.96 | 155.96 | 1.00 | 139.93 | 139.93 | 1.00 | sdrk fallback |
-| `costas_qam256_fallback` | 155.96 | 210.20 | 0.74 | 139.93 | 185.12 | 0.76 | GNU Radio constellation_receiver_cb with constellation_rect 256-QAM (constellation_receiver_cb_impl.cc and constellation.cc of gr-digital, generic compiler flags) |
-| `costas_qam64` | 156.28 | 156.28 | 1.00 | 140.26 | 140.26 | 1.00 | sdrk fallback |
-| `costas_qam64_fallback` | 156.28 | 206.09 | 0.76 | 140.26 | 181.50 | 0.77 | GNU Radio constellation_receiver_cb with constellation_rect 64-QAM (constellation_receiver_cb_impl.cc and constellation.cc of gr-digital, generic compiler flags) |
+| `costas` | 75.17 | 75.17 | 1.00 | 62.68 | 62.68 | 1.00 | sdrk fallback |
+| `costas_fallback` | 75.17 | 86.26 | 0.87 | 62.68 | 80.13 | 0.78 | GNU Radio costas_loop_cc (costas_loop_cc_impl.cc of gr-digital, generic compiler flags) |
+| `costas_qam1024` | 155.27 | 155.27 | 1.00 | 139.37 | 139.37 | 1.00 | sdrk fallback |
+| `costas_qam1024_fallback` | 155.27 | 287.31 | 0.54 | 139.37 | 246.17 | 0.57 | GNU Radio constellation_receiver_cb with constellation_rect 1024-QAM (constellation_receiver_cb_impl.cc and constellation.cc of gr-digital, generic compiler flags) |
+| `costas_qam16` | 156.35 | 156.35 | 1.00 | 140.33 | 140.33 | 1.00 | sdrk fallback |
+| `costas_qam16_fallback` | 156.35 | 205.09 | 0.76 | 140.33 | 180.00 | 0.78 | GNU Radio constellation_receiver_cb with constellation_rect 16-QAM (constellation_receiver_cb_impl.cc and constellation.cc of gr-digital, generic compiler flags) |
+| `costas_qam256` | 155.62 | 155.62 | 1.00 | 139.68 | 139.68 | 1.00 | sdrk fallback |
+| `costas_qam256_fallback` | 155.62 | 210.25 | 0.74 | 139.68 | 184.16 | 0.76 | GNU Radio constellation_receiver_cb with constellation_rect 256-QAM (constellation_receiver_cb_impl.cc and constellation.cc of gr-digital, generic compiler flags) |
+| `costas_qam64` | 156.24 | 156.24 | 1.00 | 140.23 | 140.23 | 1.00 | sdrk fallback |
+| `costas_qam64_fallback` | 156.24 | 206.06 | 0.76 | 140.23 | 180.47 | 0.78 | GNU Radio constellation_receiver_cb with constellation_rect 64-QAM (constellation_receiver_cb_impl.cc and constellation.cc of gr-digital, generic compiler flags) |
 | `crc16_ccitt_false` | 13.55 | 15.15 | 0.89 | 11.55 | 13.14 | 0.88 | GNU Radio gr::digital::crc: one 256-entry uint64_t table, a 64-bit remainder, one lookup per byte (generic compiler flags) |
 | `crc16_x25` | 8.06 | 8.15 | 0.99 | 7.06 | 7.14 | 0.99 | GNU Radio gr::digital::crc: one 256-entry uint64_t table, a 64-bit remainder, one lookup per byte (generic compiler flags) |
 | `crc24_adsb` | 13.05 | 15.15 | 0.86 | 11.06 | 13.14 | 0.84 | GNU Radio gr::digital::crc: one 256-entry uint64_t table, a 64-bit remainder, one lookup per byte (generic compiler flags) |
@@ -1574,7 +1574,7 @@ Reference model `skylake`, counter-model `znver2`, mode `whole-loop`; execution 
 | `preemph_limit` | 16.10 | 16.10 | 1.00 | 11.93 | 11.93 | 1.00 | sdrk fallback |
 | `preemph_limit_q15` | 51.64 | 51.64 | 1.00 | 43.84 | 43.84 | 1.00 | sdrk fallback |
 | `preemph_limit_stereo` | 21.13 | 21.13 | 1.00 | 22.70 | 22.70 | 1.00 | sdrk fallback |
-| `psk_demod_block` | 75.59 | 447.26 | 0.17 | 65.96 | 367.86 | 0.18 | GNU Radio fir_filter_ccf + symbol_sync_cc + costas_loop_cc + constellation_decoder_cb (the sum of the blocks of the receiver chain, generic compiler flags; no acquisition and no lock watches) |
+| `psk_demod_block` | 75.60 | 447.26 | 0.17 | 65.90 | 367.86 | 0.18 | GNU Radio fir_filter_ccf + symbol_sync_cc + costas_loop_cc + constellation_decoder_cb (the sum of the blocks of the receiver chain, generic compiler flags; no acquisition and no lock watches) |
 | `psk_mod_block` | 8.98 | 198.05 | 0.05 | 11.40 | 193.95 | 0.06 | GNU Radio constellation_modulator as the sum of its blocks: pack_k_bits_bb + chunks_to_symbols_bc + pfb_arb_resampler_ccf (32 filters of 88 taps and their derivative filters), VOLK's dispatched dot product of the level |
 | `psk_mod_block_liquid` | 8.98 | 77.95 | 0.12 | 11.40 | 66.01 | 0.17 | liquid-dsp 1.8.3 modemcf_modulate (arbitrary-constellation modem) + firinterp_crcf (the root-raised cosine of the block), the SIMD dot products of the level (the portable loop at simd128) |
 | `pulse_match_block` | 42.97 | 94.30 | 0.46 | 38.63 | 96.04 | 0.40 | GNU Radio fir_filter_ccf (fir_filter_ccf_impl.cc of gr-filter) with VOLK's dispatched dot product of the level (volk_32fc_32f_dot_prod_32fc_a, the aligned tap copies of fir_filter) |
@@ -1601,7 +1601,7 @@ Reference model `skylake`, counter-model `znver2`, mode `whole-loop`; execution 
 | `qam_soft_bits_qam64_lut` | 3.03 | 78.15 | 0.04 | 3.34 | 66.60 | 0.05 | GNU Radio constellation_soft_decoder_cf with the look-up table of gen_soft_dec_lut (precision 8, npwr 1; constellation.cc of gr-digital; exact log-likelihood ratio, not max-log; the table lookup and a copy of 2 to 3 floats per symbol, no vector allocation) |
 | `qam_soft_bits_qpsk` | 0.52 | 0.52 | 0.99 | 0.52 | 0.59 | 0.88 | sdrk fallback |
 | `rds_decode_block` | 9.18 | 9.18 | 1.00 | 11.91 | 11.91 | 1.00 | sdrk fallback |
-| `rds_demod_block` | 43.57 | 43.57 | 1.00 | 38.02 | 38.03 | 1.00 | sdrk fallback |
+| `rds_demod_block` | 43.58 | 43.57 | 1.00 | 38.02 | 38.02 | 1.00 | sdrk fallback |
 | `rds_shape` | 83.94 | 83.94 | 1.00 | 75.83 | 75.83 | 1.00 | sdrk fallback |
 | `real_to_complex` | 5.31 | 70.40 | 0.08 | 5.53 | 57.25 | 0.10 | liquid-dsp 1.8.3 firhilbf_decim_execute_block (dotprod_rrrf) with its portable dot product (-O3 -ffp-contract=off, sse2) |
 | `real_to_complex_airspy` | 5.31 | 11.28 | 0.47 | 5.53 | 9.37 | 0.59 | libairspy 1.0.10 iqconverter_float, conversion without remove_dc (USE_SSE2) (-O3 -ffp-contract=off, sse2) |
@@ -1829,16 +1829,16 @@ Reference model `skylake`, counter-model `znver2`, mode `whole-loop`; execution 
 | `channelize_block` | 26.83 | 26.83 | 1.00 | 28.63 | 28.63 | 1.00 | sdrk fallback |
 | `channelize_fallback` | 53.83 | 166.73 | 0.32 | 57.87 | 182.23 | 0.32 | liquid-dsp 1.8.3 firpfbch2_crcf analyzer (benches/refs/liquid-channelizer.c), portable dot products, liquid's own FFT |
 | `correlate_block` | 21.89 | 21.89 | 1.00 | 20.44 | 20.44 | 1.00 | sdrk fallback |
-| `costas` | 73.14 | 73.14 | 1.00 | 62.15 | 62.15 | 1.00 | sdrk fallback |
-| `costas_fallback` | 73.14 | 86.69 | 0.84 | 62.15 | 80.45 | 0.77 | GNU Radio costas_loop_cc (costas_loop_cc_impl.cc of gr-digital, generic compiler flags) |
-| `costas_qam1024` | 155.28 | 155.28 | 1.00 | 139.35 | 139.35 | 1.00 | sdrk fallback |
-| `costas_qam1024_fallback` | 155.37 | 287.25 | 0.54 | 139.46 | 247.13 | 0.56 | GNU Radio constellation_receiver_cb with constellation_rect 1024-QAM (constellation_receiver_cb_impl.cc and constellation.cc of gr-digital, generic compiler flags) |
-| `costas_qam16` | 156.32 | 156.32 | 1.00 | 140.29 | 140.29 | 1.00 | sdrk fallback |
-| `costas_qam16_fallback` | 156.32 | 205.13 | 0.76 | 140.29 | 181.04 | 0.77 | GNU Radio constellation_receiver_cb with constellation_rect 16-QAM (constellation_receiver_cb_impl.cc and constellation.cc of gr-digital, generic compiler flags) |
-| `costas_qam256` | 155.96 | 155.96 | 1.00 | 139.93 | 139.93 | 1.00 | sdrk fallback |
-| `costas_qam256_fallback` | 155.96 | 210.20 | 0.74 | 139.93 | 185.12 | 0.76 | GNU Radio constellation_receiver_cb with constellation_rect 256-QAM (constellation_receiver_cb_impl.cc and constellation.cc of gr-digital, generic compiler flags) |
-| `costas_qam64` | 156.28 | 156.28 | 1.00 | 140.26 | 140.26 | 1.00 | sdrk fallback |
-| `costas_qam64_fallback` | 156.28 | 206.09 | 0.76 | 140.26 | 181.50 | 0.77 | GNU Radio constellation_receiver_cb with constellation_rect 64-QAM (constellation_receiver_cb_impl.cc and constellation.cc of gr-digital, generic compiler flags) |
+| `costas` | 73.67 | 73.67 | 1.00 | 61.19 | 61.19 | 1.00 | sdrk fallback |
+| `costas_fallback` | 73.67 | 86.26 | 0.85 | 61.19 | 80.13 | 0.76 | GNU Radio costas_loop_cc (costas_loop_cc_impl.cc of gr-digital, generic compiler flags) |
+| `costas_qam1024` | 155.27 | 155.27 | 1.00 | 139.37 | 139.37 | 1.00 | sdrk fallback |
+| `costas_qam1024_fallback` | 155.27 | 287.31 | 0.54 | 139.37 | 246.17 | 0.57 | GNU Radio constellation_receiver_cb with constellation_rect 1024-QAM (constellation_receiver_cb_impl.cc and constellation.cc of gr-digital, generic compiler flags) |
+| `costas_qam16` | 156.35 | 156.35 | 1.00 | 140.33 | 140.33 | 1.00 | sdrk fallback |
+| `costas_qam16_fallback` | 156.35 | 205.09 | 0.76 | 140.33 | 180.00 | 0.78 | GNU Radio constellation_receiver_cb with constellation_rect 16-QAM (constellation_receiver_cb_impl.cc and constellation.cc of gr-digital, generic compiler flags) |
+| `costas_qam256` | 155.62 | 155.62 | 1.00 | 139.68 | 139.68 | 1.00 | sdrk fallback |
+| `costas_qam256_fallback` | 155.62 | 210.25 | 0.74 | 139.68 | 184.16 | 0.76 | GNU Radio constellation_receiver_cb with constellation_rect 256-QAM (constellation_receiver_cb_impl.cc and constellation.cc of gr-digital, generic compiler flags) |
+| `costas_qam64` | 156.24 | 156.24 | 1.00 | 140.23 | 140.23 | 1.00 | sdrk fallback |
+| `costas_qam64_fallback` | 156.24 | 206.06 | 0.76 | 140.23 | 180.47 | 0.78 | GNU Radio constellation_receiver_cb with constellation_rect 64-QAM (constellation_receiver_cb_impl.cc and constellation.cc of gr-digital, generic compiler flags) |
 | `crc16_ccitt_false` | 13.55 | 15.15 | 0.89 | 11.55 | 13.14 | 0.88 | GNU Radio gr::digital::crc: one 256-entry uint64_t table, a 64-bit remainder, one lookup per byte (generic compiler flags) |
 | `crc16_x25` | 8.06 | 8.15 | 0.99 | 7.06 | 7.14 | 0.99 | GNU Radio gr::digital::crc: one 256-entry uint64_t table, a 64-bit remainder, one lookup per byte (generic compiler flags) |
 | `crc24_adsb` | 13.05 | 15.15 | 0.86 | 11.06 | 13.14 | 0.84 | GNU Radio gr::digital::crc: one 256-entry uint64_t table, a 64-bit remainder, one lookup per byte (generic compiler flags) |
@@ -1887,7 +1887,7 @@ Reference model `skylake`, counter-model `znver2`, mode `whole-loop`; execution 
 | `preemph_limit` | 16.10 | 16.10 | 1.00 | 11.44 | 11.44 | 1.00 | sdrk fallback |
 | `preemph_limit_q15` | 51.64 | 51.64 | 1.00 | 43.84 | 43.84 | 1.00 | sdrk fallback |
 | `preemph_limit_stereo` | 20.85 | 20.85 | 1.00 | 21.65 | 21.65 | 1.00 | sdrk fallback |
-| `psk_demod_block` | 75.46 | 447.26 | 0.17 | 65.58 | 367.86 | 0.18 | GNU Radio fir_filter_ccf + symbol_sync_cc + costas_loop_cc + constellation_decoder_cb (the sum of the blocks of the receiver chain, generic compiler flags; no acquisition and no lock watches) |
+| `psk_demod_block` | 75.52 | 447.26 | 0.17 | 65.46 | 367.86 | 0.18 | GNU Radio fir_filter_ccf + symbol_sync_cc + costas_loop_cc + constellation_decoder_cb (the sum of the blocks of the receiver chain, generic compiler flags; no acquisition and no lock watches) |
 | `psk_mod_block` | 8.64 | 216.10 | 0.04 | 10.63 | 212.97 | 0.05 | GNU Radio constellation_modulator as the sum of its blocks: pack_k_bits_bb + chunks_to_symbols_bc + pfb_arb_resampler_ccf (32 filters of 88 taps and their derivative filters), VOLK's dispatched dot product of the level |
 | `psk_mod_block_liquid` | 8.64 | 77.95 | 0.11 | 10.63 | 66.00 | 0.16 | liquid-dsp 1.8.3 modemcf_modulate (arbitrary-constellation modem) + firinterp_crcf (the root-raised cosine of the block), the SIMD dot products of the level (the portable loop at simd128) |
 | `pulse_match_block` | 42.97 | 103.32 | 0.42 | 38.63 | 105.37 | 0.37 | GNU Radio fir_filter_ccf (fir_filter_ccf_impl.cc of gr-filter) with VOLK's dispatched dot product of the level (volk_32fc_32f_dot_prod_32fc_a, the aligned tap copies of fir_filter) |
@@ -1914,7 +1914,7 @@ Reference model `skylake`, counter-model `znver2`, mode `whole-loop`; execution 
 | `qam_soft_bits_qam64_lut` | 3.03 | 78.15 | 0.04 | 3.34 | 66.60 | 0.05 | GNU Radio constellation_soft_decoder_cf with the look-up table of gen_soft_dec_lut (precision 8, npwr 1; constellation.cc of gr-digital; exact log-likelihood ratio, not max-log; the table lookup and a copy of 2 to 3 floats per symbol, no vector allocation) |
 | `qam_soft_bits_qpsk` | 0.52 | 0.52 | 0.99 | 0.52 | 0.59 | 0.89 | sdrk fallback |
 | `rds_decode_block` | 8.74 | 8.74 | 1.00 | 11.50 | 11.50 | 1.00 | sdrk fallback |
-| `rds_demod_block` | 43.56 | 43.55 | 1.00 | 37.97 | 37.97 | 1.00 | sdrk fallback |
+| `rds_demod_block` | 43.55 | 43.55 | 1.00 | 37.96 | 37.96 | 1.00 | sdrk fallback |
 | `rds_shape` | 78.95 | 78.95 | 1.00 | 71.83 | 71.83 | 1.00 | sdrk fallback |
 | `real_to_complex` | 5.34 | 55.36 | 0.10 | 5.44 | 50.25 | 0.11 | liquid-dsp 1.8.3 firhilbf_decim_execute_block (dotprod_rrrf) with its SSE (SSE3 horizontal add) dot product (-O3 -ffp-contract=off, sse4.2) |
 | `real_to_complex_cq15` | 7.55 | 10.87 | 0.69 | 6.96 | 13.90 | 0.50 | libairspy 1.0.10 iqconverter_int16 (truncating >> 15, 32-bit accumulator, the odd samples halved), conversion without remove_dc (-O3 -ffp-contract=off, sse4.2) |
@@ -2143,16 +2143,16 @@ Reference model `znver3`, counter-model `alderlake`, mode `whole-loop`; executio
 | `channelize_block` | 12.09 | 12.09 | 1.00 | 12.87 | 12.87 | 1.00 | sdrk fallback |
 | `channelize_fallback` | 34.38 | 147.96 | 0.23 | 32.18 | 133.26 | 0.24 | liquid-dsp 1.8.3 firpfbch2_crcf analyzer (benches/refs/liquid-channelizer.c), portable dot products, liquid's own FFT |
 | `correlate_block` | 7.62 | 7.62 | 1.00 | 7.16 | 7.16 | 1.00 | sdrk fallback |
-| `costas` | 56.17 | 56.17 | 1.00 | 68.16 | 68.16 | 1.00 | sdrk fallback |
-| `costas_fallback` | 56.17 | 76.48 | 0.73 | 68.16 | 66.29 | 1.03 | GNU Radio costas_loop_cc (costas_loop_cc_impl.cc of gr-digital, generic compiler flags) |
-| `costas_qam1024` | 131.03 | 131.03 | 1.00 | 152.02 | 152.02 | 1.00 | sdrk fallback |
-| `costas_qam1024_fallback` | 131.43 | 211.11 | 0.62 | 152.22 | 254.51 | 0.60 | GNU Radio constellation_receiver_cb with constellation_rect 1024-QAM (constellation_receiver_cb_impl.cc and constellation.cc of gr-digital, generic compiler flags) |
-| `costas_qam16` | 124.31 | 124.31 | 1.00 | 148.35 | 148.35 | 1.00 | sdrk fallback |
-| `costas_qam16_fallback` | 124.31 | 166.51 | 0.75 | 148.35 | 172.95 | 0.86 | GNU Radio constellation_receiver_cb with constellation_rect 16-QAM (constellation_receiver_cb_impl.cc and constellation.cc of gr-digital, generic compiler flags) |
-| `costas_qam256` | 132.04 | 132.04 | 1.00 | 153.09 | 153.09 | 1.00 | sdrk fallback |
-| `costas_qam256_fallback` | 132.04 | 169.25 | 0.78 | 153.09 | 177.98 | 0.86 | GNU Radio constellation_receiver_cb with constellation_rect 256-QAM (constellation_receiver_cb_impl.cc and constellation.cc of gr-digital, generic compiler flags) |
-| `costas_qam64` | 128.27 | 128.27 | 1.00 | 154.29 | 154.29 | 1.00 | sdrk fallback |
-| `costas_qam64_fallback` | 128.27 | 166.64 | 0.77 | 154.29 | 173.22 | 0.89 | GNU Radio constellation_receiver_cb with constellation_rect 64-QAM (constellation_receiver_cb_impl.cc and constellation.cc of gr-digital, generic compiler flags) |
+| `costas` | 57.69 | 57.69 | 1.00 | 68.20 | 68.20 | 1.00 | sdrk fallback |
+| `costas_fallback` | 57.69 | 76.46 | 0.75 | 68.20 | 66.03 | 1.03 | GNU Radio costas_loop_cc (costas_loop_cc_impl.cc of gr-digital, generic compiler flags) |
+| `costas_qam1024` | 131.34 | 131.34 | 1.00 | 152.10 | 152.10 | 1.00 | sdrk fallback |
+| `costas_qam1024_fallback` | 131.34 | 211.17 | 0.62 | 152.10 | 255.05 | 0.60 | GNU Radio constellation_receiver_cb with constellation_rect 1024-QAM (constellation_receiver_cb_impl.cc and constellation.cc of gr-digital, generic compiler flags) |
+| `costas_qam16` | 124.35 | 124.35 | 1.00 | 149.39 | 149.39 | 1.00 | sdrk fallback |
+| `costas_qam16_fallback` | 124.35 | 166.34 | 0.75 | 149.39 | 173.25 | 0.86 | GNU Radio constellation_receiver_cb with constellation_rect 16-QAM (constellation_receiver_cb_impl.cc and constellation.cc of gr-digital, generic compiler flags) |
+| `costas_qam256` | 131.66 | 131.66 | 1.00 | 152.53 | 152.53 | 1.00 | sdrk fallback |
+| `costas_qam256_fallback` | 131.66 | 169.39 | 0.78 | 152.53 | 178.61 | 0.85 | GNU Radio constellation_receiver_cb with constellation_rect 256-QAM (constellation_receiver_cb_impl.cc and constellation.cc of gr-digital, generic compiler flags) |
+| `costas_qam64` | 128.23 | 128.23 | 1.00 | 154.25 | 154.25 | 1.00 | sdrk fallback |
+| `costas_qam64_fallback` | 128.23 | 166.51 | 0.77 | 154.25 | 173.57 | 0.89 | GNU Radio constellation_receiver_cb with constellation_rect 64-QAM (constellation_receiver_cb_impl.cc and constellation.cc of gr-digital, generic compiler flags) |
 | `crc16_ccitt_false` | 11.81 | 13.17 | 0.90 | 12.80 | 16.19 | 0.79 | GNU Radio gr::digital::crc: one 256-entry uint64_t table, a 64-bit remainder, one lookup per byte (generic compiler flags) |
 | `crc16_x25` | 7.05 | 10.39 | 0.68 | 8.05 | 9.40 | 0.86 | GNU Radio gr::digital::crc: one 256-entry uint64_t table, a 64-bit remainder, one lookup per byte (generic compiler flags) |
 | `crc24_adsb` | 11.04 | 13.17 | 0.84 | 12.04 | 16.19 | 0.74 | GNU Radio gr::digital::crc: one 256-entry uint64_t table, a 64-bit remainder, one lookup per byte (generic compiler flags) |
@@ -2201,7 +2201,7 @@ Reference model `znver3`, counter-model `alderlake`, mode `whole-loop`; executio
 | `preemph_limit` | 15.37 | 15.37 | 1.00 | 13.18 | 13.18 | 1.00 | sdrk fallback |
 | `preemph_limit_q15` | 27.62 | 27.62 | 1.00 | 18.69 | 18.69 | 1.00 | sdrk fallback |
 | `preemph_limit_stereo` | 16.71 | 16.71 | 1.00 | 22.32 | 22.32 | 1.00 | sdrk fallback |
-| `psk_demod_block` | 38.23 | 1161.39 | 0.03 | 40.21 | 415.11 | 0.10 | GNU Radio fir_filter_ccf + symbol_sync_cc + costas_loop_cc + constellation_decoder_cb (the sum of the blocks of the receiver chain, generic compiler flags; no acquisition and no lock watches) |
+| `psk_demod_block` | 38.39 | 1161.39 | 0.03 | 39.98 | 415.11 | 0.10 | GNU Radio fir_filter_ccf + symbol_sync_cc + costas_loop_cc + constellation_decoder_cb (the sum of the blocks of the receiver chain, generic compiler flags; no acquisition and no lock watches) |
 | `psk_mod_block` | 4.37 | 180.44 | 0.02 | 4.25 | 249.99 | 0.02 | GNU Radio constellation_modulator as the sum of its blocks: pack_k_bits_bb + chunks_to_symbols_bc + pfb_arb_resampler_ccf (32 filters of 88 taps and their derivative filters), VOLK's dispatched dot product of the level |
 | `psk_mod_block_liquid` | 4.37 | 57.45 | 0.08 | 4.25 | 57.04 | 0.07 | liquid-dsp 1.8.3 modemcf_modulate (arbitrary-constellation modem) + firinterp_crcf (the root-raised cosine of the block), the SIMD dot products of the level (the portable loop at simd128) |
 | `pulse_match_block` | 12.41 | 878.31 | 0.01 | 12.07 | 151.26 | 0.08 | GNU Radio fir_filter_ccf (fir_filter_ccf_impl.cc of gr-filter) with VOLK's dispatched dot product of the level (volk_32fc_32f_dot_prod_32fc_a, the aligned tap copies of fir_filter) |
@@ -2228,7 +2228,7 @@ Reference model `znver3`, counter-model `alderlake`, mode `whole-loop`; executio
 | `qam_soft_bits_qam64_lut` | 1.55 | 56.48 | 0.03 | 1.42 | 55.13 | 0.03 | GNU Radio constellation_soft_decoder_cf with the look-up table of gen_soft_dec_lut (precision 8, npwr 1; constellation.cc of gr-digital; exact log-likelihood ratio, not max-log; the table lookup and a copy of 2 to 3 floats per symbol, no vector allocation) |
 | `qam_soft_bits_qpsk` | 0.26 | 0.26 | 1.00 | 0.20 | 0.20 | 0.99 | sdrk fallback |
 | `rds_decode_block` | 7.28 | 7.28 | 1.00 | 7.98 | 7.98 | 1.00 | sdrk fallback |
-| `rds_demod_block` | 16.72 | 16.72 | 1.00 | 14.46 | 14.46 | 1.00 | sdrk fallback |
+| `rds_demod_block` | 16.73 | 16.73 | 1.00 | 14.45 | 14.45 | 1.00 | sdrk fallback |
 | `rds_shape` | 50.41 | 50.41 | 1.00 | 78.60 | 78.60 | 1.00 | sdrk fallback |
 | `real_to_complex` | 2.50 | 91.87 | 0.03 | 2.29 | 35.24 | 0.06 | liquid-dsp 1.8.3 firhilbf_decim_execute_block (dotprod_rrrf) with its AVX dot product (-O3 -ffp-contract=off, avx2) |
 | `real_to_complex_cq15` | 3.60 | 7.27 | 0.50 | 4.87 | 8.83 | 0.55 | libairspy 1.0.10 iqconverter_int16 (truncating >> 15, 32-bit accumulator, the odd samples halved), conversion without remove_dc (-O3 -ffp-contract=off, avx2) |
@@ -2457,16 +2457,16 @@ Reference model `znver4`, counter-model `sapphirerapids`, mode `whole-loop`; exe
 | `channelize_block` | 12.45 | 12.45 | 1.00 | 16.15 | 16.15 | 1.00 | sdrk fallback |
 | `channelize_fallback` | 37.41 | 105.93 | 0.35 | 32.12 | 118.74 | 0.27 | liquid-dsp 1.8.3 firpfbch2_crcf analyzer (benches/refs/liquid-channelizer.c), portable dot products, liquid's own FFT |
 | `correlate_block` | 7.64 | 7.64 | 1.00 | 5.52 | 5.52 | 1.00 | sdrk fallback |
-| `costas` | 55.09 | 55.09 | 1.00 | 68.07 | 68.07 | 1.00 | sdrk fallback |
-| `costas_fallback` | 55.09 | 68.92 | 0.80 | 68.07 | 66.44 | 1.02 | GNU Radio costas_loop_cc (costas_loop_cc_impl.cc of gr-digital, generic compiler flags) |
-| `costas_qam1024` | 127.06 | 127.06 | 1.00 | 148.29 | 148.29 | 1.00 | sdrk fallback |
-| `costas_qam1024_fallback` | 127.43 | 208.56 | 0.61 | 148.41 | 254.51 | 0.58 | GNU Radio constellation_receiver_cb with constellation_rect 1024-QAM (constellation_receiver_cb_impl.cc and constellation.cc of gr-digital, generic compiler flags) |
-| `costas_qam16` | 119.37 | 119.37 | 1.00 | 137.41 | 137.41 | 1.00 | sdrk fallback |
-| `costas_qam16_fallback` | 119.37 | 158.63 | 0.75 | 137.41 | 172.95 | 0.79 | GNU Radio constellation_receiver_cb with constellation_rect 16-QAM (constellation_receiver_cb_impl.cc and constellation.cc of gr-digital, generic compiler flags) |
-| `costas_qam256` | 128.09 | 128.09 | 1.00 | 149.16 | 149.16 | 1.00 | sdrk fallback |
-| `costas_qam256_fallback` | 128.09 | 161.70 | 0.79 | 149.16 | 177.98 | 0.84 | GNU Radio constellation_receiver_cb with constellation_rect 256-QAM (constellation_receiver_cb_impl.cc and constellation.cc of gr-digital, generic compiler flags) |
-| `costas_qam64` | 121.33 | 121.33 | 1.00 | 140.37 | 140.37 | 1.00 | sdrk fallback |
-| `costas_qam64_fallback` | 121.33 | 159.08 | 0.76 | 140.37 | 173.40 | 0.81 | GNU Radio constellation_receiver_cb with constellation_rect 64-QAM (constellation_receiver_cb_impl.cc and constellation.cc of gr-digital, generic compiler flags) |
+| `costas` | 55.10 | 55.10 | 1.00 | 69.56 | 69.56 | 1.00 | sdrk fallback |
+| `costas_fallback` | 55.10 | 68.66 | 0.80 | 69.56 | 66.18 | 1.05 | GNU Radio costas_loop_cc (costas_loop_cc_impl.cc of gr-digital, generic compiler flags) |
+| `costas_qam1024` | 127.33 | 127.33 | 1.00 | 148.29 | 148.29 | 1.00 | sdrk fallback |
+| `costas_qam1024_fallback` | 127.33 | 208.62 | 0.61 | 148.29 | 255.05 | 0.58 | GNU Radio constellation_receiver_cb with constellation_rect 1024-QAM (constellation_receiver_cb_impl.cc and constellation.cc of gr-digital, generic compiler flags) |
+| `costas_qam16` | 119.28 | 119.28 | 1.00 | 137.30 | 137.30 | 1.00 | sdrk fallback |
+| `costas_qam16_fallback` | 119.28 | 158.59 | 0.75 | 137.30 | 173.33 | 0.79 | GNU Radio constellation_receiver_cb with constellation_rect 16-QAM (constellation_receiver_cb_impl.cc and constellation.cc of gr-digital, generic compiler flags) |
+| `costas_qam256` | 127.65 | 127.65 | 1.00 | 148.62 | 148.62 | 1.00 | sdrk fallback |
+| `costas_qam256_fallback` | 127.65 | 161.83 | 0.79 | 148.62 | 178.61 | 0.83 | GNU Radio constellation_receiver_cb with constellation_rect 256-QAM (constellation_receiver_cb_impl.cc and constellation.cc of gr-digital, generic compiler flags) |
+| `costas_qam64` | 121.28 | 121.28 | 1.00 | 140.31 | 140.31 | 1.00 | sdrk fallback |
+| `costas_qam64_fallback` | 121.28 | 159.13 | 0.76 | 140.31 | 173.92 | 0.81 | GNU Radio constellation_receiver_cb with constellation_rect 64-QAM (constellation_receiver_cb_impl.cc and constellation.cc of gr-digital, generic compiler flags) |
 | `crc16_ccitt_false` | 11.81 | 13.17 | 0.90 | 12.80 | 16.19 | 0.79 | GNU Radio gr::digital::crc: one 256-entry uint64_t table, a 64-bit remainder, one lookup per byte (generic compiler flags) |
 | `crc16_x25` | 7.05 | 10.38 | 0.68 | 8.04 | 9.40 | 0.86 | GNU Radio gr::digital::crc: one 256-entry uint64_t table, a 64-bit remainder, one lookup per byte (generic compiler flags) |
 | `crc24_adsb` | 11.04 | 13.17 | 0.84 | 12.04 | 16.19 | 0.74 | GNU Radio gr::digital::crc: one 256-entry uint64_t table, a 64-bit remainder, one lookup per byte (generic compiler flags) |
@@ -2515,7 +2515,7 @@ Reference model `znver4`, counter-model `sapphirerapids`, mode `whole-loop`; exe
 | `preemph_limit` | 19.13 | 19.13 | 1.00 | 12.17 | 12.17 | 1.00 | sdrk fallback |
 | `preemph_limit_q15` | 26.71 | 26.71 | 1.00 | 18.69 | 18.69 | 1.00 | sdrk fallback |
 | `preemph_limit_stereo` | 15.64 | 15.64 | 1.00 | 13.07 | 13.07 | 1.00 | sdrk fallback |
-| `psk_demod_block` | 33.40 | 1155.72 | 0.03 | 35.41 | 415.00 | 0.09 | GNU Radio fir_filter_ccf + symbol_sync_cc + costas_loop_cc + constellation_decoder_cb (the sum of the blocks of the receiver chain, generic compiler flags; no acquisition and no lock watches) |
+| `psk_demod_block` | 33.44 | 1156.90 | 0.03 | 35.61 | 415.10 | 0.09 | GNU Radio fir_filter_ccf + symbol_sync_cc + costas_loop_cc + constellation_decoder_cb (the sum of the blocks of the receiver chain, generic compiler flags; no acquisition and no lock watches) |
 | `psk_mod_block` | 4.66 | 216.38 | 0.02 | 3.57 | 250.10 | 0.01 | GNU Radio constellation_modulator as the sum of its blocks: pack_k_bits_bb + chunks_to_symbols_bc + pfb_arb_resampler_ccf (32 filters of 88 taps and their derivative filters), VOLK's dispatched dot product of the level |
 | `psk_mod_block_liquid` | 4.66 | 49.88 | 0.09 | 3.57 | 57.19 | 0.06 | liquid-dsp 1.8.3 modemcf_modulate (arbitrary-constellation modem) + firinterp_crcf (the root-raised cosine of the block), the SIMD dot products of the level (the portable loop at simd128) |
 | `pulse_match_block` | 10.87 | 878.11 | 0.01 | 10.43 | 150.71 | 0.07 | GNU Radio fir_filter_ccf (fir_filter_ccf_impl.cc of gr-filter) with VOLK's dispatched dot product of the level (volk_32fc_32f_dot_prod_32fc_a, the aligned tap copies of fir_filter) |
@@ -2542,7 +2542,7 @@ Reference model `znver4`, counter-model `sapphirerapids`, mode `whole-loop`; exe
 | `qam_soft_bits_qam64_lut` | 0.77 | 56.64 | 0.01 | 0.77 | 55.46 | 0.01 | GNU Radio constellation_soft_decoder_cf with the look-up table of gen_soft_dec_lut (precision 8, npwr 1; constellation.cc of gr-digital; exact log-likelihood ratio, not max-log; the table lookup and a copy of 2 to 3 floats per symbol, no vector allocation) |
 | `qam_soft_bits_qpsk` | 0.14 | 0.26 | 0.52 | 0.13 | 0.20 | 0.67 | sdrk fallback |
 | `rds_decode_block` | 7.20 | 7.20 | 1.00 | 7.96 | 7.96 | 1.00 | sdrk fallback |
-| `rds_demod_block` | 475.90 | 476.00 | 1.00 | 52.74 | 52.75 | 1.00 | sdrk fallback |
+| `rds_demod_block` | 480.73 | 480.83 | 1.00 | 53.13 | 53.13 | 1.00 | sdrk fallback |
 | `rds_shape` | 42.06 | 42.06 | 1.00 | 39.42 | 39.42 | 1.00 | sdrk fallback |
 | `real_to_complex` | 1.99 | 53.98 | 0.04 | 1.57 | 23.02 | 0.07 | liquid-dsp 1.8.3 firhilbf_decim_execute_block (dotprod_rrrf) with its AVX-512F dot product (-O3 -ffp-contract=off, avx512) |
 | `real_to_complex_cq15` | 4.28 | 220.09 | 0.02 | 5.03 | 25.92 | 0.19 | libairspy 1.0.10 iqconverter_int16 (truncating >> 15, 32-bit accumulator, the odd samples halved), conversion without remove_dc (-O3 -ffp-contract=off, avx512) |
@@ -2771,16 +2771,16 @@ Reference model `cortex-a72`, counter-model `cortex-a76`, mode `whole-loop`; exe
 | `channelize_block` | 30.98 | 30.98 | 1.00 | 22.71 | 22.71 | 1.00 | sdrk fallback |
 | `channelize_fallback` | 97.44 | 221.93 | 0.44 | 81.02 | 165.45 | 0.49 | liquid-dsp 1.8.3 firpfbch2_crcf analyzer (benches/refs/liquid-channelizer.c), portable dot products, liquid's own FFT |
 | `correlate_block` | 44.25 | 44.25 | 1.00 | 30.68 | 30.68 | 1.00 | sdrk fallback |
-| `costas` | 86.13 | 86.13 | 1.00 | 54.09 | 54.09 | 1.00 | sdrk fallback |
-| `costas_fallback` | 86.13 | 82.40 | 1.05 | 54.09 | 75.07 | 0.72 | GNU Radio costas_loop_cc (costas_loop_cc_impl.cc of gr-digital, generic compiler flags) |
-| `costas_qam1024` | 163.07 | 163.07 | 1.00 | 109.89 | 109.89 | 1.00 | sdrk fallback |
-| `costas_qam1024_fallback` | 163.11 | 268.19 | 0.61 | 109.73 | 256.75 | 0.43 | GNU Radio constellation_receiver_cb with constellation_rect 1024-QAM (constellation_receiver_cb_impl.cc and constellation.cc of gr-digital, generic compiler flags) |
-| `costas_qam16` | 153.34 | 153.34 | 1.00 | 102.23 | 102.23 | 1.00 | sdrk fallback |
-| `costas_qam16_fallback` | 153.34 | 194.18 | 0.79 | 102.23 | 175.13 | 0.58 | GNU Radio constellation_receiver_cb with constellation_rect 16-QAM (constellation_receiver_cb_impl.cc and constellation.cc of gr-digital, generic compiler flags) |
-| `costas_qam256` | 163.25 | 163.25 | 1.00 | 108.90 | 108.90 | 1.00 | sdrk fallback |
-| `costas_qam256_fallback` | 163.25 | 199.19 | 0.82 | 108.90 | 180.55 | 0.60 | GNU Radio constellation_receiver_cb with constellation_rect 256-QAM (constellation_receiver_cb_impl.cc and constellation.cc of gr-digital, generic compiler flags) |
-| `costas_qam64` | 146.24 | 146.24 | 1.00 | 110.18 | 110.18 | 1.00 | sdrk fallback |
-| `costas_qam64_fallback` | 146.24 | 194.81 | 0.75 | 110.18 | 175.71 | 0.63 | GNU Radio constellation_receiver_cb with constellation_rect 64-QAM (constellation_receiver_cb_impl.cc and constellation.cc of gr-digital, generic compiler flags) |
+| `costas` | 94.19 | 94.19 | 1.00 | 55.58 | 55.58 | 1.00 | sdrk fallback |
+| `costas_fallback` | 94.19 | 87.54 | 1.08 | 55.58 | 74.73 | 0.74 | GNU Radio costas_loop_cc (costas_loop_cc_impl.cc of gr-digital, generic compiler flags) |
+| `costas_qam1024` | 190.67 | 190.67 | 1.00 | 109.88 | 109.88 | 1.00 | sdrk fallback |
+| `costas_qam1024_fallback` | 190.67 | 311.89 | 0.61 | 109.88 | 256.78 | 0.43 | GNU Radio constellation_receiver_cb with constellation_rect 1024-QAM (constellation_receiver_cb_impl.cc and constellation.cc of gr-digital, generic compiler flags) |
+| `costas_qam16` | 180.44 | 180.44 | 1.00 | 102.26 | 102.26 | 1.00 | sdrk fallback |
+| `costas_qam16_fallback` | 180.44 | 237.51 | 0.76 | 102.26 | 175.11 | 0.58 | GNU Radio constellation_receiver_cb with constellation_rect 16-QAM (constellation_receiver_cb_impl.cc and constellation.cc of gr-digital, generic compiler flags) |
+| `costas_qam256` | 190.87 | 190.87 | 1.00 | 109.03 | 109.03 | 1.00 | sdrk fallback |
+| `costas_qam256_fallback` | 190.87 | 242.80 | 0.79 | 109.03 | 180.58 | 0.60 | GNU Radio constellation_receiver_cb with constellation_rect 256-QAM (constellation_receiver_cb_impl.cc and constellation.cc of gr-digital, generic compiler flags) |
+| `costas_qam64` | 173.25 | 173.25 | 1.00 | 110.16 | 110.16 | 1.00 | sdrk fallback |
+| `costas_qam64_fallback` | 173.25 | 238.32 | 0.73 | 110.16 | 175.70 | 0.63 | GNU Radio constellation_receiver_cb with constellation_rect 64-QAM (constellation_receiver_cb_impl.cc and constellation.cc of gr-digital, generic compiler flags) |
 | `crc16_ccitt_false` | 10.13 | 10.16 | 1.00 | 7.10 | 9.15 | 0.78 | GNU Radio gr::digital::crc: one 256-entry uint64_t table, a 64-bit remainder, one lookup per byte (generic compiler flags) |
 | `crc16_x25` | 8.11 | 8.17 | 0.99 | 7.10 | 7.15 | 0.99 | GNU Radio gr::digital::crc: one 256-entry uint64_t table, a 64-bit remainder, one lookup per byte (generic compiler flags) |
 | `crc24_adsb` | 8.10 | 10.16 | 0.80 | 7.09 | 9.15 | 0.78 | GNU Radio gr::digital::crc: one 256-entry uint64_t table, a 64-bit remainder, one lookup per byte (generic compiler flags) |
@@ -2829,7 +2829,7 @@ Reference model `cortex-a72`, counter-model `cortex-a76`, mode `whole-loop`; exe
 | `preemph_limit` | 15.43 | 15.43 | 1.00 | 15.41 | 15.41 | 1.00 | sdrk fallback |
 | `preemph_limit_q15` | 55.11 | 55.11 | 1.00 | 40.70 | 40.70 | 1.00 | sdrk fallback |
 | `preemph_limit_stereo` | 24.12 | 24.12 | 1.00 | 22.90 | 22.90 | 1.00 | sdrk fallback |
-| `psk_demod_block` | 86.53 | 361.97 | 0.24 | 55.96 | 272.98 | 0.20 | GNU Radio fir_filter_ccf + symbol_sync_cc + costas_loop_cc + constellation_decoder_cb (the sum of the blocks of the receiver chain, generic compiler flags; no acquisition and no lock watches) |
+| `psk_demod_block` | 86.53 | 361.97 | 0.24 | 56.02 | 272.98 | 0.21 | GNU Radio fir_filter_ccf + symbol_sync_cc + costas_loop_cc + constellation_decoder_cb (the sum of the blocks of the receiver chain, generic compiler flags; no acquisition and no lock watches) |
 | `psk_mod_block` | 14.00 | 340.13 | 0.04 | 13.06 | 264.83 | 0.05 | GNU Radio constellation_modulator as the sum of its blocks: pack_k_bits_bb + chunks_to_symbols_bc + pfb_arb_resampler_ccf (32 filters of 88 taps and their derivative filters), VOLK's dispatched dot product of the level |
 | `psk_mod_block_liquid` | 14.00 | 115.22 | 0.12 | 13.06 | 109.07 | 0.12 | liquid-dsp 1.8.3 modemcf_modulate (arbitrary-constellation modem) + firinterp_crcf (the root-raised cosine of the block), the SIMD dot products of the level (the portable loop at simd128) |
 | `pulse_match_block` | 50.35 | 179.70 | 0.28 | 31.64 | 129.18 | 0.24 | GNU Radio fir_filter_ccf (fir_filter_ccf_impl.cc of gr-filter) with VOLK's dispatched dot product of the level (volk_32fc_32f_dot_prod_32fc_a, the aligned tap copies of fir_filter) |
@@ -2856,7 +2856,7 @@ Reference model `cortex-a72`, counter-model `cortex-a76`, mode `whole-loop`; exe
 | `qam_soft_bits_qam64_lut` | 4.55 | 63.03 | 0.07 | 3.03 | 45.97 | 0.07 | GNU Radio constellation_soft_decoder_cf with the look-up table of gen_soft_dec_lut (precision 8, npwr 1; constellation.cc of gr-digital; exact log-likelihood ratio, not max-log; the table lookup and a copy of 2 to 3 floats per symbol, no vector allocation) |
 | `qam_soft_bits_qpsk` | 1.78 | 1.78 | 1.00 | 1.53 | 1.53 | 1.00 | sdrk fallback |
 | `rds_decode_block` | 12.14 | 12.14 | 1.00 | 13.67 | 13.67 | 1.00 | sdrk fallback |
-| `rds_demod_block` | 54.67 | 54.67 | 1.00 | 49.29 | 49.29 | 1.00 | sdrk fallback |
+| `rds_demod_block` | 54.68 | 54.68 | 1.00 | 49.30 | 49.30 | 1.00 | sdrk fallback |
 | `rds_shape` | 53.93 | 53.93 | 1.00 | 47.22 | 47.22 | 1.00 | sdrk fallback |
 | `real_to_complex` | 10.15 | 86.75 | 0.12 | 8.59 | 76.87 | 0.11 | liquid-dsp 1.8.3 firhilbf_decim_execute_block (dotprod_rrrf) with its NEON dot product (-O3 -ffp-contract=off, neon) |
 | `real_to_complex_cq15` | 10.69 | 17.90 | 0.60 | 8.74 | 17.14 | 0.51 | libairspy 1.0.10 iqconverter_int16 (truncating >> 15, 32-bit accumulator, the odd samples halved), conversion without remove_dc (-O3 -ffp-contract=off, neon) |
@@ -3447,17 +3447,17 @@ Instructions per sample that changed (all others are equal): `frame_decode_four_
 
 Since D2553 the last 128 symbols are left out (before, the symbols still in the filters counted as errors of both receivers, about 10 symbols per seed) and the history of GNU Radio's matched filter is right in the last, shorter call (`GrFront` took it from the length of that call, which turned about 5 symbols of the chain wrong per seed); GNU Radio's BER at 8 dB is 1.96e-4 instead of 2.66e-4 (BPSK), and the tables of D2551 are replaced by these.
 
-Block default (`sync_bw` 0.005, D2553):
+Block default (`sync_bw` 0.005, D2553; the PSK detector of `costas` limited to [-1, 1], D2554):
 
 | constellation | mode | Eb/N0 dB | theory | sdrk BER | GNU Radio BER | sdrk / GNU Radio | sdrk changes per 1e5 | GNU Radio changes per 1e5 | bits |
 | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- |
-| BPSK | coherent | 2 | 3.751e-2 | 4.159e-2 | 3.934e-2 | 1.06 | 0.00 | 0.00 | 1536000 |
-| BPSK | coherent | 4 | 1.250e-2 | 1.381e-2 | 1.306e-2 | 1.06 | 0.00 | 0.00 | 1536000 |
-| BPSK | coherent | 6 | 2.388e-3 | 2.663e-3 | 2.503e-3 | 1.06 | 0.00 | 0.00 | 1536000 |
-| BPSK | coherent | 8 | 1.909e-4 | 2.155e-4 | 1.960e-4 | 1.10 | 0.00 | 0.00 | 1536000 |
-| QPSK | coherent | 2 | 3.751e-2 | 5.616e-2 | 5.050e-2 | 1.11 | 4.56 | 2.73 | 3072000 |
-| QPSK | coherent | 4 | 1.250e-2 | 1.445e-2 | 1.416e-2 | 1.02 | 0.07 | 0.07 | 3072000 |
-| QPSK | coherent | 6 | 2.388e-3 | 2.830e-3 | 2.761e-3 | 1.02 | 0.00 | 0.00 | 3072000 |
+| BPSK | coherent | 2 | 3.751e-2 | 4.134e-2 | 3.934e-2 | 1.05 | 0.00 | 0.00 | 1536000 |
+| BPSK | coherent | 4 | 1.250e-2 | 1.378e-2 | 1.306e-2 | 1.06 | 0.00 | 0.00 | 1536000 |
+| BPSK | coherent | 6 | 2.388e-3 | 2.660e-3 | 2.503e-3 | 1.06 | 0.00 | 0.00 | 1536000 |
+| BPSK | coherent | 8 | 1.909e-4 | 2.142e-4 | 1.960e-4 | 1.09 | 0.00 | 0.00 | 1536000 |
+| QPSK | coherent | 2 | 3.751e-2 | 5.189e-2 | 5.050e-2 | 1.03 | 3.26 | 2.73 | 3072000 |
+| QPSK | coherent | 4 | 1.250e-2 | 1.442e-2 | 1.416e-2 | 1.02 | 0.07 | 0.07 | 3072000 |
+| QPSK | coherent | 6 | 2.388e-3 | 2.829e-3 | 2.761e-3 | 1.02 | 0.00 | 0.00 | 3072000 |
 | QPSK | coherent | 8 | 1.909e-4 | 2.542e-4 | 2.497e-4 | 1.02 | 0.00 | 0.00 | 3072000 |
 | 8PSK | coherent | 6 | 2.048e-2 | 3.946e-2 | 3.848e-2 | 1.03 | 5.14 | 5.92 | 4608000 |
 | 8PSK | coherent | 8 | 6.181e-3 | 7.441e-3 | 7.387e-3 | 1.01 | 0.00 | 0.00 | 4608000 |
@@ -3468,18 +3468,18 @@ Block default (`sync_bw` 0.005, D2553):
 | BPSK | differential | 6 | 9.333e-3 | 9.995e-3 | 5.052e-3 | 1.98 | 0.00 | 0.00 | 1536000 |
 | BPSK | differential | 8 | 9.094e-4 | 1.014e-3 | 3.997e-4 | 2.54 | 0.00 | 0.00 | 1536000 |
 
-`sync_bw` 0.01 (the default before D2553):
+`sync_bw` 0.01 (the default before D2553), with the limit of D2554:
 
 | constellation | mode | Eb/N0 dB | theory | sdrk BER | GNU Radio BER | sdrk / GNU Radio | sdrk changes per 1e5 | GNU Radio changes per 1e5 | bits |
 | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- |
-| BPSK | coherent | 2 | 3.751e-2 | 7.077e-2 | 3.934e-2 | 1.80 | 8.79 | 0.00 | 1536000 |
-| BPSK | coherent | 4 | 1.250e-2 | 1.617e-2 | 1.306e-2 | 1.24 | 0.20 | 0.00 | 1536000 |
-| BPSK | coherent | 6 | 2.388e-3 | 3.068e-3 | 2.503e-3 | 1.23 | 0.00 | 0.00 | 1536000 |
-| BPSK | coherent | 8 | 1.909e-4 | 2.604e-4 | 1.960e-4 | 1.33 | 0.00 | 0.00 | 1536000 |
-| QPSK | coherent | 2 | 3.751e-2 | 6.084e-2 | 5.050e-2 | 1.20 | 5.86 | 2.73 | 3072000 |
-| QPSK | coherent | 4 | 1.250e-2 | 1.507e-2 | 1.416e-2 | 1.06 | 0.07 | 0.07 | 3072000 |
-| QPSK | coherent | 6 | 2.388e-3 | 2.985e-3 | 2.761e-3 | 1.08 | 0.00 | 0.00 | 3072000 |
-| QPSK | coherent | 8 | 1.909e-4 | 2.692e-4 | 2.497e-4 | 1.08 | 0.00 | 0.00 | 3072000 |
+| BPSK | coherent | 2 | 3.751e-2 | 7.307e-2 | 3.934e-2 | 1.86 | 9.05 | 0.00 | 1536000 |
+| BPSK | coherent | 4 | 1.250e-2 | 1.614e-2 | 1.306e-2 | 1.24 | 0.20 | 0.00 | 1536000 |
+| BPSK | coherent | 6 | 2.388e-3 | 3.072e-3 | 2.503e-3 | 1.23 | 0.00 | 0.00 | 1536000 |
+| BPSK | coherent | 8 | 1.909e-4 | 2.611e-4 | 1.960e-4 | 1.33 | 0.00 | 0.00 | 1536000 |
+| QPSK | coherent | 2 | 3.751e-2 | 5.554e-2 | 5.050e-2 | 1.10 | 3.84 | 2.73 | 3072000 |
+| QPSK | coherent | 4 | 1.250e-2 | 1.503e-2 | 1.416e-2 | 1.06 | 0.07 | 0.07 | 3072000 |
+| QPSK | coherent | 6 | 2.388e-3 | 2.981e-3 | 2.761e-3 | 1.08 | 0.00 | 0.00 | 3072000 |
+| QPSK | coherent | 8 | 1.909e-4 | 2.686e-4 | 2.497e-4 | 1.08 | 0.00 | 0.00 | 3072000 |
 | 8PSK | coherent | 6 | 2.048e-2 | 3.863e-2 | 3.848e-2 | 1.00 | 5.34 | 5.92 | 4608000 |
 | 8PSK | coherent | 8 | 6.181e-3 | 7.807e-3 | 7.387e-3 | 1.06 | 0.07 | 0.00 | 4608000 |
 | 8PSK | coherent | 10 | 1.011e-3 | 1.351e-3 | 1.255e-3 | 1.08 | 0.00 | 0.00 | 4608000 |
@@ -3489,48 +3489,24 @@ Block default (`sync_bw` 0.005, D2553):
 | BPSK | differential | 6 | 9.333e-3 | 1.104e-2 | 5.052e-3 | 2.18 | 0.00 | 0.00 | 1536000 |
 | BPSK | differential | 8 | 9.094e-4 | 1.148e-3 | 3.997e-4 | 2.87 | 0.00 | 0.00 | 1536000 |
 
-`sync_bw` 0.0075 for `psk_demod` (and 0.004 for the 8PSK row: 6.856e-2 at 6 dB, 1.78 times, 7.88 changes; BPSK 1.03 to 1.04, QPSK 1.01 to 1.11):
-
-| constellation | mode | Eb/N0 dB | theory | sdrk BER | GNU Radio BER | sdrk / GNU Radio | sdrk changes per 1e5 | GNU Radio changes per 1e5 | bits |
-| --- | --- | --- | --- | --- | --- | --- | --- | --- | --- |
-| BPSK | coherent | 2 | 3.751e-2 | 5.132e-2 | 3.934e-2 | 1.30 | 1.56 | 0.00 | 1536000 |
-| BPSK | coherent | 4 | 1.250e-2 | 1.456e-2 | 1.306e-2 | 1.12 | 0.00 | 0.00 | 1536000 |
-| BPSK | coherent | 6 | 2.388e-3 | 2.838e-3 | 2.503e-3 | 1.13 | 0.00 | 0.00 | 1536000 |
-| BPSK | coherent | 8 | 1.909e-4 | 2.350e-4 | 1.960e-4 | 1.20 | 0.00 | 0.00 | 1536000 |
-| QPSK | coherent | 2 | 3.751e-2 | 5.741e-2 | 5.050e-2 | 1.14 | 4.75 | 2.73 | 3072000 |
-| QPSK | coherent | 4 | 1.250e-2 | 1.474e-2 | 1.416e-2 | 1.04 | 0.07 | 0.07 | 3072000 |
-| QPSK | coherent | 6 | 2.388e-3 | 2.897e-3 | 2.761e-3 | 1.05 | 0.00 | 0.00 | 3072000 |
-| QPSK | coherent | 8 | 1.909e-4 | 2.620e-4 | 2.497e-4 | 1.05 | 0.00 | 0.00 | 3072000 |
-| 8PSK | coherent | 6 | 2.048e-2 | 9.574e-2 | 3.848e-2 | 2.49 | 10.48 | 5.92 | 4608000 |
-| 8PSK | coherent | 8 | 6.181e-3 | 7.541e-3 | 7.387e-3 | 1.02 | 0.00 | 0.00 | 4608000 |
-| 8PSK | coherent | 10 | 1.011e-3 | 1.317e-3 | 1.255e-3 | 1.05 | 0.00 | 0.00 | 4608000 |
-| 8PSK | coherent | 12 | 6.340e-5 | 9.831e-5 | 8.984e-5 | 1.09 | 0.00 | 0.00 | 4608000 |
-| BPSK | differential | 2 | 1.025e-1 | 1.154e-1 | 7.603e-2 | 1.52 | 1.30 | 0.00 | 1536000 |
-| BPSK | differential | 4 | 4.056e-2 | 4.451e-2 | 2.604e-2 | 1.71 | 0.00 | 0.00 | 1536000 |
-| BPSK | differential | 6 | 9.333e-3 | 1.043e-2 | 5.052e-3 | 2.06 | 0.00 | 0.00 | 1536000 |
-| BPSK | differential | 8 | 9.094e-4 | 1.063e-3 | 3.997e-4 | 2.66 | 0.00 | 0.00 | 1536000 |
-
 Timing settling: `cargo run --release --bin psk_ber -- acquisition [symbols [first seed [seeds [sync_bw...]]]]` sends 8000 symbols at a high Eb/N0 (12 dB, 8PSK 18 dB) for each delay of 0 to 7 samples (every symbol phase) and seeds 2701 to 2704 (32 runs per row; carrier offset and phase as above) and counts the symbols up to the last decision error at the alignment of symbols 6872 to 7871 (a run whose final alignment still has errors is "not settled"):
 
 | constellation | Eb/N0 dB | receiver | median | 90 % | max | not settled |
 | --- | --- | --- | --- | --- | --- | --- |
-| BPSK | 12 | sdrk, sync_bw 0.01 | 0 | 47 | 258 | 0 |
-| BPSK | 12 | sdrk, sync_bw 0.0075 | 0 | 71 | 141 | 0 |
 | BPSK | 12 | sdrk, sync_bw 0.005 | 0 | 147 | 258 | 0 |
+| BPSK | 12 | sdrk, sync_bw 0.01 | 0 | 47 | 258 | 0 |
 | BPSK | 12 | GNU Radio, sync_bw 0.01 | 0 | 862 | 2078 | 0 |
-| QPSK | 12 | sdrk, sync_bw 0.01 | 8 | 55 | 142 | 0 |
-| QPSK | 12 | sdrk, sync_bw 0.0075 | 12 | 89 | 223 | 0 |
 | QPSK | 12 | sdrk, sync_bw 0.005 | 17 | 190 | 353 | 0 |
+| QPSK | 12 | sdrk, sync_bw 0.01 | 12 | 78 | 142 | 0 |
 | QPSK | 12 | GNU Radio, sync_bw 0.01 | 27 | 1185 | 2400 | 0 |
-| 8PSK | 18 | sdrk, sync_bw 0.01 | 19 | 115 | 237 | 0 |
-| 8PSK | 18 | sdrk, sync_bw 0.0075 | 47 | 150 | 310 | 0 |
 | 8PSK | 18 | sdrk, sync_bw 0.005 | 60 | 213 | 306 | 0 |
+| 8PSK | 18 | sdrk, sync_bw 0.01 | 19 | 115 | 237 | 0 |
 | 8PSK | 18 | GNU Radio, sync_bw 0.01 | 281 | 2018 | 2032 | 0 |
 
-- **Coherent BPSK, QPSK and 8PSK.** With the default `sync_bw` 0.005 `psk_demod` is within 1 to 11 % of GNU Radio's chain (BPSK 1.06 to 1.10, QPSK 1.02 to 1.11, 8PSK 1.01 to 1.03) with 0 alignment changes for BPSK (QPSK 2 dB 4.56 against GNU Radio's 2.77, 8PSK 6 dB 5.14 against 5.86). At 0.01 it was 23 to 80 % above for BPSK with 8.79 alignment changes per 1e5 symbols at 2 dB against 0: the same nominal `sync_bw` is a wider loop in `psk_demod` than in `symbol_sync_cc` (the likely causes, not isolated: the factor `sps` in our gains, D565, and the cubic interpolator against the 8-tap MMSE, D2539). The carrier loop is not the cause (with `carrier_bw` 0.014 and 0.01 the BPSK rows at 0.01 did not change, D2551). The narrower loop keeps the settling well below that of the chain: at most 258 symbols for BPSK, 353 for QPSK and 306 for 8PSK (0.01: 258, 142 and 237), GNU Radio 2078, 2400 and 2032 (its carrier loop at the same `carrier_bw` and the 8-tap interpolator; the start is not isolated). 8PSK at 6 dB (a BER of 4e-2) is sensitive to the bandwidth: 0.0075 and 0.004 have slipping seeds (2.49 and 1.78 times, 10.48 and 7.88 changes), 0.005 and 0.01 not. The remaining gap of QPSK at 2 dB (1.11) is open item I169-2.
+- **Coherent BPSK, QPSK and 8PSK.** With the block defaults `psk_demod` is within 1 to 9 % of GNU Radio's chain on every row: BPSK 1.05 to 1.09 with 0 alignment changes, QPSK 1.02 to 1.03 (2 dB: 3.26 alignment changes per 1e5 symbols against 2.73), 8PSK 1.01 to 1.03. Two changes brought it there. The timing loop (D2553): the same nominal `sync_bw` is a wider loop in `psk_demod` than in `symbol_sync_cc`, so at 0.01 BPSK is 1.23 to 1.86 times GNU Radio's BER with 9.05 alignment changes at 2 dB; the default is 0.005. The carrier loop (D2554): GNU Radio's `costas_loop_cc` limits the phase error to +-1 before the loop filter, ours did not, so at 2 dB QPSK slipped more (4.56 changes, 1.11 of GNU Radio's BER, before the limit). The narrower timing loop keeps the settling well below that of the chain: at most 258 symbols for BPSK, 353 for QPSK and 306 for 8PSK (0.01: 258, 142 and 237), GNU Radio 2078, 2400 and 2032. With the loop before D2554, 0.0075 and 0.004 made 8PSK at 6 dB slip (2.49 and 1.78 times, D2553).
 
 - **Differential BPSK.** `psk_demod` with `differential` is a non-coherent detector (no carrier loop, the product of two symbols) and its BER is the theory of the non-coherent detector plus 5 to 12 % (1.0e-3 at 8 dB against `exp(-Eb/N0)/2` = 9.1e-4); GNU Radio's chain is coherent detection (`costas_loop_cc`) followed by the differential decoder, which has about twice the BER of coherent BPSK (4.0e-4 at 8 dB), so it is 1.4 to 2.5 times better at 2 to 8 dB (1.8 to 2.9 with `sync_bw` 0.01). These are two receivers with different work (the differential mode of `psk_demod` needs no carrier lock and follows frequency offsets that the loop of the chain would have to pull in), reported as information.
-- **Not compared.** Differential QPSK and differential 8PSK: the differential `psk_mod` steps the phase by the mapped phase (odd multiples of 45 degrees for QPSK and 8PSK, M40 and M40.1), so no point set of GNU Radio's `costas_loop_cc` (orders 4 and 8 lock to one point set) follows the signal, and GNU Radio's `diff_encoder_bb` steps by 0, 90, 180 and 270 degrees, another signal; `pi4` and `offset` likewise (no GNU Radio block). The receiver with the equalizer (`equalizer_taps`): the translations of GNU Radio's `linear_equalizer` in `benches/refs` run the decision-directed NLMS (QPSK points and the rectangular constellation of square QAM) without the CMA start of the QAM comparison, and a constellation of BPSK or 8PSK points is not among them; open item I169-3.
+- **Not compared** (the maintainer's decision D2555: the reason stands, no further comparison). Differential QPSK and differential 8PSK: the differential `psk_mod` steps the phase by the mapped phase (odd multiples of 45 degrees for QPSK and 8PSK, M40 and M40.1), so no point set of GNU Radio's `costas_loop_cc` (orders 4 and 8 lock to one point set) follows the signal, and GNU Radio's `diff_encoder_bb` steps by 0, 90, 180 and 270 degrees, another signal; `pi4` and `offset` likewise (no GNU Radio block). The receiver with the equalizer (`equalizer_taps`): the translations of GNU Radio's `linear_equalizer` in `benches/refs` run the decision-directed NLMS (QPSK points and the rectangular constellation of square QAM) without the CMA start of the QAM comparison, and a constellation of BPSK or 8PSK points is not among them.
 
 ## QAM of any square order (M44.2)
 

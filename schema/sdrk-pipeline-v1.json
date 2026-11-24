@@ -3785,8 +3785,8 @@
                     "type": "number"
                   },
                   "sync_bw": {
-                    "default": 0.01,
-                    "description": "Loop bandwidth of the symbol timing, normalized to the symbol rate. Typical: 0.01. Build-time.",
+                    "default": 0.005,
+                    "description": "Loop bandwidth of the symbol timing, normalized to the symbol rate. Typical: 0.005; up to 0.01 for a faster acquisition. Build-time.",
                     "maximum": 0.1,
                     "minimum": 0.0001,
                     "type": "number"

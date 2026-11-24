@@ -110,6 +110,8 @@ pub(crate) struct GrFront {
     /// The samples the timing loop has not consumed, then the filter output of the call.
     pending: Vec<[f32; 2]>,
     pending_len: usize,
+    /// The input samples of the call before (the history ends there in `window`).
+    last_len: usize,
     /// The symbols of the last call.
     pub(crate) symbols: Vec<[f32; 2]>,
 }
@@ -129,6 +131,7 @@ impl GrFront {
             window: vec![[0.0; 2]; history + n],
             pending: vec![[0.0; 2]; n + 64],
             pending_len: 0,
+            last_len: n,
             symbols: vec![[0.0; 2]; n / BLOCK_SPS + 64],
         })
     }
@@ -138,8 +141,11 @@ impl GrFront {
     pub(crate) fn process(&mut self, input: &[[f32; 2]]) -> usize {
         let history = self.fir.ntaps() - 1;
         let n = input.len();
-        // The filter: the history, then the input.
-        self.window.copy_within(n..n + history, 0);
+        // The filter: the history (the last `history` samples before this call's input), then
+        // the input.
+        self.window
+            .copy_within(self.last_len..self.last_len + history, 0);
+        self.last_len = n;
         self.window[history..history + n].copy_from_slice(input);
         let at = self.pending_len;
         self.fir

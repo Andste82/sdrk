@@ -11,6 +11,9 @@
 //! operands are those of the stage-by-stage order, so the result is the same bit for bit; only
 //! the loads, stores and twiddle reads of the fused stages are saved.
 //! Block floating point needs the largest magnitude between the stages and runs them one by one.
+//!
+//! On x86 the `C32` stage pairs run on two samples per vector (`two`) whenever no infinity or
+//! NaN can arise in the transform, with the same butterflies and the same bits.
 
 // `(a + b) * 0.5` is the specified, exact halving; `f32::midpoint` is not part of the contract.
 #![allow(clippy::manual_midpoint, clippy::many_single_char_names)]
@@ -103,9 +106,20 @@ fn bit_reverse_quarter<T>(data: &mut [T], log2n: u32) {
         let i = 2 * u;
         #[cfg(not(any(target_arch = "x86", target_arch = "x86_64", target_arch = "wasm32")))]
         let j = i.reverse_bits() >> shift;
+        #[cfg(not(any(target_arch = "x86", target_arch = "x86_64")))]
         if i < j {
             data.swap(i, j);
             data.swap(i + half + 1, j + half + 1);
+        }
+        // On x86 the pairs `i < j` are swapped without a branch on `i < j` (whose outcome
+        // follows no pattern the predictor learns: about one misprediction every four samples
+        // at 64 points): the partner is `j` or `i` itself, chosen by a conditional move, and a
+        // swap of a sample with itself changes nothing.
+        #[cfg(any(target_arch = "x86", target_arch = "x86_64"))]
+        {
+            let k = if i < j { j } else { i };
+            data.swap(i, k);
+            data.swap(i + half + 1, k + half + 1);
         }
         data.swap(i + 1, j + half);
         #[cfg(any(target_arch = "x86", target_arch = "x86_64", target_arch = "wasm32"))]
@@ -156,6 +170,208 @@ fn quad_c32<const INV: bool>(x: [&mut C32; 4], w: C32, wa: C32, wb: C32) {
     butterfly_c32::<INV>(&mut a0, &mut a2, wa);
     butterfly_c32::<INV>(&mut a1, &mut a3, wb);
     (*x0, *x1, *x2, *x3) = (a0, a1, a2, a3);
+}
+
+/// The `C32` stages of x86 on two samples at a time, for the transforms in which no infinity
+/// or NaN can arise (see [`two::fits`]). Four lanes `[re0, im0, re1, im1]` hold two consecutive
+/// samples as they lie in memory, so a group of lanes is one 128-bit vector that the compiler
+/// loads, multiplies, adds and stores without moving the samples apart; the scalar butterflies
+/// of [`quad_c32`] use one lane of the 16 vector registers.
+///
+/// [`two::butterfly_two`] is [`butterfly_c32`] on two samples: `tr = w.re c.re + (-wi) c.im`
+/// and `ti = w.re c.im + wi c.re`. On finite values these are exactly `w.re c.re - wi c.im`
+/// and `w.re c.im + wi c.re` (`x - y` is `x + (-y)`, and `(-wi) c.im` is `-(wi c.im)`). The
+/// twiddles are prepared once per group as the lanes `[w.re, w.re, ...]` and `[-wi, wi, ...]`.
+/// The stages, their grouping (one single stage first for an odd `log2 N`, then pairs) and the
+/// butterflies of every group are those of [`stages_c32`], so the result is that of the scalar
+/// stages bit for bit. Only the sign and payload of a NaN could depend on how the compiler
+/// orders the operands, which is why a transform that may meet one keeps the scalar stages.
+#[cfg(any(target_arch = "x86", target_arch = "x86_64"))]
+mod two {
+    use super::{C32, Result, check_twiddles, stage_c32, tw_error};
+
+    /// Two samples `[re0, im0, re1, im1]`.
+    type Lanes = [f32; 4];
+
+    /// The largest component magnitude of the data for the lanes: `2^96`.
+    const DATA_BOUND: f32 = 79_228_162_514_264_337_593_543_950_336.0;
+
+    /// Whether no infinity or NaN can arise in the transform of `data` with the twiddles
+    /// `tw[k stride]`, `k < n / 2`: every component of those twiddles is at most 1 in magnitude
+    /// and every component of the data at most `2^96` (a NaN fails both tests). A butterfly
+    /// then turns components of at most `M` into components of at most `3 M (1 + 2^-22)` (two
+    /// products of at most `M` and two sums, each rounded), so after the at most 16 stages of
+    /// `N <= 65536` they stay below `2^96 3.01^16 < 2^122`, far below `f32::MAX`.
+    pub(super) fn fits(data: &[C32], tw: &[C32], n: usize, stride: usize) -> bool {
+        let within =
+            |ok: bool, v: &C32, bound: f32| ok & (v.re.abs() <= bound) & (v.im.abs() <= bound);
+        let twiddles = match (stride, tw.get(..n / 2)) {
+            // One pass over consecutive entries, which the compiler vectorizes.
+            (1, Some(used)) => used.iter().fold(true, |ok, w| within(ok, w, 1.0)),
+            (1, None) => false,
+            _ => (tw.iter().step_by(stride.max(1)).take(n / 2))
+                .fold(true, |ok, w| within(ok, w, 1.0)),
+        };
+        twiddles & data.iter().fold(true, |ok, x| within(ok, x, DATA_BOUND))
+    }
+
+    /// The stages of the transform after the bit reversal, as [`super::stages_c32`] groups them
+    /// on x86: one stage first for an odd `log2 N`, then pairs of stages.
+    pub(super) fn stages<const INV: bool>(
+        data: &mut [C32],
+        tw: &[C32],
+        n: usize,
+        log2n: u32,
+        stride: usize,
+    ) -> Result<()> {
+        let mut s;
+        if log2n % 2 == 1 {
+            // The scalar stage, which the compiler vectorizes well (pairs of neighbours).
+            stage_c32::<INV>(data, tw, 1, (n >> 1) * stride)?;
+            s = 2;
+        } else {
+            let (step, step2) = ((n >> 1) * stride, (n >> 2) * stride);
+            check_twiddles(tw, 1, step)?;
+            check_twiddles(tw, 2, step2)?;
+            let w0 = tw.first().copied().ok_or_else(tw_error)?;
+            let w1 = tw.get(step2).copied().ok_or_else(tw_error)?;
+            first_pair::<INV>(data, w0, w1);
+            s = 3;
+        }
+        while s < log2n {
+            pair_blocks::<INV>(data, tw, 1 << (s - 1), (n >> s) * stride)?;
+            s += 2;
+        }
+        Ok(())
+    }
+
+    #[inline(always)]
+    fn load(s: &[C32]) -> Option<Lanes> {
+        match s {
+            [a, b] => Some([a.re, a.im, b.re, b.im]),
+            _ => None,
+        }
+    }
+
+    #[inline(always)]
+    fn store(s: &mut [C32], v: Lanes) {
+        let [r0, i0, r1, i1] = v;
+        if let [a, b] = s {
+            *a = C32::new(r0, i0);
+            *b = C32::new(r1, i1);
+        }
+    }
+
+    /// The twiddle lanes of two groups with the twiddles `w0` and `w1`: `[w.re, w.re]` and
+    /// `[-wi, wi]` per sample, `wi` as in [`super::butterfly_c32`].
+    ///
+    /// The lanes pass through [`core::hint::black_box`]: otherwise the compiler folds the
+    /// negations into the butterflies (`x + (-wi) y` into `x - wi y` on every other lane), which
+    /// then need a subtraction, an addition and two shuffles to merge them on every vector
+    /// instead of one addition. The values are the same either way.
+    #[inline(always)]
+    fn twiddles<const INV: bool>(w0: C32, w1: C32) -> [Lanes; 2] {
+        let wi = |w: C32| if INV { -w.im } else { w.im };
+        let (i0, i1) = (wi(w0), wi(w1));
+        core::hint::black_box([[w0.re, w0.re, w1.re, w1.re], [-i0, i0, -i1, i1]])
+    }
+
+    /// [`super::butterfly_c32`] on the two samples of `a` and `c` with the twiddle lanes `w`.
+    #[inline(always)]
+    pub(super) fn butterfly_two(a: &mut Lanes, c: &mut Lanes, w: [Lanes; 2]) {
+        let [[r0, r1, r2, r3], [i0, i1, i2, i3]] = w;
+        let [c0, c1, c2, c3] = *c;
+        // `tr = w.re c.re + (-wi) c.im` and `ti = w.re c.im + wi c.re` of each sample.
+        let [t0, t1, t2, t3] = [
+            r0 * c0 + i0 * c1,
+            r1 * c1 + i1 * c0,
+            r2 * c2 + i2 * c3,
+            r3 * c3 + i3 * c2,
+        ];
+        let [x0, x1, x2, x3] = *a;
+        *a = [x0 + t0, x1 + t1, x2 + t2, x3 + t3];
+        *c = [x0 - t0, x1 - t1, x2 - t2, x3 - t3];
+    }
+
+    /// The lanes `[a0, a1, b0, b1]` and `[a2, a3, b2, b3]`: from two vectors of two samples
+    /// each, the first samples together and the second ones together.
+    #[inline(always)]
+    fn split(a: Lanes, b: Lanes) -> [Lanes; 2] {
+        let ([a0, a1, a2, a3], [b0, b1, b2, b3]) = (a, b);
+        [[a0, a1, b0, b1], [a2, a3, b2, b3]]
+    }
+
+    /// The first two stages (half block length 1, the twiddles `w0` and `w0`, then `w0` and
+    /// `w1`) on every group of four samples, as [`super::quad_c32`].
+    fn first_pair<const INV: bool>(data: &mut [C32], w0: C32, w1: C32) {
+        let first = twiddles::<INV>(w0, w0);
+        let second = twiddles::<INV>(w0, w1);
+        for quad in data.chunks_exact_mut(4) {
+            let (lo, hi) = quad.split_at_mut(2);
+            let (Some(p), Some(q)) = (load(lo), load(hi)) else {
+                return;
+            };
+            // Keeps the compiler from vectorizing this loop once more across groups (a scalar
+            // load and a shuffle per lane, slower on `skylake`); it emits no instruction.
+            core::hint::black_box(());
+            // Samples 0 and 2 against 1 and 3, then 0 and 1 against 2 and 3.
+            let [mut a, mut c] = split(p, q);
+            butterfly_two(&mut a, &mut c, first);
+            let [mut p, mut q] = split(a, c);
+            butterfly_two(&mut p, &mut q, second);
+            store(lo, p);
+            store(hi, q);
+        }
+    }
+
+    /// [`super::stage_pair_c32`] for an even `half >= 2`: the groups `k` and `k + 1` of every
+    /// block in one set of lanes, their twiddle lanes prepared once for all blocks. The groups
+    /// are independent, so their order does not change a bit. (With the groups in the inner
+    /// loop the compiler vectorized that loop once more, across groups, with a scalar load and
+    /// a shuffle per lane.)
+    fn pair_blocks<const INV: bool>(
+        data: &mut [C32],
+        tw: &[C32],
+        half: usize,
+        step: usize,
+    ) -> Result<()> {
+        let step2 = step / 2;
+        check_twiddles(tw, half, step)?;
+        check_twiddles(tw, 2 * half, step2)?;
+        let at = |i: usize| tw.get(i).copied().ok_or_else(tw_error);
+        for k in (0..half).step_by(2) {
+            let w = twiddles::<INV>(at(k * step)?, at((k + 1) * step)?);
+            let wa = twiddles::<INV>(at(k * step2)?, at((k + 1) * step2)?);
+            let wb = twiddles::<INV>(at((k + half) * step2)?, at((k + 1 + half) * step2)?);
+            for block in data.chunks_exact_mut(4 * half) {
+                let (lo, hi) = block.split_at_mut(2 * half);
+                let (q0, q1) = lo.split_at_mut(half);
+                let (q2, q3) = hi.split_at_mut(half);
+                let (Some(s0), Some(s1), Some(s2), Some(s3)) = (
+                    q0.get_mut(k..k + 2),
+                    q1.get_mut(k..k + 2),
+                    q2.get_mut(k..k + 2),
+                    q3.get_mut(k..k + 2),
+                ) else {
+                    return Err(tw_error());
+                };
+                let (Some(mut x0), Some(mut x1), Some(mut x2), Some(mut x3)) =
+                    (load(s0), load(s1), load(s2), load(s3))
+                else {
+                    return Err(tw_error());
+                };
+                butterfly_two(&mut x0, &mut x1, w);
+                butterfly_two(&mut x2, &mut x3, w);
+                butterfly_two(&mut x0, &mut x2, wa);
+                butterfly_two(&mut x1, &mut x3, wb);
+                store(s0, x0);
+                store(s1, x1);
+                store(s2, x2);
+                store(s3, x3);
+            }
+        }
+        Ok(())
+    }
 }
 
 /// One radix-2 stage of `C32` data: `half` is the half block length, `step` the twiddle step.
@@ -983,8 +1199,19 @@ impl Fft<C32> for Fallback {
         let inverse = dir == Direction::Inverse;
         bit_reverse_quarter(data, plan.log2n);
         let (n, log2n, stride) = (plan.n, plan.log2n, plan.tw_stride);
+        // On x86 the stages run on two samples at a time where no infinity or NaN can arise
+        // (the same bits, see `two`).
+        #[cfg(any(target_arch = "x86", target_arch = "x86_64"))]
+        let lanes = two::fits(data, tw, n, stride);
+        #[cfg(not(any(target_arch = "x86", target_arch = "x86_64")))]
+        let lanes = false;
         if inverse {
-            stages_c32::<true>(data, tw, n, log2n, stride)?;
+            if lanes {
+                #[cfg(any(target_arch = "x86", target_arch = "x86_64"))]
+                two::stages::<true>(data, tw, n, log2n, stride)?;
+            } else {
+                stages_c32::<true>(data, tw, n, log2n, stride)?;
+            }
             let g = 1.0 / plan.n as f32;
             for x in data.iter_mut() {
                 *x = C32::new(x.re * g, x.im * g);
@@ -993,7 +1220,12 @@ impl Fft<C32> for Fallback {
                 exponent: plan.log2n as i32,
             })
         } else {
-            stages_c32::<false>(data, tw, n, log2n, stride)?;
+            if lanes {
+                #[cfg(any(target_arch = "x86", target_arch = "x86_64"))]
+                two::stages::<false>(data, tw, n, log2n, stride)?;
+            } else {
+                stages_c32::<false>(data, tw, n, log2n, stride)?;
+            }
             Ok(FftScale { exponent: 0 })
         }
     }
@@ -1602,6 +1834,105 @@ mod tests {
                     assert_eq!(bits(&got), bits(&want), "n={n} half={half} {inverse}");
                 }
             }
+        }
+    }
+
+    /// Data for the lanes of x86: noise, components at the bound `2^96`, subnormals and zeros
+    /// of both signs.
+    #[cfg(any(target_arch = "x86", target_arch = "x86_64"))]
+    fn c32_lane_data(s: &mut u64, n: usize) -> std::vec::Vec<C32> {
+        let bound = 2f32.powi(96);
+        let tiny = f32::from_bits(1);
+        let mut x = c32_noise(s, n);
+        for v in &mut x {
+            let mut pick = |c: f32| match lcg(s) % 16 {
+                0 => bound,
+                1 => -bound,
+                2 => tiny,
+                3 => -tiny,
+                4 => 0.0,
+                5 => -0.0,
+                6 => c * 1e28,
+                _ => c,
+            };
+            *v = C32::new(pick(v.re), pick(v.im));
+        }
+        x
+    }
+
+    #[cfg(any(target_arch = "x86", target_arch = "x86_64"))]
+    #[test]
+    fn the_x86_lanes_give_the_bits_of_the_scalar_stages() {
+        // Every size from 16 to 4096 and 65536, both directions, plans of their own, over a
+        // larger table and with arbitrary twiddles within the bound of `two::fits`, on data up to
+        // its bound with subnormals and signed zeros.
+        let mut s = 59u64;
+        for n in sizes().chain([65_536]) {
+            let log2n = n.trailing_zeros();
+            let arbitrary: std::vec::Vec<C32> = c32_noise(&mut s, n / 2)
+                .iter()
+                .map(|w| match lcg(&mut s) % 8 {
+                    0 => C32::new(1.0, -0.0),
+                    1 => C32::new(-1.0, 0.0),
+                    2 => C32::new(0.0, -1.0),
+                    _ => *w,
+                })
+                .collect();
+            let tables = [
+                (strided::<C32>(n, n).twiddles, 1),
+                (strided::<C32>(n, 4096.max(n)).twiddles, 4096.max(n) / n),
+                (arbitrary, 1),
+            ];
+            for (tw, stride) in &tables {
+                let x = c32_lane_data(&mut s, n);
+                assert!(two::fits(&x, tw, n, *stride), "n={n}");
+                for inverse in [false, true] {
+                    let mut want = x.clone();
+                    let mut got = x.clone();
+                    if inverse {
+                        stages_c32::<true>(&mut want, tw, n, log2n, *stride).unwrap();
+                        two::stages::<true>(&mut got, tw, n, log2n, *stride).unwrap();
+                    } else {
+                        stages_c32::<false>(&mut want, tw, n, log2n, *stride).unwrap();
+                        two::stages::<false>(&mut got, tw, n, log2n, *stride).unwrap();
+                    }
+                    assert_eq!(bits(&got), bits(&want), "n={n} stride={stride} {inverse}");
+                    assert!(got.iter().all(|v| v.re.is_finite() && v.im.is_finite()));
+                }
+            }
+        }
+    }
+
+    #[cfg(any(target_arch = "x86", target_arch = "x86_64"))]
+    #[test]
+    fn the_x86_lanes_take_only_data_and_twiddles_within_their_bounds() {
+        let n = 64;
+        let p = strided::<C32>(n, 4096);
+        let (tw, stride) = (&p.twiddles, p.tw_stride);
+        let mut s = 61u64;
+        let x = c32_noise(&mut s, n);
+        assert!(two::fits(&x, tw, n, stride));
+        let above = 2f32.powi(96) * (1.0 + f32::EPSILON);
+        for bad in [f32::NAN, f32::INFINITY, -f32::INFINITY, above, -above] {
+            for (i, im) in [(0, false), (n - 1, true)] {
+                let mut y = x.clone();
+                if im {
+                    y[i].im = bad;
+                } else {
+                    y[i].re = bad;
+                }
+                assert!(!two::fits(&y, tw, n, stride), "{bad} at {i}");
+            }
+        }
+        // A twiddle above 1 in magnitude or NaN, among those the transform uses (every
+        // `stride`-th) and not among them.
+        for bad in [1.0 + f32::EPSILON, -1.0 - f32::EPSILON, f32::NAN] {
+            let mut t = tw.clone();
+            t[(n / 2 - 1) * stride].im = bad;
+            assert!(!two::fits(&x, &t, n, stride), "{bad}");
+            let mut t = tw.clone();
+            t[stride + 1].re = bad;
+            assert!(two::fits(&x, &t, n, stride), "{bad} unused");
         }
     }
 

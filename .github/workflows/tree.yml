@@ -91,6 +91,9 @@ jobs:
         run: cargo xtask check
       - name: Pipeline schema is up to date
         run: cargo xtask schema --check
+      # The cycle tables of docs/performance.md are generated from benches/results/cycles (D2706).
+      - name: Cycle tables are generated from the committed cycle results
+        run: python3 -I benches/test_cycle_tables.py
       - uses: taiki-e/install-action@cargo-deny
       - name: Dependency policy
         run: cargo deny check

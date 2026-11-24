@@ -25,10 +25,10 @@ on:
         description: Skip the tests that every pull request runs (main unchanged).
         type: boolean
         default: false
-      run_count:
+      run_bench:
         description: >-
           Kernels, backends, benches, xtask or the toolchain changed: `check` builds the
-          measurement harness (the instruction counts themselves run in scope `full` only).
+          measurement harness (the measurements themselves run in scope `full` only).
         type: boolean
         default: true
       run_golden:
@@ -51,12 +51,12 @@ env:
   SDE_DIR: sde-external-9.58.0-2025-06-16-lin
   WASMTIME_VERSION: v49.0.3
   WASMTIME_SHA256: 4001225413f208345b980525f31c4080e1873808b38d0ddc7918497340667fbb
-  # Not QEMU_VERSION: qemu-user reads QEMU_<OPTION> variables as options (QEMU_VERSION is
-  # -version), and the counters run qemu-aarch64 in this environment.
+  # Not QEMU_VERSION: qemu-user and qemu-system read QEMU_<OPTION> variables as options
+  # (QEMU_VERSION is -version). The QEMU of count_m4_qemu; measure.yml pins the same.
   CI_QEMU_VERSION: 10.2.1
   CI_QEMU_SHA256: a3717477d8e2c84d630bfffbc20f6cd3293eb45aa1e6dac6d0cc27689991c9e1
   # The pinned container of the count jobs (the compilers of the C references, glibc and the
-  # counters are the same in every run) and its apt snapshot.
+  # counters are the same in every run) and its apt snapshot; measure.yml pins the same.
   COUNT_IMAGE_SNAPSHOT: "20261019T000000Z"
 
 jobs:
@@ -106,11 +106,12 @@ jobs:
         run: |
           pip install -r tests/golden/requirements.txt
           python tests/golden/generate.py --check
-      # The instruction counts (count_x64) run at night only (D175), so a pull request checks
-      # that the measurement harness still builds. Without the C references (they are optional,
-      # benches/cref-sys/build.rs) the code behind their cfgs is left to the nightly counts.
+      # The cycle measurement (measure_nightly) runs at night only (D2709), so a pull request
+      # checks that the measurement harness still builds. Without the C references (they are
+      # optional, benches/cref-sys/build.rs) the code behind their cfgs is left to the nightly
+      # measurement.
       - name: Bench harness compiles (benches workspace, without the C references)
-        if: inputs.run_count
+        if: inputs.run_bench
         run: cargo check --manifest-path benches/Cargo.toml --workspace --all-targets
 
   check_msrv:
@@ -765,125 +766,33 @@ jobs:
           retention-days: 7
 
   # ---------------------------------------------------------------------------------------
-  # Instruction counts. The count jobs run in a pinned container with an apt snapshot, so that
-  # the compilers of the C references (benches/refs/build.sh), glibc (VOLK's generic atan2 and
-  # rotator call libm) and the counters are the same in every run and on a development machine
-  # with the same image; benches/results/*.json record the compiler versions and VOLK's flags.
-  # Nightly and manual runs only (D175): the speed target is the simulated cycles (D68), the
-  # instruction counts are the gate against gross outliers, and a pull request that needs them
-  # runs `gh workflow run nightly.yml --ref <branch>`.
-  count_x64:
-    name: count_x64
-    needs: build_x64_linux
+  # Speed. The cycles per sample of every level with a core model (M13.1, D2709): measure.yml
+  # in its pinned container, with the corrected llvm-mca, the gates in cycles and the drift
+  # against benches/results/cycles. The instruction counts stay only where no core model
+  # exists: wasm32 (simd128, judged by benches/limits.json) and the Cortex-M4 (report only).
+  # The count jobs run in a pinned container with an apt snapshot, so that the compilers of the
+  # C references (benches/refs/build.sh), the libc and the counters are the same in every run;
+  # benches/results/wasm32.json and cortex-m4.json record the compiler versions. Nightly and
+  # manual runs only (D175, D2709); a pull request that needs them runs
+  # `gh workflow run nightly.yml --ref <branch>`, or `gh workflow run measure.yml --ref
+  # <branch> -f kernels=<names>` for the cycles of a selection.
+  measure_nightly:
+    name: measure_nightly
+    needs: check
     if: ${{ inputs.scope == 'full' }}
-    runs-on: ubuntu-24.04
-    container:
-      image: ubuntu:26.04@sha256:c098726dd9b9733f3e885f8de0ef375206a311b0a317eadc40d347b1115fb944
-    timeout-minutes: 240
-    steps:
-      - name: Packages of the pinned snapshot (compilers, valgrind, VOLK build tools)
-        run: |
-          # The image has no CA certificates, which the https snapshot needs: take them from the
-          # image's own mirror first (they are installed again from the snapshot below).
-          # A mirror that answers 502/503 makes `apt-get update` warn and exit 0, and the install
-          # then finds no packages (nightly of 2026-10-27, issue 38): apt retries every download,
-          # `--error-on=any` turns a failed index into an error and the loop retries the update.
-          echo 'Acquire::Retries "5";' > /etc/apt/apt.conf.d/80-retries
-          apt_update() {
-            for i in 1 2 3 4 5; do
-              apt-get update --error-on=any "$@" && return 0
-              sleep $((i * 60))
-            done
-            return 1
-          }
-          apt_update
-          DEBIAN_FRONTEND=noninteractive apt-get install -y ca-certificates
-          apt_update --snapshot "$COUNT_IMAGE_SNAPSHOT"
-          DEBIAN_FRONTEND=noninteractive apt-get install -y --snapshot "$COUNT_IMAGE_SNAPSHOT" \
-            git ca-certificates curl xz-utils zstd build-essential cmake ninja-build pkg-config \
-            python3 python3-mako valgrind
-      - uses: actions/checkout@v4
-      - name: Install toolchain from rust-toolchain.toml
-        shell: bash
-        run: |
-          git config --global --add safe.directory "$GITHUB_WORKSPACE"
-          curl -fsSL https://sh.rustup.rs | sh -s -- -y --profile minimal --default-toolchain none
-          echo "$HOME/.cargo/bin" >> "$GITHUB_PATH"
-          "$HOME/.cargo/bin/rustup" toolchain install
-      - uses: Swatinem/rust-cache@v2
-        with:
-          shared-key: count-x64
-          save-if: ${{ github.ref == 'refs/heads/main' }}
-      - name: Cache the C references
-        # Keyed on the build script (versions, checksums, flags), the image and the snapshot
-        # (the compilers); the build script itself also rebuilds when a compiler version differs.
-        uses: actions/cache@v4
-        with:
-          path: benches/target/refs
-          key: refs-x86_64-${{ hashFiles('benches/refs/**') }}-c098726dd9b9-${{ env.COUNT_IMAGE_SNAPSHOT }}
-      - name: Cache Intel SDE
-        id: sde-cache
-        uses: actions/cache@v4
-        with:
-          path: ~/sde
-          # Not the key of the host jobs: that cache was saved on the host (another home
-          # directory), and restored here it leaves ~/sde empty.
-          key: sde-container-${{ env.SDE_SHA256 }}
-      - name: Download Intel SDE (pinned)
-        if: steps.sde-cache.outputs.cache-hit != 'true'
-        shell: bash
-        run: |
-          mkdir -p ~/sde
-          curl -fsSL "$SDE_URL" -o ~/sde.tar.xz
-          echo "$SDE_SHA256  $HOME/sde.tar.xz" | sha256sum -c -
-          tar -xJf ~/sde.tar.xz -C ~/sde
-      - name: Use Intel SDE
-        shell: bash
-        run: echo "SDRK_SDE=$HOME/sde/$SDE_DIR/sde64" >> "$GITHUB_ENV"
-      - name: CPU of the runner and compilers
-        shell: bash
-        run: |
-          grep -m1 'model name' /proc/cpuinfo
-          grep -m1 '^flags' /proc/cpuinfo | tr ' ' '\n' | grep -E '^(sse|ssse|avx|fma|bmi|f16c|gfni|vaes|vpclmul|adx|amx)' | sort | tr '\n' ' '
-          echo
-          gcc --version | head -n 1
-          valgrind --version
-      - name: Count the x86-64 levels (sse2 and sse4.2 under SDE, avx2, avx2-runtime)
-        # With the misaligned and small-block variants (information, not judged) for the
-        # committed results.
-        run: cargo xtask count --platform x86_64
-      - name: Count the FM receiver pipeline
-        run: cargo xtask count --pipeline
-      # The counts depend on the CPU of the runner (the pool mixes EPYC 7763, 9V45 and 9V74) and
-      # on the toolchain of the day, so they cannot be compared byte for byte against the
-      # committed files. Show the drift and keep the fresh results instead of failing the run;
-      # the limits are judged by `cargo xtask count` itself.
-      - name: Results drift against the committed files (informational)
-        run: git diff -- benches/results
-      - name: Keep the fresh results
-        uses: actions/upload-artifact@v4
-        with:
-          name: count-results-x64
-          path: benches/results
-          retention-days: 30
+    uses: ./.github/workflows/measure.yml
 
-  count_nightly:
-    name: count_${{ matrix.name }}
-    needs: [build_x64_linux_sde_avx512, build_arm64_linux, test_wasm32]
+  count_wasm32:
+    # Instructions per sample at simd128 (wasmtime fuel), judged by benches/limits.json.
+    name: count_wasm32
+    needs: test_wasm32
     if: ${{ inputs.scope == 'full' }}
     runs-on: ubuntu-24.04
     container:
       image: ubuntu:26.04@sha256:c098726dd9b9733f3e885f8de0ef375206a311b0a317eadc40d347b1115fb944
-    timeout-minutes: 240
-    strategy:
-      fail-fast: false
-      matrix:
-        include:
-          - { name: x64_linux_sde_avx512, platform: x86_64-avx512, refs: x86_64 }
-          - { name: arm64_linux, platform: aarch64, refs: aarch64 }
-          - { name: wasm32, platform: wasm32, refs: wasm32 }
+    timeout-minutes: 120
     steps:
-      - name: Packages of the pinned snapshot (compilers, cross compilers, VOLK and QEMU build tools)
+      - name: Packages of the pinned snapshot (clang for wasm32, wasi-libc, VOLK build tools)
         run: |
           # A mirror that answers 502/503 makes `apt-get update` warn and exit 0, and the install
           # then finds no packages (nightly of 2026-10-27, issue 38): apt retries every download,
@@ -901,9 +810,7 @@ jobs:
           apt_update --snapshot "$COUNT_IMAGE_SNAPSHOT"
           DEBIAN_FRONTEND=noninteractive apt-get install -y --snapshot "$COUNT_IMAGE_SNAPSHOT" \
             git ca-certificates curl xz-utils zstd build-essential cmake ninja-build pkg-config \
-            python3 python3-mako python3-venv valgrind clang llvm wasi-libc \
-            gcc-aarch64-linux-gnu g++-aarch64-linux-gnu libc6-dev-arm64-cross \
-            libglib2.0-dev libpixman-1-dev
+            python3 python3-mako clang llvm wasi-libc
       - uses: actions/checkout@v4
       - name: Install toolchain from rust-toolchain.toml
         shell: bash
@@ -914,60 +821,14 @@ jobs:
           "$HOME/.cargo/bin/rustup" toolchain install
       - uses: Swatinem/rust-cache@v2
         with:
-          shared-key: count-${{ matrix.platform }}
+          shared-key: count-wasm32
           save-if: ${{ github.ref == 'refs/heads/main' }}
       - name: Cache the C references
         uses: actions/cache@v4
         with:
           path: benches/target/refs
-          key: refs-${{ matrix.refs }}-${{ hashFiles('benches/refs/**') }}-c098726dd9b9-${{ env.COUNT_IMAGE_SNAPSHOT }}
-      - name: CPU of the runner
-        shell: bash
-        run: |
-          grep -m1 'model name' /proc/cpuinfo || true
-          grep -m1 '^flags' /proc/cpuinfo | tr ' ' '\n' | grep -E '^(sse|ssse|avx|fma|bmi|f16c|gfni|vaes|vpclmul|adx|amx)' | sort | tr '\n' ' ' || true
-          echo
-      - name: Intel SDE
-        if: matrix.platform == 'x86_64-avx512'
-        shell: bash
-        run: |
-          mkdir -p ~/sde
-          curl -fsSL "$SDE_URL" -o ~/sde.tar.xz
-          echo "$SDE_SHA256  $HOME/sde.tar.xz" | sha256sum -c -
-          tar -xJf ~/sde.tar.xz -C ~/sde
-          echo "SDRK_SDE=$HOME/sde/$SDE_DIR/sde64" >> "$GITHUB_ENV"
-      - name: Cache QEMU
-        if: matrix.platform == 'aarch64'
-        id: qemu-cache
-        uses: actions/cache@v4
-        with:
-          path: |
-            ~/qemu-build/qemu-aarch64
-            ~/qemu-build/plugin-src
-          key: qemu-plugin-src-${{ env.CI_QEMU_VERSION }}-c098726dd9b9-${{ env.COUNT_IMAGE_SNAPSHOT }}
-      - name: QEMU user mode with plugins
-        # The distribution's qemu-user is built without plugin support: build QEMU from source.
-        if: matrix.platform == 'aarch64' && steps.qemu-cache.outputs.cache-hit != 'true'
-        shell: bash
-        run: |
-          curl -fsSL "https://download.qemu.org/qemu-$CI_QEMU_VERSION.tar.xz" -o ~/qemu.tar.xz
-          echo "$CI_QEMU_SHA256  $HOME/qemu.tar.xz" | sha256sum -c -
-          tar -xJf ~/qemu.tar.xz -C "$HOME"
-          mkdir -p ~/qemu-build && cd ~/qemu-build
-          ~/qemu-$CI_QEMU_VERSION/configure --target-list=aarch64-linux-user --enable-plugins --disable-docs --disable-tools --disable-guest-agent --disable-werror
-          ninja qemu-aarch64
-          # The source of the insn plugin, from the checksummed tarball (cached with QEMU).
-          for f in tests/tcg/plugins/insn.c include/qemu/qemu-plugin.h; do
-            install -D ~/qemu-$CI_QEMU_VERSION/$f ~/qemu-build/plugin-src/$f
-          done
-      - name: Use QEMU
-        if: matrix.platform == 'aarch64'
-        shell: bash
-        run: |
-          echo "SDRK_QEMU_AARCH64=$HOME/qemu-build/qemu-aarch64" >> "$GITHUB_ENV"
-          echo "SDRK_QEMU_SRC=$HOME/qemu-build/plugin-src" >> "$GITHUB_ENV"
+          key: refs-wasm32-${{ hashFiles('benches/refs/**') }}-c098726dd9b9-${{ env.COUNT_IMAGE_SNAPSHOT }}
       - name: wasmtime
-        if: matrix.platform == 'wasm32'
         shell: bash
         run: |
           name="wasmtime-$WASMTIME_VERSION-x86_64-linux"
@@ -976,15 +837,17 @@ jobs:
           tar -xJf ~/wasmtime.tar.xz -C "$HOME"
           echo "$HOME/$name" >> "$GITHUB_PATH"
       - name: Count
-        run: cargo xtask count --platform ${{ matrix.platform }}
-      # As in count_x64: the drift against the committed files is information.
-      - name: Results drift against the committed files (informational)
-        run: git diff -- benches/results
+        run: cargo xtask count --platform wasm32
+      # The counts depend on the toolchain of the day, so they cannot be compared byte for byte
+      # against the committed file. Show the drift and keep the fresh results instead of failing
+      # the run; the limits are judged by `cargo xtask count` itself.
+      - name: Results drift against the committed file (informational)
+        run: git diff -- benches/results/wasm32.json
       - name: Keep the fresh results
         uses: actions/upload-artifact@v4
         with:
-          name: count-results-${{ matrix.name }}
-          path: benches/results
+          name: count-results-wasm32
+          path: benches/results/wasm32.json
           retention-days: 30
 
   count_m4_qemu:

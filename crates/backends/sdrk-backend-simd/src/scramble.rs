@@ -27,19 +27,21 @@
 //!    chosen by simulated cycles, M49.1 §3, `docs/performance.md`): from an in-register permute
 //!    of the `2^b` entries (`vpermd`/`vpermps` up to 8 entries, two and a blend up to 16 on AVX2;
 //!    `vpermd`, `vpermi2d`, `vpermq`, `vpermi2q` and blends up to 64 on AVX-512; `tbl`/`tbx` on
-//!    NEON up to 16 `C32` and 64 `CQ15` entries), from gathers (AVX-512 above 64 entries; `C32`
-//!    then sixteen samples in the planar form), or from one load of the pair per sample (SSE2,
-//!    SSE4.2, AVX2 above 16 entries, NEON lane loads above the `tbl` tables, SIMD128). The AVX2
-//!    gather form was measured and is slower than the fallback on `alderlake`.
+//!    NEON up to 16 `C32` and 64 `CQ15` entries), from gathers (AVX-512 `CQ15` above 64
+//!    entries), or from one load of the pair per sample (SSE2, SSE4.2, AVX2 above 16 entries
+//!    and AVX-512 `C32` above 64 entries in the AVX2 code, NEON lane loads above the `tbl`
+//!    tables, SIMD128). The AVX2 gather form was measured and is slower than the fallback on
+//!    `alderlake`; the AVX-512 `C32` gather form (sixteen samples in the planar form) simulated
+//!    2.66 cycles per sample on `sapphirerapids`, above the library (D2820).
 //! 3. *Product.* `CQ15`: `pmaddwd` of the `(re, im)` pairs with `(c, !s)` and `(s, c)`
 //!    (`i32x4.dot_i16x8_s`), where `!s = −s − 1` cannot overflow (`s` is −32768 at the
 //!    three-quarter turn) and `xi` (an arithmetic shift of the pair by 16) is added back with the
 //!    rounding constant `2^14`, then an arithmetic shift by 15 and the saturating pack; on NEON
 //!    `smull`/`smlsl`/`smlal` on the planar form and `sqrshrn #15`: the `cq15_mul` of the
 //!    fallback, exact in `i32`. `C32`: `(re c − im s, re s + im c)` by two products and one sum
-//!    per component in the order of the fallback (planar on every level but AVX-512, which forms
-//!    the components as `re c + im (−s)` and `im c + re s`, the same values for every non-NaN
-//!    result; NaN by class, D296), no fused multiply-add.
+//!    per component in the order of the fallback (planar on every level but AVX-512 up to 64
+//!    entries, which forms the components as `re c + im (−s)` and `im c + re s`, the same
+//!    values for every non-NaN result; NaN by class, D296), no fused multiply-add.
 //!
 //! A remainder shorter than one vector step runs `scramble_one_c32`/`scramble_one_cq15`.
 // The helpers of the level paths are unused on a target without one.
@@ -308,9 +310,13 @@ fn c32_level<S: SimdToken>(simd: S, x: &[f32], p: &[u8], y: &mut [f32], plan: &P
             bytemuck::cast_slice_mut(y),
         );
     }
+    // AVX-512 permutes up to `AVX512_PERMUTE_MAX` phasors from registers; above it (`b` 7
+    // and 8) it takes the per-sample pair loads of AVX2 (D2820).
     #[cfg(target_arch = "x86_64")]
     {
-        if let Some(t) = level.as_avx512() {
+        if let Some(t) = level.as_avx512()
+            && !(plan.phasor() && plan.entries() > x86::AVX512_PERMUTE_MAX)
+        {
             return x86::c32_avx512(t, x, p, y, plan);
         }
         if let Some(t) = level.as_avx2() {
@@ -460,13 +466,13 @@ mod x86 {
         _mm512_castps_pd, _mm512_castps_si512, _mm512_castsi512_ps, _mm512_cvtepu8_epi32,
         _mm512_cvtepu8_epi64, _mm512_i32gather_epi32, _mm512_loadu_si512, _mm512_madd_epi16,
         _mm512_mask_blend_epi32, _mm512_mask_blend_epi64, _mm512_mask_blend_pd,
-        _mm512_mask_i32gather_ps, _mm512_mask_ror_epi32, _mm512_mask_sub_epi32,
+        _mm512_mask_ror_epi32, _mm512_mask_sub_epi32,
         _mm512_mask_sub_epi64, _mm512_mul_ps, _mm512_or_si512, _mm512_packs_epi32,
         _mm512_permute_ps, _mm512_permutex2var_epi32, _mm512_permutex2var_epi64,
-        _mm512_permutex2var_ps, _mm512_permutexvar_epi32, _mm512_permutexvar_epi64,
-        _mm512_set1_epi32, _mm512_set1_epi64, _mm512_setzero_ps, _mm512_setzero_si512,
+        _mm512_permutexvar_epi32, _mm512_permutexvar_epi64,
+        _mm512_set1_epi32, _mm512_set1_epi64, _mm512_setzero_si512,
         _mm512_shuffle_epi8, _mm512_slli_epi32, _mm512_slli_epi64, _mm512_srai_epi32,
-        _mm512_srl_epi32, _mm512_srl_epi64, _mm512_sub_ps, _mm512_subs_epi16,
+        _mm512_srl_epi32, _mm512_srl_epi64, _mm512_subs_epi16,
         _mm512_test_epi32_mask, _mm512_test_epi64_mask, _mm512_xor_si512,
     };
 
@@ -1061,6 +1067,19 @@ mod x86 {
     #[target_feature(enable = "avx2")]
     #[inline]
     fn words8(p: [u8; 8], c: Loads8) -> [u64; 8] {
+        let w = k_bytes(p, c);
+        core::array::from_fn(|i| {
+            // A byte indexes the 256 words: no bound check.
+            let k = usize::from((w >> (8 * i)) as u8);
+            c.words.get(k).copied().unwrap_or_default()
+        })
+    }
+
+    /// `k` of the eight phase bytes `p` (`vpxor`, `vpsubb`, `vpand`), one byte each, moved to a
+    /// general register with one `vmovq` (see [`words8`]).
+    #[target_feature(enable = "avx2")]
+    #[inline]
+    fn k_bytes(p: [u8; 8], c: Loads8) -> u64 {
         let v = _mm_cvtsi64_si128(i64::from_le_bytes(p));
         let k = _mm_and_si128(_mm_sub_epi8(_mm_xor_si128(v, c.neg), c.neg), c.mask);
         let w: u64;
@@ -1074,11 +1093,48 @@ mod x86 {
                 options(pure, nomem, nostack, preserves_flags)
             );
         }
-        core::array::from_fn(|i| {
-            // A byte indexes the 256 words: no bound check.
-            let k = usize::from((w >> (8 * i)) as u8);
-            c.words.get(k).copied().unwrap_or_default()
-        })
+        w
+    }
+
+    /// [`pairs8`] of [`words8`] for `C32`. In a build for AVX-512 (`avx512f` a target feature
+    /// of the whole build, the fixed `avx512` level, which runs this code at `b` 7 and 8) LLVM
+    /// turns the eight 64-bit loads of [`words8`] into two `vpgatherqq`, which simulated 4.81
+    /// cycles per sample on `sapphirerapids` (D2820); there each pair of words is read by one
+    /// `vmovq` and one `vmovhps` in an `asm!` block instead, the loads of the `avx2` build.
+    #[target_feature(enable = "avx2")]
+    #[inline]
+    fn pairs8_c32(p: [u8; 8], c: Loads8) -> (__m256, __m256) {
+        #[cfg(target_feature = "avx512f")]
+        {
+            let k = k_bytes(p, c);
+            let w = c.words.as_ptr();
+            let pair = |i: u32| -> __m128 {
+                let x: __m128;
+                // SAFETY: both indices are bytes of `k`, below 256, the length of `c.words`;
+                // the two instructions read 8 bytes each from it and write one `xmm`
+                // register; no stack, no flags, and AVX is a target feature of this function.
+                unsafe {
+                    core::arch::asm!(
+                        "vmovq {x}, qword ptr [{w} + {i} * 8]",
+                        "vmovhps {x}, {x}, qword ptr [{w} + {j} * 8]",
+                        x = out(xmm_reg) x,
+                        w = in(reg) w,
+                        i = in(reg) usize::from((k >> (8 * i)) as u8),
+                        j = in(reg) usize::from((k >> (8 * i + 8)) as u8),
+                        options(pure, readonly, nostack, preserves_flags)
+                    );
+                }
+                x
+            };
+            let a = core::arch::x86_64::_mm256_set_m128(pair(2), pair(0));
+            let b = core::arch::x86_64::_mm256_set_m128(pair(6), pair(4));
+            (
+                _mm256_shuffle_ps::<0x88>(a, b),
+                _mm256_shuffle_ps::<0xDD>(a, b),
+            )
+        }
+        #[cfg(not(target_feature = "avx512f"))]
+        pairs8(words8(p, c))
     }
 
     fearless_simd::kernel!(
@@ -1245,7 +1301,7 @@ mod x86 {
                                     _mm256_castsi256_ps(get256(&ls, k)),
                                 )
                             }
-                            Avx2Form::Loads => pairs8(words8(*pv, lw)),
+                            Avx2Form::Loads => pairs8_c32(*pv, lw),
                         };
                         (
                             _mm256_sub_ps(_mm256_mul_ps(re, cv), _mm256_mul_ps(im, sv)),
@@ -1375,8 +1431,9 @@ mod x86 {
     }
 
     /// The largest number of phasors that AVX-512 permutes from registers; above it (`b` 7
-    /// and 8) the phasors are gathered (M49.1 §3).
-    const AVX512_PERMUTE_MAX: usize = 64;
+    /// and 8) `CQ15` gathers the phasors (M49.1 §3) and `C32` takes the per-sample pair loads
+    /// of [`c32_avx2`] (D2820).
+    pub(super) const AVX512_PERMUTE_MAX: usize = 64;
 
     /// The constants of an AVX-512 `CQ15` call.
     struct Cq15x16 {
@@ -1555,90 +1612,6 @@ mod x86 {
         }
     }
 
-    /// The constants of the planar `C32` form of sixteen samples (`b` 7 and 8).
-    struct C32x16 {
-        inv: u16,
-        mask: __m512i,
-        base: __m512i,
-        /// `vpermt2ps` controls: the even and the odd elements, and the interleave.
-        even: __m512i,
-        odd: __m512i,
-        zip_lo: __m512i,
-        zip_hi: __m512i,
-    }
-
-    /// Sixteen dword indices `f(0) .. f(15)`.
-    #[target_feature(enable = "avx512f")]
-    #[inline]
-    fn idx16(f: impl Fn(u32) -> u32) -> __m512i {
-        let a: [u32; 16] = core::array::from_fn(|i| f(i as u32));
-        // SAFETY: `a` is sixteen `u32`, 64 bytes.
-        unsafe { _mm512_loadu_si512(a.as_ptr().cast()) }
-    }
-
-    #[target_feature(enable = "avx512f")]
-    #[inline]
-    fn c32x16(plan: &Plan) -> C32x16 {
-        C32x16 {
-            inv: if plan.neg == 0 { 0 } else { u16::MAX },
-            mask: _mm512_set1_epi32(plan.mask as i32),
-            base: _mm512_set1_epi32(plan.base as i32),
-            even: idx16(|i| 2 * i),
-            odd: idx16(|i| 2 * i + 1),
-            zip_lo: idx16(|i| i / 2 + 16 * (i % 2)),
-            zip_hi: idx16(|i| 8 + i / 2 + 16 * (i % 2)),
-        }
-    }
-
-    /// Sixteen `C32` samples `x0`, `x1` with the phase bytes `p` in the planar form: `re` and
-    /// `im` by `vpermt2ps`, `c` and `s` gathered from the static tables (`vgatherdps`), the
-    /// product in the order of the fallback, interleaved again by `vpermt2ps`.
-    #[target_feature(enable = "avx512f,avx512bw")]
-    #[inline]
-    fn c32_x16_gather(x0: __m512, x1: __m512, p: __m128i, c: &C32x16) -> [__m512; 2] {
-        let v = _mm512_cvtepu8_epi32(p);
-        let k = _mm512_mask_sub_epi32(v, c.inv, _mm512_setzero_si512(), v);
-        let e = _mm512_or_si512(_mm512_and_si512(k, c.mask), c.base);
-        // SAFETY: every lane of `e` is `2^b + k`, `k < 2^b`, `b` 7 or 8: below 512.
-        let (cv, sv) = unsafe {
-            (
-                _mm512_mask_i32gather_ps::<4>(_mm512_setzero_ps(), u16::MAX, e, C_F32.as_ptr()),
-                _mm512_mask_i32gather_ps::<4>(_mm512_setzero_ps(), u16::MAX, e, S_F32.as_ptr()),
-            )
-        };
-        let re = _mm512_permutex2var_ps(x0, c.even, x1);
-        let im = _mm512_permutex2var_ps(x0, c.odd, x1);
-        let pre = _mm512_sub_ps(_mm512_mul_ps(re, cv), _mm512_mul_ps(im, sv));
-        let pim = _mm512_add_ps(_mm512_mul_ps(re, sv), _mm512_mul_ps(im, cv));
-        [
-            _mm512_permutex2var_ps(pre, c.zip_lo, pim),
-            _mm512_permutex2var_ps(pre, c.zip_hi, pim),
-        ]
-    }
-
-    fearless_simd::kernel!(
-        /// `b` 7 and 8: sixteen samples per step in the planar form, the phasors gathered.
-        fn c32_avx512_gather(t: Avx512, x: &[f32], p: &[u8], y: &mut [f32], plan: &Plan) -> usize {
-            let c = c32x16(plan);
-            let (xs, _) = x.as_chunks::<32>();
-            let (ps, _) = p.as_chunks::<16>();
-            let (ys, _) = y.as_chunks_mut::<32>();
-            let mut n = 0;
-            for ((xv, pv), yv) in xs.iter().zip(ps).zip(ys) {
-                let (lo, hi) = xv.split_at(16);
-                let x0: __m512 = f32x16::from_slice(t, lo).into();
-                let x1: __m512 = f32x16::from_slice(t, hi).into();
-                let pb: __m128i = u8x16::from_slice(t, pv).into();
-                let [y0, y1] = c32_x16_gather(x0, x1, pb, &c);
-                let (lo, hi) = yv.split_at_mut(16);
-                f32x16::simd_from(t, y0).store_slice(lo);
-                f32x16::simd_from(t, y1).store_slice(hi);
-                n += 16;
-            }
-            n
-        }
-    );
-
     fearless_simd::kernel!(
         pub(super) fn c32_avx512(
             t: Avx512,
@@ -1648,9 +1621,6 @@ mod x86 {
             plan: &Plan,
         ) -> usize {
             let mut n = 0;
-            if plan.phasor() && plan.entries() > AVX512_PERMUTE_MAX {
-                return c32_avx512_gather(t, x, p, y, plan);
-            }
             let c = c32x8(plan);
             let (xs, _) = x.as_chunks::<16>();
             let (ps, _) = p.as_chunks::<8>();

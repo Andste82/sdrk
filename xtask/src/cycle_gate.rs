@@ -52,7 +52,10 @@ use std::path::{Path, PathBuf};
 use anyhow::{Context, anyhow, bail};
 use serde_json::Value;
 
-use crate::bench::{ComparisonKind, KERNELS, PLANS, comparisons};
+use crate::bench::{
+    ComparisonKind, KERNELS, KernelSpec, LevelPlan, PLANS, Reference, SimdLevel, comparisons,
+    measured_level, reference_level,
+};
 use crate::count::{Caps, Limits, Status};
 use crate::scan::Finding;
 
@@ -1064,6 +1067,69 @@ pub fn check_comparisons(limits: &Limits) -> Vec<Finding> {
     out
 }
 
+/// The static check of the SIMD levels (G7 of the maintainer's measurement order of 2026-11-24,
+/// D2782): for every level of [`PLANS`] and every entry of [`KERNELS`] measured there, a
+/// `release` or `dev` entry whose judged comparison is built for a lower SIMD level than the code
+/// the entry measures ([`reference_level`] below [`measured_level`]: FFTW's SSE2 build at `avx2`,
+/// portable C at `simd128`, a scalar library against our SIMD path) is a finding; such a
+/// comparison is information and the entry `info`. A level with a baseline (`avx2-runtime`) is
+/// judged against the comparison of the baseline level (D2764).
+#[must_use]
+pub fn check_reference_levels(limits: &Limits) -> Vec<Finding> {
+    check_reference_levels_with(limits, reference_level)
+}
+
+/// [`check_reference_levels`] with the table of the reference builds given.
+#[allow(
+    clippy::large_stack_frames,
+    reason = "the plan table and the findings are large; xtask is a host tool"
+)]
+fn check_reference_levels_with(
+    limits: &Limits,
+    level_of: impl Fn(Reference, &LevelPlan, &KernelSpec) -> Option<SimdLevel>,
+) -> Vec<Finding> {
+    let mut out = Vec::new();
+    for plan in &PLANS {
+        let judged_plan = plan.baseline.map_or(Some(plan), |base| {
+            PLANS
+                .iter()
+                .find(|p| p.platform == plan.platform && p.level == base)
+        });
+        let Some(judged_plan) = judged_plan else {
+            continue;
+        };
+        for spec in KERNELS.iter().filter(|s| s.family.measured_at(plan)) {
+            let Some(limit) = limits.get(spec.name, plan.level) else {
+                continue;
+            };
+            if limit.status == Status::Info {
+                continue;
+            }
+            let (gate, _) = comparisons(judged_plan, spec);
+            let Some(built) = level_of(gate, judged_plan, spec) else {
+                continue;
+            };
+            let measured = measured_level(plan, spec);
+            if built.rank() < measured.rank() {
+                out.push(Finding {
+                    path: PathBuf::from("benches/limits.json"),
+                    line: 0,
+                    message: format!(
+                        "`{}` at `{}` is `{}` but its judged comparison (`{}`) is built for `{}`, below the `{}` code the entry measures: not like with like (G7, D2782); make the entry `info`",
+                        spec.name,
+                        plan.level,
+                        status_name(limit.status),
+                        gate.implementation(),
+                        built.name(),
+                        measured.name()
+                    ),
+                });
+            }
+        }
+    }
+    out
+}
+
 /// The comparison kinds of the records of `results` against the measurement plan (D2767): every
 /// record of a level of [`PLANS`] must carry the `comparison_kind` of its judged comparison
 /// ([`comparisons`]), and a record of a level with a baseline the `judged_against` kind of the
@@ -1200,10 +1266,12 @@ pub fn check(root: &Path, o: &Options) -> anyhow::Result<Vec<Finding>> {
     // No status decided by our own code, from the plan alone and from the records (D2767).
     let plan_findings = check_comparisons(&limits);
     let kind_findings = check_record_kinds(&results);
+    let level_findings = check_reference_levels(&limits);
     println!(
-        "check cycles: the judged comparison of every release and dev entry is a foreign library: {} findings; the comparison kinds of the records follow the plan: {} findings (D2767)",
+        "check cycles: the judged comparison of every release and dev entry is a foreign library: {} findings; the comparison kinds of the records follow the plan: {} findings (D2767); no release or dev entry is judged against a build of a lower SIMD level: {} findings (G7, D2782)",
         plan_findings.len(),
-        kind_findings.len()
+        kind_findings.len(),
+        level_findings.len()
     );
     // Other results (a measurement of a selection of levels) take the library's cycles of
     // `avx2-runtime` from the committed `avx2` records where they lack them (D2764).
@@ -1254,6 +1322,7 @@ pub fn check(root: &Path, o: &Options) -> anyhow::Result<Vec<Finding>> {
     let mut findings = fallbacks.findings;
     findings.extend(plan_findings);
     findings.extend(kind_findings);
+    findings.extend(level_findings);
     findings.extend(gate.findings);
     Ok(findings)
 }
@@ -2059,6 +2128,146 @@ mod tests {
             check_comparisons(&Limits::parse(&info).unwrap()),
             Vec::new()
         );
+    }
+
+    /// `limits.json` text with `status` for each `(entry, level)`.
+    fn limits_text(entries: &[(&str, &str, &str)]) -> String {
+        let mut doc = serde_json::Map::new();
+        for (entry, level, status) in entries {
+            doc.entry(*entry)
+                .or_insert_with(|| serde_json::json!({}))
+                .as_object_mut()
+                .unwrap()
+                .insert((*level).into(), serde_json::json!({ "status": status }));
+        }
+        Value::Object(doc).to_string()
+    }
+
+    #[test]
+    fn the_static_check_finds_a_status_judged_against_a_lower_simd_level() {
+        use crate::bench::Family;
+        let root = Path::new(env!("CARGO_MANIFEST_DIR")).parent().unwrap();
+        let real = std::fs::read_to_string(root.join("benches/limits.json")).unwrap();
+        assert_eq!(
+            check_reference_levels(&Limits::parse(&real).unwrap()),
+            Vec::new()
+        );
+        // A scalar library against our SIMD path (KissFFT at avx2), portable C at simd128
+        // (liquid-dsp's channelizer, VOLK's generic protokernels), libairspy's SSE2 converter at
+        // avx2 through the judged comparison of an entry that has it.
+        let text = limits_text(&[
+            ("fft_cq15_1024", "avx2", "release"),
+            ("fft_cq15_1024", "avx2-runtime", "dev"),
+            ("channelize", "simd128", "release"),
+            ("rotate", "simd128", "dev"),
+            // Like with like: these pass.
+            ("fft_cq15_1024", "neon", "release"),
+            ("channelize", "avx512", "release"),
+            ("fft_64", "simd128", "release"),
+            ("biquad", "simd128", "release"),
+            ("squelch", "avx2", "release"),
+            ("crc32", "simd128", "release"),
+            ("fft_cq15_1024_default_fallback", "avx512", "release"),
+            ("channelize_fallback", "simd128", "release"),
+            ("real_to_complex_airspy", "sse2", "release"),
+        ]);
+        let f = check_reference_levels(&Limits::parse(&text).unwrap());
+        let messages: Vec<&str> = f.iter().map(|f| f.message.as_str()).collect();
+        assert_eq!(f.len(), 4, "{messages:#?}");
+        for (entry, level, built, measured) in [
+            ("fft_cq15_1024", "avx2", "scalar", "avx2"),
+            ("fft_cq15_1024", "avx2-runtime", "scalar", "avx2"),
+            ("channelize", "simd128", "scalar", "simd128"),
+            ("rotate", "simd128", "scalar", "simd128"),
+        ] {
+            assert!(
+                messages
+                    .iter()
+                    .any(|m| m.starts_with(&format!("`{entry}` at `{level}`"))
+                        && m.contains(&format!(
+                            "built for `{built}`, below the `{measured}` code"
+                        ))),
+                "{entry} {level}: {messages:#?}"
+            );
+        }
+        // As `info` they pass.
+        let info = text
+            .replace("\"release\"", "\"info\"")
+            .replace("\"dev\"", "\"info\"");
+        assert_eq!(
+            check_reference_levels(&Limits::parse(&info).unwrap()),
+            Vec::new()
+        );
+        // The FFTW build before D2780 (`--enable-sse2` only, for every x86-64 level): the
+        // committed statuses of the entries judged against FFTW above `sse2` fail.
+        let sse2_fftw = |r: Reference, p: &LevelPlan, s: &KernelSpec| {
+            let level = reference_level(r, p, s)?;
+            let fftw = matches!(r, Reference::Fftw | Reference::FftwInPlace)
+                || matches!(s.family, Family::ChannelizeLiquid | Family::XcorrLiquid);
+            Some(if fftw && p.platform.starts_with("x86_64") {
+                SimdLevel::Level("sse2")
+            } else {
+                level
+            })
+        };
+        let f = check_reference_levels_with(&Limits::parse(&real).unwrap(), sse2_fftw);
+        let mut failed: Vec<(String, String)> = f
+            .iter()
+            .map(|f| {
+                let mut it = f.message.split('`');
+                let entry = it.nth(1).unwrap().to_string();
+                let level = it.nth(1).unwrap().to_string();
+                (entry, level)
+            })
+            .collect();
+        failed.sort();
+        for (entry, level) in [
+            ("channelize", "avx2"),
+            ("channelize", "avx2-runtime"),
+            ("channelize", "avx512"),
+            ("channelize", "sse4.2"),
+            ("rfft_1024", "sse4.2"),
+            ("xcorr_fft_n4096", "avx512"),
+            ("xcorr_fft_n512", "avx2"),
+        ] {
+            assert!(
+                failed.contains(&(entry.to_string(), level.to_string())),
+                "{entry} {level}: {failed:?}"
+            );
+        }
+        assert!(
+            failed
+                .iter()
+                .all(|(e, l)| l != "sse2" && l != "neon" && !e.ends_with("_fallback")),
+            "{failed:?}"
+        );
+    }
+
+    #[test]
+    fn the_scalar_entries_have_no_simd_backend() {
+        let root = Path::new(env!("CARGO_MANIFEST_DIR")).parent().unwrap();
+        let mut dirs = vec![root.join("crates/backends/sdrk-backend-simd/src")];
+        let mut text = String::new();
+        while let Some(dir) = dirs.pop() {
+            for e in std::fs::read_dir(&dir).unwrap() {
+                let path = e.unwrap().path();
+                if path.is_dir() {
+                    dirs.push(path);
+                } else if path.extension().is_some_and(|x| x == "rs") {
+                    text.push_str(&std::fs::read_to_string(&path).unwrap().to_lowercase());
+                }
+            }
+        }
+        assert!(text.contains("fn "), "the SIMD backend was not read");
+        for word in ["squelch", "crc", "bit_scramble", "bit_descramble"] {
+            assert!(
+                !text.contains(word),
+                "the SIMD backend has `{word}`: review SCALAR_ENTRIES (D2782)"
+            );
+        }
+        for entry in crate::bench::SCALAR_ENTRIES {
+            assert!(KERNELS.iter().any(|s| s.name == entry), "{entry}");
+        }
     }
 
     #[test]

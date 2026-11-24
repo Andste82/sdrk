@@ -10,9 +10,9 @@
 # | Library | Version | License | Platforms | Use |
 # | --- | --- | --- | --- | --- |
 # | VOLK | 3.3.0 | LGPL-3.0-or-later | x86_64, aarch64 (shared, CMake Release, no ORC); wasm32 (the `generic` protokernels, static, see volk-wasm.c; since the fallback round with the multiply, log2, scalar multiply and add, dot product and 8i-to-16i kernels; since M30 also the complex and real adds, the real and complex multiplies, the saturated 16-bit add and the 16-bit complex deinterleave) | the reference of the streaming kernels; VOLK's generic `multiply_conjugate` in gr-quad-demod.c |
-# | FFTW | 3.3.10 | GPL-2.0-or-later | x86_64 (`--enable-sse2`), aarch64 (`--enable-neon`); static, single precision | the C32 FFT reference at `sse2`, information on `neon` |
+# | FFTW | 3.3.10 | GPL-2.0-or-later | x86_64 (one library per level: `--enable-sse2` for `sse2` and `sse4.2`, also `--enable-avx --enable-avx2` for `avx2`, also `--enable-avx512` for `avx512`, the -march of the level), aarch64 (`--enable-neon`); static, single precision | the C32 FFT reference at `sse2`, the real-input one at `sse2` and `sse4.2`, the FFT of the channelizer and fast-convolution references, information on `neon` |
 # | KissFFT | 131.1.0 | BSD-3-Clause | all (static, `FIXED_POINT=16`) | the CQ15 FFT reference |
-# | Ne10 | 1f059a7 (last commit of the archived repository) | BSD-3-Clause | aarch64 (static, DSP module) | information next to KissFFT on `neon` |
+# | Ne10 | 1f059a7 (last commit of the archived repository) | BSD-3-Clause | aarch64 (static, DSP module) | the CQ15 FFT reference on `neon`, KissFFT as information there |
 # | VOLK generic | 3.3.0 (the `generic` protokernels of `volk_32f_x2_interleave_32fc`, `volk_32fc_deinterleave_32f_x2`, `volk_16ic_deinterleave_16i_x2`, `volk_32fc_x2_multiply_32fc`, `volk_32fc_32f_multiply_32fc`, and their 16-bit interleave loop), see volk-generic.c | LGPL-3.0-or-later | x86_64, aarch64, wasm32 (static, one library per level) | the scalar references of the `interleave` and `deinterleave` fallbacks, and with a phasor lookup (or a `±1.0` sequence at `bits = 1`) of the `C32` `scramble` fallback |
 # | VOLK without FMA | 3.3.0 (the protokernels of `volk_32fc_x2_multiply_32fc` and `volk_32fc_x2_dot_prod_32fc` without fused operations: `u_avx` on x86_64, `neon` on aarch64), see volk-nofma.c | LGPL-3.0-or-later | x86_64 (`avx2`, `avx512`), aarch64 (`neon`) (static, one library per level) | information for `mul` `C32` (its gate from D287 until D326) and the gate of `dot_complex` (D821) at the levels where VOLK's dispatcher picks a fused implementation |
 # | GNU Radio `agc_cc` | main at ec1bf15 (agc.h of gr-analog), see gr-agc.c | GPL-3.0-or-later | all (static, one object file) | the reference of the `C32` `agc` |
@@ -225,20 +225,44 @@ Libs: -L\${libdir} -lvolk
 EOF
 }
 
+# FFTW, one library per level on x86_64 (libfftw3f-<level>.a), so that a level is compared with
+# FFTW's codelets of that level (the maintainer's measurement order of 2026-11-24, D2780):
+# `fftw_simd <level>` are the configure options of the SIMD codelets FFTW has up to the level
+# (FFTW has none for SSE3 to SSE4.2, so `sse4.2` has the SSE2 codelets of `sse2`), compiled with
+# the `-march` of the level (biquad_levels) for the rest of the library. FFTW selects among the
+# enabled codelets from the CPUID at run time (the CPU of the level's profiler). On aarch64 one
+# library with the NEON codelets (libfftw3f-neon.a).
+fftw_simd() {
+    case $1 in
+        sse2 | sse4.2) echo "--enable-sse2" ;;
+        avx2) echo "--enable-sse2 --enable-avx --enable-avx2" ;;
+        avx512) echo "--enable-sse2 --enable-avx --enable-avx2 --enable-avx512" ;;
+        neon) echo "--enable-neon" ;;
+    esac
+}
+
 build_fftw() {
     fetch "$FFTW_URL" "$FFTW_SHA256" "fftw-$FFTW_VERSION.tar.gz"
-    unpack "fftw-$FFTW_VERSION.tar.gz" fftw
-    local simd=(--enable-sse2)
-    local host=()
+    local host=() entry level march simd dir
     if [ "$platform" = aarch64 ]; then
-        simd=(--enable-neon)
         host=(--host=aarch64-linux-gnu)
     fi
-    (cd "$work/fftw" && ./configure "${host[@]}" --prefix="$prefix" --libdir="$prefix/lib" \
-        --enable-float "${simd[@]}" --enable-static --disable-shared --disable-fortran \
-        --disable-doc --disable-threads CC="$cc" CFLAGS="$OPT_FLAGS" >"$work/fftw-configure.log")
-    make -C "$work/fftw" -j "$jobs" >"$work/fftw-build.log"
-    make -C "$work/fftw" install >/dev/null
+    for entry in $(biquad_levels); do
+        level=${entry%%:*}
+        march=${entry#*:}
+        march=${march//,/ }
+        read -r -a simd <<<"$(fftw_simd "$level")"
+        dir="fftw-$level"
+        unpack "fftw-$FFTW_VERSION.tar.gz" "$dir"
+        (cd "$work/$dir" && ./configure "${host[@]}" --prefix="$work/$dir-install" --libdir="$work/$dir-install/lib" \
+            --enable-float "${simd[@]}" --enable-static --disable-shared --disable-fortran \
+            --disable-doc --disable-threads CC="$cc" CFLAGS="$OPT_FLAGS $march" >"$work/$dir-configure.log")
+        make -C "$work/$dir" -j "$jobs" >"$work/$dir-build.log"
+        make -C "$work/$dir" install >/dev/null
+        cp "$work/$dir-install/lib/libfftw3f.a" "$prefix/lib/libfftw3f-$level.a"
+        cp "$work/$dir-install/include/fftw3.h" "$prefix/include/"
+        rm -rf "$work/$dir"
+    done
 }
 
 build_kissfft() {
@@ -894,6 +918,24 @@ case $platform in
         ;;
 esac
 
+# `simd_levels <same|scalar|liquid|airspy>`: the JSON members `"<level>": "<SIMD level>"` of the
+# levels of the platform for the manifest below.
+simd_levels() {
+    local e level v sep=""
+    simd_of() { if [ "$1" = LIQUID_RUNTIME_PORT ]; then echo scalar; else echo "$2"; fi; }
+    for e in $(biquad_levels); do
+        level=${e%%:*}
+        case $1 in
+            same) v=$level ;;
+            scalar) v=scalar ;;
+            liquid) v="$(simd_of "$(liquid_simd "$level" crcf)" "$level") / $(simd_of "$(liquid_simd "$level" rrrf)" "$level")" ;;
+            airspy) v="$([ "$platform" = x86_64 ] && echo sse2 || echo scalar) / scalar" ;;
+        esac
+        printf '%s"%s": "%s"' "$sep" "$level" "$v"
+        sep=", "
+    done
+}
+
 # The manifest that xtask records in benches/results/<platform>.json.
 {
     echo "{"
@@ -906,7 +948,7 @@ esac
     for lib in "${libraries[@]}"; do
         case $lib in
             volk) entry="\"volk\": { \"version\": \"$VOLK_VERSION\", \"sha256\": \"$VOLK_SHA256\", \"build\": \"$([ "$platform" = wasm32 ] && echo "generic protokernels, -O3 -msimd128" || echo "CMake Release, ENABLE_ORC=OFF")\" }" ;;
-            fftw) entry="\"fftw\": { \"version\": \"$FFTW_VERSION\", \"sha256\": \"$FFTW_SHA256\", \"build\": \"--enable-float $([ "$platform" = aarch64 ] && echo --enable-neon || echo --enable-sse2), CFLAGS=$OPT_FLAGS\" }" ;;
+            fftw) entry="\"fftw\": { \"version\": \"$FFTW_VERSION\", \"sha256\": \"$FFTW_SHA256\", \"build\": \"--enable-float, CFLAGS=$OPT_FLAGS and the -march of the level, per level $(for e in $(biquad_levels); do printf '%s:%s ' "${e%%:*}" "$(fftw_simd "${e%%:*}" | tr ' ' ',')"; done | sed 's/ $//')\" }" ;;
             kissfft) entry="\"kissfft\": { \"version\": \"$KISSFFT_VERSION\", \"sha256\": \"$KISSFFT_SHA256\", \"build\": \"$KISSFFT_FLAGS\" }" ;;
             gragc) entry="\"gnuradio_agc_cc\": { \"version\": \"main at ec1bf15\", \"sha256\": \"$(sha256sum "$here/gr-agc.c" | cut -d ' ' -f 1)\", \"build\": \"$GR_AGC_FLAGS\" }" ;;
             grsquelch) entry="\"gnuradio_pwr_squelch_cc\": { \"version\": \"main at ec1bf15\", \"sha256\": \"$(sha256sum "$here/gr-squelch.c" | cut -d ' ' -f 1)\", \"build\": \"$GR_AGC_FLAGS\" }" ;;
@@ -936,6 +978,24 @@ esac
             volkgeneric) entry="\"volk_generic\": { \"version\": \"$VOLK_VERSION\", \"sha256\": \"$(sha256sum "$here/volk-generic.c" | cut -d ' ' -f 1)\", \"build\": \"volk-generic.c over the generic protokernels of volk_32f_x2_interleave_32fc.h, volk_32fc_deinterleave_32f_x2.h, volk_16ic_deinterleave_16i_x2.h, volk_32fc_x2_multiply_32fc.h and volk_32fc_32f_multiply_32fc.h: $BIQUAD_OPT, per level $(biquad_levels | tr , ' ')\" }" ;;
             ne10) entry="\"ne10\": { \"version\": \"$NE10_COMMIT\", \"sha256\": \"$NE10_SHA256\", \"build\": \"CMake Release, DSP module\" }" ;;
         esac
+        # The SIMD level each build is compiled for, per measured level (G7 of the measurement
+        # order, D2782): the level where the library's SIMD code of that level is built and
+        # selected, `scalar` where only its portable C runs (whatever the compiler flags), and
+        # for liquid-dsp the crcf / rrrf dot products, for libairspy the float / int16
+        # converters. xtask's table of the judged references (bench.rs, reference_level) is
+        # the same.
+        case $lib in
+            volk) mode=$([ "$platform" = wasm32 ] && echo scalar || echo same) ;;
+            fftw | kfr | volknofma | ne10 | grvolk) mode=same ;;
+            liquidhb) mode=liquid ;;
+            airspy) mode=airspy ;;
+            cmsisdsp) mode=$([ "$platform" = cortex-m4 ] && echo same || echo scalar) ;;
+            wasisysroot | emscripten | cmsiscore) mode="" ;;
+            *) mode=scalar ;;
+        esac
+        if [ -n "$mode" ]; then
+            entry="${entry% \}}, \"simd_level\": { $(simd_levels "$mode") } }"
+        fi
         printf '%s    %s' "$sep" "$entry"
         sep=$',\n'
     done

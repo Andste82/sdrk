@@ -76,7 +76,11 @@ pub(crate) fn integrate(t: f32, limit: f32) -> f32 {
 /// out of line.
 #[inline]
 fn limit_error(e: f32) -> f32 {
-    if libm::fabsf(e) <= 1.0 { e } else { limit_cold(e) }
+    if libm::fabsf(e) <= 1.0 {
+        e
+    } else {
+        limit_cold(e)
+    }
 }
 
 #[cold]
@@ -489,7 +493,14 @@ mod tests {
             seed ^= seed << 17;
             s.push(f32::from_bits(seed as u32));
         }
-        s.extend([1.0, -1.0, 1.0 + f32::EPSILON, -1.0 - f32::EPSILON, 0.0, -0.0]);
+        s.extend([
+            1.0,
+            -1.0,
+            1.0 + f32::EPSILON,
+            -1.0 - f32::EPSILON,
+            0.0,
+            -0.0,
+        ]);
         for &e in s.iter().filter(|v| v.is_finite()) {
             let (got, want) = (limit_error(e), e.clamp(-1.0, 1.0));
             assert_eq!(got.to_bits(), want.to_bits(), "{e:e}");

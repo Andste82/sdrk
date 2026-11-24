@@ -538,30 +538,30 @@
           "compared_with": "sdrk fallback",
           "counter_model": {
             "comparison": {
-              "coverage": 0.9807733653750317,
-              "cycles_per_sample": 53.08456055624935,
-              "efficiency": 0.492415194433596
+              "coverage": 0.9810465683676309,
+              "cycles_per_sample": 51.095137773429364,
+              "efficiency": 0.49360583140704345
             },
             "cpu": "sapphirerapids",
             "ours": {
-              "coverage": 0.9807733653750317,
-              "cycles_per_sample": 53.08456055624935,
-              "efficiency": 0.492415194433596
+              "coverage": 0.9810465683676309,
+              "cycles_per_sample": 51.095137773429364,
+              "efficiency": 0.49360583140704345
             },
             "ratio": 1.0
           },
           "cycle_mode": "whole-loop",
           "reference_model": {
             "comparison": {
-              "coverage": 0.9807733653750317,
-              "cycles_per_sample": 55.21079925429084,
-              "efficiency": 0.450921165115384
+              "coverage": 0.9810465683676309,
+              "cycles_per_sample": 53.14993602808889,
+              "efficiency": 0.4518198352516484
             },
             "cpu": "znver4",
             "ours": {
-              "coverage": 0.9807733653750317,
-              "cycles_per_sample": 55.21079925429084,
-              "efficiency": 0.450921165115384
+              "coverage": 0.9810465683676309,
+              "cycles_per_sample": 53.14993602808889,
+              "efficiency": 0.4518198352516484
             },
             "ratio": 1.0
           },
@@ -874,11 +874,11 @@
             },
             "cpu": "sapphirerapids",
             "ours": {
-              "coverage": 0.9916718642836488,
-              "cycles_per_sample": 1.1907369312660554,
-              "efficiency": 0.9424724602203182
+              "coverage": 0.9904439487506844,
+              "cycles_per_sample": 1.193347044894229,
+              "efficiency": 0.9400897290776742
             },
-            "ratio": 0.21444260338222462
+            "ratio": 0.2149126648599969
           },
           "cycle_mode": "whole-loop",
           "reference_model": {
@@ -889,11 +889,11 @@
             },
             "cpu": "znver4",
             "ours": {
-              "coverage": 0.9916718642836488,
-              "cycles_per_sample": 1.350386829788048,
-              "efficiency": 0.9372265328743947
+              "coverage": 0.9904439487506844,
+              "cycles_per_sample": 1.3554133368105672,
+              "efficiency": 0.9372363022667097
             },
-            "ratio": 0.28385457796081776
+            "ratio": 0.28491116189515475
           },
           "samples": 65536
         },
@@ -1000,30 +1000,30 @@
           "compared_with": "sdrk fallback",
           "counter_model": {
             "comparison": {
-              "coverage": 0.9900653248631334,
-              "cycles_per_sample": 85.12561693443199,
-              "efficiency": 0.5732962966448928
+              "coverage": 0.9903879940827891,
+              "cycles_per_sample": 85.10400131893145,
+              "efficiency": 0.5733245984543742
             },
             "cpu": "sapphirerapids",
             "ours": {
-              "coverage": 0.9900653248631334,
-              "cycles_per_sample": 85.12561693443199,
-              "efficiency": 0.5732962966448928
+              "coverage": 0.9903879940827891,
+              "cycles_per_sample": 85.10400131893145,
+              "efficiency": 0.5733245984543742
             },
             "ratio": 1.0
           },
           "cycle_mode": "whole-loop",
           "reference_model": {
             "comparison": {
-              "coverage": 0.9900653248631334,
-              "cycles_per_sample": 514.1455140464856,
-              "efficiency": 0.3325369541084913
+              "coverage": 0.9903879940827891,
+              "cycles_per_sample": 513.9815843432765,
+              "efficiency": 0.33254135287085035
             },
             "cpu": "znver4",
             "ours": {
-              "coverage": 0.9900653248631334,
-              "cycles_per_sample": 514.1455140464856,
-              "efficiency": 0.3325369541084913
+              "coverage": 0.9903879940827891,
+              "cycles_per_sample": 513.9815843432765,
+              "efficiency": 0.33254135287085035
             },
             "ratio": 1.0
           },
@@ -1990,32 +1990,32 @@
           "compared_with": "sdrk fallback",
           "counter_model": {
             "comparison": {
-              "coverage": 0.9981725142750209,
-              "cycles_per_sample": 68.06660059506132,
+              "coverage": 0.9981885530833833,
+              "cycles_per_sample": 68.06654707525193,
               "efficiency": 0.23513851127930047
             },
             "cpu": "sapphirerapids",
             "ours": {
-              "coverage": 0.9981731421546072,
-              "cycles_per_sample": 68.06655777921382,
+              "coverage": 0.9981891809735522,
+              "cycles_per_sample": 68.06650425940445,
               "efficiency": 0.23513851127930047
             },
-            "ratio": 0.9999993709712676
+            "ratio": 0.9999993709707732
           },
           "cycle_mode": "whole-loop",
           "reference_model": {
             "comparison": {
-              "coverage": 0.9981725142750209,
-              "cycles_per_sample": 55.09248332387394,
+              "coverage": 0.9981885530833833,
+              "cycles_per_sample": 55.09244000543024,
               "efficiency": 0.3050385837494326
             },
             "cpu": "znver4",
             "ours": {
-              "coverage": 0.9981731421546072,
-              "cycles_per_sample": 55.09244866911899,
+              "coverage": 0.9981891809735522,
+              "cycles_per_sample": 55.09240535067529,
               "efficiency": 0.3050385837494326
             },
-            "ratio": 0.9999993709712675
+            "ratio": 0.9999993709707731
           },
           "samples": 65536
         },
@@ -2023,32 +2023,32 @@
           "compared_with": "GNU Radio costas_loop_cc (costas_loop_cc_impl.cc of gr-digital, generic compiler flags)",
           "counter_model": {
             "comparison": {
-              "coverage": 0.9958115332964759,
-              "cycles_per_sample": 66.44046928602239,
-              "efficiency": 0.3832031563423049
+              "coverage": 0.9958013744854166,
+              "cycles_per_sample": 66.16113069054141,
+              "efficiency": 0.37722876702952635
             },
             "cpu": "sapphirerapids",
             "ours": {
-              "coverage": 0.9981725142750209,
-              "cycles_per_sample": 68.06660059506132,
+              "coverage": 0.9981885530833833,
+              "cycles_per_sample": 68.06654707525193,
               "efficiency": 0.23513851127930047
             },
-            "ratio": 1.0244750123909951
+            "ratio": 1.0287996345410542
           },
           "cycle_mode": "whole-loop",
           "reference_model": {
             "comparison": {
-              "coverage": 0.9958115332964759,
-              "cycles_per_sample": 68.92221730697663,
-              "efficiency": 0.35517398974241843
+              "coverage": 0.9958013744854166,
+              "cycles_per_sample": 68.65531675676101,
+              "efficiency": 0.3550761598378506
             },
             "cpu": "znver4",
             "ours": {
-              "coverage": 0.9981725142750209,
-              "cycles_per_sample": 55.09248332387394,
+              "coverage": 0.9981885530833833,
+              "cycles_per_sample": 55.09244000543024,
               "efficiency": 0.3050385837494326
             },
-            "ratio": 0.799342874859849
+            "ratio": 0.8024497243326005
           },
           "samples": 65536
         },
@@ -2056,32 +2056,32 @@
           "compared_with": "sdrk fallback",
           "counter_model": {
             "comparison": {
-              "coverage": 0.9930412357432876,
-              "cycles_per_sample": 148.4109399301569,
-              "efficiency": 0.18249599887728463
+              "coverage": 0.9932335480373442,
+              "cycles_per_sample": 148.3064965598447,
+              "efficiency": 0.1829025542257214
             },
             "cpu": "sapphirerapids",
             "ours": {
-              "coverage": 0.9930418296459226,
-              "cycles_per_sample": 148.41085117090665,
-              "efficiency": 0.18249599887728463
+              "coverage": 0.9932341413250616,
+              "cycles_per_sample": 148.30640797204939,
+              "efficiency": 0.1829025542257214
             },
-            "ratio": 0.9999994019359335
+            "ratio": 0.999999402670838
           },
           "cycle_mode": "whole-loop",
           "reference_model": {
             "comparison": {
-              "coverage": 0.9930412357432876,
-              "cycles_per_sample": 127.42549276319463,
-              "efficiency": 0.214709312700594
+              "coverage": 0.9932335480373442,
+              "cycles_per_sample": 127.32734707865406,
+              "efficiency": 0.21511513881428757
             },
             "cpu": "znver4",
             "ours": {
-              "coverage": 0.9930418296459226,
-              "cycles_per_sample": 127.42541655458625,
-              "efficiency": 0.214709312700594
+              "coverage": 0.9932341413250616,
+              "cycles_per_sample": 127.32727102231651,
+              "efficiency": 0.21511513881428757
             },
-            "ratio": 0.9999994019359335
+            "ratio": 0.9999994026708379
           },
           "samples": 65536
         },
@@ -2089,32 +2089,32 @@
           "compared_with": "GNU Radio constellation_receiver_cb with constellation_rect 1024-QAM (constellation_receiver_cb_impl.cc and constellation.cc of gr-digital, generic compiler flags)",
           "counter_model": {
             "comparison": {
-              "coverage": 0.9935715442373999,
-              "cycles_per_sample": 254.50612823112684,
-              "efficiency": 0.3264668636370584
+              "coverage": 0.9935825305557044,
+              "cycles_per_sample": 254.57941602387044,
+              "efficiency": 0.32639418620691835
             },
             "cpu": "sapphirerapids",
             "ours": {
-              "coverage": 0.9930412357432876,
-              "cycles_per_sample": 148.4109399301569,
-              "efficiency": 0.18249599887728463
+              "coverage": 0.9932335480373442,
+              "cycles_per_sample": 148.3064965598447,
+              "efficiency": 0.1829025542257214
             },
-            "ratio": 0.5831330701608065
+            "ratio": 0.5825549405217383
           },
           "cycle_mode": "whole-loop",
           "reference_model": {
             "comparison": {
-              "coverage": 0.9935715442373999,
-              "cycles_per_sample": 208.55798214459995,
-              "efficiency": 0.458308149363955
+              "coverage": 0.9935825305557044,
+              "cycles_per_sample": 208.624357176407,
+              "efficiency": 0.4581859346554118
             },
             "cpu": "znver4",
             "ours": {
-              "coverage": 0.9930412357432876,
-              "cycles_per_sample": 127.42549276319463,
-              "efficiency": 0.214709312700594
+              "coverage": 0.9932335480373442,
+              "cycles_per_sample": 127.32734707865406,
+              "efficiency": 0.21511513881428757
             },
-            "ratio": 0.6109835329862677
+            "ratio": 0.6103187029642448
           },
           "samples": 65536
         },
@@ -2122,32 +2122,32 @@
           "compared_with": "sdrk fallback",
           "counter_model": {
             "comparison": {
-              "coverage": 0.9909428229434554,
-              "cycles_per_sample": 137.40951499938964,
-              "efficiency": 0.17370360909389482
+              "coverage": 0.9916729083220124,
+              "cycles_per_sample": 137.3067015097593,
+              "efficiency": 0.1739818340649095
             },
             "cpu": "sapphirerapids",
             "ours": {
-              "coverage": 0.9909434980413011,
-              "cycles_per_sample": 137.40942138671875,
-              "efficiency": 0.17370360909389482
+              "coverage": 0.9916735836676425,
+              "cycles_per_sample": 137.30660800169136,
+              "efficiency": 0.1739818340649095
             },
-            "ratio": 0.9999993187322516
+            "ratio": 0.9999993189839468
           },
           "cycle_mode": "whole-loop",
           "reference_model": {
             "comparison": {
-              "coverage": 0.9909428229434554,
-              "cycles_per_sample": 119.37272977686641,
-              "efficiency": 0.19490884650928336
+              "coverage": 0.9916729083220124,
+              "cycles_per_sample": 119.28401463208448,
+              "efficiency": 0.1951272381363874
             },
             "cpu": "znver4",
             "ours": {
-              "coverage": 0.9909434980413011,
-              "cycles_per_sample": 119.37264845207555,
-              "efficiency": 0.19490884650928336
+              "coverage": 0.9916735836676425,
+              "cycles_per_sample": 119.28393339775559,
+              "efficiency": 0.1951272381363874
             },
-            "ratio": 0.9999993187322515
+            "ratio": 0.9999993189839466
           },
           "samples": 65536
         },
@@ -2155,32 +2155,32 @@
           "compared_with": "GNU Radio constellation_receiver_cb with constellation_rect 16-QAM (constellation_receiver_cb_impl.cc and constellation.cc of gr-digital, generic compiler flags)",
           "counter_model": {
             "comparison": {
-              "coverage": 0.9935340968179828,
-              "cycles_per_sample": 172.93862401601808,
-              "efficiency": 0.2787926612014617
+              "coverage": 0.9935118393768194,
+              "cycles_per_sample": 172.86058617368286,
+              "efficiency": 0.27888527734699775
             },
             "cpu": "sapphirerapids",
             "ours": {
-              "coverage": 0.9909428229434554,
-              "cycles_per_sample": 137.40951499938964,
-              "efficiency": 0.17370360909389482
+              "coverage": 0.9916729083220124,
+              "cycles_per_sample": 137.3067015097593,
+              "efficiency": 0.1739818340649095
             },
-            "ratio": 0.7945565415546637
+            "ratio": 0.7943204668518216
           },
           "cycle_mode": "whole-loop",
           "reference_model": {
             "comparison": {
-              "coverage": 0.9935340968179828,
-              "cycles_per_sample": 158.66113449791348,
-              "efficiency": 0.30151654871402117
+              "coverage": 0.9935118393768194,
+              "cycles_per_sample": 158.5907641854949,
+              "efficiency": 0.30161650925810896
             },
             "cpu": "znver4",
             "ours": {
-              "coverage": 0.9909428229434554,
-              "cycles_per_sample": 119.37272977686641,
-              "efficiency": 0.19490884650928336
+              "coverage": 0.9916729083220124,
+              "cycles_per_sample": 119.28401463208448,
+              "efficiency": 0.1951272381363874
             },
-            "ratio": 0.7523753700275996
+            "ratio": 0.7521498193461287
           },
           "samples": 65536
         },
@@ -2188,32 +2188,32 @@
           "compared_with": "sdrk fallback",
           "counter_model": {
             "comparison": {
-              "coverage": 0.9960749840636651,
-              "cycles_per_sample": 148.60311097255203,
-              "efficiency": 0.18083963398650602
+              "coverage": 0.9908365941499914,
+              "cycles_per_sample": 148.63108845784697,
+              "efficiency": 0.1804958950948549
             },
             "cpu": "sapphirerapids",
             "ours": {
-              "coverage": 0.996075584132333,
-              "cycles_per_sample": 148.60302144915414,
-              "efficiency": 0.18083963398650602
+              "coverage": 0.990837192123904,
+              "cycles_per_sample": 148.63099875843497,
+              "efficiency": 0.1804958950948549
             },
-            "ratio": 0.999999397567135
+            "ratio": 0.9999993964962988
           },
           "cycle_mode": "whole-loop",
           "reference_model": {
             "comparison": {
-              "coverage": 0.9960749840636651,
-              "cycles_per_sample": 127.61824949763401,
-              "efficiency": 0.21281448253448196
+              "coverage": 0.9908365941499914,
+              "cycles_per_sample": 127.64706556125537,
+              "efficiency": 0.21236114934560035
             },
             "cpu": "znver4",
             "ours": {
-              "coverage": 0.996075584132333,
-              "cycles_per_sample": 127.61817261620634,
-              "efficiency": 0.21281448253448196
+              "coverage": 0.990837192123904,
+              "cycles_per_sample": 127.64698852577887,
+              "efficiency": 0.21236114934560035
             },
-            "ratio": 0.999999397567135
+            "ratio": 0.9999993964962989
           },
           "samples": 65536
         },
@@ -2221,32 +2221,32 @@
           "compared_with": "GNU Radio constellation_receiver_cb with constellation_rect 256-QAM (constellation_receiver_cb_impl.cc and constellation.cc of gr-digital, generic compiler flags)",
           "counter_model": {
             "comparison": {
-              "coverage": 0.9900734087680518,
-              "cycles_per_sample": 178.01435632729266,
-              "efficiency": 0.2813263102191904
+              "coverage": 0.9901073582433781,
+              "cycles_per_sample": 178.13769151344331,
+              "efficiency": 0.281182451044619
             },
             "cpu": "sapphirerapids",
             "ours": {
-              "coverage": 0.9960749840636651,
-              "cycles_per_sample": 148.60311097255203,
-              "efficiency": 0.18083963398650602
+              "coverage": 0.9908365941499914,
+              "cycles_per_sample": 148.63108845784697,
+              "efficiency": 0.1804958950948549
             },
-            "ratio": 0.8347816099693338
+            "ratio": 0.8343606970264931
           },
           "cycle_mode": "whole-loop",
           "reference_model": {
             "comparison": {
-              "coverage": 0.9900734087680518,
-              "cycles_per_sample": 161.72265487403718,
-              "efficiency": 0.31232006792017675
+              "coverage": 0.9901073582433781,
+              "cycles_per_sample": 161.83392686984163,
+              "efficiency": 0.3121574756278003
             },
             "cpu": "znver4",
             "ours": {
-              "coverage": 0.9960749840636651,
-              "cycles_per_sample": 127.61824949763401,
-              "efficiency": 0.21281448253448196
+              "coverage": 0.9908365941499914,
+              "cycles_per_sample": 127.64706556125537,
+              "efficiency": 0.21236114934560035
             },
-            "ratio": 0.7891179476186162
+            "ratio": 0.7887534340306667
           },
           "samples": 65536
         },
@@ -2254,32 +2254,32 @@
           "compared_with": "sdrk fallback",
           "counter_model": {
             "comparison": {
-              "coverage": 0.9919672653295467,
-              "cycles_per_sample": 140.36993611742565,
+              "coverage": 0.9914912633608571,
+              "cycles_per_sample": 140.31515012834456,
               "efficiency": 0.18355176231118095
             },
             "cpu": "sapphirerapids",
             "ours": {
-              "coverage": 0.9919678988102102,
-              "cycles_per_sample": 140.36984647577458,
+              "coverage": 0.9914918967847645,
+              "cycles_per_sample": 140.31506048669345,
               "efficiency": 0.18355176231118095
             },
-            "ratio": 0.999999361389956
+            "ratio": 0.9999993611406108
           },
           "cycle_mode": "whole-loop",
           "reference_model": {
             "comparison": {
-              "coverage": 0.9919672653295467,
-              "cycles_per_sample": 121.33179672614679,
+              "coverage": 0.9914912633608571,
+              "cycles_per_sample": 121.28444126902761,
               "efficiency": 0.20409006403635613
             },
             "cpu": "znver4",
             "ours": {
-              "coverage": 0.9919678988102102,
-              "cycles_per_sample": 121.33171924244274,
+              "coverage": 0.9914918967847645,
+              "cycles_per_sample": 121.28436378532355,
               "efficiency": 0.20409006403635613
             },
-            "ratio": 0.999999361389956
+            "ratio": 0.9999993611406108
           },
           "samples": 65536
         },
@@ -2287,32 +2287,32 @@
           "compared_with": "GNU Radio constellation_receiver_cb with constellation_rect 64-QAM (constellation_receiver_cb_impl.cc and constellation.cc of gr-digital, generic compiler flags)",
           "counter_model": {
             "comparison": {
-              "coverage": 0.9902741046781215,
-              "cycles_per_sample": 173.48593873991433,
-              "efficiency": 0.2788174474741915
+              "coverage": 0.9902537657034324,
+              "cycles_per_sample": 173.4461632689121,
+              "efficiency": 0.2788533115151017
             },
             "cpu": "sapphirerapids",
             "ours": {
-              "coverage": 0.9919672653295467,
-              "cycles_per_sample": 140.36993611742565,
+              "coverage": 0.9914912633608571,
+              "cycles_per_sample": 140.31515012834456,
               "efficiency": 0.18355176231118095
             },
-            "ratio": 0.8091141975942192
+            "ratio": 0.80898387997663
           },
           "cycle_mode": "whole-loop",
           "reference_model": {
             "comparison": {
-              "coverage": 0.9902741046781215,
-              "cycles_per_sample": 159.163592931824,
-              "efficiency": 0.30154330067296437
+              "coverage": 0.9902537657034324,
+              "cycles_per_sample": 159.1277253947034,
+              "efficiency": 0.30158648646819414
             },
             "cpu": "znver4",
             "ours": {
-              "coverage": 0.9919672653295467,
-              "cycles_per_sample": 121.33179672614679,
+              "coverage": 0.9914912633608571,
+              "cycles_per_sample": 121.28444126902761,
               "efficiency": 0.20409006403635613
             },
-            "ratio": 0.7623087321113563
+            "ratio": 0.7621829632026186
           },
           "samples": 65536
         },
@@ -3208,12 +3208,12 @@
           "samples": 65536
         },
         "equalize": {
-          "compared_with": "sdrk fallback",
+          "compared_with": "GNU Radio linear_equalizer with adaptive_algorithm_nlms (linear_equalizer_impl.cc of gr-digital, VOLK's dispatched dot products of the level with the aligned tap copies of fir_filter)",
           "counter_model": {
             "comparison": {
-              "coverage": 0.9913518754856282,
-              "cycles_per_sample": 146.18666233319792,
-              "efficiency": 0.5976581220448224
+              "coverage": 0.9928884385284646,
+              "cycles_per_sample": 323.954899399837,
+              "efficiency": 0.6222921468120872
             },
             "cpu": "sapphirerapids",
             "ours": {
@@ -3221,14 +3221,14 @@
               "cycles_per_sample": 146.1866354697112,
               "efficiency": 0.5976581220448224
             },
-            "ratio": 0.9999998162384565
+            "ratio": 0.4512561339264769
           },
           "cycle_mode": "whole-loop",
           "reference_model": {
             "comparison": {
-              "coverage": 0.9913518754856282,
-              "cycles_per_sample": 104.007753250571,
-              "efficiency": 0.832847143400521
+              "coverage": 0.9928884385284646,
+              "cycles_per_sample": 1094.8502943894289,
+              "efficiency": 0.411458708300257
             },
             "cpu": "znver4",
             "ours": {
@@ -3236,7 +3236,7 @@
               "cycles_per_sample": 104.00773413794572,
               "efficiency": 0.832847143400521
             },
-            "ratio": 0.9999998162384565
+            "ratio": 0.09499721986735024
           },
           "samples": 65536
         },
@@ -3244,32 +3244,32 @@
           "compared_with": "GNU Radio linear_equalizer with adaptive_algorithm_nlms (linear_equalizer_impl.cc of gr-digital, VOLK generic dot products, generic compiler flags)",
           "counter_model": {
             "comparison": {
-              "coverage": 0.999948051093445,
-              "cycles_per_sample": 220.1888213810064,
+              "coverage": 0.9999439908503319,
+              "cycles_per_sample": 220.1897154512281,
               "efficiency": 0.5336180469546836
             },
             "cpu": "sapphirerapids",
             "ours": {
-              "coverage": 0.9913518754856282,
-              "cycles_per_sample": 146.18666233319792,
+              "coverage": 0.9913519362097488,
+              "cycles_per_sample": 146.18665337870235,
               "efficiency": 0.5976581220448224
             },
-            "ratio": 0.6639150044780977
+            "ratio": 0.663912268014546
           },
           "cycle_mode": "whole-loop",
           "reference_model": {
             "comparison": {
-              "coverage": 0.999948051093445,
-              "cycles_per_sample": 929.6019246160153,
+              "coverage": 0.9999439908503319,
+              "cycles_per_sample": 929.605699237241,
               "efficiency": 0.3499579540297672
             },
             "cpu": "znver4",
             "ours": {
-              "coverage": 0.9913518754856282,
-              "cycles_per_sample": 104.007753250571,
+              "coverage": 0.9913519362097488,
+              "cycles_per_sample": 104.0077468796959,
               "efficiency": 0.832847143400521
             },
-            "ratio": 0.11188418450567733
+            "ratio": 0.1118837233517783
           },
           "samples": 65536
         },
@@ -3277,32 +3277,32 @@
           "compared_with": "sdrk fallback",
           "counter_model": {
             "comparison": {
-              "coverage": 0.9916232214434448,
-              "cycles_per_sample": 173.38356762635146,
+              "coverage": 0.9916232801486374,
+              "cycles_per_sample": 173.3835573618529,
               "efficiency": 0.5271095491973304
             },
             "cpu": "sapphirerapids",
             "ours": {
-              "coverage": 0.9916234269116492,
-              "cycles_per_sample": 173.38353170060654,
+              "coverage": 0.9916233975590434,
+              "cycles_per_sample": 173.38353683285584,
               "efficiency": 0.5271095491973304
             },
-            "ratio": 0.9999997927961374
+            "ratio": 0.9999998815977861
           },
           "cycle_mode": "whole-loop",
           "reference_model": {
             "comparison": {
-              "coverage": 0.9916232214434448,
-              "cycles_per_sample": 125.31473377470438,
+              "coverage": 0.9916232801486374,
+              "cycles_per_sample": 125.31472635593383,
               "efficiency": 0.7229886733995896
             },
             "cpu": "znver4",
             "ours": {
-              "coverage": 0.9916234269116492,
-              "cycles_per_sample": 125.3147078090075,
+              "coverage": 0.9916233975590434,
+              "cycles_per_sample": 125.31471151839277,
               "efficiency": 0.7229886733995896
             },
-            "ratio": 0.9999997927961374
+            "ratio": 0.9999998815977859
           },
           "samples": 65536
         },
@@ -3310,65 +3310,65 @@
           "compared_with": "GNU Radio linear_equalizer with adaptive_algorithm_nlms on constellation_rect 1024-QAM (linear_equalizer_impl.cc and constellation.cc of gr-digital, VOLK generic dot products, generic compiler flags)",
           "counter_model": {
             "comparison": {
-              "coverage": 0.9999440737840409,
-              "cycles_per_sample": 277.16157481683877,
+              "coverage": 0.9999401113895473,
+              "cycles_per_sample": 277.16267310611164,
               "efficiency": 0.43906787365840116
             },
             "cpu": "sapphirerapids",
             "ours": {
-              "coverage": 0.9916232214434448,
-              "cycles_per_sample": 173.38356762635146,
+              "coverage": 0.9916232801486374,
+              "cycles_per_sample": 173.3835573618529,
               "efficiency": 0.5271095491973304
             },
-            "ratio": 0.625568561374106
+            "ratio": 0.6255660454518457
           },
           "cycle_mode": "whole-loop",
           "reference_model": {
             "comparison": {
-              "coverage": 0.9999440737840409,
-              "cycles_per_sample": 937.2253646868979,
+              "coverage": 0.9999401113895473,
+              "cycles_per_sample": 937.2290785659411,
               "efficiency": 0.34988956043102953
             },
             "cpu": "znver4",
             "ours": {
-              "coverage": 0.9916232214434448,
-              "cycles_per_sample": 125.31473377470438,
+              "coverage": 0.9916232801486374,
+              "cycles_per_sample": 125.31472635593383,
               "efficiency": 0.7229886733995896
             },
-            "ratio": 0.13370821842467814
+            "ratio": 0.13370768067469538
           },
           "samples": 65536
         },
         "equalize_qam16": {
-          "compared_with": "sdrk fallback",
+          "compared_with": "GNU Radio linear_equalizer with adaptive_algorithm_nlms on constellation_rect 16-QAM (linear_equalizer_impl.cc and constellation.cc of gr-digital, VOLK's dispatched dot products of the level with the aligned tap copies of fir_filter)",
           "counter_model": {
             "comparison": {
-              "coverage": 0.9913473386207483,
-              "cycles_per_sample": 169.3887100243086,
-              "efficiency": 0.5224398266505071
+              "coverage": 0.9930494853727843,
+              "cycles_per_sample": 328.53455847296226,
+              "efficiency": 0.6303762768980344
             },
             "cpu": "sapphirerapids",
             "ours": {
-              "coverage": 0.9913475506769532,
-              "cycles_per_sample": 169.38867379087364,
+              "coverage": 0.9913475203832041,
+              "cycles_per_sample": 169.38867896707865,
               "efficiency": 0.5224398266505071
             },
-            "ratio": 0.9999997860929754
+            "ratio": 0.5155886179962373
           },
           "cycle_mode": "whole-loop",
           "reference_model": {
             "comparison": {
-              "coverage": 0.9913473386207483,
-              "cycles_per_sample": 121.26567709079231,
-              "efficiency": 0.7188598685963464
+              "coverage": 0.9930494853727843,
+              "cycles_per_sample": 1100.181023515278,
+              "efficiency": 0.41333445815510184
             },
             "cpu": "znver4",
             "ours": {
-              "coverage": 0.9913475506769532,
-              "cycles_per_sample": 121.26565115121213,
+              "coverage": 0.9913475203832041,
+              "cycles_per_sample": 121.26565485686645,
               "efficiency": 0.7188598685963464
             },
-            "ratio": 0.9999997860929754
+            "ratio": 0.11022336530528465
           },
           "samples": 65536
         },
@@ -3376,32 +3376,32 @@
           "compared_with": "GNU Radio linear_equalizer with adaptive_algorithm_nlms on constellation_rect 16-QAM (linear_equalizer_impl.cc and constellation.cc of gr-digital, VOLK generic dot products, generic compiler flags)",
           "counter_model": {
             "comparison": {
-              "coverage": 0.9999440743689156,
-              "cycles_per_sample": 277.2241953443264,
+              "coverage": 0.9999401120158582,
+              "cycles_per_sample": 277.225293870253,
               "efficiency": 0.4390025142525392
             },
             "cpu": "sapphirerapids",
             "ours": {
-              "coverage": 0.9913473386207483,
-              "cycles_per_sample": 169.3887100243086,
+              "coverage": 0.9913473992082261,
+              "cycles_per_sample": 169.38869967189862,
               "efficiency": 0.5224398266505071
             },
-            "ratio": 0.6110170499869945
+            "ratio": 0.6110145914433621
           },
           "cycle_mode": "whole-loop",
           "reference_model": {
             "comparison": {
-              "coverage": 0.9999440743689156,
-              "cycles_per_sample": 938.0067750271047,
+              "coverage": 0.9999401120158582,
+              "cycles_per_sample": 938.0104919637176,
               "efficiency": 0.3498063157352017
             },
             "cpu": "znver4",
             "ours": {
-              "coverage": 0.9913473386207483,
-              "cycles_per_sample": 121.26567709079231,
+              "coverage": 0.9913473992082261,
+              "cycles_per_sample": 121.2656696794837,
               "efficiency": 0.7188598685963464
             },
-            "ratio": 0.12928017187006802
+            "ratio": 0.1292796516866405
           },
           "samples": 65536
         },
@@ -3409,32 +3409,32 @@
           "compared_with": "sdrk fallback",
           "counter_model": {
             "comparison": {
-              "coverage": 0.9916232214434448,
-              "cycles_per_sample": 173.38356762635146,
+              "coverage": 0.9916232801486374,
+              "cycles_per_sample": 173.3835573618529,
               "efficiency": 0.5271095491973304
             },
             "cpu": "sapphirerapids",
             "ours": {
-              "coverage": 0.9916234269116492,
-              "cycles_per_sample": 173.38353170060654,
+              "coverage": 0.9916233975590434,
+              "cycles_per_sample": 173.38353683285584,
               "efficiency": 0.5271095491973304
             },
-            "ratio": 0.9999997927961374
+            "ratio": 0.9999998815977861
           },
           "cycle_mode": "whole-loop",
           "reference_model": {
             "comparison": {
-              "coverage": 0.9916232214434448,
-              "cycles_per_sample": 125.31473377470438,
+              "coverage": 0.9916232801486374,
+              "cycles_per_sample": 125.31472635593383,
               "efficiency": 0.7229886733995896
             },
             "cpu": "znver4",
             "ours": {
-              "coverage": 0.9916234269116492,
-              "cycles_per_sample": 125.3147078090075,
+              "coverage": 0.9916233975590434,
+              "cycles_per_sample": 125.31471151839277,
               "efficiency": 0.7229886733995896
             },
-            "ratio": 0.9999997927961374
+            "ratio": 0.9999998815977859
           },
           "samples": 65536
         },
@@ -3442,65 +3442,65 @@
           "compared_with": "GNU Radio linear_equalizer with adaptive_algorithm_nlms on constellation_rect 256-QAM (linear_equalizer_impl.cc and constellation.cc of gr-digital, VOLK generic dot products, generic compiler flags)",
           "counter_model": {
             "comparison": {
-              "coverage": 0.9999440743689156,
-              "cycles_per_sample": 277.2241953443264,
+              "coverage": 0.9999401120158582,
+              "cycles_per_sample": 277.225293870253,
               "efficiency": 0.4390025142525392
             },
             "cpu": "sapphirerapids",
             "ours": {
-              "coverage": 0.9916232214434448,
-              "cycles_per_sample": 173.38356762635146,
+              "coverage": 0.9916232801486374,
+              "cycles_per_sample": 173.3835573618529,
               "efficiency": 0.5271095491973304
             },
-            "ratio": 0.6254272554060455
+            "ratio": 0.62542474007801
           },
           "cycle_mode": "whole-loop",
           "reference_model": {
             "comparison": {
-              "coverage": 0.9999440743689156,
-              "cycles_per_sample": 938.0067750271047,
+              "coverage": 0.9999401120158582,
+              "cycles_per_sample": 938.0104919637176,
               "efficiency": 0.3498063157352017
             },
             "cpu": "znver4",
             "ours": {
-              "coverage": 0.9916232214434448,
-              "cycles_per_sample": 125.31473377470438,
+              "coverage": 0.9916232801486374,
+              "cycles_per_sample": 125.31472635593383,
               "efficiency": 0.7229886733995896
             },
-            "ratio": 0.13359683225217991
+            "ratio": 0.13359629495570827
           },
           "samples": 65536
         },
         "equalize_qam64": {
-          "compared_with": "sdrk fallback",
+          "compared_with": "GNU Radio linear_equalizer with adaptive_algorithm_nlms on constellation_rect 64-QAM (linear_equalizer_impl.cc and constellation.cc of gr-digital, VOLK's dispatched dot products of the level with the aligned tap copies of fir_filter)",
           "counter_model": {
             "comparison": {
-              "coverage": 0.9915503986311331,
-              "cycles_per_sample": 168.3707122759237,
-              "efficiency": 0.54166364442531
+              "coverage": 0.9930494853727843,
+              "cycles_per_sample": 328.53455847296226,
+              "efficiency": 0.6303762768980344
             },
             "cpu": "sapphirerapids",
             "ours": {
-              "coverage": 0.9915506057532345,
-              "cycles_per_sample": 168.37067710545884,
+              "coverage": 0.9915505761643576,
+              "cycles_per_sample": 168.37068212981097,
               "efficiency": 0.54166364442531
             },
-            "ratio": 0.9999997911129295
+            "ratio": 0.5124900190482322
           },
           "cycle_mode": "whole-loop",
           "reference_model": {
             "comparison": {
-              "coverage": 0.9915503986311331,
-              "cycles_per_sample": 121.24084304334158,
-              "efficiency": 0.7354965329451445
+              "coverage": 0.9930494853727843,
+              "cycles_per_sample": 1100.181023515278,
+              "efficiency": 0.41333445815510184
             },
             "cpu": "znver4",
             "ours": {
-              "coverage": 0.9915506057532345,
-              "cycles_per_sample": 121.24081771769706,
+              "coverage": 0.9915505761643576,
+              "cycles_per_sample": 121.24082133564626,
               "efficiency": 0.7354965329451445
             },
-            "ratio": 0.9999997911129295
+            "ratio": 0.11020079309154038
           },
           "samples": 65536
         },
@@ -3508,32 +3508,32 @@
           "compared_with": "GNU Radio linear_equalizer with adaptive_algorithm_nlms on constellation_rect 64-QAM (linear_equalizer_impl.cc and constellation.cc of gr-digital, VOLK generic dot products, generic compiler flags)",
           "counter_model": {
             "comparison": {
-              "coverage": 0.9999440743689156,
-              "cycles_per_sample": 277.2241953443264,
+              "coverage": 0.9999401120158582,
+              "cycles_per_sample": 277.225293870253,
               "efficiency": 0.4390025142525392
             },
             "cpu": "sapphirerapids",
             "ours": {
-              "coverage": 0.9915503986311331,
-              "cycles_per_sample": 168.3707122759237,
+              "coverage": 0.9915504578088676,
+              "cycles_per_sample": 168.37070222721948,
               "efficiency": 0.54166364442531
             },
-            "ratio": 0.6073449399566253
+            "ratio": 0.6073424970595228
           },
           "cycle_mode": "whole-loop",
           "reference_model": {
             "comparison": {
-              "coverage": 0.9999440743689156,
-              "cycles_per_sample": 938.0067750271047,
+              "coverage": 0.9999401120158582,
+              "cycles_per_sample": 938.0104919637176,
               "efficiency": 0.3498063157352017
             },
             "cpu": "znver4",
             "ours": {
-              "coverage": 0.9915503986311331,
-              "cycles_per_sample": 121.24084304334158,
+              "coverage": 0.9915504578088676,
+              "cycles_per_sample": 121.24083580744315,
               "efficiency": 0.7354965329451445
             },
-            "ratio": 0.12925369653096397
+            "ratio": 0.12925317663944932
           },
           "samples": 65536
         },
@@ -4009,11 +4009,11 @@
             },
             "cpu": "sapphirerapids",
             "ours": {
-              "coverage": 0.9912577890290734,
-              "cycles_per_sample": 1.6051430337071502,
-              "efficiency": 0.6659792537081269
+              "coverage": 0.9909008688025872,
+              "cycles_per_sample": 1.6051395858872268,
+              "efficiency": 0.665946194858364
             },
-            "ratio": 0.10527834058686476
+            "ratio": 0.1052781144507806
           },
           "cycle_mode": "whole-loop",
           "reference_model": {
@@ -4024,11 +4024,11 @@
             },
             "cpu": "znver4",
             "ours": {
-              "coverage": 0.9912577890290734,
-              "cycles_per_sample": 2.0458364891809087,
-              "efficiency": 0.826343441445099
+              "coverage": 0.9909008688025872,
+              "cycles_per_sample": 2.045888143500127,
+              "efficiency": 0.8262890401666964
             },
-            "ratio": 0.2317050756315741
+            "ratio": 0.23171092583905867
           },
           "samples": 65536
         },
@@ -4762,9 +4762,9 @@
           "compared_with": "liquid-dsp 1.8.3 crandnf times sigma (libc rand(), f32 Box-Muller with sqrtf, logf and cexpf; no random access, no bit-exact sequence; reference does different work; -O3)",
           "counter_model": {
             "comparison": {
-              "coverage": 0.992711555514157,
-              "cycles_per_sample": 192.51057463629644,
-              "efficiency": 0.35133589828552275
+              "coverage": 0.9927313949350182,
+              "cycles_per_sample": 192.5983861897165,
+              "efficiency": 0.3512083588557151
             },
             "cpu": "sapphirerapids",
             "ours": {
@@ -4772,14 +4772,14 @@
               "cycles_per_sample": 3.087240267057809,
               "efficiency": 0.9413502208751375
             },
-            "ratio": 0.016036730828373584
+            "ratio": 0.016029419187431632
           },
           "cycle_mode": "whole-loop",
           "reference_model": {
             "comparison": {
-              "coverage": 0.992711555514157,
-              "cycles_per_sample": 187.379899277829,
-              "efficiency": 0.33743267052099646
+              "coverage": 0.9927313949350182,
+              "cycles_per_sample": 187.45887556758257,
+              "efficiency": 0.33732219214447473
             },
             "cpu": "znver4",
             "ours": {
@@ -4787,7 +4787,7 @@
               "cycles_per_sample": 1.6442485684560126,
               "efficiency": 0.5807429984387023
             },
-            "ratio": 0.00877494637788271
+            "ratio": 0.008771249499270729
           },
           "samples": 65536
         },
@@ -4795,9 +4795,9 @@
           "compared_with": "liquid-dsp 1.8.3 crandnf times sigma (libc rand(), f32 Box-Muller with sqrtf, logf and cexpf; no random access, no bit-exact sequence; reference does different work; -O3)",
           "counter_model": {
             "comparison": {
-              "coverage": 0.992711555514157,
-              "cycles_per_sample": 192.51057463629644,
-              "efficiency": 0.35133589828552275
+              "coverage": 0.9927313949350182,
+              "cycles_per_sample": 192.5983861897165,
+              "efficiency": 0.3512083588557151
             },
             "cpu": "sapphirerapids",
             "ours": {
@@ -4805,14 +4805,14 @@
               "cycles_per_sample": 18.585763330459596,
               "efficiency": 0.4845222072678331
             },
-            "ratio": 0.09654411642359405
+            "ratio": 0.09650009897877303
           },
           "cycle_mode": "whole-loop",
           "reference_model": {
             "comparison": {
-              "coverage": 0.992711555514157,
-              "cycles_per_sample": 187.379899277829,
-              "efficiency": 0.33743267052099646
+              "coverage": 0.9927313949350182,
+              "cycles_per_sample": 187.45887556758257,
+              "efficiency": 0.33732219214447473
             },
             "cpu": "znver4",
             "ours": {
@@ -4820,7 +4820,7 @@
               "cycles_per_sample": 10.676182758331299,
               "efficiency": 0.6560449859418932
             },
-            "ratio": 0.05697613671198359
+            "ratio": 0.05695213270647368
           },
           "samples": 65536
         },
@@ -4861,9 +4861,9 @@
           "compared_with": "liquid-dsp 1.8.3 randnf times sigma (libc rand(), f32 Box-Muller with sqrtf, logf and sinf; no random access, no bit-exact sequence; reference does different work; -O3)",
           "counter_model": {
             "comparison": {
-              "coverage": 0.9931157670505356,
-              "cycles_per_sample": 124.64599835414731,
-              "efficiency": 0.36154743662445393
+              "coverage": 0.9932656947806154,
+              "cycles_per_sample": 124.73850579305693,
+              "efficiency": 0.36138054324430274
             },
             "cpu": "sapphirerapids",
             "ours": {
@@ -4871,14 +4871,14 @@
               "cycles_per_sample": 1.5581455195061513,
               "efficiency": 0.9394136643136561
             },
-            "ratio": 0.01250056592333682
+            "ratio": 0.012491295367054808
           },
           "cycle_mode": "whole-loop",
           "reference_model": {
             "comparison": {
-              "coverage": 0.9931157670505356,
-              "cycles_per_sample": 116.16119231955379,
-              "efficiency": 0.36113300195965947
+              "coverage": 0.9932656947806154,
+              "cycles_per_sample": 116.24261910848635,
+              "efficiency": 0.3610285518729266
             },
             "cpu": "znver4",
             "ours": {
@@ -4886,7 +4886,7 @@
               "cycles_per_sample": 0.8361356040027654,
               "efficiency": 0.5803553027492684
             },
-            "ratio": 0.00719806320257627
+            "ratio": 0.0071930210314894985
           },
           "samples": 65536
         },
@@ -4894,9 +4894,9 @@
           "compared_with": "liquid-dsp 1.8.3 randnf times sigma (libc rand(), f32 Box-Muller with sqrtf, logf and sinf; no random access, no bit-exact sequence; reference does different work; -O3)",
           "counter_model": {
             "comparison": {
-              "coverage": 0.9931157670505356,
-              "cycles_per_sample": 124.64599835414731,
-              "efficiency": 0.36154743662445393
+              "coverage": 0.9932656947806154,
+              "cycles_per_sample": 124.73850579305693,
+              "efficiency": 0.36138054324430274
             },
             "cpu": "sapphirerapids",
             "ours": {
@@ -4904,14 +4904,14 @@
               "cycles_per_sample": 9.29791612625122,
               "efficiency": 0.4845222072678331
             },
-            "ratio": 0.07459458184797678
+            "ratio": 0.0745392616909858
           },
           "cycle_mode": "whole-loop",
           "reference_model": {
             "comparison": {
-              "coverage": 0.9931157670505356,
-              "cycles_per_sample": 116.16119231955379,
-              "efficiency": 0.36113300195965947
+              "coverage": 0.9932656947806154,
+              "cycles_per_sample": 116.24261910848635,
+              "efficiency": 0.3610285518729266
             },
             "cpu": "znver4",
             "ours": {
@@ -4919,7 +4919,7 @@
               "cycles_per_sample": 5.34098331451416,
               "efficiency": 0.6560449859418932
             },
-            "ratio": 0.045979067603071556
+            "ratio": 0.045946859727322154
           },
           "samples": 65536
         },
@@ -4960,9 +4960,9 @@
           "compared_with": "rand_distr 0.5.1 StandardNormal as f32 times sigma over rand 0.9.5 SmallRng (Ziggurat in f64 with rejection: a variable number of draws per value, no random access, no bit-exact sequence across platforms; reference does different work)",
           "counter_model": {
             "comparison": {
-              "coverage": 0.9944741731163875,
-              "cycles_per_sample": 10.44016682710563,
-              "efficiency": 0.8894396027347369
+              "coverage": 0.9948848090586083,
+              "cycles_per_sample": 10.431838322918802,
+              "efficiency": 0.8895974926043562
             },
             "cpu": "sapphirerapids",
             "ours": {
@@ -4970,14 +4970,14 @@
               "cycles_per_sample": 1.5581455195061513,
               "efficiency": 0.9394136643136561
             },
-            "ratio": 0.14924527024422293
+            "ratio": 0.1493644237260558
           },
           "cycle_mode": "whole-loop",
           "reference_model": {
             "comparison": {
-              "coverage": 0.9944741731163875,
-              "cycles_per_sample": 9.829561051098944,
-              "efficiency": 0.9057830737138103
+              "coverage": 0.9948848090586083,
+              "cycles_per_sample": 9.82151279327581,
+              "efficiency": 0.9059540801090208
             },
             "cpu": "znver4",
             "ours": {
@@ -4985,7 +4985,7 @@
               "cycles_per_sample": 0.8361356040027654,
               "efficiency": 0.5803553027492684
             },
-            "ratio": 0.08506337156421502
+            "ratio": 0.08513307691002718
           },
           "samples": 65536
         },
@@ -4994,8 +4994,8 @@
           "counter_model": {
             "comparison": {
               "coverage": 0.9994026334609398,
-              "cycles_per_sample": 9.200647456538945,
-              "efficiency": 0.8428355063623336
+              "cycles_per_sample": 9.200121472876047,
+              "efficiency": 0.8428836924333724
             },
             "cpu": "sapphirerapids",
             "ours": {
@@ -5003,14 +5003,14 @@
               "cycles_per_sample": 1.8293921316176514,
               "efficiency": 0.8679323228089251
             },
-            "ratio": 0.19883297781587028
+            "ratio": 0.1988443453720797
           },
           "cycle_mode": "whole-loop",
           "reference_model": {
             "comparison": {
               "coverage": 0.9994026334609398,
-              "cycles_per_sample": 9.977863428040143,
-              "efficiency": 0.742085037346317
+              "cycles_per_sample": 9.976781013589084,
+              "efficiency": 0.7421655486422194
             },
             "cpu": "znver4",
             "ours": {
@@ -5018,7 +5018,7 @@
               "cycles_per_sample": 1.039959659499963,
               "efficiency": 0.5559132505479835
             },
-            "ratio": 0.10422668810814063
+            "ratio": 0.104237996011285
           },
           "samples": 65536
         },
@@ -5027,14 +5027,14 @@
           "counter_model": {
             "comparison": {
               "coverage": 0.9994026334609398,
-              "cycles_per_sample": 9.200647456538945,
-              "efficiency": 0.8428355063623336
+              "cycles_per_sample": 9.200121472876047,
+              "efficiency": 0.8428836924333724
             },
             "cpu": "sapphirerapids",
             "ours": {
               "coverage": 0.9994026334609398,
-              "cycles_per_sample": 9.200647456538945,
-              "efficiency": 0.8428355063623336
+              "cycles_per_sample": 9.200121472876047,
+              "efficiency": 0.8428836924333724
             },
             "ratio": 1.0
           },
@@ -5042,14 +5042,14 @@
           "reference_model": {
             "comparison": {
               "coverage": 0.9994026334609398,
-              "cycles_per_sample": 9.977863428040143,
-              "efficiency": 0.742085037346317
+              "cycles_per_sample": 9.976781013589084,
+              "efficiency": 0.7421655486422194
             },
             "cpu": "znver4",
             "ours": {
               "coverage": 0.9994026334609398,
-              "cycles_per_sample": 9.977863428040143,
-              "efficiency": 0.742085037346317
+              "cycles_per_sample": 9.976781013589084,
+              "efficiency": 0.7421655486422194
             },
             "ratio": 1.0
           },
@@ -5098,11 +5098,11 @@
             },
             "cpu": "sapphirerapids",
             "ours": {
-              "coverage": 0.9913945135742082,
-              "cycles_per_sample": 8.522789779937368,
+              "coverage": 0.9913307240538121,
+              "cycles_per_sample": 8.523338199006108,
               "efficiency": 0.4663801511555755
             },
-            "ratio": 0.6421452256965053
+            "ratio": 0.6421865460500241
           },
           "cycle_mode": "whole-loop",
           "reference_model": {
@@ -5113,11 +5113,11 @@
             },
             "cpu": "znver4",
             "ours": {
-              "coverage": 0.9913945135742082,
-              "cycles_per_sample": 7.146906248937203,
+              "coverage": 0.9913307240538121,
+              "cycles_per_sample": 7.147366133525539,
               "efficiency": 0.6281575066542164
             },
-            "ratio": 0.5983287608801513
+            "ratio": 0.5983672617595951
           },
           "samples": 65536
         },
@@ -5197,11 +5197,11 @@
             },
             "cpu": "sapphirerapids",
             "ours": {
-              "coverage": 0.9908279247520838,
-              "cycles_per_sample": 1.0615549372155986,
-              "efficiency": 0.8603911429331493
+              "coverage": 0.9908313079218289,
+              "cycles_per_sample": 1.0625529277031547,
+              "efficiency": 0.860507672054304
             },
-            "ratio": 0.052814077706370643
+            "ratio": 0.052863729349740374
           },
           "cycle_mode": "whole-loop",
           "reference_model": {
@@ -5212,11 +5212,11 @@
             },
             "cpu": "znver4",
             "ours": {
-              "coverage": 0.9908279247520838,
-              "cycles_per_sample": 1.628345455669609,
-              "efficiency": 0.6425806957435375
+              "coverage": 0.9908313079218289,
+              "cycles_per_sample": 1.6293291908750893,
+              "efficiency": 0.6427954449728885
             },
-            "ratio": 0.05922134527427114
+            "ratio": 0.059257122769801565
           },
           "samples": 65536
         },
@@ -6672,102 +6672,234 @@
           },
           "samples": 65536
         },
-        "psk_mod_block": {
-          "compared_with": "sdrk fallback",
+        "psk_demod_block": {
+          "compared_with": "GNU Radio fir_filter_ccf + symbol_sync_cc + costas_loop_cc + constellation_decoder_cb (the sum of the blocks of the receiver chain, generic compiler flags; no acquisition and no lock watches)",
           "counter_model": {
             "comparison": {
-              "coverage": 0.9907925883815674,
-              "cycles_per_sample": 3.56849256624284,
-              "efficiency": 0.9417575584528757
+              "coverage": 0.9942000063704179,
+              "cycles_per_sample": 415.0360190559676,
+              "efficiency": 0.35880482840014233
             },
             "cpu": "sapphirerapids",
             "ours": {
-              "coverage": 0.9907925883815674,
-              "cycles_per_sample": 3.56849256624284,
-              "efficiency": 0.9417575584528757
+              "coverage": 0.9906257090675502,
+              "cycles_per_sample": 33.62458095586343,
+              "efficiency": 0.48077171911683997
             },
-            "ratio": 1.0
+            "ratio": 0.08101605502179114
           },
           "cycle_mode": "whole-loop",
           "reference_model": {
             "comparison": {
-              "coverage": 0.9907925883815674,
-              "cycles_per_sample": 4.6551001931344835,
-              "efficiency": 0.9487537668598904
+              "coverage": 0.9942000063704179,
+              "cycles_per_sample": 1156.1159420580743,
+              "efficiency": 0.28559038215073745
             },
             "cpu": "znver4",
             "ours": {
-              "coverage": 0.9907925883815674,
-              "cycles_per_sample": 4.6551001931344835,
-              "efficiency": 0.9487537668598904
+              "coverage": 0.9906257090675502,
+              "cycles_per_sample": 35.136672035472664,
+              "efficiency": 0.5262351046450386
             },
-            "ratio": 1.0
+            "ratio": 0.030391996820771865
+          },
+          "samples": 65536
+        },
+        "psk_mod_block": {
+          "compared_with": "GNU Radio constellation_modulator as the sum of its blocks: pack_k_bits_bb + chunks_to_symbols_bc + pfb_arb_resampler_ccf (32 filters of 88 taps and their derivative filters), VOLK's dispatched dot product of the level",
+          "counter_model": {
+            "comparison": {
+              "coverage": 0.9909733029942304,
+              "cycles_per_sample": 302.0401751445999,
+              "efficiency": 0.3770291207804518
+            },
+            "cpu": "sapphirerapids",
+            "ours": {
+              "coverage": 0.9906628234514827,
+              "cycles_per_sample": 3.571412090765865,
+              "efficiency": 0.9417871965161264
+            },
+            "ratio": 0.011824294860960377
+          },
+          "cycle_mode": "whole-loop",
+          "reference_model": {
+            "comparison": {
+              "coverage": 0.9909733029942304,
+              "cycles_per_sample": 216.6329802743938,
+              "efficiency": 0.482002072876757
+            },
+            "cpu": "znver4",
+            "ours": {
+              "coverage": 0.9906628234514827,
+              "cycles_per_sample": 4.659239000409812,
+              "efficiency": 0.9487121847239373
+            },
+            "ratio": 0.021507523898292316
+          },
+          "samples": 65536
+        },
+        "psk_mod_block_liquid": {
+          "compared_with": "liquid-dsp 1.8.3 modemcf_modulate (arbitrary-constellation modem) + firinterp_crcf (the root-raised cosine of the block), the SIMD dot products of the level (the portable loop at simd128)",
+          "counter_model": {
+            "comparison": {
+              "coverage": 0.9922220673645045,
+              "cycles_per_sample": 57.218164025315644,
+              "efficiency": 0.5222541475389986
+            },
+            "cpu": "sapphirerapids",
+            "ours": {
+              "coverage": 0.9906628234514827,
+              "cycles_per_sample": 3.571412090765865,
+              "efficiency": 0.9417871965161264
+            },
+            "ratio": 0.06241745347134394
+          },
+          "cycle_mode": "whole-loop",
+          "reference_model": {
+            "comparison": {
+              "coverage": 0.9922220673645045,
+              "cycles_per_sample": 49.54473057687068,
+              "efficiency": 0.6387387960078825
+            },
+            "cpu": "znver4",
+            "ours": {
+              "coverage": 0.9906628234514827,
+              "cycles_per_sample": 4.659239000409812,
+              "efficiency": 0.9487121847239373
+            },
+            "ratio": 0.09404106039452192
           },
           "samples": 65536
         },
         "pulse_match_block": {
-          "compared_with": "sdrk fallback",
+          "compared_with": "GNU Radio fir_filter_ccf (fir_filter_ccf_impl.cc of gr-filter) with VOLK's dispatched dot product of the level (volk_32fc_32f_dot_prod_32fc_a, the aligned tap copies of fir_filter)",
           "counter_model": {
             "comparison": {
-              "coverage": 0.9919008569245951,
-              "cycles_per_sample": 6.233929427763685,
-              "efficiency": 0.9916781726645917
+              "coverage": 0.9965214046677846,
+              "cycles_per_sample": 178.8586784287522,
+              "efficiency": 0.3026784042571159
             },
             "cpu": "sapphirerapids",
             "ours": {
-              "coverage": 0.9919008569245951,
-              "cycles_per_sample": 6.233929427763685,
-              "efficiency": 0.9916781726645917
+              "coverage": 0.9919939364277413,
+              "cycles_per_sample": 6.233100843795225,
+              "efficiency": 0.9916971947826732
             },
-            "ratio": 1.0
+            "ratio": 0.034849306159209725
           },
           "cycle_mode": "whole-loop",
           "reference_model": {
             "comparison": {
-              "coverage": 0.9919008569245951,
-              "cycles_per_sample": 11.005955212195065,
-              "efficiency": 0.9410787542871251
+              "coverage": 0.9965214046677846,
+              "cycles_per_sample": 878.2394182028373,
+              "efficiency": 0.2776253440780614
             },
             "cpu": "znver4",
             "ours": {
-              "coverage": 0.9919008569245951,
-              "cycles_per_sample": 11.005955212195065,
-              "efficiency": 0.9410787542871251
+              "coverage": 0.9919939364277413,
+              "cycles_per_sample": 10.993128876140412,
+              "efficiency": 0.9419988107647286
             },
-            "ratio": 1.0
+            "ratio": 0.01251723464956278
+          },
+          "samples": 65536
+        },
+        "pulse_match_block_liquid": {
+          "compared_with": "liquid-dsp 1.8.3 firfilt_crcf (firfilt.proto.c), the SIMD dot product of the level (the portable loop at simd128)",
+          "counter_model": {
+            "comparison": {
+              "coverage": 0.9971917985674021,
+              "cycles_per_sample": 69.98152221092812,
+              "efficiency": 0.5301998996919108
+            },
+            "cpu": "sapphirerapids",
+            "ours": {
+              "coverage": 0.9919939364277413,
+              "cycles_per_sample": 6.233100843795225,
+              "efficiency": 0.9916971947826732
+            },
+            "ratio": 0.08906780885686252
+          },
+          "cycle_mode": "whole-loop",
+          "reference_model": {
+            "comparison": {
+              "coverage": 0.9971917985674021,
+              "cycles_per_sample": 73.62174468890574,
+              "efficiency": 0.5353129469454472
+            },
+            "cpu": "znver4",
+            "ours": {
+              "coverage": 0.9919939364277413,
+              "cycles_per_sample": 10.993128876140412,
+              "efficiency": 0.9419988107647286
+            },
+            "ratio": 0.1493190486396745
           },
           "samples": 65536
         },
         "pulse_shape_block": {
-          "compared_with": "sdrk fallback",
+          "compared_with": "GNU Radio interp_fir_filter_ccf (interp_fir_filter_impl.cc of gr-filter) with VOLK's dispatched dot product of the level (volk_32fc_32f_dot_prod_32fc_a, the aligned tap copies of fir_filter)",
           "counter_model": {
             "comparison": {
-              "coverage": 0.9910379354000771,
-              "cycles_per_sample": 2.8591591250299775,
-              "efficiency": 0.9633591127470242
+              "coverage": 0.9932976896978184,
+              "cycles_per_sample": 86.35183909617724,
+              "efficiency": 0.48672781044768504
             },
             "cpu": "sapphirerapids",
             "ours": {
-              "coverage": 0.9910379354000771,
-              "cycles_per_sample": 2.8591591250299775,
+              "coverage": 0.9910356147960359,
+              "cycles_per_sample": 2.859165820022691,
               "efficiency": 0.9633591127470242
             },
-            "ratio": 1.0
+            "ratio": 0.033110653460874176
           },
           "cycle_mode": "whole-loop",
           "reference_model": {
             "comparison": {
-              "coverage": 0.9910379354000771,
-              "cycles_per_sample": 3.9102268107470146,
-              "efficiency": 0.9546801908931977
+              "coverage": 0.9932976896978184,
+              "cycles_per_sample": 168.93293922110695,
+              "efficiency": 0.35663835529867194
             },
             "cpu": "znver4",
             "ours": {
-              "coverage": 0.9910379354000771,
-              "cycles_per_sample": 3.9102268107470146,
+              "coverage": 0.9910356147960359,
+              "cycles_per_sample": 3.9102359669145668,
               "efficiency": 0.9546801908931977
             },
-            "ratio": 1.0
+            "ratio": 0.02314667574567371
+          },
+          "samples": 65536
+        },
+        "pulse_shape_block_liquid": {
+          "compared_with": "liquid-dsp 1.8.3 firinterp_crcf (firinterp.proto.c, firpfb.proto.c), the SIMD dot products of the level (the portable loop at simd128)",
+          "counter_model": {
+            "comparison": {
+              "coverage": 0.998762438644186,
+              "cycles_per_sample": 55.351000258926106,
+              "efficiency": 0.5227694116583006
+            },
+            "cpu": "sapphirerapids",
+            "ours": {
+              "coverage": 0.9910356147960359,
+              "cycles_per_sample": 2.859165820022691,
+              "efficiency": 0.9633591127470242
+            },
+            "ratio": 0.051655178888327526
+          },
+          "cycle_mode": "whole-loop",
+          "reference_model": {
+            "comparison": {
+              "coverage": 0.998762438644186,
+              "cycles_per_sample": 47.787890446492455,
+              "efficiency": 0.6424324961370244
+            },
+            "cpu": "znver4",
+            "ours": {
+              "coverage": 0.9910356147960359,
+              "cycles_per_sample": 3.9102359669145668,
+              "efficiency": 0.9546801908931977
+            },
+            "ratio": 0.08182482905983918
           },
           "samples": 65536
         },
@@ -6805,35 +6937,35 @@
           "samples": 65536
         },
         "qam_demod_block": {
-          "compared_with": "sdrk fallback",
+          "compared_with": "GNU Radio fir_filter_ccf + symbol_sync_cc + linear_equalizer + constellation_receiver_cb (the sum of the blocks of the receiver chain, generic compiler flags and VOLK generic dot products; no acquisition, no blind equalizer stage and no lock watches)",
           "counter_model": {
             "comparison": {
-              "coverage": 0.990068885517904,
-              "cycles_per_sample": 71.19164854874192,
-              "efficiency": 0.42611614841907497
+              "coverage": 0.9921809497072277,
+              "cycles_per_sample": 463.62196263834886,
+              "efficiency": 0.360162275786635
             },
             "cpu": "sapphirerapids",
             "ours": {
-              "coverage": 0.990068885517904,
-              "cycles_per_sample": 71.19164854874192,
-              "efficiency": 0.42611614841907497
+              "coverage": 0.9904862028393934,
+              "cycles_per_sample": 65.02198382227357,
+              "efficiency": 0.4513239703204557
             },
-            "ratio": 1.0
+            "ratio": 0.14024785075377105
           },
           "cycle_mode": "whole-loop",
           "reference_model": {
             "comparison": {
-              "coverage": 0.990068885517904,
-              "cycles_per_sample": 62.633041113251885,
-              "efficiency": 0.5121727143565487
+              "coverage": 0.9921809497072277,
+              "cycles_per_sample": 1287.0463988873612,
+              "efficiency": 0.29094979718946584
             },
             "cpu": "znver4",
             "ours": {
-              "coverage": 0.990068885517904,
-              "cycles_per_sample": 62.633041113251885,
-              "efficiency": 0.5121727143565487
+              "coverage": 0.9904862028393934,
+              "cycles_per_sample": 59.62022179887756,
+              "efficiency": 0.5241343042439097
             },
-            "ratio": 1.0
+            "ratio": 0.04632328861680406
           },
           "samples": 65536
         },
@@ -6841,30 +6973,30 @@
           "compared_with": "sdrk fallback",
           "counter_model": {
             "comparison": {
-              "coverage": 0.9900118314146293,
-              "cycles_per_sample": 73.02033984928207,
-              "efficiency": 0.4266637739409513
+              "coverage": 0.9900385112457395,
+              "cycles_per_sample": 66.83739419849032,
+              "efficiency": 0.45050095268133095
             },
             "cpu": "sapphirerapids",
             "ours": {
-              "coverage": 0.9900118314146293,
-              "cycles_per_sample": 73.02033984928207,
-              "efficiency": 0.4266637739409513
+              "coverage": 0.9900385112457395,
+              "cycles_per_sample": 66.83739419849032,
+              "efficiency": 0.45050095268133095
             },
             "ratio": 1.0
           },
           "cycle_mode": "whole-loop",
           "reference_model": {
             "comparison": {
-              "coverage": 0.9900118314146293,
-              "cycles_per_sample": 64.10972237089672,
-              "efficiency": 0.5154062849054263
+              "coverage": 0.9900385112457395,
+              "cycles_per_sample": 61.07764978534053,
+              "efficiency": 0.5267472233720222
             },
             "cpu": "znver4",
             "ours": {
-              "coverage": 0.9900118314146293,
-              "cycles_per_sample": 64.10972237089672,
-              "efficiency": 0.5154062849054263
+              "coverage": 0.9900385112457395,
+              "cycles_per_sample": 61.07764978534053,
+              "efficiency": 0.5267472233720222
             },
             "ratio": 1.0
           },
@@ -6874,32 +7006,32 @@
           "compared_with": "sdrk fallback",
           "counter_model": {
             "comparison": {
-              "coverage": 0.9847623471924598,
-              "cycles_per_sample": 75.04286687240328,
-              "efficiency": 0.44535669646483034
+              "coverage": 0.9827823950176243,
+              "cycles_per_sample": 68.89881942346994,
+              "efficiency": 0.4692963477002136
             },
             "cpu": "sapphirerapids",
             "ours": {
-              "coverage": 0.9847623471924598,
-              "cycles_per_sample": 75.04286687240328,
-              "efficiency": 0.44535669646483034
+              "coverage": 0.9840352009608082,
+              "cycles_per_sample": 68.83904833967675,
+              "efficiency": 0.4696248181028812
             },
-            "ratio": 1.0
+            "ratio": 0.9991324802907605
           },
           "cycle_mode": "whole-loop",
           "reference_model": {
             "comparison": {
-              "coverage": 0.9847623471924598,
-              "cycles_per_sample": 65.99023632027384,
-              "efficiency": 0.534548822363919
+              "coverage": 0.9827823950176243,
+              "cycles_per_sample": 62.99075055833966,
+              "efficiency": 0.5457533311487026
             },
             "cpu": "znver4",
             "ours": {
-              "coverage": 0.9847623471924598,
-              "cycles_per_sample": 65.99023632027384,
-              "efficiency": 0.534548822363919
+              "coverage": 0.9840352009608082,
+              "cycles_per_sample": 62.95332776809888,
+              "efficiency": 0.546050927376214
             },
-            "ratio": 1.0
+            "ratio": 0.9994059002328267
           },
           "samples": 65536
         },
@@ -6907,30 +7039,30 @@
           "compared_with": "sdrk fallback",
           "counter_model": {
             "comparison": {
-              "coverage": 0.9834951848857937,
-              "cycles_per_sample": 82.32069241444744,
-              "efficiency": 0.4730409560913126
+              "coverage": 0.983544050855199,
+              "cycles_per_sample": 76.0437975439635,
+              "efficiency": 0.49859231765712414
             },
             "cpu": "sapphirerapids",
             "ours": {
-              "coverage": 0.9834951848857937,
-              "cycles_per_sample": 82.32069241444744,
-              "efficiency": 0.4730409560913126
+              "coverage": 0.983544050855199,
+              "cycles_per_sample": 76.0437975439635,
+              "efficiency": 0.49859231765712414
             },
             "ratio": 1.0
           },
           "cycle_mode": "whole-loop",
           "reference_model": {
             "comparison": {
-              "coverage": 0.9834951848857937,
-              "cycles_per_sample": 74.15455275603749,
-              "efficiency": 0.5515609099771249
+              "coverage": 0.983544050855199,
+              "cycles_per_sample": 71.06425324568691,
+              "efficiency": 0.5633357987483292
             },
             "cpu": "znver4",
             "ours": {
-              "coverage": 0.9834951848857937,
-              "cycles_per_sample": 74.15455275603749,
-              "efficiency": 0.5515609099771249
+              "coverage": 0.983544050855199,
+              "cycles_per_sample": 71.06425324568691,
+              "efficiency": 0.5633357987483292
             },
             "ratio": 1.0
           },
@@ -6970,68 +7102,134 @@
           "samples": 65536
         },
         "qam_mod_block": {
-          "compared_with": "sdrk fallback",
+          "compared_with": "GNU Radio constellation_modulator as the sum of its blocks: pack_k_bits_bb + chunks_to_symbols_bc + pfb_arb_resampler_ccf (32 filters of 88 taps and their derivative filters), VOLK's dispatched dot product of the level",
           "counter_model": {
             "comparison": {
-              "coverage": 0.9912951139309409,
-              "cycles_per_sample": 3.212857696926596,
-              "efficiency": 0.9511234305662342
+              "coverage": 0.9910102511096033,
+              "cycles_per_sample": 302.56624456131664,
+              "efficiency": 0.37786032008070797
             },
             "cpu": "sapphirerapids",
             "ours": {
-              "coverage": 0.9912951139309409,
-              "cycles_per_sample": 3.212857696926596,
+              "coverage": 0.9912929024773846,
+              "cycles_per_sample": 3.212864864420242,
               "efficiency": 0.9511234305662342
             },
-            "ratio": 1.0
+            "ratio": 0.010618715478583859
           },
           "cycle_mode": "whole-loop",
           "reference_model": {
             "comparison": {
-              "coverage": 0.9912951139309409,
-              "cycles_per_sample": 4.169558470900595,
-              "efficiency": 0.9354013577797078
+              "coverage": 0.9910102511096033,
+              "cycles_per_sample": 217.01844129179855,
+              "efficiency": 0.4828716565729364
             },
             "cpu": "znver4",
             "ours": {
-              "coverage": 0.9912951139309409,
-              "cycles_per_sample": 4.169558470900595,
+              "coverage": 0.9912929024773846,
+              "cycles_per_sample": 4.169567772676979,
               "efficiency": 0.9354013577797078
             },
-            "ratio": 1.0
+            "ratio": 0.01921296525704313
+          },
+          "samples": 65536
+        },
+        "qam_mod_block_liquid": {
+          "compared_with": "liquid-dsp 1.8.3 modemcf_modulate (arbitrary-constellation modem) + firinterp_crcf (the root-raised cosine of the block), the SIMD dot products of the level (the portable loop at simd128)",
+          "counter_model": {
+            "comparison": {
+              "coverage": 0.9922991926377694,
+              "cycles_per_sample": 57.98087454556908,
+              "efficiency": 0.5196893161696813
+            },
+            "cpu": "sapphirerapids",
+            "ours": {
+              "coverage": 0.9912929024773846,
+              "cycles_per_sample": 3.212864864420242,
+              "efficiency": 0.9511234305662342
+            },
+            "ratio": 0.05541249402671817
+          },
+          "cycle_mode": "whole-loop",
+          "reference_model": {
+            "comparison": {
+              "coverage": 0.9922991926377694,
+              "cycles_per_sample": 50.05483766238575,
+              "efficiency": 0.6387235595374413
+            },
+            "cpu": "znver4",
+            "ours": {
+              "coverage": 0.9912929024773846,
+              "cycles_per_sample": 4.169567772676979,
+              "efficiency": 0.9354013577797078
+            },
+            "ratio": 0.0832999959124879
           },
           "samples": 65536
         },
         "qam_mod_qam256_block": {
-          "compared_with": "sdrk fallback",
+          "compared_with": "GNU Radio constellation_modulator as the sum of its blocks: pack_k_bits_bb + chunks_to_symbols_bc + pfb_arb_resampler_ccf (32 filters of 88 taps and their derivative filters), VOLK's dispatched dot product of the level",
           "counter_model": {
             "comparison": {
-              "coverage": 0.9910398656481374,
-              "cycles_per_sample": 3.5447768132125015,
-              "efficiency": 0.9334499013503774
+              "coverage": 0.9910832472914,
+              "cycles_per_sample": 303.61854145187226,
+              "efficiency": 0.3795138932160229
             },
             "cpu": "sapphirerapids",
             "ours": {
-              "coverage": 0.9910398656481374,
-              "cycles_per_sample": 3.5447768132125015,
+              "coverage": 0.9910377355111013,
+              "cycles_per_sample": 3.54478443235767,
               "efficiency": 0.9334499013503774
             },
-            "ratio": 1.0
+            "ratio": 0.011675125028290037
           },
           "cycle_mode": "whole-loop",
           "reference_model": {
             "comparison": {
-              "coverage": 0.9910398656481374,
-              "cycles_per_sample": 4.411619770304385,
-              "efficiency": 0.92254420280002
+              "coverage": 0.9910832472914,
+              "cycles_per_sample": 217.78947489013115,
+              "efficiency": 0.48460139681951375
             },
             "cpu": "znver4",
             "ours": {
-              "coverage": 0.9910398656481374,
-              "cycles_per_sample": 4.411619770304385,
+              "coverage": 0.9910377355111013,
+              "cycles_per_sample": 4.411629252642266,
               "efficiency": 0.92254420280002
             },
-            "ratio": 1.0
+            "ratio": 0.020256393266331225
+          },
+          "samples": 65536
+        },
+        "qam_mod_qam256_block_liquid": {
+          "compared_with": "liquid-dsp 1.8.3 modemcf_modulate (arbitrary-constellation modem) + firinterp_crcf (the root-raised cosine of the block), the SIMD dot products of the level (the portable loop at simd128)",
+          "counter_model": {
+            "comparison": {
+              "coverage": 0.9924489438118269,
+              "cycles_per_sample": 59.50620973324092,
+              "efficiency": 0.5147580192822597
+            },
+            "cpu": "sapphirerapids",
+            "ours": {
+              "coverage": 0.9910377355111013,
+              "cycles_per_sample": 3.54478443235767,
+              "efficiency": 0.9334499013503774
+            },
+            "ratio": 0.059569991909222686
+          },
+          "cycle_mode": "whole-loop",
+          "reference_model": {
+            "comparison": {
+              "coverage": 0.9924489438118269,
+              "cycles_per_sample": 51.075045538676044,
+              "efficiency": 0.6386940063869401
+            },
+            "cpu": "znver4",
+            "ours": {
+              "coverage": 0.9910377355111013,
+              "cycles_per_sample": 4.411629252642266,
+              "efficiency": 0.92254420280002
+            },
+            "ratio": 0.0863754345417393
           },
           "samples": 65536
         },
@@ -7039,65 +7237,131 @@
           "compared_with": "sdrk fallback",
           "counter_model": {
             "comparison": {
-              "coverage": 0.9962766853144236,
-              "cycles_per_sample": 2.0626800067608175,
+              "coverage": 0.996262705165325,
+              "cycles_per_sample": 2.062708951509916,
               "efficiency": 0.97323600973236
             },
             "cpu": "sapphirerapids",
             "ours": {
-              "coverage": 0.9952664657367819,
-              "cycles_per_sample": 2.064773676945613,
+              "coverage": 0.9952548391995608,
+              "cycles_per_sample": 2.0647977975698617,
               "efficiency": 0.97323600973236
             },
-            "ratio": 1.0010150242296105
+            "ratio": 1.0010126712537009
           },
           "cycle_mode": "whole-loop",
           "reference_model": {
             "comparison": {
-              "coverage": 0.9962766853144236,
-              "cycles_per_sample": 2.0463692767803483,
+              "coverage": 0.996262705165325,
+              "cycles_per_sample": 2.046397992647611,
               "efficiency": 0.7357449417535254
             },
             "cpu": "znver4",
             "ours": {
-              "coverage": 0.9952664657367819,
-              "cycles_per_sample": 2.0484463911790116,
+              "coverage": 0.9952548391995608,
+              "cycles_per_sample": 2.0484703210683968,
               "efficiency": 0.7357449417535254
             },
-            "ratio": 1.001015024229611
+            "ratio": 1.001012671253701
           },
           "samples": 65536
         },
         "qam_soft_bits_qam16": {
-          "compared_with": "sdrk fallback",
+          "compared_with": "GNU Radio constellation_soft_decoder_cf with calc_soft_dec (constellation.cc of gr-digital; the exact log-likelihood ratio over all points, npwr 1, not max-log; no vector allocation per symbol, so faster than GNU Radio's object code)",
           "counter_model": {
             "comparison": {
-              "coverage": 0.9909292193414756,
-              "cycles_per_sample": 0.5167712589751683,
-              "efficiency": 0.978405192861008
+              "coverage": 0.9918741967337343,
+              "cycles_per_sample": 1330.9046695105972,
+              "efficiency": 0.34194638244362124
             },
             "cpu": "sapphirerapids",
             "ours": {
-              "coverage": 0.9940213715676992,
-              "cycles_per_sample": 0.327740689806499,
+              "coverage": 0.9939541489145871,
+              "cycles_per_sample": 0.3277628554151698,
               "efficiency": 0.7849970023980816
             },
-            "ratio": 0.6342084319016811
+            "ratio": 0.00024627072315832764
           },
           "cycle_mode": "whole-loop",
           "reference_model": {
             "comparison": {
-              "coverage": 0.9909292193414756,
-              "cycles_per_sample": 0.4309266635102361,
-              "efficiency": 0.6610960713295388
+              "coverage": 0.9918741967337343,
+              "cycles_per_sample": 1224.8226680365271,
+              "efficiency": 0.34752689588186386
             },
             "cpu": "znver4",
             "ours": {
-              "coverage": 0.9940213715676992,
-              "cycles_per_sample": 0.36152789603643837,
+              "coverage": 0.9939541489145871,
+              "cycles_per_sample": 0.361552346726012,
               "efficiency": 0.7093239309358579
             },
-            "ratio": 0.8389545754526065
+            "ratio": 0.0002951875044128671
+          },
+          "samples": 65536
+        },
+        "qam_soft_bits_qam16_liquid": {
+          "compared_with": "liquid-dsp 1.8.3 modemcf_demodulate_soft of its own QAM modem (modem_common.proto.c; soft bytes with liquid's scale and labelling; the hard symbol and the soft bits per symbol)",
+          "counter_model": {
+            "comparison": {
+              "coverage": 0.9908929112803895,
+              "cycles_per_sample": 172.09853160312954,
+              "efficiency": 0.7062053714436868
+            },
+            "cpu": "sapphirerapids",
+            "ours": {
+              "coverage": 0.9939541489145871,
+              "cycles_per_sample": 0.3277628554151698,
+              "efficiency": 0.7849970023980816
+            },
+            "ratio": 0.0019045069842374505
+          },
+          "cycle_mode": "whole-loop",
+          "reference_model": {
+            "comparison": {
+              "coverage": 0.9908929112803895,
+              "cycles_per_sample": 157.166628279062,
+              "efficiency": 0.7328439989550094
+            },
+            "cpu": "znver4",
+            "ours": {
+              "coverage": 0.9939541489145871,
+              "cycles_per_sample": 0.361552346726012,
+              "efficiency": 0.7093239309358579
+            },
+            "ratio": 0.002300439671480683
+          },
+          "samples": 65536
+        },
+        "qam_soft_bits_qam16_lut": {
+          "compared_with": "GNU Radio constellation_soft_decoder_cf with the look-up table of gen_soft_dec_lut (precision 8, npwr 1; constellation.cc of gr-digital; exact log-likelihood ratio, not max-log; the table lookup and a copy of 2 to 3 floats per symbol, no vector allocation)",
+          "counter_model": {
+            "comparison": {
+              "coverage": 0.9920788696058371,
+              "cycles_per_sample": 55.46431935387238,
+              "efficiency": 0.5015224907952516
+            },
+            "cpu": "sapphirerapids",
+            "ours": {
+              "coverage": 0.9939541489145871,
+              "cycles_per_sample": 0.3277628554151698,
+              "efficiency": 0.7849970023980816
+            },
+            "ratio": 0.005909436178671616
+          },
+          "cycle_mode": "whole-loop",
+          "reference_model": {
+            "comparison": {
+              "coverage": 0.9920788696058371,
+              "cycles_per_sample": 56.63987621020465,
+              "efficiency": 0.4555176371247812
+            },
+            "cpu": "znver4",
+            "ours": {
+              "coverage": 0.9939541489145871,
+              "cycles_per_sample": 0.361552346726012,
+              "efficiency": 0.7093239309358579
+            },
+            "ratio": 0.006383353406073867
           },
           "samples": 65536
         },
@@ -7105,65 +7369,131 @@
           "compared_with": "sdrk fallback",
           "counter_model": {
             "comparison": {
-              "coverage": 0.9945066618106772,
-              "cycles_per_sample": 1.0092943954467772,
+              "coverage": 0.9944840249167293,
+              "cycles_per_sample": 1.0093173694610595,
               "efficiency": 0.7471980074719802
             },
             "cpu": "sapphirerapids",
             "ours": {
-              "coverage": 0.992871914129669,
-              "cycles_per_sample": 1.0109561824798583,
+              "coverage": 0.9928531119451882,
+              "cycles_per_sample": 1.0109753274917601,
               "efficiency": 0.7471980074719802
             },
-            "ratio": 1.0016464839600594
+            "ratio": 1.0016426528274114
           },
           "cycle_mode": "whole-loop",
           "reference_model": {
             "comparison": {
-              "coverage": 0.9945066618106772,
-              "cycles_per_sample": 1.2066284179687499,
+              "coverage": 0.9944840249167293,
+              "cycles_per_sample": 1.2066558837890624,
               "efficiency": 0.5625000000000001
             },
             "cpu": "znver4",
             "ours": {
-              "coverage": 0.992871914129669,
-              "cycles_per_sample": 1.2086151123046875,
+              "coverage": 0.9928531119451882,
+              "cycles_per_sample": 1.2086380004882813,
               "efficiency": 0.5625000000000001
             },
-            "ratio": 1.0016464839600596
+            "ratio": 1.0016426528274116
           },
           "samples": 65536
         },
         "qam_soft_bits_qam64": {
-          "compared_with": "sdrk fallback",
+          "compared_with": "GNU Radio constellation_soft_decoder_cf with calc_soft_dec (constellation.cc of gr-digital; the exact log-likelihood ratio over all points, npwr 1, not max-log; no vector allocation per symbol, so faster than GNU Radio's object code)",
           "counter_model": {
             "comparison": {
-              "coverage": 0.9942652547258549,
-              "cycles_per_sample": 0.802099838256836,
-              "efficiency": 0.9404388714733543
+              "coverage": 0.9911762821279838,
+              "cycles_per_sample": 4764.873903015945,
+              "efficiency": 0.4171651319230207
             },
             "cpu": "sapphirerapids",
             "ours": {
-              "coverage": 0.9916813784337264,
-              "cycles_per_sample": 0.7653510406727101,
+              "coverage": 0.9916463651449352,
+              "cycles_per_sample": 0.7653780638716604,
               "efficiency": 0.9923443129181677
             },
-            "ratio": 0.9541842600741696
+            "ratio": 0.00016062923792950983
           },
           "cycle_mode": "whole-loop",
           "reference_model": {
             "comparison": {
-              "coverage": 0.9942652547258549,
-              "cycles_per_sample": 0.7870133209228516,
-              "efficiency": 0.8626198083067094
+              "coverage": 0.9911762821279838,
+              "cycles_per_sample": 4356.96462664386,
+              "efficiency": 0.4105573205635263
             },
             "cpu": "znver4",
             "ours": {
-              "coverage": 0.9916813784337264,
-              "cycles_per_sample": 0.7657781778496167,
+              "coverage": 0.9916463651449352,
+              "cycles_per_sample": 0.7658052161300294,
               "efficiency": 0.9924337774691491
             },
-            "ratio": 0.9730180639784666
+            "ratio": 0.0001757657639557023
+          },
+          "samples": 65536
+        },
+        "qam_soft_bits_qam64_liquid": {
+          "compared_with": "liquid-dsp 1.8.3 modemcf_demodulate_soft of its own QAM modem (modem_common.proto.c; soft bytes with liquid's scale and labelling; the hard symbol and the soft bits per symbol)",
+          "counter_model": {
+            "comparison": {
+              "coverage": 0.8605061613876863,
+              "cycles_per_sample": 220.3794198929311,
+              "efficiency": 0.7097700656592805
+            },
+            "cpu": "sapphirerapids",
+            "ours": {
+              "coverage": 0.9916463651449352,
+              "cycles_per_sample": 0.7653780638716604,
+              "efficiency": 0.9923443129181677
+            },
+            "ratio": 0.003473001536366285
+          },
+          "cycle_mode": "whole-loop",
+          "reference_model": {
+            "comparison": {
+              "coverage": 0.8605061613876863,
+              "cycles_per_sample": 209.2349590256044,
+              "efficiency": 0.7322764936736176
+            },
+            "cpu": "znver4",
+            "ours": {
+              "coverage": 0.9916463651449352,
+              "cycles_per_sample": 0.7658052161300294,
+              "efficiency": 0.9924337774691491
+            },
+            "ratio": 0.0036600251683387027
+          },
+          "samples": 65536
+        },
+        "qam_soft_bits_qam64_lut": {
+          "compared_with": "GNU Radio constellation_soft_decoder_cf with the look-up table of gen_soft_dec_lut (precision 8, npwr 1; constellation.cc of gr-digital; exact log-likelihood ratio, not max-log; the table lookup and a copy of 2 to 3 floats per symbol, no vector allocation)",
+          "counter_model": {
+            "comparison": {
+              "coverage": 0.9920788696058371,
+              "cycles_per_sample": 55.46431935387238,
+              "efficiency": 0.5015224907952516
+            },
+            "cpu": "sapphirerapids",
+            "ours": {
+              "coverage": 0.9916463651449352,
+              "cycles_per_sample": 0.7653780638716604,
+              "efficiency": 0.9923443129181677
+            },
+            "ratio": 0.013799467347438449
+          },
+          "cycle_mode": "whole-loop",
+          "reference_model": {
+            "comparison": {
+              "coverage": 0.9920788696058371,
+              "cycles_per_sample": 56.63987621020465,
+              "efficiency": 0.4555176371247812
+            },
+            "cpu": "znver4",
+            "ours": {
+              "coverage": 0.9916463651449352,
+              "cycles_per_sample": 0.7658052161300294,
+              "efficiency": 0.9924337774691491
+            },
+            "ratio": 0.013520601868689402
           },
           "samples": 65536
         },
@@ -7171,32 +7501,32 @@
           "compared_with": "sdrk fallback",
           "counter_model": {
             "comparison": {
-              "coverage": 0.9943152454780362,
-              "cycles_per_sample": 0.20055661905332314,
+              "coverage": 0.9941867975713732,
+              "cycles_per_sample": 0.20058253076121116,
               "efficiency": 0.9555465775394523
             },
             "cpu": "sapphirerapids",
             "ours": {
-              "coverage": 0.9925423728813559,
-              "cycles_per_sample": 0.13451758629637336,
+              "coverage": 0.9923021060275963,
+              "cycles_per_sample": 0.13455015714051294,
               "efficiency": 0.9834057142857142
             },
-            "ratio": 0.6707212503448136
+            "ratio": 0.670796986307306
           },
           "cycle_mode": "whole-loop",
           "reference_model": {
             "comparison": {
-              "coverage": 0.9943152454780362,
-              "cycles_per_sample": 0.26156137510049876,
+              "coverage": 0.9941867975713732,
+              "cycles_per_sample": 0.261595168559814,
               "efficiency": 0.972997329303037
             },
             "cpu": "znver4",
             "ours": {
-              "coverage": 0.9925423728813559,
-              "cycles_per_sample": 0.1353391428462795,
+              "coverage": 0.9923021060275963,
+              "cycles_per_sample": 0.13537191261452317,
               "efficiency": 0.9710749434312038
             },
-            "ratio": 0.5174278610298582
+            "ratio": 0.517486287532754
           },
           "samples": 65536
         },
@@ -7369,32 +7699,32 @@
           "compared_with": "sdrk fallback",
           "counter_model": {
             "comparison": {
-              "coverage": 0.9775629322101166,
-              "cycles_per_sample": 50.78970267650608,
-              "efficiency": 0.2936465074104605
+              "coverage": 0.9779407083785481,
+              "cycles_per_sample": 50.29339345329639,
+              "efficiency": 0.29481996985060566
             },
             "cpu": "sapphirerapids",
             "ours": {
-              "coverage": 0.9770240643160929,
-              "cycles_per_sample": 50.80876945942859,
-              "efficiency": 0.29353345313076423
+              "coverage": 0.9779407083785481,
+              "cycles_per_sample": 50.29339345329639,
+              "efficiency": 0.29481996985060566
             },
-            "ratio": 1.0003754064685897
+            "ratio": 1.0
           },
           "cycle_mode": "whole-loop",
           "reference_model": {
             "comparison": {
-              "coverage": 0.9775629322101166,
-              "cycles_per_sample": 477.3301048533815,
-              "efficiency": 0.2687596471088727
+              "coverage": 0.9779407083785481,
+              "cycles_per_sample": 476.91554508733793,
+              "efficiency": 0.2687379172532336
             },
             "cpu": "znver4",
             "ours": {
-              "coverage": 0.9770240643160929,
-              "cycles_per_sample": 477.5842102247432,
-              "efficiency": 0.26874583586436906
+              "coverage": 0.9779407083785481,
+              "cycles_per_sample": 476.91554508733793,
+              "efficiency": 0.2687379172532336
             },
-            "ratio": 1.000532347255658
+            "ratio": 1.0
           },
           "samples": 65536
         },
@@ -7441,11 +7771,11 @@
             },
             "cpu": "sapphirerapids",
             "ours": {
-              "coverage": 0.9910121181241818,
-              "cycles_per_sample": 1.5748199842136466,
-              "efficiency": 0.9016521432084594
+              "coverage": 0.9910100960385247,
+              "cycles_per_sample": 1.5738217630818168,
+              "efficiency": 0.9015997383961708
             },
-            "ratio": 0.06839960404570898
+            "ratio": 0.06835624802352762
           },
           "cycle_mode": "whole-loop",
           "reference_model": {
@@ -7456,11 +7786,11 @@
             },
             "cpu": "znver4",
             "ours": {
-              "coverage": 0.9910121181241818,
-              "cycles_per_sample": 2.000212811053869,
-              "efficiency": 0.791411289212175
+              "coverage": 0.9910100960385247,
+              "cycles_per_sample": 1.9992277756726546,
+              "efficiency": 0.7913099384585862
             },
-            "ratio": 0.037054139684598565
+            "ratio": 0.03703589180696871
           },
           "samples": 65536
         },
@@ -7477,11 +7807,11 @@
             },
             "cpu": "sapphirerapids",
             "ours": {
-              "coverage": 0.9902424605503978,
-              "cycles_per_sample": 5.03864787534281,
+              "coverage": 0.9901092417823197,
+              "cycles_per_sample": 5.039325823224121,
               "efficiency": 0.5156305265904114
             },
-            "ratio": 0.19391409173861604
+            "ratio": 0.1939401827953644
           },
           "cycle_mode": "whole-loop",
           "reference_model": {
@@ -7492,11 +7822,11 @@
             },
             "cpu": "znver4",
             "ours": {
-              "coverage": 0.9902424605503978,
-              "cycles_per_sample": 4.298710631084079,
+              "coverage": 0.9901092417823197,
+              "cycles_per_sample": 4.2992890207308285,
               "efficiency": 0.6156234669629654
             },
-            "ratio": 0.01945802902989848
+            "ratio": 0.019460647099245987
           },
           "samples": 65536
         },
@@ -8296,9 +8626,9 @@
           "compared_with": "GNU Radio dvbs2_physical_cc PL scrambling, the per-symbol switch on R_n (benches/refs/gr-dvbs2-plscramble.c, main at ec1bf15; reference does different work; -O3)",
           "counter_model": {
             "comparison": {
-              "coverage": 0.9992733381312766,
-              "cycles_per_sample": 2.4203574142541204,
-              "efficiency": 0.9516402229629196
+              "coverage": 0.9992738847514057,
+              "cycles_per_sample": 2.421692509890088,
+              "efficiency": 0.9514076301067894
             },
             "cpu": "sapphirerapids",
             "ours": {
@@ -8306,14 +8636,14 @@
               "cycles_per_sample": 0.7766162882871822,
               "efficiency": 0.8755888321409931
             },
-            "ratio": 0.32086843195698495
+            "ratio": 0.3206915349969142
           },
           "cycle_mode": "whole-loop",
           "reference_model": {
             "comparison": {
-              "coverage": 0.9992733381312766,
-              "cycles_per_sample": 2.9746615731375563,
-              "efficiency": 0.9840612515769553
+              "coverage": 0.9992738847514057,
+              "cycles_per_sample": 2.976836819576022,
+              "efficiency": 0.984039257173388
             },
             "cpu": "znver4",
             "ours": {
@@ -8321,7 +8651,7 @@
               "cycles_per_sample": 0.6384791283088695,
               "efficiency": 0.6554656229856841
             },
-            "ratio": 0.21463924974679618
+            "ratio": 0.21448240767184723
           },
           "samples": 65536
         },
@@ -8953,35 +9283,101 @@
           "samples": 65536
         },
         "symbol_demap_qam16_block": {
-          "compared_with": "sdrk fallback",
+          "compared_with": "GNU Radio constellation_soft_decoder_cf with calc_soft_dec (constellation.cc of gr-digital; the exact log-likelihood ratio over all points, npwr 1, not max-log; no vector allocation per symbol, so faster than GNU Radio's object code)",
           "counter_model": {
             "comparison": {
-              "coverage": 0.9908607577898917,
-              "cycles_per_sample": 0.32883908023680847,
-              "efficiency": 0.7853950390187433
+              "coverage": 0.991875754810185,
+              "cycles_per_sample": 1330.9025788745337,
+              "efficiency": 0.34194638244362124
             },
             "cpu": "sapphirerapids",
             "ours": {
-              "coverage": 0.9908607577898917,
-              "cycles_per_sample": 0.32883908023680847,
+              "coverage": 0.990834084821729,
+              "cycles_per_sample": 0.32884793249012934,
               "efficiency": 0.7853950390187433
             },
-            "ratio": 1.0
+            "ratio": 0.0002470864041515471
           },
           "cycle_mode": "whole-loop",
           "reference_model": {
             "comparison": {
-              "coverage": 0.9908607577898917,
-              "cycles_per_sample": 0.36162529364795015,
-              "efficiency": 0.7128938188160907
+              "coverage": 0.991875754810185,
+              "cycles_per_sample": 1224.8207440381375,
+              "efficiency": 0.34752689588186386
             },
             "cpu": "znver4",
             "ours": {
-              "coverage": 0.9908607577898917,
-              "cycles_per_sample": 0.36162529364795015,
+              "coverage": 0.990834084821729,
+              "cycles_per_sample": 0.36163502849669227,
               "efficiency": 0.7128938188160907
             },
-            "ratio": 1.0
+            "ratio": 0.00029525547330657554
+          },
+          "samples": 65536
+        },
+        "symbol_demap_qam16_block_liquid": {
+          "compared_with": "liquid-dsp 1.8.3 modemcf_demodulate_soft of its own QAM modem (modem_common.proto.c; soft bytes with liquid's scale and labelling; the hard symbol and the soft bits per symbol)",
+          "counter_model": {
+            "comparison": {
+              "coverage": 0.9909308105573545,
+              "cycles_per_sample": 172.0984470843395,
+              "efficiency": 0.7062118723400205
+            },
+            "cpu": "sapphirerapids",
+            "ours": {
+              "coverage": 0.990834084821729,
+              "cycles_per_sample": 0.32884793249012934,
+              "efficiency": 0.7853950390187433
+            },
+            "ratio": 0.0019108128984393004
+          },
+          "cycle_mode": "whole-loop",
+          "reference_model": {
+            "comparison": {
+              "coverage": 0.9909308105573545,
+              "cycles_per_sample": 157.1658231671812,
+              "efficiency": 0.7328538714664876
+            },
+            "cpu": "znver4",
+            "ours": {
+              "coverage": 0.990834084821729,
+              "cycles_per_sample": 0.36163502849669227,
+              "efficiency": 0.7128938188160907
+            },
+            "ratio": 0.0023009775357585986
+          },
+          "samples": 65536
+        },
+        "symbol_demap_qam16_block_lut": {
+          "compared_with": "GNU Radio constellation_soft_decoder_cf with the look-up table of gen_soft_dec_lut (precision 8, npwr 1; constellation.cc of gr-digital; exact log-likelihood ratio, not max-log; the table lookup and a copy of 2 to 3 floats per symbol, no vector allocation)",
+          "counter_model": {
+            "comparison": {
+              "coverage": 0.9921047341546708,
+              "cycles_per_sample": 35.46448025948065,
+              "efficiency": 0.7843167595463713
+            },
+            "cpu": "sapphirerapids",
+            "ours": {
+              "coverage": 0.990834084821729,
+              "cycles_per_sample": 0.32884793249012934,
+              "efficiency": 0.7853950390187433
+            },
+            "ratio": 0.009272599797997013
+          },
+          "cycle_mode": "whole-loop",
+          "reference_model": {
+            "comparison": {
+              "coverage": 0.9921047341546708,
+              "cycles_per_sample": 47.18331337679199,
+              "efficiency": 0.5467912060161161
+            },
+            "cpu": "znver4",
+            "ours": {
+              "coverage": 0.990834084821729,
+              "cycles_per_sample": 0.36163502849669227,
+              "efficiency": 0.7128938188160907
+            },
+            "ratio": 0.007664468699109404
           },
           "samples": 65536
         },
@@ -8989,14 +9385,14 @@
           "compared_with": "sdrk fallback",
           "counter_model": {
             "comparison": {
-              "coverage": 0.9915012235666115,
-              "cycles_per_sample": 1.0123537683486938,
+              "coverage": 0.9914937233587878,
+              "cycles_per_sample": 1.0123614263534546,
               "efficiency": 0.7471980074719802
             },
             "cpu": "sapphirerapids",
             "ours": {
-              "coverage": 0.9915012235666115,
-              "cycles_per_sample": 1.0123537683486938,
+              "coverage": 0.9914937233587878,
+              "cycles_per_sample": 1.0123614263534546,
               "efficiency": 0.7471980074719802
             },
             "ratio": 1.0
@@ -9004,14 +9400,14 @@
           "cycle_mode": "whole-loop",
           "reference_model": {
             "comparison": {
-              "coverage": 0.9915012235666115,
-              "cycles_per_sample": 1.2102859497070313,
+              "coverage": 0.9914937233587878,
+              "cycles_per_sample": 1.2102951049804687,
               "efficiency": 0.5625000000000001
             },
             "cpu": "znver4",
             "ours": {
-              "coverage": 0.9915012235666115,
-              "cycles_per_sample": 1.2102859497070313,
+              "coverage": 0.9914937233587878,
+              "cycles_per_sample": 1.2102951049804687,
               "efficiency": 0.5625000000000001
             },
             "ratio": 1.0
@@ -9019,68 +9415,299 @@
           "samples": 65536
         },
         "symbol_demap_qam64_block": {
-          "compared_with": "sdrk fallback",
+          "compared_with": "GNU Radio constellation_soft_decoder_cf with calc_soft_dec (constellation.cc of gr-digital; the exact log-likelihood ratio over all points, npwr 1, not max-log; no vector allocation per symbol, so faster than GNU Radio's object code)",
           "counter_model": {
             "comparison": {
-              "coverage": 0.9901494828302458,
-              "cycles_per_sample": 0.7673895057680828,
-              "efficiency": 0.9919142489473101
+              "coverage": 0.9911766434039513,
+              "cycles_per_sample": 4764.872166257477,
+              "efficiency": 0.4171651319230207
             },
             "cpu": "sapphirerapids",
             "ours": {
-              "coverage": 0.9901494828302458,
-              "cycles_per_sample": 0.7673895057680828,
+              "coverage": 0.9901355395176905,
+              "cycles_per_sample": 0.7674003123206239,
               "efficiency": 0.9919142489473101
             },
-            "ratio": 1.0
+            "ratio": 0.00016105370418014196
           },
           "cycle_mode": "whole-loop",
           "reference_model": {
             "comparison": {
-              "coverage": 0.9901494828302458,
-              "cycles_per_sample": 0.7670221172701257,
-              "efficiency": 0.993064429282092
+              "coverage": 0.9911766434039513,
+              "cycles_per_sample": 4356.963038565064,
+              "efficiency": 0.4105573205635263
             },
             "cpu": "znver4",
             "ours": {
-              "coverage": 0.9901494828302458,
-              "cycles_per_sample": 0.7670221172701257,
+              "coverage": 0.9901355395176905,
+              "cycles_per_sample": 0.7670329186490188,
               "efficiency": 0.993064429282092
             },
-            "ratio": 1.0
+            "ratio": 0.00017604760744117668
+          },
+          "samples": 65536
+        },
+        "symbol_demap_qam64_block_liquid": {
+          "compared_with": "liquid-dsp 1.8.3 modemcf_demodulate_soft of its own QAM modem (modem_common.proto.c; soft bytes with liquid's scale and labelling; the hard symbol and the soft bits per symbol)",
+          "counter_model": {
+            "comparison": {
+              "coverage": 0.8596874348563118,
+              "cycles_per_sample": 220.52432921292285,
+              "efficiency": 0.7094431390308497
+            },
+            "cpu": "sapphirerapids",
+            "ours": {
+              "coverage": 0.9901355395176905,
+              "cycles_per_sample": 0.7674003123206239,
+              "efficiency": 0.9919142489473101
+            },
+            "ratio": 0.0034798895661969156
+          },
+          "cycle_mode": "whole-loop",
+          "reference_model": {
+            "comparison": {
+              "coverage": 0.8596874348563118,
+              "cycles_per_sample": 209.3302846935827,
+              "efficiency": 0.7319417017771879
+            },
+            "cpu": "znver4",
+            "ours": {
+              "coverage": 0.9901355395176905,
+              "cycles_per_sample": 0.7670329186490188,
+              "efficiency": 0.993064429282092
+            },
+            "ratio": 0.0036642233577038326
+          },
+          "samples": 65536
+        },
+        "symbol_demap_qam64_block_lut": {
+          "compared_with": "GNU Radio constellation_soft_decoder_cf with the look-up table of gen_soft_dec_lut (precision 8, npwr 1; constellation.cc of gr-digital; exact log-likelihood ratio, not max-log; the table lookup and a copy of 2 to 3 floats per symbol, no vector allocation)",
+          "counter_model": {
+            "comparison": {
+              "coverage": 0.9921067152899402,
+              "cycles_per_sample": 55.46276262424651,
+              "efficiency": 0.5015224907952516
+            },
+            "cpu": "sapphirerapids",
+            "ours": {
+              "coverage": 0.9901355395176905,
+              "cycles_per_sample": 0.7674003123206239,
+              "efficiency": 0.9919142489473101
+            },
+            "ratio": 0.013836316043606914
+          },
+          "cycle_mode": "whole-loop",
+          "reference_model": {
+            "comparison": {
+              "coverage": 0.9921067152899402,
+              "cycles_per_sample": 56.63828648595797,
+              "efficiency": 0.4555176371247812
+            },
+            "cpu": "znver4",
+            "ours": {
+              "coverage": 0.9901355395176905,
+              "cycles_per_sample": 0.7670329186490188,
+              "efficiency": 0.993064429282092
+            },
+            "ratio": 0.013542657559726586
           },
           "samples": 65536
         },
         "symbol_map_block": {
-          "compared_with": "sdrk fallback",
+          "compared_with": "GNU Radio pack_k_bits_bb + chunks_to_symbols_bc (pack_k_bits.cc of gr-blocks, chunks_to_symbols_impl.cc of gr-digital), the table of the points of the block, generic compiler flags",
           "counter_model": {
             "comparison": {
-              "coverage": 0.9953636497349286,
-              "cycles_per_sample": 2.1713169860839843,
-              "efficiency": 0.8675534991324465
+              "coverage": 0.9996050693125543,
+              "cycles_per_sample": 11.659112597993957,
+              "efficiency": 0.8151079883440187
             },
             "cpu": "sapphirerapids",
             "ours": {
-              "coverage": 0.9953636497349286,
-              "cycles_per_sample": 2.1713169860839843,
+              "coverage": 0.9953541018516446,
+              "cycles_per_sample": 2.1713378143310544,
               "efficiency": 0.8675534991324465
             },
-            "ratio": 1.0
+            "ratio": 0.18623525556350234
           },
           "cycle_mode": "whole-loop",
           "reference_model": {
             "comparison": {
-              "coverage": 0.9953636497349286,
-              "cycles_per_sample": 1.2815667925382914,
-              "efficiency": 0.61734443900049
+              "coverage": 0.9996050693125543,
+              "cycles_per_sample": 10.168317538448123,
+              "efficiency": 0.9640914486544082
             },
             "cpu": "znver4",
             "ours": {
-              "coverage": 0.9953636497349286,
-              "cycles_per_sample": 1.2815667925382914,
+              "coverage": 0.9953541018516446,
+              "cycles_per_sample": 1.2815790859021639,
               "efficiency": 0.61734443900049
             },
-            "ratio": 1.0
+            "ratio": 0.12603649335854208
+          },
+          "samples": 65536
+        },
+        "symbol_map_block_liquid": {
+          "compared_with": "liquid-dsp 1.8.3 modemcf_modulate on the arbitrary-constellation modem of the points of the block (modem_arb.proto.c), the bits packed by the wrapper",
+          "counter_model": {
+            "comparison": {
+              "coverage": 0.9996679591472625,
+              "cycles_per_sample": 20.136686202457973,
+              "efficiency": 0.4868355688027819
+            },
+            "cpu": "sapphirerapids",
+            "ours": {
+              "coverage": 0.9953541018516446,
+              "cycles_per_sample": 2.1713378143310544,
+              "efficiency": 0.8675534991324465
+            },
+            "ratio": 0.10782994741538016
+          },
+          "cycle_mode": "whole-loop",
+          "reference_model": {
+            "comparison": {
+              "coverage": 0.9996679591472625,
+              "cycles_per_sample": 17.260731267929074,
+              "efficiency": 0.5911330049261083
+            },
+            "cpu": "znver4",
+            "ours": {
+              "coverage": 0.9953541018516446,
+              "cycles_per_sample": 1.2815790859021639,
+              "efficiency": 0.61734443900049
+            },
+            "ratio": 0.07424824974150278
+          },
+          "samples": 65536
+        },
+        "symbol_map_block_qam64": {
+          "compared_with": "GNU Radio pack_k_bits_bb + chunks_to_symbols_bc (pack_k_bits.cc of gr-blocks, chunks_to_symbols_impl.cc of gr-digital), the table of the points of the block, generic compiler flags",
+          "counter_model": {
+            "comparison": {
+              "coverage": 0.9997024247368632,
+              "cycles_per_sample": 15.91924523022895,
+              "efficiency": 0.823128341169265
+            },
+            "cpu": "sapphirerapids",
+            "ours": {
+              "coverage": 0.9969201965831969,
+              "cycles_per_sample": 3.5459207388070912,
+              "efficiency": 0.884016973125884
+            },
+            "ratio": 0.222744275091244
+          },
+          "cycle_mode": "whole-loop",
+          "reference_model": {
+            "comparison": {
+              "coverage": 0.9997024247368632,
+              "cycles_per_sample": 13.288256014092521,
+              "efficiency": 0.9634918447048014
+            },
+            "cpu": "znver4",
+            "ours": {
+              "coverage": 0.9969201965831969,
+              "cycles_per_sample": 2.4049066396859975,
+              "efficiency": 0.6777893639207508
+            },
+            "ratio": 0.1809798544771816
+          },
+          "samples": 65536
+        },
+        "symbol_map_block_qam64_liquid": {
+          "compared_with": "liquid-dsp 1.8.3 modemcf_modulate on the arbitrary-constellation modem of the points of the block (modem_arb.proto.c), the bits packed by the wrapper",
+          "counter_model": {
+            "comparison": {
+              "coverage": 0.9997343496764579,
+              "cycles_per_sample": 26.22696720232282,
+              "efficiency": 0.45003813882532423
+            },
+            "cpu": "sapphirerapids",
+            "ours": {
+              "coverage": 0.9969201965831969,
+              "cycles_per_sample": 3.5459207388070912,
+              "efficiency": 0.884016973125884
+            },
+            "ratio": 0.13520132585108974
+          },
+          "cycle_mode": "whole-loop",
+          "reference_model": {
+            "comparison": {
+              "coverage": 0.9997343496764579,
+              "cycles_per_sample": 21.340669155665807,
+              "efficiency": 0.5999531286618233
+            },
+            "cpu": "znver4",
+            "ours": {
+              "coverage": 0.9969201965831969,
+              "cycles_per_sample": 2.4049066396859975,
+              "efficiency": 0.6777893639207508
+            },
+            "ratio": 0.11269124797089648
+          },
+          "samples": 65536
+        },
+        "symbol_map_block_qpsk": {
+          "compared_with": "GNU Radio pack_k_bits_bb + chunks_to_symbols_bc (pack_k_bits.cc of gr-blocks, chunks_to_symbols_impl.cc of gr-digital), the table of the points of the block, generic compiler flags",
+          "counter_model": {
+            "comparison": {
+              "coverage": 0.9994130371699158,
+              "cycles_per_sample": 7.398850907108433,
+              "efficiency": 0.7978465331293134
+            },
+            "cpu": "sapphirerapids",
+            "ours": {
+              "coverage": 0.9991365449718558,
+              "cycles_per_sample": 5.030682879755648,
+              "efficiency": 0.8605497844970478
+            },
+            "ratio": 0.6799275918538146
+          },
+          "cycle_mode": "whole-loop",
+          "reference_model": {
+            "comparison": {
+              "coverage": 0.9994130371699158,
+              "cycles_per_sample": 7.048438929474219,
+              "efficiency": 0.9652221951890692
+            },
+            "cpu": "znver4",
+            "ours": {
+              "coverage": 0.9991365449718558,
+              "cycles_per_sample": 5.186541333474316,
+              "efficiency": 0.9454939830102428
+            },
+            "ratio": 0.7358425582416457
+          },
+          "samples": 65536
+        },
+        "symbol_map_block_qpsk_liquid": {
+          "compared_with": "liquid-dsp 1.8.3 modemcf_modulate on the arbitrary-constellation modem of the points of the block (modem_arb.proto.c), the bits packed by the wrapper",
+          "counter_model": {
+            "comparison": {
+              "coverage": 0.999557327858095,
+              "cycles_per_sample": 14.04621786934989,
+              "efficiency": 0.5555555555555555
+            },
+            "cpu": "sapphirerapids",
+            "ours": {
+              "coverage": 0.9991365449718558,
+              "cycles_per_sample": 5.030682879755648,
+              "efficiency": 0.8605497844970478
+            },
+            "ratio": 0.35815213223575654
+          },
+          "cycle_mode": "whole-loop",
+          "reference_model": {
+            "comparison": {
+              "coverage": 0.999557327858095,
+              "cycles_per_sample": 13.180834788367864,
+              "efficiency": 0.5768500948766604
+            },
+            "cpu": "znver4",
+            "ours": {
+              "coverage": 0.9991365449718558,
+              "cycles_per_sample": 5.186541333474316,
+              "efficiency": 0.9454939830102428
+            },
+            "ratio": 0.3934911116594419
           },
           "samples": 65536
         },
@@ -9088,32 +9715,65 @@
           "compared_with": "sdrk fallback",
           "counter_model": {
             "comparison": {
-              "coverage": 0.9974059523074845,
-              "cycles_per_sample": 39.811803102493286,
-              "efficiency": 0.23785440613026818
+              "coverage": 0.9970819118894885,
+              "cycles_per_sample": 27.84390013974016,
+              "efficiency": 0.2673913996405558
             },
             "cpu": "sapphirerapids",
             "ours": {
-              "coverage": 0.997405414728257,
-              "cycles_per_sample": 39.811824560165405,
-              "efficiency": 0.23785440613026818
+              "coverage": 0.9970815675439031,
+              "cycles_per_sample": 27.84390975572786,
+              "efficiency": 0.2673913996405558
             },
-            "ratio": 1.000000538977651
+            "ratio": 1.000000345353476
           },
           "cycle_mode": "whole-loop",
           "reference_model": {
             "comparison": {
-              "coverage": 0.9974059523074845,
-              "cycles_per_sample": 28.815813592713454,
-              "efficiency": 0.3447107648005421
+              "coverage": 0.9970819118894885,
+              "cycles_per_sample": 23.20589459329679,
+              "efficiency": 0.3523904696786409
             },
             "cpu": "znver4",
             "ours": {
-              "coverage": 0.997405414728257,
-              "cycles_per_sample": 28.815829123792973,
-              "efficiency": 0.3447107648005421
+              "coverage": 0.9970815675439031,
+              "cycles_per_sample": 23.20590260753315,
+              "efficiency": 0.3523904696786409
             },
-            "ratio": 1.000000538977651
+            "ratio": 1.000000345353476
+          },
+          "samples": 65536
+        },
+        "symbol_sync_fallback": {
+          "compared_with": "GNU Radio symbol_sync_cc (symbol_sync_cc_impl.cc of gr-digital, TED_GARDNER, IR_MMSE_8TAP, generic compiler flags; reference does different work: an 8-tap MMSE interpolator against our 4-point Lagrange polynomial)",
+          "counter_model": {
+            "comparison": {
+              "coverage": 0.9992014013383078,
+              "cycles_per_sample": 36.518948718847604,
+              "efficiency": 0.6177808710220367
+            },
+            "cpu": "sapphirerapids",
+            "ours": {
+              "coverage": 0.9970819118894885,
+              "cycles_per_sample": 27.84390013974016,
+              "efficiency": 0.2673913996405558
+            },
+            "ratio": 0.7624507582106215
+          },
+          "cycle_mode": "whole-loop",
+          "reference_model": {
+            "comparison": {
+              "coverage": 0.9992014013383078,
+              "cycles_per_sample": 36.86691186718559,
+              "efficiency": 0.5911462452919377
+            },
+            "cpu": "znver4",
+            "ours": {
+              "coverage": 0.9970819118894885,
+              "cycles_per_sample": 23.20589459329679,
+              "efficiency": 0.3523904696786409
+            },
+            "ratio": 0.6294504589073497
           },
           "samples": 65536
         },
@@ -9121,32 +9781,32 @@
           "compared_with": "sdrk fallback",
           "counter_model": {
             "comparison": {
-              "coverage": 0.9945604304876474,
-              "cycles_per_sample": 19.92026720484462,
-              "efficiency": 0.22810821001036855
+              "coverage": 0.9940242064151337,
+              "cycles_per_sample": 13.77907632261334,
+              "efficiency": 0.2481141506861765
             },
             "cpu": "sapphirerapids",
             "ours": {
-              "coverage": 0.9945593182571199,
-              "cycles_per_sample": 19.920289481976706,
-              "efficiency": 0.22810821001036855
+              "coverage": 0.9940227383225422,
+              "cycles_per_sample": 13.779096673214076,
+              "efficiency": 0.2481141506861765
             },
-            "ratio": 1.000001118314923
+            "ratio": 1.000001476920532
           },
           "cycle_mode": "whole-loop",
           "reference_model": {
             "comparison": {
-              "coverage": 0.9945604304876474,
-              "cycles_per_sample": 14.403028526656122,
-              "efficiency": 0.32765513645054756
+              "coverage": 0.9940242064151337,
+              "cycles_per_sample": 11.27948199925278,
+              "efficiency": 0.33529477073387365
             },
             "cpu": "znver4",
             "ours": {
-              "coverage": 0.9945593182571199,
-              "cycles_per_sample": 14.403044633777862,
-              "efficiency": 0.32765513645054756
+              "coverage": 0.9940227383225422,
+              "cycles_per_sample": 11.279498658151336,
+              "efficiency": 0.33529477073387365
             },
-            "ratio": 1.000001118314923
+            "ratio": 1.000001476920532
           },
           "samples": 65536
         },

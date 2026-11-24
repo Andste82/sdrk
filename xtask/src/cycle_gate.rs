@@ -32,9 +32,10 @@
 //! **The accuracy trade (D2760, the maintainer's decision of 2026-11-24).** A `release` entry
 //! above the release limit in cycles whose SNR is at least [`TRADE_DB`] above the comparison's
 //! stays `release` with an `accuracy_trade` text that names both SNR figures: it passes while
-//! the advantage holds and its ratio stays at most [`TRADE_CAP`] on both models, and fails as
-//! soon as either does not ("3 dB better must not mean that we may be slow"). A trade on an
-//! entry within its limit is a remark.
+//! the advantage holds, the comparison's SNR is below [`TRADE_SCARCE_DB`] (where accuracy is
+//! scarce, typically fixed point) and its ratio stays at most [`TRADE_CAP`] on both models,
+//! and fails as soon as one of them does not ("3 dB better must not mean that we may be
+//! slow"). A trade on an entry within its limit is a remark.
 //!
 //! The instruction judgement of `simd128` stays in `cargo xtask count`.
 #![allow(clippy::print_stdout, clippy::print_stderr)]
@@ -65,6 +66,10 @@ pub const TRADE_DB: f64 = 3.0;
 /// The highest ratio to the comparison, on each model, that an accuracy trade covers (D2760,
 /// the maintainer's decision: "3 dB better must not mean that we may be slow").
 pub const TRADE_CAP: f64 = 1.20;
+/// The comparison's SNR, in dB, below which an accuracy trade is possible (D2760, the
+/// maintainer's decision): above it, as for most `f32` kernels at 137 to 150 dB, a few dB more
+/// accuracy have no practical effect and do not justify more cycles.
+pub const TRADE_SCARCE_DB: f64 = 100.0;
 /// The SNR the measurement binary reports for an exact result.
 pub const EXACT_DB: f64 = 999.0;
 
@@ -631,6 +636,11 @@ pub fn judge_record(
                     failing.push(format!(
                         "{text}; the accuracy trade holds only up to {TRADE_CAP:.2}x on both models: {} (D2760; accuracy trade: {t})",
                         ratios(r, TRADE_CAP)
+                    ));
+                } else if r.snr.is_some_and(|s| s.comparison >= TRADE_SCARCE_DB) {
+                    failing.push(format!(
+                        "{text}; the accuracy trade needs a comparison below {TRADE_SCARCE_DB:.0} dB, where accuracy is scarce: {} (D2760; accuracy trade: {t})",
+                        r.snr.map(Snr::describe).unwrap_or_default()
                     ));
                 } else if advantage.is_none_or(|a| a < TRADE_DB) {
                     failing.push(format!(
@@ -1291,7 +1301,7 @@ mod tests {
     }
 
     #[test]
-    fn an_accuracy_trade_keeps_release_while_three_db_and_the_trade_cap_hold() {
+    fn an_accuracy_trade_keeps_release_while_three_db_the_scarce_comparison_and_the_cap_hold() {
         let l = |status: &str, extra: &str| {
             limits_with(&format!(
                 r#""k": {{"sse2": {{"status": "{status}", "accuracy_trade": "exact against 82.6 dB"{extra}}}}}"#
@@ -1326,6 +1336,14 @@ mod tests {
             assert_eq!((g.findings.len(), g.traded.len()), (1, 0), "{ratio}");
             assert!(g.findings[0].message.contains("only up to 1.20x"));
         }
+        // The comparison at 100 dB or above: accuracy is not scarce, no trade.
+        for snr in [(140.0, 100.0), (999.0, 137.5)] {
+            let g = gate(&rec(1.15, Some(snr)), &l("release", ""));
+            assert_eq!((g.findings.len(), g.traded.len()), (1, 0), "{snr:?}");
+            assert!(g.findings[0].message.contains("below 100 dB"));
+        }
+        let g = gate(&rec(1.15, Some((103.0, 99.99))), &l("release", ""));
+        assert_eq!(g.traded.len(), 1);
         // The counter-model alone above 1.20 fails too.
         let counter = with_snr(
             results(&[("k", 1.15, 1.0, 1.25, 1.0, "CMSIS-DSP")], "sse2"),

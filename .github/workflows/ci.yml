@@ -44,6 +44,15 @@ jobs:
       - name: Quick test (unit tests of the libraries)
         run: cargo test --workspace --all-features --lib
 
+  prune_caches:
+    # After a successful push run on main: the rust caches with an outdated lock hash (D2784).
+    needs: smoke
+    if: github.event_name == 'push' && github.ref == 'refs/heads/main'
+    uses: ./.github/workflows/prune-caches.yml
+    permissions:
+      actions: write
+      contents: read
+
   scope:
     # What the pull request changed: decides which parts of the tree run.
     name: scope

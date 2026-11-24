@@ -106,7 +106,7 @@ jobs:
         run: |
           pip install -r tests/golden/requirements.txt
           python tests/golden/generate.py --check
-      # The cycle measurement (measure_nightly) runs at night only (D2709), so a pull request
+      # The cycle measurement (measure_nightly of nightly.yml) runs at night only (D2709), so a pull request
       # checks that the measurement harness still builds. Without the C references (they are
       # optional, benches/cref-sys/build.rs) the code behind their cfgs is left to the nightly
       # measurement.
@@ -766,22 +766,14 @@ jobs:
           retention-days: 7
 
   # ---------------------------------------------------------------------------------------
-  # Speed. The cycles per sample of every level with a core model (M13.1, D2709): measure.yml
-  # in its pinned container, with the corrected llvm-mca, the gates in cycles and the drift
-  # against benches/results/cycles. The instruction counts stay only where no core model
-  # exists: wasm32 (simd128, judged by benches/limits.json) and the Cortex-M4 (report only).
+  # Instruction counts, only where no core model exists: wasm32 (simd128, judged by
+  # benches/limits.json) and the Cortex-M4 (report only). The cycles per sample of the other
+  # levels are measured by measure.yml, called by nightly.yml as `measure_nightly` (D2709).
   # The count jobs run in a pinned container with an apt snapshot, so that the compilers of the
   # C references (benches/refs/build.sh), the libc and the counters are the same in every run;
   # benches/results/wasm32.json and cortex-m4.json record the compiler versions. Nightly and
-  # manual runs only (D175, D2709); a pull request that needs them runs
-  # `gh workflow run nightly.yml --ref <branch>`, or `gh workflow run measure.yml --ref
-  # <branch> -f kernels=<names>` for the cycles of a selection.
-  measure_nightly:
-    name: measure_nightly
-    needs: check
-    if: ${{ inputs.scope == 'full' }}
-    uses: ./.github/workflows/measure.yml
-
+  # manual runs only (D175); a pull request that needs them runs
+  # `gh workflow run nightly.yml --ref <branch>`.
   count_wasm32:
     # Instructions per sample at simd128 (wasmtime fuel), judged by benches/limits.json.
     name: count_wasm32

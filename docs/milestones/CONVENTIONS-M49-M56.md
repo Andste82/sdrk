@@ -197,7 +197,7 @@ The same pieces exist for a `CQ15` `code_search` (`rotate` `CQ15`, the block-flo
 5. **Measurement:**
    - `cargo measure` gives the simulated cycles per sample (per output sample, chip or element, as the entry defines) on every level with a core model, on the reference and the counter model.
    - Each SIMD entry `<k>` is compared with its own `<k>_fallback` (the D321 floor) and with the **fair reference** of D32 at the same level (same work and algorithm class). A library row that does different or less work is marked so ("reference does different work", "reference does less work"), as in M48 §5, and is information, not a gap.
-   - `cargo xtask count --merge` gives instruction counts on all four platforms. Instruction counts stand only where no core model exists (`simd128`, Cortex-M).
+   - Cycles are the only speed measure on the out-of-order levels (M13.1, D2700): no instruction counts are taken there. `cargo xtask count --platform wasm32 --merge` gives the instructions at `simd128` and `cargo xtask count --platform cortex-m4` the Cortex-M report; instruction counts stand only where no core model exists.
    - Numbers go into `docs/performance.md`. Estimates in the specs are marked "(to be confirmed)".
 6. **Tests** (`sdrk-backend-simd/tests/<kernel>.rs`; pattern of M48 test 9):
    - every level with a path equals `Fallback` bit for bit, on lengths 0 to 67 and 4096 and on the special values of the kernel;

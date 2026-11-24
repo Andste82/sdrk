@@ -67,7 +67,7 @@ sdrk/
 ├── benches/        comparative benchmarks
 ├── tests/golden/   golden samples + generator script
 ├── examples/       fm-receiver, fm-transmitter (CLI)
-├── xtask/          layer, heap, global-state, names and docs checks; bare-metal check; instruction counting (`count`); WASM package and tests; schema generation; emulator matrix (planned)
+├── xtask/          layer, heap, global-state, names and docs checks; bare-metal check; cycle measurement (`measure`, `check cycles`); instruction counting for `simd128` and Cortex-M4 (`count`); WASM package and tests; schema generation; emulator matrix (planned)
 └── docs/           architecture, kernels, backends, device, pipeline, timing, performance
 ```
 
@@ -107,7 +107,7 @@ Phases 0 to 3 are the core: after them the library is usable, tested and produce
 - **Front-end correction:** `dc_block` (needed for almost every RTL-SDR recording)
 - **Transmit:** `convert_out` (rounding, saturation, packing), `fir_interpolate`, `fm_mod`
 - **Own FFT:** reference (naive DFT), radix-2 fallback in f32 and Q15 (fixed and block-floating-point scaling), complex/real/inverse, static twiddles; spectrum blocks account for the block exponent (+6.02 dB per shift)
-- **Fused kernels** with default implementation: `ddc`, `duc`, `fm_demod`. A fused variant is kept only if its instruction count beats the chained single kernels (lesson from GNU Radio 4); otherwise the default chaining stays.
+- **Fused kernels** with default implementation: `ddc`, `duc`, `fm_demod`. A fused variant is kept only if its simulated cycles per sample beat the chained single kernels (lesson from GNU Radio 4); otherwise the default chaining stays.
 - Every kernel declares its rate ratio (fraction, constant/variable) and group delay
 - **Golden samples** from SciPy and GNU Radio; numeric contracts in `kernels.md`
 - **Testkit:** FM generator, `SinadMeter`, `SpectralMask`, `ToneMeter`; weak-tone test (−60 dBFS) for block-floating-point FFT
@@ -136,7 +136,7 @@ Phases 0 to 3 are the core: after them the library is usable, tested and produce
 - **Tests:** block-size invariance for whole pipelines; pipeline = hand-wired chain; JSON round-trip; schema validation of all example flows; FM over loopback (SINAD); burst timing over loopback (±1 sample); two stations without crosstalk; exact event propagation; long runs without drift; fuzzing of parser and build
 - **Architecture probe:** a two-thread runner as a test; multi-threaded = single-threaded, bit-identical
 - **Paper check:** GPU group and network split describable in `architecture.md`
-- **Benchmark:** latency in samples (from buffer sizes and group delays) and throughput as instructions per sample, reported together
+- **Benchmark:** latency in samples (from buffer sizes and group delays) and throughput as cycles per sample (instructions per sample at `simd128` and on Cortex-M), reported together
 
 **Done when:** synthetic recordings are demodulated via a JSON flow, and all loopback tests pass. No real recordings are needed: correctness rests on golden samples from established implementations.
 
@@ -147,10 +147,10 @@ Phases 0 to 3 are the core: after them the library is usable, tested and produce
 - `sdrk-backend-simd`: `convert`, `rotate`, `fir`/`fir_decimate`/`fir_interpolate`, `mag_sq`, `quad_demod`, `fm_mod`
 - SIMD FFT (radix-4, vectorized butterflies, modelled on rustfft)
 - Comparative benchmarks against VOLK and rustfft (dev-dependencies only)
-- Instruction counting in CI (`cargo xtask count`, Valgrind callgrind, Intel SDE, QEMU and wasmtime)
+- Cycle measurement in CI (`cargo measure`, the nightly job `measure_nightly`: Valgrind callgrind, Intel SDE and QEMU profiles simulated by `llvm-mca`; M13.1) and instruction counting for `simd128` (wasmtime) and Cortex-M4 (QEMU) (`cargo xtask count`)
 - CI matrix: x86 native, AVX-512 via Intel SDE, AArch64 via QEMU, WASM under wasmtime (with/without SIMD128, with WASM's default stack limit to catch oversized stack buffers)
 
-**Done when:** the suite passes everywhere and the instruction-count target (at most 1.10× the reference, decision D14; [performance.md](performance.md)) is met. Then release 0.1.
+**Done when:** the suite passes everywhere and the speed target (at most 1.10× the reference in simulated cycles per sample on both core models, decision D14 restated by M13.1; [performance.md](performance.md)) is met. Then release 0.1.
 
 ### Phase 5 – WASM bindings (small to medium)
 
@@ -180,7 +180,7 @@ Phases 0 to 3 are the core: after them the library is usable, tested and produce
 - Third platform: Arm DSP extension for Cortex-M4/M7/M33 (`arm-dsp`, bit-exact Q15 with 64-bit accumulators, compared with CMSIS-DSP; milestone M18)
 - Then only on concrete demand: `helium` (M55/M85, small installed base) and S3 PIE (only after the emulator is shown to execute the `ee.*` instructions; see BACKLOG)
 
-**Done when:** per backend, the suite passes in the emulator and the instruction-count target is met.
+**Done when:** per backend, the suite passes in the emulator and the speed target is met (cycles on the out-of-order levels, instruction counts on the in-order cores).
 
 ### Phase 8 – Further bindings (optional, when needed)
 
@@ -261,18 +261,18 @@ Correctness rests on a chain of trust; performance is measured against establish
 
 Q15 results are bit-exact for simple kernels and bound to a minimum SNR for filters, FFT and demodulation.
 
-**Performance is measured by counting executed instructions in the same emulator**, for our kernel and for the established library, with identical input size and build flags. Instruction counts are deterministic, so there is no measurement noise. Speed in the core is added by static simulation, not by real-hardware timing (see the measurement policy below).
+**Performance is measured in simulated cycles per sample** on every level with a core model (M13.1): the execution counts of our kernel and of the established library are taken from the same profiler (callgrind, Intel SDE, QEMU), with identical input size and build flags, and simulated by `llvm-mca` on a reference core model and a counter-model of each level. The profiles are deterministic, so there is no measurement noise; speed is never measured by real-hardware timing (see the measurement policy below). Executed instructions are counted only where no core model exists: `simd128` and the in-order cores.
 
 | Platform | Counting tool | Compared against |
 | --- | --- | --- |
-| x86-64 | callgrind (read by `cargo xtask count`); Intel SDE instruction mix for SSE2, SSE4.2 and AVX-512 | VOLK, rustfft |
-| AArch64 | QEMU user mode with the instruction-count plugin | VOLK |
+| x86-64 | callgrind (AVX2) and Intel SDE (SSE2, SSE4.2, AVX-512), simulated cycles by `cargo measure` | VOLK, rustfft, FFTW, KFR |
+| AArch64 | QEMU user mode with the block-count plugin, simulated cycles by `cargo measure` | VOLK |
 | Cortex-M4/M33/M55 | QEMU system mode with the instruction-count plugin | CMSIS-DSP |
 | ESP32-P4/S3 | S3: QEMU instruction-count plugin in the Espressif QEMU fork (plugin-enabled build; plugin support and PIE emulation unverified, otherwise static counting as for the P4); P4: static instruction count of the inner loops from the disassembly, as esp-emulator only samples | ESP-DSP |
 | RISC-V V | QEMU with the instruction-count plugin | own scalar fallback (no established library) |
 | WASM | wasmtime fuel metering | rustfft (`wasm_simd`) for the `C32` FFT and `rfft`, KissFFT for the `CQ15` FFT, VOLK compiled for wasm32 for `mag_sq` and the conversions (its other kernels as information, decision D12); our fallback for the kernels without an established library |
 
-| Instructions per sample vs. reference library | Meaning |
+| Cycles per sample vs. reference library (both core models of the level; instructions per sample at `simd128`) | Meaning |
 | --- | --- |
 | ≤ 1.00× | goal: equal or better (marked in the results) |
 | ≤ 1.10× | release limit; CI fails above it for a `release` entry (decision D14) |
@@ -280,12 +280,12 @@ Q15 results are bit-exact for simple kernels and bound to a minimum SNR for filt
 
 `docs/performance.md` and `benches/limits.json` are the current contract; they supersede these tables where they differ.
 
-Comparisons hold accuracy at least equal (within 1 dB or better), shown by the error against the f64 reference. Instruction counts are a strong proxy on in-order cores (Cortex-M, ESP32) and a weaker one on out-of-order CPUs and for memory-bound kernels.
+Comparisons hold accuracy at least equal (within 1 dB or better), shown by the error against the f64 reference. Instruction counts are a strong proxy on in-order cores (Cortex-M, ESP32) and a weak one on out-of-order CPUs and for memory-bound kernels, which is why they are the measure only there (M13.1).
 
 **Measurement policy (D32 to D34, issue #20; details in [performance.md](performance.md#measurement-policy) and [kernels.md](kernels.md#accuracy-policy)):**
 
 - **Fair comparison.** Every SIMD branch is compared with an established library at the same level, with the same algorithm class and the same work; the fallback with established scalar code. SIMD against our own fallback is at most `info`, never a gate. Without any fair reference, the efficiency of the branch is judged instead.
-- **Speed, not only work.** Instructions measure work. Once level 2 is built, the branch of each instruction-set level on out-of-order cores is judged by cycles per sample simulated with `llvm-mca` (one reference core model and one counter-model per level, ratios only, no real hardware, no calibration), together with its efficiency (port bound / cycles). Instructions stay the gate on in-order cores and WASM, and everywhere until level 2 exists.
+- **Speed, not only work.** Instructions measure work. The branch of each instruction-set level on out-of-order cores is judged by cycles per sample simulated with `llvm-mca` (one reference core model and one counter-model per level, ratios only, no real hardware, no calibration), together with its efficiency (port bound / cycles); since M13.1 these cycles are the only speed measure there, with the release gate of 1.10 on both models. Instructions stay the gate on in-order cores and WASM only.
 - **Accuracy against the optimum.** The f64 golden is the mathematical optimum and the first target, for float and Q15 kernels. An established library is a yardstick only where the optimum cannot be reached by principle or data type. Regression guards close to the measured SNR complement the loose contract floors.
 
 ## Outside this repo and follow-up projects
@@ -359,8 +359,8 @@ A server with an SDR, a web UI and MCP access: mark a signal in the waterfall, t
 | f32 denormals | feedback states (IIR, deemphasis, AGC, PLL) are flushed to zero below 1e-30; no reliance on CPU flush-to-zero modes, so results stay identical across backends |
 | Byte order | little-endian targets only (all current targets are); zero-copy reinterpretation relies on it; big-endian is not supported |
 | Bit-exactness | reference and fallback always; accelerated variants bit-exact for simple kernels, minimum SNR otherwise; WASM relaxed SIMD is opt-in and only bound to the numeric contract's tolerance |
-| Fused kernels | kept only if their instruction count beats the chained single kernels |
-| Performance target | instruction count in the emulator vs. the established library: goal ≤ 1.00×, release limit ≤ 1.10×, dev ≤ 1.50× (decision D14); on x86-64 and AArch64 simulated cycles per sample once level 2 exists (D33) |
+| Fused kernels | kept only if their simulated cycles per sample beat the chained single kernels |
+| Performance target | simulated cycles per sample vs. the established library on both core models of each level: goal ≤ 1.00×, release limit ≤ 1.10×, dev ≤ 1.50× (decision D14, restated in cycles by M13.1/D2708; D33); instruction counts only for `simd128` and in-order cores |
 | Counting on ESP32 | S3: QEMU instruction-count plugin (plugin-enabled build of the Espressif fork); P4: static count of the inner loops from the disassembly; exact counting in esp-emulator would be a welcome upstream contribution |
 | Real-time targets | deferred until real hardware is in use; the speed judgement of level 2 (D33) uses simulation only |
 | YAML crate | `serde-saphyr` (pure Rust, no `unsafe-libyaml`), behind the `yaml` feature, not in the WASM build; version pinned at the start of phase 3 |

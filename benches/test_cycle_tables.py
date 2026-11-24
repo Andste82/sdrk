@@ -94,6 +94,21 @@ class GenerateTest(unittest.TestCase):
             self.assertIn("avx512 mag_sq", err.getvalue())
 
 
+class Simd128Test(unittest.TestCase):
+    def test_rows_status_and_verdict(self):
+        def k(ours, other, status="release", verdict="pass", what="VOLK | generic"):
+            return {"ours_instr_per_sample": ours, "other_instr_per_sample": other, "ratio": ours / other,
+                    "status": status, "verdict": verdict, "compared_with": what}
+        text = ct.simd128_block({"levels": {"simd128": {"kernels": {
+            "mag_sq": k(1.0, 2.0), "convert_cs8": k(3.0, 4.0, "info", "info"),
+            "mul": k(5.0, 4.0, "release", "waived")}}}})
+        lines = text.split("\n")
+        self.assertEqual([l.split("`")[1] for l in lines if ct.ROW.match(l)], ["convert_cs8", "mag_sq", "mul"])
+        self.assertIn("| `convert_cs8` | 3.00 | 4.00 | 0.75 | info | VOLK \\| generic |", text)
+        self.assertIn("| `mag_sq` | 1.00 | 2.00 | 0.50 |  | VOLK \\| generic |", text)
+        self.assertIn("| 1.25 | waived |", text)
+
+
 class CommittedBlockTest(unittest.TestCase):
     """The block of docs/performance.md is what the committed results give, byte for byte."""
 
@@ -102,6 +117,13 @@ class CommittedBlockTest(unittest.TestCase):
             doc = fh.read()
         block = doc[doc.index(ct.BEGIN) + len(ct.BEGIN):doc.index(ct.END)].strip("\n")
         self.assertEqual(ct.differences(block, ct.block(ct.load(ct.RESULTS))), [])
+
+    def test_the_committed_simd128_table_is_generated(self):
+        with open(ct.DOC) as fh:
+            doc = fh.read()
+        block = doc[doc.index(ct.SIMD_BEGIN) + len(ct.SIMD_BEGIN):doc.index(ct.SIMD_END)].strip("\n")
+        with open(os.path.join(os.path.dirname(ct.RESULTS), "wasm32.json")) as fh:
+            self.assertEqual(block, ct.simd128_block(json.load(fh)))
 
 
 if __name__ == "__main__":

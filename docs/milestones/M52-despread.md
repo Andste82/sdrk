@@ -156,7 +156,7 @@ Additional rules:
 
 ## Scope
 
-**In:** kernel `despread` (`C32`, `CQ15`; both code forms of `Code`) in `sdrk_core::kernels::spread` (the module of M51) with `DespreadState`, Fallback, Reference, facade delegation, contract, `docs/kernels.md` (including the full text of the shared conventions §C.1, introduced here); SIMD paths in `sdrk-backend-simd` on every level (§5) with `docs/backends.md`; golden cases; unit, invariance, extreme and SIMD tests; suite cases; `cargo xtask count` and `cargo measure`; CHANGELOG, decisions log; the block `DespreadBlock<T>` and the pipeline kind `despread` (§6) with `docs/blocks.md`, `docs/pipeline.md`, `docs/timing.md`, the schema and the WASM kind list.
+**In:** kernel `despread` (`C32`, `CQ15`; both code forms of `Code`) in `sdrk_core::kernels::spread` (the module of M51) with `DespreadState`, Fallback, Reference, facade delegation, contract, `docs/kernels.md` (including the full text of the shared conventions §C.1, introduced here); SIMD paths in `sdrk-backend-simd` on every level (§5) with `docs/backends.md`; golden cases; unit, invariance, extreme and SIMD tests; suite cases; `cargo measure` and, for `simd128`, `cargo xtask count --platform wasm32`; CHANGELOG, decisions log; the block `DespreadBlock<T>` and the pipeline kind `despread` (§6) with `docs/blocks.md`, `docs/pipeline.md`, `docs/timing.md`, the schema and the WASM kind list.
 
 **Out:** the code-phase search (`code_search`, M53) and the tracking loop (`code_track`, M54); the composite `dsss_demod` (later milestone; name reserved); a wide `i32` output per component in the style of CMSIS-DSP `arm_cmplx_dot_prod_q15` (the review's alternative to the output shift; not chosen, the shift keeps the `CQ15` stream type).
 
@@ -259,9 +259,9 @@ New cases in `tests/golden/sdrk_golden/cases/despread.py` (the shared code helpe
 
 ### 5. Cost, SIMD plan and reference rows
 
-**Entries.** `cargo xtask count` and `cargo measure` entries `despread_c32`, `despread_cq15` (binary code, the block's form) and `despread_c32_complex`, `despread_cq15_complex` (complex code), per input chip, every level, each with its `<k>_fallback` row (the D321 floor), plus `despread_block` (§6). Record the numbers in `docs/performance.md`.
+**Entries.** `cargo measure` entries `despread_c32`, `despread_cq15` (binary code, the block's form) and `despread_c32_complex`, `despread_cq15_complex` (complex code), per input chip, every level, each with its `<k>_fallback` row (the D321 floor), plus `despread_block` (§6). Record the numbers in `docs/performance.md`.
 
-**Estimated cost (to be confirmed by `cargo measure` and `cargo xtask count`).** Per chip the binary form is two additions with a sign (no multiplication), the complex form one complex multiply-accumulate (4 multiplications, 2 additions or subtractions, 2 accumulations). Estimates of the review (to be confirmed): Cortex-M4F `C32` complex about 4–6 cycles per chip (the sixteen partial sums fit in the 32 single-precision registers); `CQ15` complex about 2–3 cycles per chip (`SMLALD`/`SMLSLDX`, dual 16 × 16 into 64 bit); Cortex-M0 `CQ15` complex about 15–20 cycles per chip (the `i64` additions). The binary forms need no multiplication and are expected to be cheaper on every target (to be measured). The dump (tree or shift, once per symbol) adds a fixed cost per `sf` chips.
+**Estimated cost (to be confirmed by `cargo measure`).** Per chip the binary form is two additions with a sign (no multiplication), the complex form one complex multiply-accumulate (4 multiplications, 2 additions or subtractions, 2 accumulations). Estimates of the review (to be confirmed): Cortex-M4F `C32` complex about 4–6 cycles per chip (the sixteen partial sums fit in the 32 single-precision registers); `CQ15` complex about 2–3 cycles per chip (`SMLALD`/`SMLSLDX`, dual 16 × 16 into 64 bit); Cortex-M0 `CQ15` complex about 15–20 cycles per chip (the `i64` additions). The binary forms need no multiplication and are expected to be cheaper on every target (to be measured). The dump (tree or shift, once per symbol) adds a fixed cost per `sf` chips.
 
 **SIMD plan (`sdrk-backend-simd`, module `despread`).** SIMD follows the shared conventions §D (maintainer rule 2026-11-17): every lane-parallel part of the kernel gets a path on every level in this milestone, bit-identical to the fallback through the fixed element-wise formula or reduction order of the contract; D321 is a quality gate (a slower path is improved, not removed; delegation to the fallback only after several measured failed attempts, with an open item); cycles per sample with `cargo measure` against the fallback and the fair reference (D32), unfair rows marked.
 
@@ -287,7 +287,7 @@ New cases in `tests/golden/sdrk_golden/cases/despread.py` (the shared code helpe
 
 The binary entries `despread_c32` and `despread_cq15` are compared with the same rows as **information**, marked "reference does different work" (a complex product per chip where the binary form applies a sign). A fair gap above 10 % becomes an open item; the rows are measured, not assumed.
 
-**Measurement (D32, D33, D68).** The entries above and the block entry of §6 are measured in cycles with `cargo measure` on every level with a core model (reference and counter model) and counted with `cargo xtask count` on all four platforms (`--merge`); cycles are the speed measure, instruction counts stand only where no core model exists (`simd128`, Cortex-M). The D321 gate applies to every SIMD path.
+**Measurement (D32, D33, D68).** The entries above and the block entry of §6 are measured in cycles with `cargo measure` on every level with a core model (reference and counter model) (simulated cycles per sample; cycles are the speed measure and the only one on the out-of-order levels (M13.1, D2700); instruction counts (`cargo xtask count --platform wasm32 --merge`) stand only where no core model exists (`simd128`, Cortex-M)). The D321 gate applies to every SIMD path.
 
 ### 6. Block and kind `despread`
 
@@ -321,7 +321,7 @@ Seeds 720 … 729.
 
 ## Acceptance
 
-R1.2 commands (`cargo xtask check` includes `cargo xtask check cycles`, D321); `python tests/golden/generate.py --check`; `cargo test -p sdrk-core --all-features`; `cargo test -p sdrk --all-features`; `cargo test -p sdrk-backend-simd --all-features`; `cargo test -p sdrk-testkit --features std`; `cargo test -p sdrk-blocks --all-features`; `cargo test -p sdrk-pipeline --all-features`; `cargo xtask schema --check`; `cargo xtask count --platform <p> --kernel <entry>... --merge` for each of the four platforms `x86_64`, `x86_64-avx512`, `aarch64` and `wasm32` (the entries of §5 and `despread_block`, §5 *Measurement*); `cargo measure` (the same entries, every level with a core model).
+R1.2 commands (`cargo xtask check` includes `cargo xtask check cycles`, D321); `python tests/golden/generate.py --check`; `cargo test -p sdrk-core --all-features`; `cargo test -p sdrk --all-features`; `cargo test -p sdrk-backend-simd --all-features`; `cargo test -p sdrk-testkit --features std`; `cargo test -p sdrk-blocks --all-features`; `cargo test -p sdrk-pipeline --all-features`; `cargo xtask schema --check`; `cargo xtask count --platform wasm32 --kernel <entry>... --merge` for the `simd128` instructions (the entries of §5 and `despread_block`, §5 *Measurement*); `cargo measure` (the same entries, every level with a core model).
 
 ## Deliverables checklist
 
@@ -330,7 +330,7 @@ R1.2 commands (`cargo xtask check` includes `cargo xtask check cycles`, D321); `
 - [ ] Contract rows and section in `docs/kernels.md` (the full text of the shared conventions §C.1; the `dot_complex` order and the two `C32` equalities, the first for non-NaN results with NaN by D296; the code position: stream index modulo `code_len` for a long code, `c = j` and `code_pos` 0 for a short code; the `spread` round trip with the exact `CQ15` term for −32768; the `code_track` zero-bandwidth invariant)
 - [ ] Golden cases (seeds 720–722, 726, 727) and the Python model (packed codes, integer model with `shift`)
 - [ ] Tests 1–7 (seeds 720–728); suite cases
-- [ ] Count and cycle entries (`cargo xtask count`, `cargo measure`) with their `_fallback` rows, `docs/performance.md`; the reference rows of §5 (VOLK, liquid-dsp, CMSIS-DSP) with their markings
+- [ ] Count and cycle entries (`cargo measure`, `cargo xtask count --platform wasm32`) with their `_fallback` rows, `docs/performance.md`; the reference rows of §5 (VOLK, liquid-dsp, CMSIS-DSP) with their markings
 - [ ] Block `DespreadBlock<T>` and kind `despread` (§6): `docs/blocks.md` (entry; reserved-name row "delivered"), `docs/pipeline.md`, `docs/timing.md`, schema, WASM kind list; count entry `despread_block`; the delay decision
 - [ ] CHANGELOG, decisions log (the output shift and its default; running accumulators instead of a chip history; the two code forms and their contracts; the sample-type rule of the state; `chip_index` counting consumed chips; the long-code position from the stream index and `code_pos` unused and 0 for a short code; the SIMD layouts and any level delegated under D321, with its measured attempts; the reference markings; the pipeline cost)
 

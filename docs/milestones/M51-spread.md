@@ -154,7 +154,7 @@ Additional rules:
 
 ## Scope
 
-**In:** kernel `spread` (`C32`, `CQ15`) in `sdrk_core::kernels::spread` (a new module shared with `despread`, M52) with `SpreadState`, Fallback, Reference, facade delegation, contract, `docs/kernels.md`; the code format of the shared conventions §B, introduced here: `CodeBits` and `Code` in `sdrk_core::kernels::code` and `Prbs::fill_words` in `sdrk_proto::prbs`, with the full text of §B in `docs/kernels.md`; **SIMD paths on every level** (`sse2`, `sse4.2`, `avx2`, `avx512`, `neon`, `simd128`) in `sdrk-backend-simd`, bit-identical to the fallback, for both code forms and both types (§5); golden cases; unit, invariance, extreme and SIMD tests; suite cases; `cargo xtask count` and `cargo measure`; CHANGELOG, decisions log; the block `SpreadBlock<T>` and the pipeline kind `spread` (§6) with `docs/blocks.md`, `docs/pipeline.md`, `docs/timing.md`, the schema and the WASM kind list.
+**In:** kernel `spread` (`C32`, `CQ15`) in `sdrk_core::kernels::spread` (a new module shared with `despread`, M52) with `SpreadState`, Fallback, Reference, facade delegation, contract, `docs/kernels.md`; the code format of the shared conventions §B, introduced here: `CodeBits` and `Code` in `sdrk_core::kernels::code` and `Prbs::fill_words` in `sdrk_proto::prbs`, with the full text of §B in `docs/kernels.md`; **SIMD paths on every level** (`sse2`, `sse4.2`, `avx2`, `avx512`, `neon`, `simd128`) in `sdrk-backend-simd`, bit-identical to the fallback, for both code forms and both types (§5); golden cases; unit, invariance, extreme and SIMD tests; suite cases; `cargo measure` and, for `simd128`, `cargo xtask count --platform wasm32`; CHANGELOG, decisions log; the block `SpreadBlock<T>` and the pipeline kind `spread` (§6) with `docs/blocks.md`, `docs/pipeline.md`, `docs/timing.md`, the schema and the WASM kind list.
 
 **Out:** the composite `dsss_mod` (later milestone; the name stays reserved); code generators beyond the PRBS of `sdrk_proto::prbs` (Gold, Kasami, keyed; backlog); separate I and Q codes beyond "the code is complex" (a complex code already covers I/Q spreading; QPSK with two real codes is `make_complex` of two `spread` calls, documented, no kernel).
 
@@ -253,9 +253,9 @@ New file `tests/golden/sdrk_golden/cases/spread.py` (shared with `despread.py` o
 
 ### 5. Cost, SIMD plan and reference rows
 
-**Entries.** `cargo xtask count` and `cargo measure` entries `spread_bits_c32`, `spread_bits_cq15`, `spread_complex_c32` and `spread_complex_cq15` (per output chip, every level), each with its `<k>_fallback` entry, plus `spread_block` (§6). Record the numbers in `docs/performance.md`.
+**Entries.** `cargo measure` entries `spread_bits_c32`, `spread_bits_cq15`, `spread_complex_c32` and `spread_complex_cq15` (per output chip, every level), each with its `<k>_fallback` entry, plus `spread_block` (§6). Record the numbers in `docs/performance.md`.
 
-**Estimated cost (to be confirmed by `cargo measure` and `cargo xtask count`).** A binary chip is one conditional sign per component and a bit extraction; a complex chip is a `mul` step. On Cortex-M0 the review estimates 3–5 cycles per binary `CQ15` chip (a saturating negate) against 15–25 cycles for the `cq15_mul` product (no `SMLAD`/`SSAT`) (to be confirmed). On host targets the binary path is bound by the output stores (to be confirmed).
+**Estimated cost (to be confirmed by `cargo measure`).** A binary chip is one conditional sign per component and a bit extraction; a complex chip is a `mul` step. On Cortex-M0 the review estimates 3–5 cycles per binary `CQ15` chip (a saturating negate) against 15–25 cycles for the `cq15_mul` product (no `SMLAD`/`SSAT`) (to be confirmed). On host targets the binary path is bound by the output stores (to be confirmed).
 
 **SIMD plan (`sdrk-backend-simd`).** SIMD follows the shared conventions §D (maintainer rule 2026-11-17): every lane-parallel part of the kernel gets a path on every level in this milestone, bit-identical to the fallback through the fixed element-wise formula or reduction order of the contract; D321 is a quality gate (a slower path is improved, not removed; delegation to the fallback only after several measured failed attempts, with an open item); cycles per sample with `cargo measure` against the fallback and the fair reference (D32), unfair rows marked.
 
@@ -275,7 +275,7 @@ New file `tests/golden/sdrk_golden/cases/spread.py` (shared with `despread.py` o
 | `spread_complex_cq15` | CMSIS-DSP `arm_cmplx_mult_cmplx_q15` (Cortex-M) on the same buffers | **reference does different work** | output in 3.13 format with truncation, not the R7 rounding of `cq15_mul` |
 | `spread_bits_cq15` | CMSIS-DSP `arm_negate_q15` on the chips of `−1` | **reference does less work** | unconditional negation, no code bits; shows the floor of a binary chip on Cortex-M |
 
-**Measurement (D32, D33, D68).** The entries above and the block entry of §6 are measured in cycles with `cargo measure` on every level with a core model (reference and counter model) and counted with `cargo xtask count` on all four platforms (`--merge`); cycles are the speed measure, instruction counts stand only where no core model exists (`simd128`, Cortex-M). The D321 gate applies to every SIMD path of this milestone.
+**Measurement (D32, D33, D68).** The entries above and the block entry of §6 are measured in cycles with `cargo measure` on every level with a core model (reference and counter model) (simulated cycles per sample; cycles are the speed measure and the only one on the out-of-order levels (M13.1, D2700); instruction counts (`cargo xtask count --platform wasm32 --merge`) stand only where no core model exists (`simd128`, Cortex-M)). The D321 gate applies to every SIMD path of this milestone.
 
 ### 6. Block and kind `spread`
 
@@ -312,7 +312,7 @@ Seeds 710 … 719.
 
 ## Acceptance
 
-R1.2 commands (`cargo xtask check` includes `cargo xtask check cycles`, D321); `python tests/golden/generate.py --check`; `cargo test -p sdrk-core --all-features`; `cargo test -p sdrk --all-features`; `cargo test -p sdrk-proto --all-features`; `cargo test -p sdrk-backend-simd --all-features`; `cargo test -p sdrk-testkit --features std`; `cargo test -p sdrk-blocks --all-features`; `cargo test -p sdrk-pipeline --all-features`; `cargo xtask schema --check`; `cargo xtask count --platform x86_64` (the entries of §5 and `spread_block`); `cargo measure` (the same entries, every level with a core model).
+R1.2 commands (`cargo xtask check` includes `cargo xtask check cycles`, D321); `python tests/golden/generate.py --check`; `cargo test -p sdrk-core --all-features`; `cargo test -p sdrk --all-features`; `cargo test -p sdrk-proto --all-features`; `cargo test -p sdrk-backend-simd --all-features`; `cargo test -p sdrk-testkit --features std`; `cargo test -p sdrk-blocks --all-features`; `cargo test -p sdrk-pipeline --all-features`; `cargo xtask schema --check`; `cargo xtask count --platform wasm32` (the `simd128` instructions of the entries of §5 and `spread_block`); `cargo measure` (the same entries, every level with a core model).
 
 ## Deliverables checklist
 
@@ -322,7 +322,7 @@ R1.2 commands (`cargo xtask check` includes `cargo xtask check cycles`, D321); `
 - [ ] Contract rows and section in `docs/kernels.md` (short/long indexing; the binary form by the exact sign operations of §A; the complex form equals the `mul` fallback; why the two forms differ in `CQ15` and for non-finite `C32`; NaN of the complex `C32` form by D296; `code_pos` and `seek` for a short code)
 - [ ] Golden cases (seeds 710–713, 717, 718) and the Python model (shared code helper with M52, packing by §B.2)
 - [ ] Tests 1–9 (seeds 710–719); suite cases
-- [ ] Count and cycle entries (`cargo xtask count`, `cargo measure`), `docs/performance.md`, the information rows of §5
+- [ ] Count and cycle entries (`cargo measure`, `cargo xtask count --platform wasm32`), `docs/performance.md`, the information rows of §5
 - [ ] Block `SpreadBlock<T>` and kind `spread` (§6): `docs/blocks.md` (entry; reserved-name row "delivered"), `docs/pipeline.md`, `docs/timing.md`, schema, WASM kind list; count entry `spread_block`
 - [ ] CHANGELOG, decisions log (short vs long indexing; the two code forms as separate contracts instead of a `±1` fast path; the packed code format; `code_pos` instead of a per-chip modulo, unused and 0 for a short code; D296 for NaN of the complex `C32` form; the pipeline cost `sf`; the marking of the reference rows; the SIMD levels that stay on the fallback, with their numbers)
 

@@ -174,7 +174,7 @@ Additional rules:
 **In:**
 - The kernel `code_search` (`C32`) in `sdrk_core::kernels::acquire`, with `CodeSearchState`, Fallback, Reference, the SIMD paths in `sdrk-backend-simd` on every level (shared conventions §D, §D.3), facade delegation, the contract and `docs/kernels.md`.
 - Golden cases; unit, statistic, SIMD and extreme tests; suite cases.
-- `cargo xtask count` and `cargo measure`; CHANGELOG and decisions log.
+- `cargo measure` and, for `simd128`, `cargo xtask count --platform wasm32`; CHANGELOG and decisions log.
 - The block `CodeSearchBlock` and the pipeline kind `code_search` (§6), with `docs/blocks.md`, `docs/pipeline.md`, `docs/timing.md`, the schema and the WASM kind list.
 
 Non-coherent integration across dwells is in: it is cheap and essential below 0 dB.
@@ -320,14 +320,14 @@ New file `tests/golden/sdrk_golden/cases/acquire.py`.
 
 ### 5. Cost, SIMD plan and reference rows
 
-**Entries.** `cargo xtask count` and `cargo measure` entries:
+**Entries.** `cargo measure` entries:
 - `code_search_2048_21bins`: `L = 1023`, `K = 2048`, `D = 21`, `step_bins` 1, `f_center` 0; per dwell, reported per input sample as cost / `K`;
 - `code_search_2048_21bins_wipe`: the same with `f_center ≠ 0`;
 - the block entry `code_search_block` of §6.
 
 Each SIMD entry is compared with its `_fallback` entry (D321) on every level. Record the numbers in `docs/performance.md`, and note that acquisition runs once per lock, not per sample, so throughput is secondary.
 
-**Estimated cost (to be confirmed by `cargo measure` and `cargo xtask count`).**
+**Estimated cost (to be confirmed by `cargo measure`).**
 - **FFT count:** a dwell runs `1 + D` FFTs of size `K`: 22 FFTs of 2048 points for `D = 21`. The old (incorrect) single block ran 42 FFTs of 1024 points.
 - **Comparison with the old method:** in the `5·N·log2 N` model, the new dwell is about 1.15× the work of the old one, for a dwell twice as long. The double block without the bin shift would run 42 FFTs of 2048 points, about 2.2× the old work (the review's figure).
 - **Per input sample:** about `(D + 1) · 2.5 · log2 K + D · (4 + 2·L/K)` multiply-accumulates, ≈ 710 at `K = 2048`, `D = 21` (the pipeline cost unit, §6).
@@ -346,7 +346,7 @@ Each SIMD entry is compared with its `_fallback` entry (D321) on every level. Re
 - Its pieces already have rows of their own: the wipe-off as `rotate` against GNU Radio's rotator, the FFT of M07, and the spectral product as `mul`.
 - The speed baseline is the fallback (D321) and the rows of the composed kernels.
 
-**Measurement (D32, D33, D68).** The entries above and the block entry of §6 are measured in cycles with `cargo measure` on every level with a core model (reference and counter model). They are counted with `cargo xtask count` on all four platforms (`--merge`). Cycles are the speed measure; instruction counts stand only where no core model exists (`simd128`). A library reference enters only where it does the same work (D32); otherwise the rows are information. The D321 gate applies to every SIMD path.
+**Measurement (D32, D33, D68).** The entries above and the block entry of §6 are measured in cycles with `cargo measure` on every level with a core model (reference and counter model). Cycles are the speed measure and the only one on the out-of-order levels (M13.1, D2700); instruction counts (`cargo xtask count --platform wasm32 --merge`) stand only where no core model exists (`simd128`, Cortex-M). A library reference enters only where it does the same work (D32); otherwise the rows are information. The D321 gate applies to every SIMD path.
 
 ### 6. Block and kind `code_search`
 
@@ -407,7 +407,7 @@ Seeds 730 … 739.
 - `python tests/golden/generate.py --check`.
 - `cargo test -p sdrk-core --all-features`, `cargo test -p sdrk --all-features`, `cargo test -p sdrk-backend-simd --all-features`, `cargo test -p sdrk-testkit --features std`, `cargo test -p sdrk-blocks --all-features` and `cargo test -p sdrk-pipeline --all-features`.
 - `cargo xtask schema --check`.
-- `cargo xtask count --platform x86_64`: the entries of §5 and `code_search_block`.
+- `cargo xtask count --platform wasm32`: the `simd128` instructions of the entries of §5 and `code_search_block`.
 - `cargo measure`: the same entries and their `_fallback` entries, on every level with a core model.
 - `cargo xtask check cycles`.
 
@@ -418,7 +418,7 @@ Seeds 730 … 739.
 - [ ] Contract row and section in `docs/kernels.md` (the double block and the valid lags, the bin shift, both statistics and their normalisation, the guard window, the tie and NaN rules, the summation orders, the Doppler grid, the GNSS-SDR cross-check)
 - [ ] Golden cases (seeds 730–732, 736) and the Python model
 - [ ] Tests 1–7 (seeds 730–737); suite cases
-- [ ] Count and cycle entries (`cargo xtask count`, `cargo measure`, against the fallback entries), `docs/performance.md`
+- [ ] Count and cycle entries (`cargo measure`, `cargo xtask count --platform wasm32`, against the fallback entries), `docs/performance.md`
 - [ ] Block `CodeSearchBlock`, `CodeSearchReport` and kind `code_search` (§6): `docs/blocks.md` (entry and reserved-name row), `docs/pipeline.md`, `docs/timing.md`, schema, WASM kind list; count entry `code_search_block`
 - [ ] CHANGELOG, decisions log (the double block and the GLRT normalisation by `E_c`, the bin shift and the step rule, the dropped absolute wipe-off phase, the conjugation, the two statistics and the guard window, the zero-division guard, the GNSS-SDR citation and the bin placement, the SIMD measurements)
 

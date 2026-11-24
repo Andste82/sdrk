@@ -104,15 +104,14 @@ fn the_limits_file_judges_agc_against_gnu_radio_at_every_level() {
     for level in ["sse2", "sse4.2", "avx2", "avx512", "simd128"] {
         assert_eq!(limits["agc"][level]["status"].as_str(), Some("release"));
     }
-    // `neon` runs the fallback (D335) and is judged like `agc_fallback` there.
-    assert_eq!(limits["agc"]["neon"]["status"].as_str(), Some("dev"));
-    assert!(
-        limits["agc"]["neon"]["waiver"]
-            .as_str()
-            .is_some_and(|w| w.contains("D335"))
+    // `neon` runs the fallback (D335); in cycles it is within the release limit (D2746).
+    assert_eq!(limits["agc"]["neon"]["status"].as_str(), Some("release"));
+    // The run-time detection is above 1.02 of `avx2` in cycles: `dev` with open item I13.1-4
+    // (D2746).
+    assert_eq!(
+        limits["agc"]["avx2-runtime"]["status"].as_str(),
+        Some("dev")
     );
-    // The run-time detection is judged with the default limit against `avx2`.
-    assert!(limits["agc"]["avx2-runtime"].is_null());
 }
 
 #[test]

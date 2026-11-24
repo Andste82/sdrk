@@ -729,6 +729,13 @@ fn entry_cycles(
     }
     let mut entry = serde_json::Map::new();
     entry.insert("compared_with".into(), json!(e.compared_with));
+    entry.insert("comparison_kind".into(), json!(e.comparison_kind.name()));
+    if let Some((name, kind)) = &e.judged_against {
+        entry.insert(
+            "judged_against".into(),
+            json!({ "compared_with": name, "comparison_kind": kind.name() }),
+        );
+    }
     entry.insert("samples".into(), json!(e.samples));
     entry.insert(
         "snr_db".into(),

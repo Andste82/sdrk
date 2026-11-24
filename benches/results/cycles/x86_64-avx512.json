@@ -8,6 +8,7 @@
       "entries": {
         "add": {
           "compared_with": "volk_32fc_x2_add_32fc",
+          "comparison_kind": "library",
           "counter_model": {
             "comparison": {
               "coverage": 0.9909220256107092,
@@ -45,6 +46,7 @@
         },
         "add_cq15": {
           "compared_with": "volk_16i_x2_add_saturated_16i on the 2 n values",
+          "comparison_kind": "library",
           "counter_model": {
             "comparison": {
               "coverage": 0.9925157407040748,
@@ -82,6 +84,7 @@
         },
         "add_cq15_fallback": {
           "compared_with": "CMSIS-DSP 1.18.0 arm_add_q15 on the 2 n values, generic C (-O3 -ffp-contract=off, LOOPUNROLL, avx512)",
+          "comparison_kind": "library",
           "counter_model": {
             "comparison": {
               "coverage": 0.9921157874690535,
@@ -119,6 +122,7 @@
         },
         "add_fallback": {
           "compared_with": "CMSIS-DSP 1.18.0 arm_add_f32 on the 2 n floats, generic C (-O3 -ffp-contract=off, LOOPUNROLL, avx512)",
+          "comparison_kind": "library",
           "counter_model": {
             "comparison": {
               "coverage": 0.9939687334340211,
@@ -156,6 +160,7 @@
         },
         "add_real": {
           "compared_with": "volk_32f_x2_add_32f",
+          "comparison_kind": "library",
           "counter_model": {
             "comparison": {
               "coverage": 0.993451968261305,
@@ -193,6 +198,7 @@
         },
         "add_real_fallback": {
           "compared_with": "CMSIS-DSP 1.18.0 arm_add_f32, generic C (-O3 -ffp-contract=off, LOOPUNROLL, avx512)",
+          "comparison_kind": "library",
           "counter_model": {
             "comparison": {
               "coverage": 0.9950766079798338,
@@ -230,6 +236,7 @@
         },
         "add_real_q15": {
           "compared_with": "volk_16i_x2_add_saturated_16i",
+          "comparison_kind": "library",
           "counter_model": {
             "comparison": {
               "coverage": 0.9910139226348875,
@@ -267,6 +274,7 @@
         },
         "add_real_q15_fallback": {
           "compared_with": "CMSIS-DSP 1.18.0 arm_add_q15, generic C (-O3 -ffp-contract=off, LOOPUNROLL, avx512)",
+          "comparison_kind": "library",
           "counter_model": {
             "comparison": {
               "coverage": 0.9908358231439404,
@@ -304,6 +312,7 @@
         },
         "agc": {
           "compared_with": "GNU Radio agc_cc (agc.h of gr-analog, generic compiler flags)",
+          "comparison_kind": "library",
           "counter_model": {
             "comparison": {
               "coverage": 0.9986710748293446,
@@ -341,6 +350,7 @@
         },
         "agc_cq15": {
           "compared_with": "sdrk fallback",
+          "comparison_kind": "own_fallback",
           "counter_model": {
             "comparison": {
               "coverage": 0.9918247612284381,
@@ -378,6 +388,7 @@
         },
         "agc_fallback": {
           "compared_with": "GNU Radio agc_cc (agc.h of gr-analog, generic compiler flags)",
+          "comparison_kind": "library",
           "counter_model": {
             "comparison": {
               "coverage": 0.9986710748293446,
@@ -415,6 +426,7 @@
         },
         "am_mod": {
           "compared_with": "sdrk fallback",
+          "comparison_kind": "own_fallback",
           "counter_model": {
             "comparison": {
               "coverage": 0.9929864783246435,
@@ -452,6 +464,7 @@
         },
         "am_mod_cq15": {
           "compared_with": "sdrk fallback",
+          "comparison_kind": "own_fallback",
           "counter_model": {
             "comparison": {
               "coverage": 0.9975294755659108,
@@ -489,6 +502,7 @@
         },
         "am_mod_cq15_fallback": {
           "compared_with": "CMSIS-DSP 1.18.0 arm_scale_q15 by round(c m 32768) (truncating), arm_offset_q15 by c in place and a plain loop to (re, 0) (a composition: CMSIS-DSP has no AM modulator), generic C (-O3 -ffp-contract=off, LOOPUNROLL, avx512)",
+          "comparison_kind": "library",
           "counter_model": {
             "comparison": {
               "coverage": 0.9960644781611684,
@@ -526,6 +540,7 @@
         },
         "am_mod_fallback": {
           "compared_with": "liquid-dsp 1.8.3 ampmodem_modulate_block (LIQUID_AMPMODEM_DSB with the carrier: x * mod_index + 1, no clamp, carrier 1; -O3)",
+          "comparison_kind": "library",
           "counter_model": {
             "comparison": {
               "coverage": 0.9907316805013469,
@@ -563,6 +578,7 @@
         },
         "auto_notch": {
           "compared_with": "sdrk fallback",
+          "comparison_kind": "own_fallback",
           "counter_model": {
             "comparison": {
               "coverage": 0.9916136796527972,
@@ -600,6 +616,7 @@
         },
         "band_pulse_detect_block": {
           "compared_with": "sdrk fallback",
+          "comparison_kind": "own_fallback",
           "counter_model": {
             "comparison": {
               "coverage": 0.9810465683676309,
@@ -637,6 +654,7 @@
         },
         "biquad": {
           "compared_with": "KFR 7.2.0 kfr::iir, iir_state<float, 2> (avx512, -ffp-contract=off), two calls on planar re and im (deinterleaving not counted)",
+          "comparison_kind": "library",
           "counter_model": {
             "comparison": {
               "coverage": 0.9943951885853944,
@@ -674,6 +692,7 @@
         },
         "biquad_cq15": {
           "compared_with": "sdrk fallback",
+          "comparison_kind": "own_fallback",
           "counter_model": {
             "comparison": {
               "coverage": 0.9987431189961832,
@@ -711,6 +730,7 @@
         },
         "biquad_cq15_fallback": {
           "compared_with": "CMSIS-DSP 1.18.0 arm_biquad_cascade_df1_q15 (postShift 1, truncating), two calls on planar re and im (deinterleaving not counted), generic C (-O3 -ffp-contract=off, LOOPUNROLL, avx512)",
+          "comparison_kind": "library",
           "counter_model": {
             "comparison": {
               "coverage": 0.9991389550148927,
@@ -748,6 +768,7 @@
         },
         "biquad_fallback": {
           "compared_with": "CMSIS-DSP 1.18.0 arm_biquad_cascade_stereo_df2T_f32 (re and im as the two channels), generic C (-O3 -ffp-contract=off, LOOPUNROLL, avx512)",
+          "comparison_kind": "library",
           "counter_model": {
             "comparison": {
               "coverage": 0.999095464108219,
@@ -785,6 +806,7 @@
         },
         "biquad_real": {
           "compared_with": "KFR 7.2.0 kfr::iir, iir_state<float, 2> (avx512, -ffp-contract=off)",
+          "comparison_kind": "library",
           "counter_model": {
             "comparison": {
               "coverage": 0.9943340759050728,
@@ -822,6 +844,7 @@
         },
         "biquad_real_fallback": {
           "compared_with": "CMSIS-DSP 1.18.0 arm_biquad_cascade_df2T_f32, generic C (-O3 -ffp-contract=off, LOOPUNROLL, avx512)",
+          "comparison_kind": "library",
           "counter_model": {
             "comparison": {
               "coverage": 0.9983182626922421,
@@ -859,6 +882,7 @@
         },
         "biquad_real_q15": {
           "compared_with": "sdrk fallback",
+          "comparison_kind": "own_fallback",
           "counter_model": {
             "comparison": {
               "coverage": 0.998296818277724,
@@ -896,6 +920,7 @@
         },
         "biquad_real_q15_fallback": {
           "compared_with": "CMSIS-DSP 1.18.0 arm_biquad_cascade_df1_q15 (postShift 1, truncating), generic C (-O3 -ffp-contract=off, LOOPUNROLL, avx512)",
+          "comparison_kind": "library",
           "counter_model": {
             "comparison": {
               "coverage": 0.9991229572157355,
@@ -933,6 +958,7 @@
         },
         "bit_descramble_block": {
           "compared_with": "GNU Radio descrambler_bb(0x21, 0, 22): gr::digital::lfsr, one __builtin_parityl per unpacked bit (generic compiler flags)",
+          "comparison_kind": "library",
           "counter_model": {
             "comparison": {
               "coverage": 0.9995125014774746,
@@ -970,6 +996,7 @@
         },
         "bit_descramble_in_place_block": {
           "compared_with": "GNU Radio descrambler_bb(0x21, 0, 22): gr::digital::lfsr, one __builtin_parityl per unpacked bit (generic compiler flags)",
+          "comparison_kind": "library",
           "counter_model": {
             "comparison": {
               "coverage": 0.9995125014774746,
@@ -1007,6 +1034,7 @@
         },
         "bit_scramble_block": {
           "compared_with": "GNU Radio scrambler_bb(0x21, 0, 22): gr::digital::lfsr, one __builtin_parityl per unpacked bit (generic compiler flags)",
+          "comparison_kind": "library",
           "counter_model": {
             "comparison": {
               "coverage": 0.9995125433563649,
@@ -1044,6 +1072,7 @@
         },
         "bit_scramble_in_place_block": {
           "compared_with": "GNU Radio scrambler_bb(0x21, 0, 22): gr::digital::lfsr, one __builtin_parityl per unpacked bit (generic compiler flags)",
+          "comparison_kind": "library",
           "counter_model": {
             "comparison": {
               "coverage": 0.9995125433563649,
@@ -1081,6 +1110,7 @@
         },
         "channel_bank_channelize": {
           "compared_with": "sdrk fallback",
+          "comparison_kind": "own_fallback",
           "counter_model": {
             "comparison": {
               "coverage": 0.9934212760639686,
@@ -1118,6 +1148,7 @@
         },
         "channel_bank_ddc": {
           "compared_with": "sdrk fallback",
+          "comparison_kind": "own_fallback",
           "counter_model": {
             "comparison": {
               "coverage": 0.9903879940827891,
@@ -1155,6 +1186,7 @@
         },
         "channel_select_block": {
           "compared_with": "sdrk fallback",
+          "comparison_kind": "own_fallback",
           "counter_model": {
             "comparison": {
               "coverage": 0.9976151397818261,
@@ -1192,6 +1224,7 @@
         },
         "channelize": {
           "compared_with": "liquid-dsp 1.8.3 firpfbch2_crcf analyzer (benches/refs/liquid-channelizer.c), the SIMD dot products of the level, FFTW 3.3.10",
+          "comparison_kind": "library",
           "counter_model": {
             "comparison": {
               "coverage": 0.9917091204060212,
@@ -1229,6 +1262,7 @@
         },
         "channelize_block": {
           "compared_with": "sdrk fallback",
+          "comparison_kind": "own_fallback",
           "counter_model": {
             "comparison": {
               "coverage": 0.993242650757317,
@@ -1266,6 +1300,7 @@
         },
         "channelize_fallback": {
           "compared_with": "liquid-dsp 1.8.3 firpfbch2_crcf analyzer (benches/refs/liquid-channelizer.c), portable dot products, liquid's own FFT",
+          "comparison_kind": "library",
           "counter_model": {
             "comparison": {
               "coverage": 0.9922691755476262,
@@ -1303,6 +1338,7 @@
         },
         "convert_cq15_cs8": {
           "compared_with": "volk_8i_convert_16i",
+          "comparison_kind": "library",
           "counter_model": {
             "comparison": {
               "coverage": 0.9925637252952638,
@@ -1340,6 +1376,7 @@
         },
         "convert_cq15_cs8_fallback": {
           "compared_with": "CMSIS-DSP 1.18.0 arm_q7_to_q15, generic C (-O3 -ffp-contract=off, LOOPUNROLL, avx512)",
+          "comparison_kind": "library",
           "counter_model": {
             "comparison": {
               "coverage": 0.9946480032935364,
@@ -1377,6 +1414,7 @@
         },
         "convert_cq15_cu8": {
           "compared_with": "volk_8i_convert_16i on the bytes with the sign bit flipped (the CU8 conversion without its offset)",
+          "comparison_kind": "library",
           "counter_model": {
             "comparison": {
               "coverage": 0.9925613588448228,
@@ -1414,6 +1452,7 @@
         },
         "convert_cq15_cu8_fallback": {
           "compared_with": "CMSIS-DSP 1.18.0 arm_q7_to_q15 on the bytes with the sign bit flipped (the CU8 conversion without its offset), generic C (-O3 -ffp-contract=off, LOOPUNROLL, avx512)",
+          "comparison_kind": "library",
           "counter_model": {
             "comparison": {
               "coverage": 0.9946480032935364,
@@ -1451,6 +1490,7 @@
         },
         "convert_cs16": {
           "compared_with": "volk_16i_s32f_convert_32f",
+          "comparison_kind": "library",
           "counter_model": {
             "comparison": {
               "coverage": 0.9927814467823683,
@@ -1488,6 +1528,7 @@
         },
         "convert_cs16_fallback": {
           "compared_with": "CMSIS-DSP 1.18.0 arm_q15_to_float, generic C (-O3 -ffp-contract=off, LOOPUNROLL, avx512)",
+          "comparison_kind": "library",
           "counter_model": {
             "comparison": {
               "coverage": 0.9914443978960108,
@@ -1525,6 +1566,7 @@
         },
         "convert_cs8": {
           "compared_with": "volk_8i_s32f_convert_32f",
+          "comparison_kind": "library",
           "counter_model": {
             "comparison": {
               "coverage": 0.9916983447829125,
@@ -1562,6 +1604,7 @@
         },
         "convert_cs8_fallback": {
           "compared_with": "CMSIS-DSP 1.18.0 arm_q7_to_float, generic C (-O3 -ffp-contract=off, LOOPUNROLL, avx512)",
+          "comparison_kind": "library",
           "counter_model": {
             "comparison": {
               "coverage": 0.9933994931256325,
@@ -1599,6 +1642,7 @@
         },
         "convert_cu8": {
           "compared_with": "volk_8i_s32f_convert_32f on the bytes with the sign bit flipped (the CU8 conversion without its offset)",
+          "comparison_kind": "library",
           "counter_model": {
             "comparison": {
               "coverage": 0.9916960799358876,
@@ -1636,6 +1680,7 @@
         },
         "convert_cu8_fallback": {
           "compared_with": "CMSIS-DSP 1.18.0 arm_q7_to_float on the bytes with the sign bit flipped (the CU8 conversion without its offset), generic C (-O3 -ffp-contract=off, LOOPUNROLL, avx512)",
+          "comparison_kind": "library",
           "counter_model": {
             "comparison": {
               "coverage": 0.9933985125762513,
@@ -1673,6 +1718,7 @@
         },
         "convert_out_cs16": {
           "compared_with": "volk_32f_s32f_convert_16i",
+          "comparison_kind": "library",
           "counter_model": {
             "comparison": {
               "coverage": 0.9923759978473405,
@@ -1710,6 +1756,7 @@
         },
         "convert_out_cs16_fallback": {
           "compared_with": "CMSIS-DSP 1.18.0 arm_float_to_q15 (truncating, saturating), generic C (-O3 -ffp-contract=off, LOOPUNROLL, avx512)",
+          "comparison_kind": "library",
           "counter_model": {
             "comparison": {
               "coverage": 0.9907894981672032,
@@ -1747,6 +1794,7 @@
         },
         "convert_out_cs8": {
           "compared_with": "volk_32f_s32f_convert_8i",
+          "comparison_kind": "library",
           "counter_model": {
             "comparison": {
               "coverage": 0.9925576112622172,
@@ -1784,6 +1832,7 @@
         },
         "convert_out_cs8_fallback": {
           "compared_with": "CMSIS-DSP 1.18.0 arm_float_to_q7 (truncating, saturating), generic C (-O3 -ffp-contract=off, LOOPUNROLL, avx512)",
+          "comparison_kind": "library",
           "counter_model": {
             "comparison": {
               "coverage": 0.9927499849376419,
@@ -1821,6 +1870,7 @@
         },
         "convert_out_cu8": {
           "compared_with": "volk_32f_s32f_x2_convert_8u",
+          "comparison_kind": "library",
           "counter_model": {
             "comparison": {
               "coverage": 0.9900415740114087,
@@ -1858,6 +1908,7 @@
         },
         "convert_out_cu8_fallback": {
           "compared_with": "CMSIS-DSP 1.18.0 arm_float_to_q7 (truncating, saturating; the CU8 conversion without its offset), generic C (-O3 -ffp-contract=off, LOOPUNROLL, avx512)",
+          "comparison_kind": "library",
           "counter_model": {
             "comparison": {
               "coverage": 0.9927499849376419,
@@ -1895,6 +1946,7 @@
         },
         "convert_out_real_rs16": {
           "compared_with": "volk_32f_s32f_convert_16i",
+          "comparison_kind": "library",
           "counter_model": {
             "comparison": {
               "coverage": 0.9930258453964719,
@@ -1932,6 +1984,7 @@
         },
         "convert_out_real_rs16_fallback": {
           "compared_with": "CMSIS-DSP 1.18.0 arm_float_to_q15 (truncating, saturating), generic C (-O3 -ffp-contract=off, LOOPUNROLL, avx512)",
+          "comparison_kind": "library",
           "counter_model": {
             "comparison": {
               "coverage": 0.9953169364652089,
@@ -1969,6 +2022,7 @@
         },
         "convert_out_real_rs8": {
           "compared_with": "volk_32f_s32f_convert_8i",
+          "comparison_kind": "library",
           "counter_model": {
             "comparison": {
               "coverage": 0.9929127862707199,
@@ -2006,6 +2060,7 @@
         },
         "convert_out_real_rs8_fallback": {
           "compared_with": "CMSIS-DSP 1.18.0 arm_float_to_q7 (truncating, saturating), generic C (-O3 -ffp-contract=off, LOOPUNROLL, avx512)",
+          "comparison_kind": "library",
           "counter_model": {
             "comparison": {
               "coverage": 0.9942499107744776,
@@ -2043,6 +2098,7 @@
         },
         "convert_out_real_ru8": {
           "compared_with": "volk_32f_s32f_x2_convert_8u",
+          "comparison_kind": "library",
           "counter_model": {
             "comparison": {
               "coverage": 0.9927518393917015,
@@ -2080,6 +2136,7 @@
         },
         "convert_out_real_ru8_fallback": {
           "compared_with": "CMSIS-DSP 1.18.0 arm_float_to_q7 (truncating, saturating; the CU8 conversion without its offset), generic C (-O3 -ffp-contract=off, LOOPUNROLL, avx512)",
+          "comparison_kind": "library",
           "counter_model": {
             "comparison": {
               "coverage": 0.9942499107744776,
@@ -2117,6 +2174,7 @@
         },
         "convert_real_rs16": {
           "compared_with": "volk_16i_s32f_convert_32f",
+          "comparison_kind": "library",
           "counter_model": {
             "comparison": {
               "coverage": 0.9922812176295652,
@@ -2154,6 +2212,7 @@
         },
         "convert_real_rs16_fallback": {
           "compared_with": "CMSIS-DSP 1.18.0 arm_q15_to_float, generic C (-O3 -ffp-contract=off, LOOPUNROLL, avx512)",
+          "comparison_kind": "library",
           "counter_model": {
             "comparison": {
               "coverage": 0.9910092860967009,
@@ -2191,6 +2250,7 @@
         },
         "correlate_block": {
           "compared_with": "sdrk fallback",
+          "comparison_kind": "own_fallback",
           "counter_model": {
             "comparison": {
               "coverage": 0.9900479913437765,
@@ -2228,6 +2288,7 @@
         },
         "costas": {
           "compared_with": "sdrk fallback",
+          "comparison_kind": "own_fallback",
           "counter_model": {
             "comparison": {
               "coverage": 0.9981730566554962,
@@ -2265,6 +2326,7 @@
         },
         "costas_fallback": {
           "compared_with": "GNU Radio costas_loop_cc (costas_loop_cc_impl.cc of gr-digital, generic compiler flags)",
+          "comparison_kind": "library",
           "counter_model": {
             "comparison": {
               "coverage": 0.9958013744854166,
@@ -2302,6 +2364,7 @@
         },
         "costas_qam1024": {
           "compared_with": "sdrk fallback",
+          "comparison_kind": "own_fallback",
           "counter_model": {
             "comparison": {
               "coverage": 0.9932335480373442,
@@ -2339,6 +2402,7 @@
         },
         "costas_qam1024_fallback": {
           "compared_with": "GNU Radio constellation_receiver_cb with constellation_rect 1024-QAM (constellation_receiver_cb_impl.cc and constellation.cc of gr-digital, generic compiler flags)",
+          "comparison_kind": "library",
           "counter_model": {
             "comparison": {
               "coverage": 0.9935825305557044,
@@ -2376,6 +2440,7 @@
         },
         "costas_qam16": {
           "compared_with": "sdrk fallback",
+          "comparison_kind": "own_fallback",
           "counter_model": {
             "comparison": {
               "coverage": 0.9916729083220124,
@@ -2413,6 +2478,7 @@
         },
         "costas_qam16_fallback": {
           "compared_with": "GNU Radio constellation_receiver_cb with constellation_rect 16-QAM (constellation_receiver_cb_impl.cc and constellation.cc of gr-digital, generic compiler flags)",
+          "comparison_kind": "library",
           "counter_model": {
             "comparison": {
               "coverage": 0.9935118393768194,
@@ -2450,6 +2516,7 @@
         },
         "costas_qam256": {
           "compared_with": "sdrk fallback",
+          "comparison_kind": "own_fallback",
           "counter_model": {
             "comparison": {
               "coverage": 0.9908365941499914,
@@ -2487,6 +2554,7 @@
         },
         "costas_qam256_fallback": {
           "compared_with": "GNU Radio constellation_receiver_cb with constellation_rect 256-QAM (constellation_receiver_cb_impl.cc and constellation.cc of gr-digital, generic compiler flags)",
+          "comparison_kind": "library",
           "counter_model": {
             "comparison": {
               "coverage": 0.9901073582433781,
@@ -2524,6 +2592,7 @@
         },
         "costas_qam64": {
           "compared_with": "sdrk fallback",
+          "comparison_kind": "own_fallback",
           "counter_model": {
             "comparison": {
               "coverage": 0.9914912633608571,
@@ -2561,6 +2630,7 @@
         },
         "costas_qam64_fallback": {
           "compared_with": "GNU Radio constellation_receiver_cb with constellation_rect 64-QAM (constellation_receiver_cb_impl.cc and constellation.cc of gr-digital, generic compiler flags)",
+          "comparison_kind": "library",
           "counter_model": {
             "comparison": {
               "coverage": 0.9902537657034324,
@@ -2598,6 +2668,7 @@
         },
         "crc16_ccitt_false": {
           "compared_with": "GNU Radio gr::digital::crc: one 256-entry uint64_t table, a 64-bit remainder, one lookup per byte (generic compiler flags)",
+          "comparison_kind": "library",
           "counter_model": {
             "comparison": {
               "coverage": 0.9914806598262623,
@@ -2635,6 +2706,7 @@
         },
         "crc16_x25": {
           "compared_with": "GNU Radio gr::digital::crc: one 256-entry uint64_t table, a 64-bit remainder, one lookup per byte (generic compiler flags)",
+          "comparison_kind": "library",
           "counter_model": {
             "comparison": {
               "coverage": 0.9935553448243803,
@@ -2672,6 +2744,7 @@
         },
         "crc24_adsb": {
           "compared_with": "GNU Radio gr::digital::crc: one 256-entry uint64_t table, a 64-bit remainder, one lookup per byte (generic compiler flags)",
+          "comparison_kind": "library",
           "counter_model": {
             "comparison": {
               "coverage": 0.9914762102794091,
@@ -2709,6 +2782,7 @@
         },
         "crc32": {
           "compared_with": "GNU Radio gr::digital::crc: one 256-entry uint64_t table, a 64-bit remainder, one lookup per byte (generic compiler flags)",
+          "comparison_kind": "library",
           "counter_model": {
             "comparison": {
               "coverage": 0.9933133931044482,
@@ -2746,6 +2820,7 @@
         },
         "dc_block": {
           "compared_with": "sdrk fallback",
+          "comparison_kind": "own_fallback",
           "counter_model": {
             "comparison": {
               "coverage": 0.99807225601069,
@@ -2783,6 +2858,7 @@
         },
         "dc_block_cq15": {
           "compared_with": "sdrk fallback",
+          "comparison_kind": "own_fallback",
           "counter_model": {
             "comparison": {
               "coverage": 0.9993923653878187,
@@ -2820,6 +2896,7 @@
         },
         "dc_block_fallback": {
           "compared_with": "liquid-dsp 1.8.3 iirfilt_crcf_create_dc_blocker (direct form II, portable dot product, -O3)",
+          "comparison_kind": "library",
           "counter_model": {
             "comparison": {
               "coverage": 0.9996332545925438,
@@ -2857,6 +2934,7 @@
         },
         "dc_block_real": {
           "compared_with": "sdrk fallback",
+          "comparison_kind": "own_fallback",
           "counter_model": {
             "comparison": {
               "coverage": 0.9982765524084745,
@@ -2894,6 +2972,7 @@
         },
         "dc_block_real_fallback": {
           "compared_with": "liquid-dsp 1.8.3 iirfilt_rrrf_create_dc_blocker (direct form II, portable dot product, -O3)",
+          "comparison_kind": "library",
           "counter_model": {
             "comparison": {
               "coverage": 0.9995806626248366,
@@ -2931,6 +3010,7 @@
         },
         "dc_block_real_q15": {
           "compared_with": "sdrk fallback",
+          "comparison_kind": "own_fallback",
           "counter_model": {
             "comparison": {
               "coverage": 0.9990040852828195,
@@ -2968,6 +3048,7 @@
         },
         "deemphasis": {
           "compared_with": "sdrk fallback",
+          "comparison_kind": "own_fallback",
           "counter_model": {
             "comparison": {
               "coverage": 0.9989861900692099,
@@ -3005,6 +3086,7 @@
         },
         "deemphasis_fallback": {
           "compared_with": "GNU Radio fm_deemph: iir_filter_ffd with the bilinear taps of fm_emph.py (double taps and accumulator, generic compiler flags)",
+          "comparison_kind": "library",
           "counter_model": {
             "comparison": {
               "coverage": 0.9994931565973268,
@@ -3042,6 +3124,7 @@
         },
         "deemphasis_q15": {
           "compared_with": "sdrk fallback",
+          "comparison_kind": "own_fallback",
           "counter_model": {
             "comparison": {
               "coverage": 0.9987246773146748,
@@ -3079,6 +3162,7 @@
         },
         "deinterleave": {
           "compared_with": "volk_32fc_deinterleave_32f_x2",
+          "comparison_kind": "library",
           "counter_model": {
             "comparison": {
               "coverage": 0.9919947526125132,
@@ -3116,6 +3200,7 @@
         },
         "deinterleave_cq15": {
           "compared_with": "volk_16ic_deinterleave_16i_x2",
+          "comparison_kind": "library",
           "counter_model": {
             "comparison": {
               "coverage": 0.9927192954567132,
@@ -3153,6 +3238,7 @@
         },
         "deinterleave_cq15_fallback": {
           "compared_with": "VOLK 3.3.0 volk_16ic_deinterleave_16i_x2_generic, benches/refs/volk-generic.c (-O3 -ffp-contract=off, avx512)",
+          "comparison_kind": "library",
           "counter_model": {
             "comparison": {
               "coverage": 0.9955500039035053,
@@ -3190,6 +3276,7 @@
         },
         "deinterleave_fallback": {
           "compared_with": "VOLK 3.3.0 volk_32fc_deinterleave_32f_x2_generic, benches/refs/volk-generic.c (-O3 -ffp-contract=off, avx512)",
+          "comparison_kind": "library",
           "counter_model": {
             "comparison": {
               "coverage": 0.9977415840794962,
@@ -3227,6 +3314,7 @@
         },
         "dot": {
           "compared_with": "volk_32fc_32f_dot_prod_32fc",
+          "comparison_kind": "library",
           "counter_model": {
             "comparison": {
               "coverage": 0.9932356538451939,
@@ -3264,6 +3352,7 @@
         },
         "dot_complex": {
           "compared_with": "VOLK 3.3.0 volk_32fc_x2_dot_prod_32fc_u_avx without FMA (benches/refs/volk-nofma.c, -O3 -ffp-contract=off)",
+          "comparison_kind": "library",
           "counter_model": {
             "comparison": {
               "coverage": 0.9921729520233752,
@@ -3301,6 +3390,7 @@
         },
         "dot_complex_fallback": {
           "compared_with": "CMSIS-DSP 1.18.0 arm_cmplx_dot_prod_f32, generic C (-O3 -ffp-contract=off, LOOPUNROLL, avx512)",
+          "comparison_kind": "library",
           "counter_model": {
             "comparison": {
               "coverage": 0.9982763853069757,
@@ -3338,6 +3428,7 @@
         },
         "dot_cq15": {
           "compared_with": "sdrk fallback",
+          "comparison_kind": "own_fallback",
           "counter_model": {
             "comparison": {
               "coverage": 0.9907558396369963,
@@ -3375,6 +3466,7 @@
         },
         "dot_cq15_fallback": {
           "compared_with": "CMSIS-DSP 1.18.0 arm_dot_prod_q15 twice, on the planar re and im, generic C (-O3 -ffp-contract=off, LOOPUNROLL, avx512)",
+          "comparison_kind": "library",
           "counter_model": {
             "comparison": {
               "coverage": 0.9901513475372389,
@@ -3412,6 +3504,7 @@
         },
         "dot_fallback": {
           "compared_with": "CMSIS-DSP 1.18.0 arm_dot_prod_f32 twice, on the planar re and im, generic C (-O3 -ffp-contract=off, LOOPUNROLL, avx512)",
+          "comparison_kind": "library",
           "counter_model": {
             "comparison": {
               "coverage": 0.9921068646359076,
@@ -3449,6 +3542,7 @@
         },
         "dot_real": {
           "compared_with": "volk_32f_x2_dot_prod_32f",
+          "comparison_kind": "library",
           "counter_model": {
             "comparison": {
               "coverage": 0.9909776402388528,
@@ -3486,6 +3580,7 @@
         },
         "dot_real_fallback": {
           "compared_with": "CMSIS-DSP 1.18.0 arm_dot_prod_f32, generic C (-O3 -ffp-contract=off, LOOPUNROLL, avx512)",
+          "comparison_kind": "library",
           "counter_model": {
             "comparison": {
               "coverage": 0.9911016205818125,
@@ -3523,6 +3618,7 @@
         },
         "dot_real_q15": {
           "compared_with": "sdrk fallback",
+          "comparison_kind": "own_fallback",
           "counter_model": {
             "comparison": {
               "coverage": 0.9940056541579175,
@@ -3560,6 +3656,7 @@
         },
         "dot_real_q15_fallback": {
           "compared_with": "CMSIS-DSP 1.18.0 arm_dot_prod_q15, generic C (-O3 -ffp-contract=off, LOOPUNROLL, avx512)",
+          "comparison_kind": "library",
           "counter_model": {
             "comparison": {
               "coverage": 0.9939003282602208,
@@ -3597,6 +3694,7 @@
         },
         "equalize": {
           "compared_with": "GNU Radio linear_equalizer with adaptive_algorithm_nlms (linear_equalizer_impl.cc of gr-digital, VOLK's dispatched dot products of the level with the aligned tap copies of fir_filter)",
+          "comparison_kind": "library",
           "counter_model": {
             "comparison": {
               "coverage": 0.9928884385284646,
@@ -3634,6 +3732,7 @@
         },
         "equalize_fallback": {
           "compared_with": "GNU Radio linear_equalizer with adaptive_algorithm_nlms (linear_equalizer_impl.cc of gr-digital, VOLK generic dot products, generic compiler flags)",
+          "comparison_kind": "library",
           "counter_model": {
             "comparison": {
               "coverage": 0.9999439908503319,
@@ -3671,6 +3770,7 @@
         },
         "equalize_qam1024": {
           "compared_with": "sdrk fallback",
+          "comparison_kind": "own_fallback",
           "counter_model": {
             "comparison": {
               "coverage": 0.9916232801486374,
@@ -3708,6 +3808,7 @@
         },
         "equalize_qam1024_fallback": {
           "compared_with": "GNU Radio linear_equalizer with adaptive_algorithm_nlms on constellation_rect 1024-QAM (linear_equalizer_impl.cc and constellation.cc of gr-digital, VOLK generic dot products, generic compiler flags)",
+          "comparison_kind": "library",
           "counter_model": {
             "comparison": {
               "coverage": 0.9999401113895473,
@@ -3745,6 +3846,7 @@
         },
         "equalize_qam16": {
           "compared_with": "GNU Radio linear_equalizer with adaptive_algorithm_nlms on constellation_rect 16-QAM (linear_equalizer_impl.cc and constellation.cc of gr-digital, VOLK's dispatched dot products of the level with the aligned tap copies of fir_filter)",
+          "comparison_kind": "library",
           "counter_model": {
             "comparison": {
               "coverage": 0.9930494853727843,
@@ -3782,6 +3884,7 @@
         },
         "equalize_qam16_fallback": {
           "compared_with": "GNU Radio linear_equalizer with adaptive_algorithm_nlms on constellation_rect 16-QAM (linear_equalizer_impl.cc and constellation.cc of gr-digital, VOLK generic dot products, generic compiler flags)",
+          "comparison_kind": "library",
           "counter_model": {
             "comparison": {
               "coverage": 0.9999401120158582,
@@ -3819,6 +3922,7 @@
         },
         "equalize_qam256": {
           "compared_with": "sdrk fallback",
+          "comparison_kind": "own_fallback",
           "counter_model": {
             "comparison": {
               "coverage": 0.9916232801486374,
@@ -3856,6 +3960,7 @@
         },
         "equalize_qam256_fallback": {
           "compared_with": "GNU Radio linear_equalizer with adaptive_algorithm_nlms on constellation_rect 256-QAM (linear_equalizer_impl.cc and constellation.cc of gr-digital, VOLK generic dot products, generic compiler flags)",
+          "comparison_kind": "library",
           "counter_model": {
             "comparison": {
               "coverage": 0.9999401120158582,
@@ -3893,6 +3998,7 @@
         },
         "equalize_qam64": {
           "compared_with": "GNU Radio linear_equalizer with adaptive_algorithm_nlms on constellation_rect 64-QAM (linear_equalizer_impl.cc and constellation.cc of gr-digital, VOLK's dispatched dot products of the level with the aligned tap copies of fir_filter)",
+          "comparison_kind": "library",
           "counter_model": {
             "comparison": {
               "coverage": 0.9930494853727843,
@@ -3930,6 +4036,7 @@
         },
         "equalize_qam64_fallback": {
           "compared_with": "GNU Radio linear_equalizer with adaptive_algorithm_nlms on constellation_rect 64-QAM (linear_equalizer_impl.cc and constellation.cc of gr-digital, VOLK generic dot products, generic compiler flags)",
+          "comparison_kind": "library",
           "counter_model": {
             "comparison": {
               "coverage": 0.9999401120158582,
@@ -3967,6 +4074,7 @@
         },
         "fft_1024": {
           "compared_with": "rustfft (FftPlanner, forward, in place)",
+          "comparison_kind": "library",
           "counter_model": {
             "comparison": {
               "coverage": 0.9900282386163078,
@@ -4004,6 +4112,7 @@
         },
         "fft_1024_fallback": {
           "compared_with": "CMSIS-DSP 1.18.0 arm_cfft_f32 (forward, in place, bit reversal), generic C (-O3 -ffp-contract=off, LOOPUNROLL, avx512)",
+          "comparison_kind": "library",
           "counter_model": {
             "comparison": {
               "coverage": 0.9951311816983459,
@@ -4041,6 +4150,7 @@
         },
         "fft_4096": {
           "compared_with": "rustfft (FftPlanner, forward, in place)",
+          "comparison_kind": "library",
           "counter_model": {
             "comparison": {
               "coverage": 0.9902005375232582,
@@ -4078,6 +4188,7 @@
         },
         "fft_4096_fallback": {
           "compared_with": "CMSIS-DSP 1.18.0 arm_cfft_f32 (forward, in place, bit reversal), generic C (-O3 -ffp-contract=off, LOOPUNROLL, avx512)",
+          "comparison_kind": "library",
           "counter_model": {
             "comparison": {
               "coverage": 0.9993816184329044,
@@ -4115,6 +4226,7 @@
         },
         "fft_64": {
           "compared_with": "rustfft (FftPlanner, forward, in place)",
+          "comparison_kind": "library",
           "counter_model": {
             "comparison": {
               "coverage": 1.0,
@@ -4152,6 +4264,7 @@
         },
         "fft_64_fallback": {
           "compared_with": "CMSIS-DSP 1.18.0 arm_cfft_f32 (forward, in place, bit reversal), generic C (-O3 -ffp-contract=off, LOOPUNROLL, avx512)",
+          "comparison_kind": "library",
           "counter_model": {
             "comparison": {
               "coverage": 0.9932741458165187,
@@ -4189,6 +4302,7 @@
         },
         "fft_cq15_1024": {
           "compared_with": "KissFFT FIXED_POINT=16 (kiss_fft, 1/N scaling, out of place)",
+          "comparison_kind": "library",
           "counter_model": {
             "comparison": {
               "coverage": 0.9919814236314127,
@@ -4226,6 +4340,7 @@
         },
         "fft_cq15_1024_default": {
           "compared_with": "KissFFT FIXED_POINT=16 (kiss_fft, 1/N scaling, out of place)",
+          "comparison_kind": "library",
           "counter_model": {
             "comparison": {
               "coverage": 0.9919814236314127,
@@ -4263,6 +4378,7 @@
         },
         "fft_cq15_1024_default_fallback": {
           "compared_with": "CMSIS-DSP 1.18.0 arm_cfft_q15 (forward, in place, bit reversal, 1/N scaling with truncating shifts), generic C (-O3 -ffp-contract=off, LOOPUNROLL, avx512)",
+          "comparison_kind": "library",
           "counter_model": {
             "comparison": {
               "coverage": 0.99899852724595,
@@ -4300,6 +4416,7 @@
         },
         "fft_cq15_1024_fallback": {
           "compared_with": "CMSIS-DSP 1.18.0 arm_cfft_q15 (forward, in place, bit reversal, 1/N scaling with truncating shifts), generic C (-O3 -ffp-contract=off, LOOPUNROLL, avx512)",
+          "comparison_kind": "library",
           "counter_model": {
             "comparison": {
               "coverage": 0.99899852724595,
@@ -4337,6 +4454,7 @@
         },
         "fft_cq15_1024_full_scale": {
           "compared_with": "KissFFT FIXED_POINT=16 (kiss_fft, 1/N scaling, out of place)",
+          "comparison_kind": "library",
           "counter_model": {
             "comparison": {
               "coverage": 0.9919814236314127,
@@ -4374,6 +4492,7 @@
         },
         "fir": {
           "compared_with": "volk_32fc_32f_dot_prod_32fc_a as GNU Radio's fir_filter_ccf calls it",
+          "comparison_kind": "library",
           "counter_model": {
             "comparison": {
               "coverage": 0.993569021792493,
@@ -4411,6 +4530,7 @@
         },
         "fir_cq15": {
           "compared_with": "sdrk fallback",
+          "comparison_kind": "own_fallback",
           "counter_model": {
             "comparison": {
               "coverage": 0.9920353851730478,
@@ -4448,6 +4568,7 @@
         },
         "fir_cq15_fallback": {
           "compared_with": "CMSIS-DSP 1.18.0 arm_fir_q15, generic C (-O3 -ffp-contract=off, LOOPUNROLL, avx512)",
+          "comparison_kind": "library",
           "counter_model": {
             "comparison": {
               "coverage": 0.9995255563754272,
@@ -4485,6 +4606,7 @@
         },
         "fir_decimate": {
           "compared_with": "volk_32fc_32f_dot_prod_32fc_a as GNU Radio's fir_filter_ccf (filterNdec) calls it",
+          "comparison_kind": "library",
           "counter_model": {
             "comparison": {
               "coverage": 0.999191066250272,
@@ -4522,6 +4644,7 @@
         },
         "fir_decimate_cq15": {
           "compared_with": "sdrk fallback",
+          "comparison_kind": "own_fallback",
           "counter_model": {
             "comparison": {
               "coverage": 0.9903246305115784,
@@ -4559,6 +4682,7 @@
         },
         "fir_decimate_cq15_fallback": {
           "compared_with": "CMSIS-DSP 1.18.0 arm_fir_decimate_q15 (block 4090 of 4096), generic C (-O3 -ffp-contract=off, LOOPUNROLL, avx512)",
+          "comparison_kind": "library",
           "counter_model": {
             "comparison": {
               "coverage": 0.9928012611214415,
@@ -4596,6 +4720,7 @@
         },
         "fir_decimate_fallback": {
           "compared_with": "CMSIS-DSP 1.18.0 arm_fir_decimate_f32 (block 4090 of 4096), generic C (-O3 -ffp-contract=off, LOOPUNROLL, avx512)",
+          "comparison_kind": "library",
           "counter_model": {
             "comparison": {
               "coverage": 0.9929512921251844,
@@ -4633,6 +4758,7 @@
         },
         "fir_fallback": {
           "compared_with": "CMSIS-DSP 1.18.0 arm_fir_f32, generic C (-O3 -ffp-contract=off, LOOPUNROLL, avx512)",
+          "comparison_kind": "library",
           "counter_model": {
             "comparison": {
               "coverage": 0.9957189995361674,
@@ -4670,6 +4796,7 @@
         },
         "fir_interpolate": {
           "compared_with": "volk_32fc_32f_dot_prod_32fc_a per output as GNU Radio's interp_fir_filter_ccf calls it",
+          "comparison_kind": "library",
           "counter_model": {
             "comparison": {
               "coverage": 0.99411865784273,
@@ -4707,6 +4834,7 @@
         },
         "fir_interpolate_cq15": {
           "compared_with": "sdrk fallback",
+          "comparison_kind": "own_fallback",
           "counter_model": {
             "comparison": {
               "coverage": 0.9900569392502478,
@@ -4744,6 +4872,7 @@
         },
         "fir_interpolate_cq15_fallback": {
           "compared_with": "CMSIS-DSP 1.18.0 arm_fir_interpolate_q15 by 2, generic C (-O3 -ffp-contract=off, LOOPUNROLL, avx512)",
+          "comparison_kind": "library",
           "counter_model": {
             "comparison": {
               "coverage": 0.9993734008197721,
@@ -4781,6 +4910,7 @@
         },
         "fir_interpolate_fallback": {
           "compared_with": "CMSIS-DSP 1.18.0 arm_fir_interpolate_f32 by 2, generic C (-O3 -ffp-contract=off, LOOPUNROLL, avx512)",
+          "comparison_kind": "library",
           "counter_model": {
             "comparison": {
               "coverage": 0.9988548779450208,
@@ -4818,6 +4948,7 @@
         },
         "fir_interpolate_real": {
           "compared_with": "volk_32f_x2_dot_prod_32f_a per output as GNU Radio's interp_fir_filter_fff calls it",
+          "comparison_kind": "library",
           "counter_model": {
             "comparison": {
               "coverage": 0.994573326615554,
@@ -4855,6 +4986,7 @@
         },
         "fir_interpolate_real_fallback": {
           "compared_with": "CMSIS-DSP 1.18.0 arm_fir_interpolate_f32 by 2, generic C (-O3 -ffp-contract=off, LOOPUNROLL, avx512)",
+          "comparison_kind": "library",
           "counter_model": {
             "comparison": {
               "coverage": 0.9988265231630923,
@@ -4892,6 +5024,7 @@
         },
         "fir_interpolate_real_q15": {
           "compared_with": "sdrk fallback",
+          "comparison_kind": "own_fallback",
           "counter_model": {
             "comparison": {
               "coverage": 0.9912112115891685,
@@ -4929,6 +5062,7 @@
         },
         "fir_interpolate_real_q15_fallback": {
           "compared_with": "CMSIS-DSP 1.18.0 arm_fir_interpolate_q15 by 2, generic C (-O3 -ffp-contract=off, LOOPUNROLL, avx512)",
+          "comparison_kind": "library",
           "counter_model": {
             "comparison": {
               "coverage": 0.9993527016929774,
@@ -4966,6 +5100,7 @@
         },
         "fir_interpolate_short": {
           "compared_with": "volk_32fc_32f_dot_prod_32fc_a per output as GNU Radio's interp_fir_filter_ccf calls it",
+          "comparison_kind": "library",
           "counter_model": {
             "comparison": {
               "coverage": 0.9939066080905697,
@@ -5003,6 +5138,7 @@
         },
         "fir_interpolate_short_fallback": {
           "compared_with": "CMSIS-DSP 1.18.0 arm_fir_interpolate_f32 by 8 (80 taps), generic C (-O3 -ffp-contract=off, LOOPUNROLL, avx512)",
+          "comparison_kind": "library",
           "counter_model": {
             "comparison": {
               "coverage": 0.997326545804422,
@@ -5040,6 +5176,7 @@
         },
         "fm_mod": {
           "compared_with": "GNU Radio frequency_modulator_fc (f32 phase folded with fmodf, gr::fxpt sincos; gr-fm-mod.c, generic compiler flags)",
+          "comparison_kind": "library",
           "counter_model": {
             "comparison": {
               "coverage": 0.9931193776414468,
@@ -5077,6 +5214,7 @@
         },
         "fm_mod_cq15": {
           "compared_with": "sdrk fallback",
+          "comparison_kind": "own_fallback",
           "counter_model": {
             "comparison": {
               "coverage": 0.9982479538672628,
@@ -5114,6 +5252,7 @@
         },
         "fm_mod_cq15_fallback": {
           "compared_with": "CMSIS-DSP 1.18.0 arm_cos_q15 + arm_sin_q15 per sample of an integer phase accumulator, generic C (-O3 -ffp-contract=off, LOOPUNROLL, avx512)",
+          "comparison_kind": "library",
           "counter_model": {
             "comparison": {
               "coverage": 0.9997980862162883,
@@ -5151,6 +5290,7 @@
         },
         "fm_mod_fallback": {
           "compared_with": "GNU Radio frequency_modulator_fc (f32 phase folded with fmodf, gr::fxpt sincos; gr-fm-mod.c, generic compiler flags)",
+          "comparison_kind": "library",
           "counter_model": {
             "comparison": {
               "coverage": 0.9931193776414468,
@@ -5188,6 +5328,7 @@
         },
         "frame_decode": {
           "compared_with": "sdrk fallback",
+          "comparison_kind": "own_fallback",
           "counter_model": {
             "comparison": {
               "coverage": 0.9856536372932433,
@@ -5225,6 +5366,7 @@
         },
         "frame_decode_block": {
           "compared_with": "sdrk fallback",
+          "comparison_kind": "own_fallback",
           "counter_model": {
             "comparison": {
               "coverage": 0.9856175083270725,
@@ -5262,6 +5404,7 @@
         },
         "frame_decode_four_block": {
           "compared_with": "sdrk fallback",
+          "comparison_kind": "own_fallback",
           "counter_model": {
             "comparison": {
               "coverage": 0.9907743304153624,
@@ -5299,6 +5442,7 @@
         },
         "frame_encode_block": {
           "compared_with": "sdrk fallback",
+          "comparison_kind": "own_fallback",
           "counter_model": {
             "comparison": {
               "coverage": 0.9925925495156264,
@@ -5336,6 +5480,7 @@
         },
         "gauss_noise_c32": {
           "compared_with": "liquid-dsp 1.8.3 crandnf times sigma (libc rand(), f32 Box-Muller with sqrtf, logf and cexpf; no random access, no bit-exact sequence; reference does different work; -O3)",
+          "comparison_kind": "library",
           "counter_model": {
             "comparison": {
               "coverage": 0.9927313949350182,
@@ -5373,6 +5518,7 @@
         },
         "gauss_noise_c32_fallback": {
           "compared_with": "liquid-dsp 1.8.3 crandnf times sigma (libc rand(), f32 Box-Muller with sqrtf, logf and cexpf; no random access, no bit-exact sequence; reference does different work; -O3)",
+          "comparison_kind": "library",
           "counter_model": {
             "comparison": {
               "coverage": 0.9927313949350182,
@@ -5410,6 +5556,7 @@
         },
         "gauss_noise_c32_fastnoise": {
           "compared_with": "GNU Radio fastnoise_source_c, amplitude sigma * sqrt(2) (benches/refs/gr-fastnoise.c, main at ec1bf15: one xoroshiro128+ draw and a copy from a pool of 8192 precomputed values per sample, no normal mapping, no random access; reference does less work; -O3)",
+          "comparison_kind": "library",
           "counter_model": {
             "comparison": {
               "coverage": 0.9990243902439024,
@@ -5447,6 +5594,7 @@
         },
         "gauss_noise_f32": {
           "compared_with": "liquid-dsp 1.8.3 randnf times sigma (libc rand(), f32 Box-Muller with sqrtf, logf and sinf; no random access, no bit-exact sequence; reference does different work; -O3)",
+          "comparison_kind": "library",
           "counter_model": {
             "comparison": {
               "coverage": 0.9932656947806154,
@@ -5484,6 +5632,7 @@
         },
         "gauss_noise_f32_fallback": {
           "compared_with": "liquid-dsp 1.8.3 randnf times sigma (libc rand(), f32 Box-Muller with sqrtf, logf and sinf; no random access, no bit-exact sequence; reference does different work; -O3)",
+          "comparison_kind": "library",
           "counter_model": {
             "comparison": {
               "coverage": 0.9932656947806154,
@@ -5521,6 +5670,7 @@
         },
         "gauss_noise_f32_fastnoise": {
           "compared_with": "GNU Radio fastnoise_source_f, amplitude sigma (benches/refs/gr-fastnoise.c, main at ec1bf15: one xoroshiro128+ draw and a copy from a pool of 8192 precomputed values per sample, no normal mapping, no random access; reference does less work; -O3)",
+          "comparison_kind": "library",
           "counter_model": {
             "comparison": {
               "coverage": 0.9990058981922155,
@@ -5558,6 +5708,7 @@
         },
         "gauss_noise_f32_ziggurat": {
           "compared_with": "rand_distr 0.5.1 StandardNormal as f32 times sigma over rand 0.9.5 SmallRng (Ziggurat in f64 with rejection: a variable number of draws per value, no random access, no bit-exact sequence across platforms; reference does different work)",
+          "comparison_kind": "library",
           "counter_model": {
             "comparison": {
               "coverage": 0.9948848090586083,
@@ -5595,6 +5746,7 @@
         },
         "gauss_noise_q15": {
           "compared_with": "sdrk fallback",
+          "comparison_kind": "own_fallback",
           "counter_model": {
             "comparison": {
               "coverage": 0.9994026334609398,
@@ -5632,6 +5784,7 @@
         },
         "gauss_noise_q15_fallback": {
           "compared_with": "sdrk fallback",
+          "comparison_kind": "own_fallback",
           "counter_model": {
             "comparison": {
               "coverage": 0.9994026334609398,
@@ -5669,6 +5822,7 @@
         },
         "halfband_decimate": {
           "compared_with": "liquid-dsp 1.8.3 resamp2_crcf_decim_execute (dotprod_crcf) with its AVX-512F dot product (-O3 -ffp-contract=off, avx512)",
+          "comparison_kind": "library",
           "counter_model": {
             "comparison": {
               "coverage": 0.9924216795346052,
@@ -5706,6 +5860,7 @@
         },
         "halfband_decimate_cq15": {
           "compared_with": "sdrk fallback",
+          "comparison_kind": "own_fallback",
           "counter_model": {
             "comparison": {
               "coverage": 0.9906136936194276,
@@ -5743,6 +5898,7 @@
         },
         "halfband_decimate_cq15_fallback": {
           "compared_with": "CMSIS-DSP 1.18.0 arm_fir_q15 (24 taps) on the even samples, arm_scale_q15 (centre tap) on the odd samples and arm_add_q15 (a composition: CMSIS-DSP has no halfband decimator), generic C (-O3 -ffp-contract=off, LOOPUNROLL, avx512)",
+          "comparison_kind": "library",
           "counter_model": {
             "comparison": {
               "coverage": 0.9915942006802227,
@@ -5780,6 +5936,7 @@
         },
         "halfband_decimate_fallback": {
           "compared_with": "liquid-dsp 1.8.3 resamp2_crcf_decim_execute (dotprod_crcf) with its portable dot product (-O3 -ffp-contract=off, avx512)",
+          "comparison_kind": "library",
           "counter_model": {
             "comparison": {
               "coverage": 0.9917398048804441,
@@ -5817,6 +5974,7 @@
         },
         "halfband_decimate_real": {
           "compared_with": "liquid-dsp 1.8.3 resamp2_rrrf_decim_execute (dotprod_rrrf) with its AVX-512F dot product (-O3 -ffp-contract=off, avx512)",
+          "comparison_kind": "library",
           "counter_model": {
             "comparison": {
               "coverage": 0.9915705239520246,
@@ -5854,6 +6012,7 @@
         },
         "halfband_decimate_real_fallback": {
           "compared_with": "liquid-dsp 1.8.3 resamp2_rrrf_decim_execute (dotprod_rrrf) with its portable dot product (-O3 -ffp-contract=off, avx512)",
+          "comparison_kind": "library",
           "counter_model": {
             "comparison": {
               "coverage": 0.9929020201409272,
@@ -5891,6 +6050,7 @@
         },
         "halfband_decimate_real_q15": {
           "compared_with": "sdrk fallback",
+          "comparison_kind": "own_fallback",
           "counter_model": {
             "comparison": {
               "coverage": 0.9908431954481166,
@@ -5928,6 +6088,7 @@
         },
         "halfband_decimate_real_q15_fallback": {
           "compared_with": "CMSIS-DSP 1.18.0 arm_fir_q15 (24 taps) on the even samples, arm_scale_q15 (centre tap) on the odd samples and arm_add_q15 (a composition: CMSIS-DSP has no halfband decimator), generic C (-O3 -ffp-contract=off, LOOPUNROLL, avx512)",
+          "comparison_kind": "library",
           "counter_model": {
             "comparison": {
               "coverage": 0.9902994128763087,
@@ -5965,6 +6126,7 @@
         },
         "halfband_ref_fir_decimate": {
           "compared_with": "sdrk fallback",
+          "comparison_kind": "own_fallback",
           "counter_model": {
             "comparison": {
               "coverage": 0.9938104178526473,
@@ -6002,6 +6164,7 @@
         },
         "halfband_ref_fir_decimate_cq15": {
           "compared_with": "sdrk fallback",
+          "comparison_kind": "own_fallback",
           "counter_model": {
             "comparison": {
               "coverage": 0.9953462564269334,
@@ -6039,6 +6202,7 @@
         },
         "halfband_ref_shifted": {
           "compared_with": "sdrk fallback",
+          "comparison_kind": "own_fallback",
           "counter_model": {
             "comparison": {
               "coverage": 0.9908682150875969,
@@ -6076,6 +6240,7 @@
         },
         "halfband_ref_shifted_cq15": {
           "compared_with": "sdrk fallback",
+          "comparison_kind": "own_fallback",
           "counter_model": {
             "comparison": {
               "coverage": 0.9918407209241739,
@@ -6113,6 +6278,7 @@
         },
         "interleave": {
           "compared_with": "volk_32f_x2_interleave_32fc",
+          "comparison_kind": "library",
           "counter_model": {
             "comparison": {
               "coverage": 0.9904736962713196,
@@ -6150,6 +6316,7 @@
         },
         "interleave_cq15": {
           "compared_with": "sdrk fallback",
+          "comparison_kind": "own_fallback",
           "counter_model": {
             "comparison": {
               "coverage": 0.9942323074980003,
@@ -6187,6 +6354,7 @@
         },
         "interleave_cq15_fallback": {
           "compared_with": "VOLK 3.3.0 volk_32f_x2_interleave_32fc_generic on int16 (VOLK has no 16-bit interleave), benches/refs/volk-generic.c (-O3 -ffp-contract=off, avx512)",
+          "comparison_kind": "library",
           "counter_model": {
             "comparison": {
               "coverage": 0.9959756183662423,
@@ -6224,6 +6392,7 @@
         },
         "interleave_fallback": {
           "compared_with": "VOLK 3.3.0 volk_32f_x2_interleave_32fc_generic, benches/refs/volk-generic.c (-O3 -ffp-contract=off, avx512)",
+          "comparison_kind": "library",
           "counter_model": {
             "comparison": {
               "coverage": 0.9900999592492269,
@@ -6261,6 +6430,7 @@
         },
         "iq_offset_block": {
           "compared_with": "sdrk fallback",
+          "comparison_kind": "own_fallback",
           "counter_model": {
             "comparison": {
               "coverage": 0.9990116995464997,
@@ -6298,6 +6468,7 @@
         },
         "mag": {
           "compared_with": "volk_32fc_magnitude_32f",
+          "comparison_kind": "library",
           "counter_model": {
             "comparison": {
               "coverage": 0.9907484269919755,
@@ -6335,6 +6506,7 @@
         },
         "mag_fallback": {
           "compared_with": "CMSIS-DSP 1.18.0 arm_cmplx_mag_f32, generic C (-O3 -ffp-contract=off, LOOPUNROLL, avx512)",
+          "comparison_kind": "library",
           "counter_model": {
             "comparison": {
               "coverage": 0.9946924607169608,
@@ -6372,6 +6544,7 @@
         },
         "mag_q15": {
           "compared_with": "volk_16ic_magnitude_16i",
+          "comparison_kind": "library",
           "counter_model": {
             "comparison": {
               "coverage": 0.9926087483339392,
@@ -6409,6 +6582,7 @@
         },
         "mag_q15_fallback": {
           "compared_with": "CMSIS-DSP 1.18.0 arm_cmplx_mag_q15 (Q2.14, arm_sqrt_q31), generic C (-O3 -ffp-contract=off, LOOPUNROLL, avx512)",
+          "comparison_kind": "library",
           "counter_model": {
             "comparison": {
               "coverage": 0.9997866008171795,
@@ -6446,6 +6620,7 @@
         },
         "mag_sq": {
           "compared_with": "volk_32fc_magnitude_squared_32f",
+          "comparison_kind": "library",
           "counter_model": {
             "comparison": {
               "coverage": 0.9924313240659771,
@@ -6483,6 +6658,7 @@
         },
         "mag_sq_fallback": {
           "compared_with": "CMSIS-DSP 1.18.0 arm_cmplx_mag_squared_f32, generic C (-O3 -ffp-contract=off, LOOPUNROLL, avx512)",
+          "comparison_kind": "library",
           "counter_model": {
             "comparison": {
               "coverage": 0.9940332024906507,
@@ -6520,6 +6696,7 @@
         },
         "mag_sq_q15": {
           "compared_with": "sdrk fallback",
+          "comparison_kind": "own_fallback",
           "counter_model": {
             "comparison": {
               "coverage": 0.9954757479044646,
@@ -6557,6 +6734,7 @@
         },
         "mag_sq_q15_fallback": {
           "compared_with": "CMSIS-DSP 1.18.0 arm_cmplx_mag_squared_q15 (Q3.13, truncating), generic C (-O3 -ffp-contract=off, LOOPUNROLL, avx512)",
+          "comparison_kind": "library",
           "counter_model": {
             "comparison": {
               "coverage": 0.9926798235226078,
@@ -6594,6 +6772,7 @@
         },
         "morse_decode_block": {
           "compared_with": "sdrk fallback",
+          "comparison_kind": "own_fallback",
           "counter_model": {
             "comparison": {
               "coverage": 0.8446001854393473,
@@ -6631,6 +6810,7 @@
         },
         "morse_encode_block": {
           "compared_with": "sdrk fallback",
+          "comparison_kind": "own_fallback",
           "counter_model": {
             "comparison": {
               "coverage": 0.988176653437341,
@@ -6668,6 +6848,7 @@
         },
         "mul": {
           "compared_with": "volk_32fc_x2_multiply_32fc",
+          "comparison_kind": "library",
           "counter_model": {
             "comparison": {
               "coverage": 0.9921060454260203,
@@ -6705,6 +6886,7 @@
         },
         "mul_cq15": {
           "compared_with": "sdrk fallback",
+          "comparison_kind": "own_fallback",
           "counter_model": {
             "comparison": {
               "coverage": 0.9996133023975251,
@@ -6742,6 +6924,7 @@
         },
         "mul_cq15_fallback": {
           "compared_with": "CMSIS-DSP 1.18.0 arm_cmplx_mult_cmplx_q15 (Q3.13, truncating, scaled by 4), generic C (-O3 -ffp-contract=off, LOOPUNROLL, avx512)",
+          "comparison_kind": "library",
           "counter_model": {
             "comparison": {
               "coverage": 0.991676476235797,
@@ -6779,6 +6962,7 @@
         },
         "mul_fallback": {
           "compared_with": "CMSIS-DSP 1.18.0 arm_cmplx_mult_cmplx_f32, generic C (-O3 -ffp-contract=off, LOOPUNROLL, avx512)",
+          "comparison_kind": "library",
           "counter_model": {
             "comparison": {
               "coverage": 0.9919526949642539,
@@ -6816,6 +7000,7 @@
         },
         "mul_real": {
           "compared_with": "volk_32f_x2_multiply_32f",
+          "comparison_kind": "library",
           "counter_model": {
             "comparison": {
               "coverage": 0.9934600292375163,
@@ -6853,6 +7038,7 @@
         },
         "mul_real_fallback": {
           "compared_with": "CMSIS-DSP 1.18.0 arm_mult_f32, generic C (-O3 -ffp-contract=off, LOOPUNROLL, avx512)",
+          "comparison_kind": "library",
           "counter_model": {
             "comparison": {
               "coverage": 0.995078158837658,
@@ -6890,6 +7076,7 @@
         },
         "mul_real_q15": {
           "compared_with": "sdrk fallback",
+          "comparison_kind": "own_fallback",
           "counter_model": {
             "comparison": {
               "coverage": 0.9987515605493134,
@@ -6927,6 +7114,7 @@
         },
         "mul_real_q15_fallback": {
           "compared_with": "CMSIS-DSP 1.18.0 arm_mult_q15 (truncating), generic C (-O3 -ffp-contract=off, LOOPUNROLL, avx512)",
+          "comparison_kind": "library",
           "counter_model": {
             "comparison": {
               "coverage": 0.9955787662087179,
@@ -6964,6 +7152,7 @@
         },
         "noise_blank": {
           "compared_with": "sdrk fallback",
+          "comparison_kind": "own_fallback",
           "counter_model": {
             "comparison": {
               "coverage": 0.9917273993549551,
@@ -7001,6 +7190,7 @@
         },
         "noise_blank_cq15": {
           "compared_with": "sdrk fallback",
+          "comparison_kind": "own_fallback",
           "counter_model": {
             "comparison": {
               "coverage": 0.9915391213820454,
@@ -7038,6 +7228,7 @@
         },
         "noise_block": {
           "compared_with": "sdrk fallback",
+          "comparison_kind": "own_fallback",
           "counter_model": {
             "comparison": {
               "coverage": 0.9935202420474244,
@@ -7075,6 +7266,7 @@
         },
         "oscillate": {
           "compared_with": "sdrk fallback",
+          "comparison_kind": "own_fallback",
           "counter_model": {
             "comparison": {
               "coverage": 0.9962027302683195,
@@ -7112,6 +7304,7 @@
         },
         "oscillate_cq15": {
           "compared_with": "sdrk fallback",
+          "comparison_kind": "own_fallback",
           "counter_model": {
             "comparison": {
               "coverage": 0.9979970156878033,
@@ -7149,6 +7342,7 @@
         },
         "oscillate_cq15_fallback": {
           "compared_with": "CMSIS-DSP 1.18.0 arm_cos_q15 + arm_sin_q15 per sample (512-entry table, linear interpolation), generic C (-O3 -ffp-contract=off, LOOPUNROLL, avx512)",
+          "comparison_kind": "library",
           "counter_model": {
             "comparison": {
               "coverage": 0.9998443328628841,
@@ -7186,6 +7380,7 @@
         },
         "oscillate_fallback": {
           "compared_with": "CMSIS-DSP 1.18.0 arm_sin_cos_f32 of the angle in degrees per sample (512-entry sine table, cubic Hermite interpolation), generic C (-O3 -ffp-contract=off, LOOPUNROLL, avx512)",
+          "comparison_kind": "library",
           "counter_model": {
             "comparison": {
               "coverage": 0.9941813446621292,
@@ -7223,6 +7418,7 @@
         },
         "power_db": {
           "compared_with": "volk_32f_log2_32f + volk_32f_s32f_multiply_32f + volk_32f_s32f_add_32f",
+          "comparison_kind": "library",
           "counter_model": {
             "comparison": {
               "coverage": 0.9911978339278043,
@@ -7260,6 +7456,7 @@
         },
         "power_db_fallback": {
           "compared_with": "CMSIS-DSP 1.18.0 arm_vlog_f32 + arm_scale_f32 (+ offset loop), generic C (-O3 -ffp-contract=off, LOOPUNROLL, avx512)",
+          "comparison_kind": "library",
           "counter_model": {
             "comparison": {
               "coverage": 0.9912716828438196,
@@ -7297,6 +7494,7 @@
         },
         "power_db_q15": {
           "compared_with": "sdrk fallback",
+          "comparison_kind": "own_fallback",
           "counter_model": {
             "comparison": {
               "coverage": 0.9970333632532595,
@@ -7334,6 +7532,7 @@
         },
         "power_db_q15_fallback": {
           "compared_with": "CMSIS-DSP 1.18.0 arm_q15_to_float + arm_vlog_f32 + arm_scale_f32 (+ offset loop), generic C (-O3 -ffp-contract=off, LOOPUNROLL, avx512)",
+          "comparison_kind": "library",
           "counter_model": {
             "comparison": {
               "coverage": 0.9911149486115366,
@@ -7371,6 +7570,7 @@
         },
         "preemph_limit": {
           "compared_with": "sdrk fallback",
+          "comparison_kind": "own_fallback",
           "counter_model": {
             "comparison": {
               "coverage": 0.9976069655033176,
@@ -7408,6 +7608,7 @@
         },
         "preemph_limit_q15": {
           "compared_with": "sdrk fallback",
+          "comparison_kind": "own_fallback",
           "counter_model": {
             "comparison": {
               "coverage": 0.99158070714729,
@@ -7445,6 +7646,7 @@
         },
         "preemph_limit_stereo": {
           "compared_with": "sdrk fallback",
+          "comparison_kind": "own_fallback",
           "counter_model": {
             "comparison": {
               "coverage": 0.9992604513071026,
@@ -7482,6 +7684,7 @@
         },
         "psk_demod_block": {
           "compared_with": "GNU Radio fir_filter_ccf + symbol_sync_cc + costas_loop_cc + constellation_decoder_cb (the sum of the blocks of the receiver chain, generic compiler flags; no acquisition and no lock watches)",
+          "comparison_kind": "library",
           "counter_model": {
             "comparison": {
               "coverage": 0.9942000063704179,
@@ -7519,6 +7722,7 @@
         },
         "psk_mod_block": {
           "compared_with": "GNU Radio constellation_modulator as the sum of its blocks: pack_k_bits_bb + chunks_to_symbols_bc + pfb_arb_resampler_ccf (32 filters of 88 taps and their derivative filters), VOLK's dispatched dot product of the level",
+          "comparison_kind": "library",
           "counter_model": {
             "comparison": {
               "coverage": 0.9909733029942304,
@@ -7556,6 +7760,7 @@
         },
         "psk_mod_block_liquid": {
           "compared_with": "liquid-dsp 1.8.3 modemcf_modulate (arbitrary-constellation modem) + firinterp_crcf (the root-raised cosine of the block), the SIMD dot products of the level (the portable loop at simd128)",
+          "comparison_kind": "library",
           "counter_model": {
             "comparison": {
               "coverage": 0.9922220673645045,
@@ -7593,6 +7798,7 @@
         },
         "pulse_match_block": {
           "compared_with": "GNU Radio fir_filter_ccf (fir_filter_ccf_impl.cc of gr-filter) with VOLK's dispatched dot product of the level (volk_32fc_32f_dot_prod_32fc_a, the aligned tap copies of fir_filter)",
+          "comparison_kind": "library",
           "counter_model": {
             "comparison": {
               "coverage": 0.9965214046677846,
@@ -7630,6 +7836,7 @@
         },
         "pulse_match_block_liquid": {
           "compared_with": "liquid-dsp 1.8.3 firfilt_crcf (firfilt.proto.c), the SIMD dot product of the level (the portable loop at simd128)",
+          "comparison_kind": "library",
           "counter_model": {
             "comparison": {
               "coverage": 0.9971917985674021,
@@ -7667,6 +7874,7 @@
         },
         "pulse_shape_block": {
           "compared_with": "GNU Radio interp_fir_filter_ccf (interp_fir_filter_impl.cc of gr-filter) with VOLK's dispatched dot product of the level (volk_32fc_32f_dot_prod_32fc_a, the aligned tap copies of fir_filter)",
+          "comparison_kind": "library",
           "counter_model": {
             "comparison": {
               "coverage": 0.9932976896978184,
@@ -7704,6 +7912,7 @@
         },
         "pulse_shape_block_liquid": {
           "compared_with": "liquid-dsp 1.8.3 firinterp_crcf (firinterp.proto.c, firpfb.proto.c), the SIMD dot products of the level (the portable loop at simd128)",
+          "comparison_kind": "library",
           "counter_model": {
             "comparison": {
               "coverage": 0.998762438644186,
@@ -7741,6 +7950,7 @@
         },
         "qam_acquire_block": {
           "compared_with": "sdrk fallback",
+          "comparison_kind": "own_fallback",
           "counter_model": {
             "comparison": {
               "coverage": 0.9921184428313924,
@@ -7778,6 +7988,7 @@
         },
         "qam_demod_block": {
           "compared_with": "GNU Radio fir_filter_ccf + symbol_sync_cc + linear_equalizer + constellation_receiver_cb (the sum of the blocks of the receiver chain, generic compiler flags and VOLK generic dot products; no acquisition, no blind equalizer stage and no lock watches)",
+          "comparison_kind": "library",
           "counter_model": {
             "comparison": {
               "coverage": 0.9921809497072277,
@@ -7815,6 +8026,7 @@
         },
         "qam_demod_qam256_block": {
           "compared_with": "sdrk fallback",
+          "comparison_kind": "own_fallback",
           "counter_model": {
             "comparison": {
               "coverage": 0.9900385112457395,
@@ -7852,6 +8064,7 @@
         },
         "qam_demod_search_block": {
           "compared_with": "sdrk fallback",
+          "comparison_kind": "own_fallback",
           "counter_model": {
             "comparison": {
               "coverage": 0.9827823950176243,
@@ -7889,6 +8102,7 @@
         },
         "qam_frame_decode_block": {
           "compared_with": "sdrk fallback",
+          "comparison_kind": "own_fallback",
           "counter_model": {
             "comparison": {
               "coverage": 0.983544050855199,
@@ -7926,6 +8140,7 @@
         },
         "qam_frame_encode_block": {
           "compared_with": "sdrk fallback",
+          "comparison_kind": "own_fallback",
           "counter_model": {
             "comparison": {
               "coverage": 0.9906112523184722,
@@ -7963,6 +8178,7 @@
         },
         "qam_mod_block": {
           "compared_with": "GNU Radio constellation_modulator as the sum of its blocks: pack_k_bits_bb + chunks_to_symbols_bc + pfb_arb_resampler_ccf (32 filters of 88 taps and their derivative filters), VOLK's dispatched dot product of the level",
+          "comparison_kind": "library",
           "counter_model": {
             "comparison": {
               "coverage": 0.9910102511096033,
@@ -8000,6 +8216,7 @@
         },
         "qam_mod_block_liquid": {
           "compared_with": "liquid-dsp 1.8.3 modemcf_modulate (arbitrary-constellation modem) + firinterp_crcf (the root-raised cosine of the block), the SIMD dot products of the level (the portable loop at simd128)",
+          "comparison_kind": "library",
           "counter_model": {
             "comparison": {
               "coverage": 0.9922991926377694,
@@ -8037,6 +8254,7 @@
         },
         "qam_mod_qam256_block": {
           "compared_with": "GNU Radio constellation_modulator as the sum of its blocks: pack_k_bits_bb + chunks_to_symbols_bc + pfb_arb_resampler_ccf (32 filters of 88 taps and their derivative filters), VOLK's dispatched dot product of the level",
+          "comparison_kind": "library",
           "counter_model": {
             "comparison": {
               "coverage": 0.9910832472914,
@@ -8074,6 +8292,7 @@
         },
         "qam_mod_qam256_block_liquid": {
           "compared_with": "liquid-dsp 1.8.3 modemcf_modulate (arbitrary-constellation modem) + firinterp_crcf (the root-raised cosine of the block), the SIMD dot products of the level (the portable loop at simd128)",
+          "comparison_kind": "library",
           "counter_model": {
             "comparison": {
               "coverage": 0.9924489438118269,
@@ -8111,6 +8330,7 @@
         },
         "qam_soft_bits_qam1024": {
           "compared_with": "sdrk fallback",
+          "comparison_kind": "own_fallback",
           "counter_model": {
             "comparison": {
               "coverage": 0.996262705165325,
@@ -8148,6 +8368,7 @@
         },
         "qam_soft_bits_qam16": {
           "compared_with": "GNU Radio constellation_soft_decoder_cf with calc_soft_dec (constellation.cc of gr-digital; the exact log-likelihood ratio over all points, npwr 1, not max-log; no vector allocation per symbol, so faster than GNU Radio's object code)",
+          "comparison_kind": "library",
           "counter_model": {
             "comparison": {
               "coverage": 0.9918741967337343,
@@ -8185,6 +8406,7 @@
         },
         "qam_soft_bits_qam16_liquid": {
           "compared_with": "liquid-dsp 1.8.3 modemcf_demodulate_soft of its own QAM modem (modem_common.proto.c; soft bytes with liquid's scale and labelling; the hard symbol and the soft bits per symbol)",
+          "comparison_kind": "library",
           "counter_model": {
             "comparison": {
               "coverage": 0.9908929112803895,
@@ -8222,6 +8444,7 @@
         },
         "qam_soft_bits_qam16_lut": {
           "compared_with": "GNU Radio constellation_soft_decoder_cf with the look-up table of gen_soft_dec_lut (precision 8, npwr 1; constellation.cc of gr-digital; exact log-likelihood ratio, not max-log; the table lookup and a copy of 2 to 3 floats per symbol, no vector allocation)",
+          "comparison_kind": "library",
           "counter_model": {
             "comparison": {
               "coverage": 0.9920788696058371,
@@ -8259,6 +8482,7 @@
         },
         "qam_soft_bits_qam256": {
           "compared_with": "sdrk fallback",
+          "comparison_kind": "own_fallback",
           "counter_model": {
             "comparison": {
               "coverage": 0.9944840249167293,
@@ -8296,6 +8520,7 @@
         },
         "qam_soft_bits_qam64": {
           "compared_with": "GNU Radio constellation_soft_decoder_cf with calc_soft_dec (constellation.cc of gr-digital; the exact log-likelihood ratio over all points, npwr 1, not max-log; no vector allocation per symbol, so faster than GNU Radio's object code)",
+          "comparison_kind": "library",
           "counter_model": {
             "comparison": {
               "coverage": 0.9911762821279838,
@@ -8333,6 +8558,7 @@
         },
         "qam_soft_bits_qam64_liquid": {
           "compared_with": "liquid-dsp 1.8.3 modemcf_demodulate_soft of its own QAM modem (modem_common.proto.c; soft bytes with liquid's scale and labelling; the hard symbol and the soft bits per symbol)",
+          "comparison_kind": "library",
           "counter_model": {
             "comparison": {
               "coverage": 0.8605061613876863,
@@ -8370,6 +8596,7 @@
         },
         "qam_soft_bits_qam64_lut": {
           "compared_with": "GNU Radio constellation_soft_decoder_cf with the look-up table of gen_soft_dec_lut (precision 8, npwr 1; constellation.cc of gr-digital; exact log-likelihood ratio, not max-log; the table lookup and a copy of 2 to 3 floats per symbol, no vector allocation)",
+          "comparison_kind": "library",
           "counter_model": {
             "comparison": {
               "coverage": 0.9920788696058371,
@@ -8407,6 +8634,7 @@
         },
         "qam_soft_bits_qpsk": {
           "compared_with": "sdrk fallback",
+          "comparison_kind": "own_fallback",
           "counter_model": {
             "comparison": {
               "coverage": 0.9941867975713732,
@@ -8444,6 +8672,7 @@
         },
         "quad_demod": {
           "compared_with": "volk_32fc_x2_multiply_conjugate_32fc + volk_32fc_s32f_atan2_32f",
+          "comparison_kind": "library",
           "counter_model": {
             "comparison": {
               "coverage": 0.9937442039221732,
@@ -8481,6 +8710,7 @@
         },
         "quad_demod_cq15": {
           "compared_with": "sdrk fallback",
+          "comparison_kind": "own_fallback",
           "counter_model": {
             "comparison": {
               "coverage": 0.9906602727226206,
@@ -8518,6 +8748,7 @@
         },
         "quad_demod_cq15_fallback": {
           "compared_with": "CMSIS-DSP arm_cmplx_mult_cmplx_q15 + arm_atan2_q15 + arm_scale_q15 (generic C), conjugate in a plain loop",
+          "comparison_kind": "library",
           "counter_model": {
             "comparison": {
               "coverage": 0.9938631630195252,
@@ -8555,6 +8786,7 @@
         },
         "quad_demod_fallback": {
           "compared_with": "GNU Radio quadrature_demod_cf (gr-analog, fast_atan2f, generic compiler flags)",
+          "comparison_kind": "library",
           "counter_model": {
             "comparison": {
               "coverage": 0.9981691020181968,
@@ -8592,6 +8824,7 @@
         },
         "rds_decode_block": {
           "compared_with": "sdrk fallback",
+          "comparison_kind": "own_fallback",
           "counter_model": {
             "comparison": {
               "coverage": 0.9656925862102349,
@@ -8629,6 +8862,7 @@
         },
         "rds_demod_block": {
           "compared_with": "sdrk fallback",
+          "comparison_kind": "own_fallback",
           "counter_model": {
             "comparison": {
               "coverage": 0.977957035682351,
@@ -8666,6 +8900,7 @@
         },
         "rds_shape": {
           "compared_with": "sdrk fallback",
+          "comparison_kind": "own_fallback",
           "counter_model": {
             "comparison": {
               "coverage": 0.991627743313952,
@@ -8703,6 +8938,7 @@
         },
         "real_to_complex": {
           "compared_with": "liquid-dsp 1.8.3 firhilbf_decim_execute_block (dotprod_rrrf) with its AVX-512F dot product (-O3 -ffp-contract=off, avx512)",
+          "comparison_kind": "library",
           "counter_model": {
             "comparison": {
               "coverage": 0.9916967723337047,
@@ -8743,6 +8979,7 @@
         },
         "real_to_complex_cq15": {
           "compared_with": "libairspy 1.0.10 iqconverter_int16 (truncating >> 15, 32-bit accumulator, the odd samples halved), conversion without remove_dc (-O3 -ffp-contract=off, avx512)",
+          "comparison_kind": "library",
           "counter_model": {
             "comparison": {
               "coverage": 0.9919721212634276,
@@ -8780,6 +9017,7 @@
         },
         "real_to_complex_cq15_fallback": {
           "compared_with": "libairspy 1.0.10 iqconverter_int16 (truncating >> 15, 32-bit accumulator, the odd samples halved), conversion without remove_dc (-O3 -ffp-contract=off, avx512)",
+          "comparison_kind": "library",
           "counter_model": {
             "comparison": {
               "coverage": 0.9919641536042153,
@@ -8817,6 +9055,7 @@
         },
         "real_to_complex_fallback": {
           "compared_with": "liquid-dsp 1.8.3 firhilbf_decim_execute_block (dotprod_rrrf) with its portable dot product (-O3 -ffp-contract=off, avx512)",
+          "comparison_kind": "library",
           "counter_model": {
             "comparison": {
               "coverage": 0.9930024798474472,
@@ -8854,6 +9093,7 @@
         },
         "resample": {
           "compared_with": "volk_32fc_32f_dot_prod_32fc_a per output as GNU Radio's rational_resampler_ccf calls it",
+          "comparison_kind": "library",
           "counter_model": {
             "comparison": {
               "coverage": 0.9938211865571319,
@@ -8891,6 +9131,7 @@
         },
         "resample_cq15": {
           "compared_with": "sdrk fallback",
+          "comparison_kind": "own_fallback",
           "counter_model": {
             "comparison": {
               "coverage": 0.9902579087407934,
@@ -8928,6 +9169,7 @@
         },
         "resample_cq15_fallback": {
           "compared_with": "CMSIS-DSP 1.18.0 arm_fir_interpolate_q15 by 3, the same outputs per sample (no rational resampler), generic C (-O3 -ffp-contract=off, LOOPUNROLL, avx512)",
+          "comparison_kind": "library",
           "counter_model": {
             "comparison": {
               "coverage": 0.9983721421628703,
@@ -8965,6 +9207,7 @@
         },
         "resample_fallback": {
           "compared_with": "CMSIS-DSP 1.18.0 arm_fir_interpolate_f32 by 3, the same outputs per sample (no rational resampler), generic C (-O3 -ffp-contract=off, LOOPUNROLL, avx512)",
+          "comparison_kind": "library",
           "counter_model": {
             "comparison": {
               "coverage": 0.9978937962438539,
@@ -9002,6 +9245,7 @@
         },
         "resample_real": {
           "compared_with": "volk_32f_x2_dot_prod_32f_a per output as GNU Radio's rational_resampler_fff calls it",
+          "comparison_kind": "library",
           "counter_model": {
             "comparison": {
               "coverage": 0.9929078453968111,
@@ -9039,6 +9283,7 @@
         },
         "resample_real_fallback": {
           "compared_with": "CMSIS-DSP 1.18.0 arm_fir_interpolate_f32 by 3, the same outputs per sample (no rational resampler), generic C (-O3 -ffp-contract=off, LOOPUNROLL, avx512)",
+          "comparison_kind": "library",
           "counter_model": {
             "comparison": {
               "coverage": 0.9978637876853576,
@@ -9076,6 +9321,7 @@
         },
         "resample_real_q15": {
           "compared_with": "sdrk fallback",
+          "comparison_kind": "own_fallback",
           "counter_model": {
             "comparison": {
               "coverage": 0.9926200807695567,
@@ -9113,6 +9359,7 @@
         },
         "resample_real_q15_fallback": {
           "compared_with": "CMSIS-DSP 1.18.0 arm_fir_interpolate_q15 by 3, the same outputs per sample (no rational resampler), generic C (-O3 -ffp-contract=off, LOOPUNROLL, avx512)",
+          "comparison_kind": "library",
           "counter_model": {
             "comparison": {
               "coverage": 0.9983511072417802,
@@ -9150,6 +9397,7 @@
         },
         "rfft_1024": {
           "compared_with": "realfft on rustfft (RealFftPlanner, forward, out of place)",
+          "comparison_kind": "library",
           "counter_model": {
             "comparison": {
               "coverage": 0.9929936790800395,
@@ -9187,6 +9435,7 @@
         },
         "rfft_1024_fallback": {
           "compared_with": "CMSIS-DSP 1.18.0 arm_rfft_fast_f32 (forward, packed output), generic C (-O3 -ffp-contract=off, LOOPUNROLL, avx512)",
+          "comparison_kind": "library",
           "counter_model": {
             "comparison": {
               "coverage": 0.9908912743307647,
@@ -9224,6 +9473,7 @@
         },
         "rotate": {
           "compared_with": "volk_32fc_s32fc_x2_rotator2_32fc",
+          "comparison_kind": "library",
           "counter_model": {
             "comparison": {
               "coverage": 0.9902160245486613,
@@ -9261,6 +9511,7 @@
         },
         "rotate_cq15": {
           "compared_with": "sdrk fallback",
+          "comparison_kind": "own_fallback",
           "counter_model": {
             "comparison": {
               "coverage": 0.997954305392344,
@@ -9298,6 +9549,7 @@
         },
         "rotate_cq15_fallback": {
           "compared_with": "CMSIS-DSP 1.18.0 arm_cos_q15 + arm_sin_q15 per sample, arm_cmplx_mult_cmplx_q15 and the shift to Q15 per 64 samples, generic C (-O3 -ffp-contract=off, LOOPUNROLL, avx512)",
+          "comparison_kind": "library",
           "counter_model": {
             "comparison": {
               "coverage": 0.9933525929042859,
@@ -9335,6 +9587,7 @@
         },
         "rotate_fallback": {
           "compared_with": "GNU Radio gr::blocks::rotator::rotate (scalar, renormalised every 512 samples; gr-rotator.c, generic compiler flags)",
+          "comparison_kind": "library",
           "counter_model": {
             "comparison": {
               "coverage": 0.9964595970493978,
@@ -9372,6 +9625,7 @@
         },
         "scale": {
           "compared_with": "volk_32f_s32f_multiply_32f",
+          "comparison_kind": "library",
           "counter_model": {
             "comparison": {
               "coverage": 0.9909665002706441,
@@ -9409,6 +9663,7 @@
         },
         "scale_cq15": {
           "compared_with": "sdrk fallback",
+          "comparison_kind": "own_fallback",
           "counter_model": {
             "comparison": {
               "coverage": 0.9918521845127349,
@@ -9446,6 +9701,7 @@
         },
         "scale_cq15_fallback": {
           "compared_with": "CMSIS-DSP 1.18.0 arm_scale_q15 (shift 0, truncating) on the 2 n values, generic C (-O3 -ffp-contract=off, LOOPUNROLL, avx512)",
+          "comparison_kind": "library",
           "counter_model": {
             "comparison": {
               "coverage": 0.9906669701798315,
@@ -9483,6 +9739,7 @@
         },
         "scale_fallback": {
           "compared_with": "CMSIS-DSP 1.18.0 arm_scale_f32 on the 2 n floats, generic C (-O3 -ffp-contract=off, LOOPUNROLL, avx512)",
+          "comparison_kind": "library",
           "counter_model": {
             "comparison": {
               "coverage": 0.9928598996526438,
@@ -9520,6 +9777,7 @@
         },
         "scramble_block": {
           "compared_with": "sdrk fallback",
+          "comparison_kind": "own_fallback",
           "counter_model": {
             "comparison": {
               "coverage": 0.9902453662406636,
@@ -9557,6 +9815,7 @@
         },
         "scramble_c32_b1": {
           "compared_with": "+-1.0 sequence from the index bits into a buffer of 256 + volk_32fc_32f_multiply_32fc (VOLK 3.3.0 dispatcher; the form of srsRAN srsran_scrambling_c)",
+          "comparison_kind": "library",
           "counter_model": {
             "comparison": {
               "coverage": 0.9903334894126216,
@@ -9594,6 +9853,7 @@
         },
         "scramble_c32_b1_fallback": {
           "compared_with": "+-1.0 sequence from the index bits into a buffer of 256 + VOLK 3.3.0 volk_32fc_32f_multiply_32fc_generic (benches/refs/volk-generic.c, -O3 -ffp-contract=off)",
+          "comparison_kind": "library",
           "counter_model": {
             "comparison": {
               "coverage": 0.9914166853401662,
@@ -9631,6 +9891,7 @@
         },
         "scramble_c32_b2": {
           "compared_with": "phasor lookup into a buffer of 256 + VOLK 3.3.0 volk_32fc_x2_multiply_32fc_u_avx without FMA (benches/refs/volk-nofma.c, -O3 -ffp-contract=off)",
+          "comparison_kind": "library",
           "counter_model": {
             "comparison": {
               "coverage": 0.9920388042389413,
@@ -9668,6 +9929,7 @@
         },
         "scramble_c32_b2_dvbs2": {
           "compared_with": "GNU Radio dvbs2_physical_cc PL scrambling, the per-symbol switch on R_n (benches/refs/gr-dvbs2-plscramble.c, main at ec1bf15; reference does different work; -O3)",
+          "comparison_kind": "library",
           "counter_model": {
             "comparison": {
               "coverage": 0.9992738847514057,
@@ -9705,6 +9967,7 @@
         },
         "scramble_c32_b2_fallback": {
           "compared_with": "phasor lookup into a buffer of 256 + VOLK 3.3.0 volk_32fc_x2_multiply_32fc_generic (benches/refs/volk-generic.c, -O3 -ffp-contract=off)",
+          "comparison_kind": "library",
           "counter_model": {
             "comparison": {
               "coverage": 0.992439536628485,
@@ -9742,6 +10005,7 @@
         },
         "scramble_c32_b8": {
           "compared_with": "phasor lookup into a buffer of 256 + VOLK 3.3.0 volk_32fc_x2_multiply_32fc_u_avx without FMA (benches/refs/volk-nofma.c, -O3 -ffp-contract=off)",
+          "comparison_kind": "library",
           "counter_model": {
             "comparison": {
               "coverage": 0.9920388042389413,
@@ -9779,6 +10043,7 @@
         },
         "scramble_c32_b8_fallback": {
           "compared_with": "phasor lookup into a buffer of 256 + VOLK 3.3.0 volk_32fc_x2_multiply_32fc_generic (benches/refs/volk-generic.c, -O3 -ffp-contract=off)",
+          "comparison_kind": "library",
           "counter_model": {
             "comparison": {
               "coverage": 0.992439536628485,
@@ -9816,6 +10081,7 @@
         },
         "scramble_cq15_b2": {
           "compared_with": "CMSIS-DSP 1.18.0 phasor lookup into a buffer of 256 + arm_cmplx_mult_cmplx_q15 (3.13 output), generic C (-O3 -ffp-contract=off, LOOPUNROLL, avx512)",
+          "comparison_kind": "library",
           "counter_model": {
             "comparison": {
               "coverage": 0.9930355952482234,
@@ -9853,6 +10119,7 @@
         },
         "scramble_cq15_b2_fallback": {
           "compared_with": "CMSIS-DSP 1.18.0 phasor lookup into a buffer of 256 + arm_cmplx_mult_cmplx_q15 (3.13 output), generic C (-O3 -ffp-contract=off, LOOPUNROLL, avx512)",
+          "comparison_kind": "library",
           "counter_model": {
             "comparison": {
               "coverage": 0.9930355952482234,
@@ -9890,6 +10157,7 @@
         },
         "scramble_cq15_b8": {
           "compared_with": "CMSIS-DSP 1.18.0 phasor lookup into a buffer of 256 + arm_cmplx_mult_cmplx_q15 (3.13 output), generic C (-O3 -ffp-contract=off, LOOPUNROLL, avx512)",
+          "comparison_kind": "library",
           "counter_model": {
             "comparison": {
               "coverage": 0.9930355952482234,
@@ -9927,6 +10195,7 @@
         },
         "scramble_cq15_b8_fallback": {
           "compared_with": "CMSIS-DSP 1.18.0 phasor lookup into a buffer of 256 + arm_cmplx_mult_cmplx_q15 (3.13 output), generic C (-O3 -ffp-contract=off, LOOPUNROLL, avx512)",
+          "comparison_kind": "library",
           "counter_model": {
             "comparison": {
               "coverage": 0.9930355952482234,
@@ -9964,6 +10233,7 @@
         },
         "snr_estimate_block": {
           "compared_with": "GNU Radio mpsk_snr_est_cc(SNR_EST_M2M4, 4096, 0.001): the moments |x|^2 and |x|^4 averaged in double, six cabsf per symbol (reference does different work: no decisions, a PSK kurtosis; generic compiler flags)",
+          "comparison_kind": "library",
           "counter_model": {
             "comparison": {
               "coverage": 0.9988942420928244,
@@ -10001,6 +10271,7 @@
         },
         "snr_estimate_block_svr": {
           "compared_with": "GNU Radio mpsk_snr_est_cc(SNR_EST_SVR, 4096, 0.001): |x|^4 and |x_n|^2 |x_(n-1)|^2 averaged in double, two cabsf per symbol (reference does different work: no decisions, a PSK constellation; generic compiler flags)",
+          "comparison_kind": "library",
           "counter_model": {
             "comparison": {
               "coverage": 0.9989955978059973,
@@ -10038,6 +10309,7 @@
         },
         "squelch": {
           "compared_with": "GNU Radio pwr_squelch_cc (squelch_base_cc_impl.cc of gr-analog, generic compiler flags)",
+          "comparison_kind": "library",
           "counter_model": {
             "comparison": {
               "coverage": 0.9989381474223495,
@@ -10075,6 +10347,7 @@
         },
         "squelch_cq15": {
           "compared_with": "sdrk fallback",
+          "comparison_kind": "own_fallback",
           "counter_model": {
             "comparison": {
               "coverage": 0.9988464513136708,
@@ -10112,6 +10385,7 @@
         },
         "stereo_encode": {
           "compared_with": "sdrk fallback",
+          "comparison_kind": "own_fallback",
           "counter_model": {
             "comparison": {
               "coverage": 0.9968387402620779,
@@ -10149,6 +10423,7 @@
         },
         "stereo_encode_rds": {
           "compared_with": "sdrk fallback",
+          "comparison_kind": "own_fallback",
           "counter_model": {
             "comparison": {
               "coverage": 0.9963439084797736,
@@ -10186,6 +10461,7 @@
         },
         "stereo_matrix": {
           "compared_with": "VOLK 3.3.0 composition: volk_32fc_deinterleave_32f_x2, volk_32f_x2_add_32f (d + d), volk_32f_x2_add_32f (s + d2), volk_32f_x2_subtract_32f (s - d2), volk_32f_x2_interleave_32fc (five passes over memory)",
+          "comparison_kind": "library",
           "counter_model": {
             "comparison": {
               "coverage": 0.9903376305524632,
@@ -10223,6 +10499,7 @@
         },
         "stereo_matrix_cq15": {
           "compared_with": "sdrk fallback",
+          "comparison_kind": "own_fallback",
           "counter_model": {
             "comparison": {
               "coverage": 0.9917225910960001,
@@ -10260,6 +10537,7 @@
         },
         "stereo_matrix_cq15_fallback": {
           "compared_with": "CMSIS-DSP 1.18.0 arm_add_q15 (d + d, saturating), arm_add_q15 (s + d2), arm_sub_q15 (s - d2) on planar data, generic C (-O3 -ffp-contract=off, LOOPUNROLL, avx512)",
+          "comparison_kind": "library",
           "counter_model": {
             "comparison": {
               "coverage": 0.9922033258540063,
@@ -10297,6 +10575,7 @@
         },
         "stereo_matrix_fallback": {
           "compared_with": "CMSIS-DSP 1.18.0 arm_add_f32 (d + d), arm_add_f32 (s + d2), arm_sub_f32 (s - d2) on planar data, generic C (-O3 -ffp-contract=off, LOOPUNROLL, avx512)",
+          "comparison_kind": "library",
           "counter_model": {
             "comparison": {
               "coverage": 0.9926018643565335,
@@ -10334,6 +10613,7 @@
         },
         "stereo_pll_fallback": {
           "compared_with": "liquid-dsp 1.8.3 nco_crcf (LIQUID_VCO_INTERP): sincos at theta and 2 theta from the 1024-entry table, nco_crcf_adjust_frequency and nco_crcf_adjust_phase (double modulo in _constrain), nco_crcf_step; no lock detector, no integrator limit (-O3 -ffp-contract=off, avx512)",
+          "comparison_kind": "library",
           "counter_model": {
             "comparison": {
               "coverage": 0.9996689657898378,
@@ -10371,6 +10651,7 @@
         },
         "stereo_pll_q15_fallback": {
           "compared_with": "CMSIS-DSP 1.18.0 arm_cos_q15 and arm_sin_q15 (twice) per sample in the loop of the kernel (the oscillator only: CMSIS-DSP has no PLL), generic C (-O3 -ffp-contract=off, LOOPUNROLL, avx512)",
+          "comparison_kind": "library",
           "counter_model": {
             "comparison": {
               "coverage": 0.9998242722412861,
@@ -10408,6 +10689,7 @@
         },
         "symbol_demap_qam16_block": {
           "compared_with": "GNU Radio constellation_soft_decoder_cf with calc_soft_dec (constellation.cc of gr-digital; the exact log-likelihood ratio over all points, npwr 1, not max-log; no vector allocation per symbol, so faster than GNU Radio's object code)",
+          "comparison_kind": "library",
           "counter_model": {
             "comparison": {
               "coverage": 0.991875754810185,
@@ -10445,6 +10727,7 @@
         },
         "symbol_demap_qam16_block_liquid": {
           "compared_with": "liquid-dsp 1.8.3 modemcf_demodulate_soft of its own QAM modem (modem_common.proto.c; soft bytes with liquid's scale and labelling; the hard symbol and the soft bits per symbol)",
+          "comparison_kind": "library",
           "counter_model": {
             "comparison": {
               "coverage": 0.9909308105573545,
@@ -10482,6 +10765,7 @@
         },
         "symbol_demap_qam16_block_lut": {
           "compared_with": "GNU Radio constellation_soft_decoder_cf with the look-up table of gen_soft_dec_lut (precision 8, npwr 1; constellation.cc of gr-digital; exact log-likelihood ratio, not max-log; the table lookup and a copy of 2 to 3 floats per symbol, no vector allocation)",
+          "comparison_kind": "library",
           "counter_model": {
             "comparison": {
               "coverage": 0.9921047341546708,
@@ -10519,6 +10803,7 @@
         },
         "symbol_demap_qam256_block": {
           "compared_with": "sdrk fallback",
+          "comparison_kind": "own_fallback",
           "counter_model": {
             "comparison": {
               "coverage": 0.9914937233587878,
@@ -10556,6 +10841,7 @@
         },
         "symbol_demap_qam64_block": {
           "compared_with": "GNU Radio constellation_soft_decoder_cf with calc_soft_dec (constellation.cc of gr-digital; the exact log-likelihood ratio over all points, npwr 1, not max-log; no vector allocation per symbol, so faster than GNU Radio's object code)",
+          "comparison_kind": "library",
           "counter_model": {
             "comparison": {
               "coverage": 0.9911766434039513,
@@ -10593,6 +10879,7 @@
         },
         "symbol_demap_qam64_block_liquid": {
           "compared_with": "liquid-dsp 1.8.3 modemcf_demodulate_soft of its own QAM modem (modem_common.proto.c; soft bytes with liquid's scale and labelling; the hard symbol and the soft bits per symbol)",
+          "comparison_kind": "library",
           "counter_model": {
             "comparison": {
               "coverage": 0.8596874348563118,
@@ -10630,6 +10917,7 @@
         },
         "symbol_demap_qam64_block_lut": {
           "compared_with": "GNU Radio constellation_soft_decoder_cf with the look-up table of gen_soft_dec_lut (precision 8, npwr 1; constellation.cc of gr-digital; exact log-likelihood ratio, not max-log; the table lookup and a copy of 2 to 3 floats per symbol, no vector allocation)",
+          "comparison_kind": "library",
           "counter_model": {
             "comparison": {
               "coverage": 0.9921067152899402,
@@ -10667,6 +10955,7 @@
         },
         "symbol_map_block": {
           "compared_with": "GNU Radio pack_k_bits_bb + chunks_to_symbols_bc (pack_k_bits.cc of gr-blocks, chunks_to_symbols_impl.cc of gr-digital), the table of the points of the block, generic compiler flags",
+          "comparison_kind": "library",
           "counter_model": {
             "comparison": {
               "coverage": 0.9996050693125543,
@@ -10704,6 +10993,7 @@
         },
         "symbol_map_block_liquid": {
           "compared_with": "liquid-dsp 1.8.3 modemcf_modulate on the arbitrary-constellation modem of the points of the block (modem_arb.proto.c), the bits packed by the wrapper",
+          "comparison_kind": "library",
           "counter_model": {
             "comparison": {
               "coverage": 0.9996679591472625,
@@ -10741,6 +11031,7 @@
         },
         "symbol_map_block_qam64": {
           "compared_with": "GNU Radio pack_k_bits_bb + chunks_to_symbols_bc (pack_k_bits.cc of gr-blocks, chunks_to_symbols_impl.cc of gr-digital), the table of the points of the block, generic compiler flags",
+          "comparison_kind": "library",
           "counter_model": {
             "comparison": {
               "coverage": 0.9997024247368632,
@@ -10778,6 +11069,7 @@
         },
         "symbol_map_block_qam64_liquid": {
           "compared_with": "liquid-dsp 1.8.3 modemcf_modulate on the arbitrary-constellation modem of the points of the block (modem_arb.proto.c), the bits packed by the wrapper",
+          "comparison_kind": "library",
           "counter_model": {
             "comparison": {
               "coverage": 0.9997343496764579,
@@ -10815,6 +11107,7 @@
         },
         "symbol_map_block_qpsk": {
           "compared_with": "GNU Radio pack_k_bits_bb + chunks_to_symbols_bc (pack_k_bits.cc of gr-blocks, chunks_to_symbols_impl.cc of gr-digital), the table of the points of the block, generic compiler flags",
+          "comparison_kind": "library",
           "counter_model": {
             "comparison": {
               "coverage": 0.9994130371699158,
@@ -10852,6 +11145,7 @@
         },
         "symbol_map_block_qpsk_liquid": {
           "compared_with": "liquid-dsp 1.8.3 modemcf_modulate on the arbitrary-constellation modem of the points of the block (modem_arb.proto.c), the bits packed by the wrapper",
+          "comparison_kind": "library",
           "counter_model": {
             "comparison": {
               "coverage": 0.999557327858095,
@@ -10889,6 +11183,7 @@
         },
         "symbol_sync": {
           "compared_with": "sdrk fallback",
+          "comparison_kind": "own_fallback",
           "counter_model": {
             "comparison": {
               "coverage": 0.9970819118894885,
@@ -10926,6 +11221,7 @@
         },
         "symbol_sync_fallback": {
           "compared_with": "GNU Radio symbol_sync_cc (symbol_sync_cc_impl.cc of gr-digital, TED_GARDNER, IR_MMSE_8TAP, generic compiler flags; reference does different work: an 8-tap MMSE interpolator against our 4-point Lagrange polynomial)",
+          "comparison_kind": "library",
           "counter_model": {
             "comparison": {
               "coverage": 0.9992014013383078,
@@ -10963,6 +11259,7 @@
         },
         "symbol_sync_real": {
           "compared_with": "sdrk fallback",
+          "comparison_kind": "own_fallback",
           "counter_model": {
             "comparison": {
               "coverage": 0.9940242064151337,
@@ -11000,6 +11297,7 @@
         },
         "window": {
           "compared_with": "volk_32fc_32f_multiply_32fc",
+          "comparison_kind": "library",
           "counter_model": {
             "comparison": {
               "coverage": 0.9915068136011311,
@@ -11037,6 +11335,7 @@
         },
         "window_cq15": {
           "compared_with": "sdrk fallback",
+          "comparison_kind": "own_fallback",
           "counter_model": {
             "comparison": {
               "coverage": 0.9923346289455001,
@@ -11074,6 +11373,7 @@
         },
         "window_cq15_fallback": {
           "compared_with": "CMSIS-DSP 1.18.0 arm_cmplx_mult_real_q15 (truncating), generic C (-O3 -ffp-contract=off, LOOPUNROLL, avx512)",
+          "comparison_kind": "library",
           "counter_model": {
             "comparison": {
               "coverage": 0.9908204895738894,
@@ -11111,6 +11411,7 @@
         },
         "window_fallback": {
           "compared_with": "CMSIS-DSP 1.18.0 arm_cmplx_mult_real_f32, generic C (-O3 -ffp-contract=off, LOOPUNROLL, avx512)",
+          "comparison_kind": "library",
           "counter_model": {
             "comparison": {
               "coverage": 0.990646492434663,
@@ -11148,6 +11449,7 @@
         },
         "xcorr_fft_n4096": {
           "compared_with": "liquid-dsp 1.8.3 fftfilt_cccf (benches/refs/liquid-fftfilt.c), FFTW 3.3.10",
+          "comparison_kind": "library",
           "counter_model": {
             "comparison": {
               "coverage": 0.9910852287380503,
@@ -11185,6 +11487,7 @@
         },
         "xcorr_fft_n4096_fallback": {
           "compared_with": "liquid-dsp 1.8.3 fftfilt_cccf (benches/refs/liquid-fftfilt.c), liquid's own FFT",
+          "comparison_kind": "library",
           "counter_model": {
             "comparison": {
               "coverage": 0.9925709303902805,
@@ -11222,6 +11525,7 @@
         },
         "xcorr_fft_n512": {
           "compared_with": "liquid-dsp 1.8.3 fftfilt_cccf (benches/refs/liquid-fftfilt.c), FFTW 3.3.10",
+          "comparison_kind": "library",
           "counter_model": {
             "comparison": {
               "coverage": 0.9934529453199661,
@@ -11259,6 +11563,7 @@
         },
         "xcorr_fft_n512_fallback": {
           "compared_with": "liquid-dsp 1.8.3 fftfilt_cccf (benches/refs/liquid-fftfilt.c), liquid's own FFT",
+          "comparison_kind": "library",
           "counter_model": {
             "comparison": {
               "coverage": 0.9918315732547438,

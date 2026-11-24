@@ -23,8 +23,8 @@ use anyhow::{Context, anyhow, bail};
 use serde_json::{Value, json};
 
 use crate::bench::{
-    K, KERNELS, KernelSpec, LevelPlan, N, PLANS, Reference, Run, Runner, Session, Variant,
-    comparisons, references, run_args, session,
+    ComparisonKind, K, KERNELS, KernelSpec, LevelPlan, N, PLANS, Reference, Run, Runner, Session,
+    Variant, comparisons, references, run_args, session,
 };
 
 /// The platforms whose levels have a core model: measured in cycles per sample by
@@ -102,10 +102,6 @@ pub struct Limit {
     /// [`crate::cycle_gate::TRADE_DB`] above the comparison's and its ratio within the `dev`
     /// limit; the text names the SNR of both sides. Not used by the count of `simd128`.
     pub accuracy_trade: Option<String>,
-    /// The efficiency target of an own-kernel comparison ([`Reference::OwnKernel`]) of the
-    /// entry (`"own_target"`): the results record whether `ours / ours:<kernel>` meets it. It is
-    /// information, never judged, and it does not replace the limit of the judged comparison.
-    pub own_target: Option<f64>,
 }
 
 #[cfg(test)]
@@ -118,7 +114,6 @@ impl Limit {
             waiver: None,
             accuracy_waiver: None,
             accuracy_trade: None,
-            own_target: None,
         }
     }
 }
@@ -179,6 +174,13 @@ impl Limits {
                     Some("info") => Status::Info,
                     other => bail!("limits.json: `{kernel}.{level}`: unknown status {other:?}"),
                 };
+                // A target on a comparison of our code with our own code is a verdict on our own
+                // code, which the measurement order forbids (D2767; D102 is superseded).
+                if entry.get("own_target").is_some() {
+                    bail!(
+                        "limits.json: `{kernel}.{level}`: `own_target` is no longer a field: an own-kernel comparison is information without a target (D2767)"
+                    );
+                }
                 let text = |key: &str| entry.get(key).and_then(Value::as_str).map(str::to_string);
                 per_level.insert(
                     level.clone(),
@@ -187,15 +189,6 @@ impl Limits {
                         waiver: text("waiver"),
                         accuracy_waiver: text("accuracy_waiver"),
                         accuracy_trade: text("accuracy_trade"),
-                        own_target: match entry.get("own_target") {
-                            None => None,
-                            Some(v) => match v.as_f64() {
-                                Some(t) if t > 0.0 => Some(t),
-                                _ => bail!(
-                                    "limits.json: `{kernel}.{level}`: `own_target` must be a number > 0"
-                                ),
-                            },
-                        },
                     },
                 );
             }
@@ -232,17 +225,13 @@ pub struct Extra {
     pub other: f64,
     /// Name of the comparison.
     pub compared_with: String,
+    /// What the comparison is (D2767).
+    pub comparison_kind: ComparisonKind,
     /// SNR in dB of the comparison, where measured.
     pub other_snr_db: Option<f64>,
 }
 
 impl Extra {
-    /// Whether this is an own-kernel comparison (`ours:<kernel>`).
-    #[must_use]
-    pub fn is_own_kernel(&self) -> bool {
-        self.compared_with.starts_with("ours:")
-    }
-
     /// `ours / other`.
     #[must_use]
     pub fn ratio(&self) -> f64 {
@@ -263,6 +252,8 @@ pub struct Measurement {
     pub other: f64,
     /// Name of the comparison.
     pub compared_with: String,
+    /// What the comparison is: a foreign library or our own code (D2767).
+    pub comparison_kind: ComparisonKind,
     /// SNR in dB of our kernel against the f64 reference.
     pub ours_snr_db: f64,
     /// SNR in dB of the comparison against the f64 reference.
@@ -345,6 +336,10 @@ fn over(ratio: f64, cap: f64) -> String {
 /// checked independently, and each exceedance needs its own waiver (`waiver`,
 /// `accuracy_waiver`).
 #[must_use]
+#[allow(
+    clippy::large_stack_frames,
+    reason = "the texts of the verdict are built in place; xtask is a host tool"
+)]
 pub fn judge(caps: &Caps, limit: Option<&Limit>, m: &Measurement) -> Verdict {
     let Some(limit) = limit else {
         return Verdict::Fail(format!(
@@ -358,6 +353,13 @@ pub fn judge(caps: &Caps, limit: Option<&Limit>, m: &Measurement) -> Verdict {
         Status::Dev => caps.dev,
     };
     let status = limit.status.name();
+    if m.comparison_kind.is_own() {
+        return Verdict::Fail(format!(
+            "{status} judged against our own code (D32, D2764): the comparison `{}` is `{}`; the entry is `info` (judged by its efficiency) until a foreign library is its comparison",
+            m.compared_with,
+            m.comparison_kind.name()
+        ));
+    }
     let ratio = m.ratio();
     let slow = ratio > cap;
     let inaccurate = m.other_snr_db - m.ours_snr_db > SNR_MARGIN_DB;
@@ -370,7 +372,10 @@ pub fn judge(caps: &Caps, limit: Option<&Limit>, m: &Measurement) -> Verdict {
             m.compared_with
         );
         match &limit.waiver {
-            Some(w) => waived.push(format!("{text} (waiver: {w})")),
+            Some(w) => match waiver_above_cap(caps, limit.status, ratio, w) {
+                Ok(()) => waived.push(format!("{text} (waiver: {w})")),
+                Err(why) => failing.push(format!("{text}; {why}")),
+            },
             None => failing.push(text),
         }
     }
@@ -417,6 +422,47 @@ pub fn judge(caps: &Caps, limit: Option<&Limit>, m: &Measurement) -> Verdict {
         Verdict::Pass
     } else {
         Verdict::Warn(notes.join("; "))
+    }
+}
+
+/// The phrase of a waiver that keeps a `dev` entry above the `dev` limit while the maintainer
+/// decides it (D2779).
+pub const AWAITING: &str = "awaiting the maintainer's decision";
+
+/// Whether a plain `waiver` may cover a ratio `worst` above the limit of `status` (D2779, the
+/// maintainer's measurement order): never for `release` above [`Caps::release`] (only an
+/// `accuracy_trade` keeps `release` there, up to [`crate::cycle_gate::TRADE_CAP`]: the entry is
+/// `dev` with its open item), and for `dev` above [`Caps::dev`] only while the waiver names its
+/// open item and says that it is [`AWAITING`]. `Err` says why not.
+///
+/// # Errors
+/// The waiver cannot cover the ratio.
+pub fn waiver_above_cap(
+    caps: &Caps,
+    status: Status,
+    worst: f64,
+    waiver: &str,
+) -> Result<(), String> {
+    match status {
+        Status::Release if worst > caps.release => Err(format!(
+            "a waiver cannot keep a `release` entry above the release limit of {:.2}x: only an `accuracy_trade` keeps it `release` (up to {:.2}x, D2760); otherwise it is `dev` with its open item (D2779)",
+            caps.release,
+            crate::cycle_gate::TRADE_CAP
+        )),
+        Status::Dev if worst > caps.dev => {
+            let names_item = crate::release::references(waiver)
+                .iter()
+                .any(|r| r.starts_with("open item "));
+            if names_item && waiver.contains(AWAITING) {
+                Ok(())
+            } else {
+                Err(format!(
+                    "a waiver keeps a `dev` entry above the dev limit of {:.2}x only while it names its open item and says \"{AWAITING}\" (D2779)",
+                    caps.dev
+                ))
+            }
+        }
+        _ => Ok(()),
     }
 }
 
@@ -470,7 +516,8 @@ pub fn evaluate(limits: &Limits, level: &str, measurements: &[Measurement]) -> R
             report.blockers.push(format!("{} {level}: {why}", m.kernel));
         }
         let status = limit.map_or("unlisted", |l| l.status.name());
-        let goal = m.ratio() <= caps.goal;
+        // The goal is a figure against a library only (D2767).
+        let goal = (!m.comparison_kind.is_own()).then(|| m.ratio() <= caps.goal);
         let mut line = format!(
             "{:<22} {:<12} {:>8.2} vs {:>8.2} instr/sample  ratio {:>5.2}{}  [{status}]  {}",
             m.kernel,
@@ -478,65 +525,55 @@ pub fn evaluate(limits: &Limits, level: &str, measurements: &[Measurement]) -> R
             m.ours,
             m.other,
             m.ratio(),
-            if goal { " goal" } else { "     " },
+            match goal {
+                Some(true) => " goal",
+                Some(false) => "     ",
+                None => " own ",
+            },
             verdict.word()
         );
         if !verdict.detail().is_empty() {
             let _ = write!(line, "  {}", verdict.detail());
         }
         report.lines.push(line);
-        let target = limit.and_then(|l| l.own_target);
         for e in &m.extras {
-            let mut line = format!(
-                "    {:<34} {:>8.2} vs {:>8.2} instr/sample  ratio {:>5.2}  ({})",
+            report.lines.push(format!(
+                "    {:<34} {:>8.2} vs {:>8.2} instr/sample  ratio {:>5.2}  ({}{})",
                 e.label,
                 e.ours,
                 e.other,
                 e.ratio(),
-                e.compared_with
-            );
-            if let Some(t) = target.filter(|_| e.is_own_kernel()) {
-                let _ = write!(
-                    line,
-                    "  target {t:.2}: {}",
-                    if e.ratio() <= t { "met" } else { "missed" }
-                );
-            }
-            report.lines.push(line);
+                e.compared_with,
+                if e.comparison_kind.is_own() {
+                    ", own code: information"
+                } else {
+                    ""
+                }
+            ));
         }
         report
             .records
-            .insert(m.kernel.clone(), record(m, status, &verdict, goal, target));
+            .insert(m.kernel.clone(), record(m, status, &verdict, goal));
     }
     report
 }
 
-fn record(
-    m: &Measurement,
-    status: &str,
-    verdict: &Verdict,
-    goal: bool,
-    own_target: Option<f64>,
-) -> Value {
+/// The record of one measurement in the results file. `goal` is `None` for a comparison with our
+/// own code, which has no goal (D2767): the record then has no `goal`.
+fn record(m: &Measurement, status: &str, verdict: &Verdict, goal: Option<bool>) -> Value {
     let extras: Vec<Value> = m
         .extras
         .iter()
         .map(|e| {
-            let mut v = json!({
+            json!({
                 "label": e.label,
                 "ours_instr_per_sample": round2(e.ours),
                 "other_instr_per_sample": round2(e.other),
                 "ratio": round2(e.ratio()),
                 "compared_with": e.compared_with,
+                "comparison_kind": e.comparison_kind.name(),
                 "other_snr_db": e.other_snr_db.map(round2),
-            });
-            if let Some(t) = own_target.filter(|_| e.is_own_kernel())
-                && let Some(obj) = v.as_object_mut()
-            {
-                obj.insert("target".into(), json!(t));
-                obj.insert("meets_target".into(), json!(e.ratio() <= t));
-            }
-            v
+            })
         })
         .collect();
     let mut r = json!({
@@ -544,15 +581,18 @@ fn record(
         "other_instr_per_sample": round2(m.other),
         "ratio": round2(m.ratio()),
         "compared_with": m.compared_with,
+        "comparison_kind": m.comparison_kind.name(),
         "status": status,
         "verdict": verdict.word().to_lowercase(),
-        "goal": goal,
         "snr_db": { "ours": round2(m.ours_snr_db), "other": round2(m.other_snr_db) },
     });
-    if !extras.is_empty()
-        && let Some(obj) = r.as_object_mut()
-    {
-        obj.insert("informational".into(), Value::Array(extras));
+    if let Some(obj) = r.as_object_mut() {
+        if let Some(goal) = goal {
+            obj.insert("goal".into(), json!(goal));
+        }
+        if !extras.is_empty() {
+            obj.insert("informational".into(), Value::Array(extras));
+        }
     }
     r
 }
@@ -772,6 +812,7 @@ fn measure_kernel(
         ours,
         other,
         compared_with: label,
+        comparison_kind: gate.kind(),
         ours_snr_db,
         other_snr_db,
         extras: Vec::new(),
@@ -791,6 +832,7 @@ fn measure_kernel(
             ours,
             other: count(r.implementation(), &standard, pinned)?,
             compared_with: name,
+            comparison_kind: r.kind(),
             other_snr_db: Some(session.snr(spec.name, r.implementation(), pinned)?),
         });
     }
@@ -801,6 +843,7 @@ fn measure_kernel(
                 ours: count(measured, &v, pinned)?,
                 other: count(gate.implementation(), &v, pinned)?,
                 compared_with: m.compared_with.clone(),
+                comparison_kind: m.comparison_kind,
                 other_snr_db: None,
             });
         }
@@ -842,6 +885,7 @@ fn own_kernel_extra(
         ours,
         other: session.per_sample(kernel, "ours", variant, config)?,
         compared_with: format!("ours:{kernel}"),
+        comparison_kind: ComparisonKind::OwnKernel,
         other_snr_db: Some(session.snr(kernel, "ours", config)?),
     })
 }
@@ -869,9 +913,12 @@ pub struct Options {
     /// results file and keep everything else of it (a full run measures all kernels against
     /// all references, which a new kernel with no library to compare with does not need).
     pub merge: bool,
+    /// `--rejudge`: measure nothing; judge the stored numbers of the results file again by
+    /// `benches/limits.json` and the plan, and write the derived fields ([`rejudge`]).
+    pub rejudge: bool,
 }
 
-const USAGE: &str = "usage: cargo xtask count --platform <wasm32|cortex-m4> [--level L]... [--kernel NAME]... [--no-write] [--no-variants] [--merge] [--strict]";
+const USAGE: &str = "usage: cargo xtask count --platform <wasm32|cortex-m4> [--level L]... [--kernel NAME]... [--no-write] [--no-variants] [--merge] [--strict] [--rejudge]";
 
 impl Options {
     /// Parses the arguments after `count`.
@@ -899,6 +946,7 @@ impl Options {
                 "--no-variants" => o.variants = false,
                 "--merge" => o.merge = true,
                 "--strict" => o.strict = true,
+                "--rejudge" => o.rejudge = true,
                 other => bail!("unknown option `{other}`; {USAGE}"),
             }
         }
@@ -984,6 +1032,9 @@ pub fn run(root: &Path, args: &[&str]) -> anyhow::Result<bool> {
         bail!("{USAGE}");
     };
     let plans = select_plans(platform, &options.levels)?;
+    if options.rejudge {
+        return rejudge_file(root, platform, options.write);
+    }
     for k in &options.kernels {
         if !KERNELS.iter().any(|s| s.name == k) {
             bail!("unknown kernel `{k}`");
@@ -1044,6 +1095,269 @@ pub fn run(root: &Path, args: &[&str]) -> anyhow::Result<bool> {
         eprintln!("count {platform}: limits exceeded");
     }
     Ok(all_ok)
+}
+
+/// The derived fields of a record that [`rejudge`] writes: everything else is a measured number
+/// or a name and stays as it is.
+const DERIVED: [&str; 4] = ["status", "verdict", "goal", "comparison_kind"];
+
+/// The outcome of [`rejudge`].
+#[derive(Debug, Default)]
+pub struct Rejudged {
+    /// The document with the derived fields judged again.
+    pub doc: Value,
+    /// `kernel level: field old -> new` for every derived field that changed.
+    pub changes: Vec<String>,
+    /// The records that fail their judgement: `kernel level: reason`.
+    pub failures: Vec<String>,
+}
+
+/// The measurement of a stored record of `kernel` at the level of `plan`, with the comparison
+/// kinds of the plan (D2767): the judged comparison's for the record and the variants, and for
+/// an informational comparison (`information: <implementation>`) that of its reference.
+///
+/// # Errors
+/// A record without its numbers, or an informational comparison that the plan does not have.
+fn stored_measurement(
+    plan: &LevelPlan,
+    spec: &KernelSpec,
+    r: &Value,
+) -> anyhow::Result<Measurement> {
+    let num = |v: &Value, k: &str| {
+        v.get(k)
+            .and_then(Value::as_f64)
+            .ok_or_else(|| anyhow!("`{}` at `{}` has no `{k}`", spec.name, plan.level))
+    };
+    let text = |v: &Value| {
+        v.get("compared_with")
+            .and_then(Value::as_str)
+            .unwrap_or_default()
+            .to_string()
+    };
+    let (gate, extras) = comparisons(plan, spec);
+    let snr = r.get("snr_db").unwrap_or(&Value::Null);
+    let mut m = Measurement {
+        kernel: spec.name.to_string(),
+        level: plan.level.to_string(),
+        ours: num(r, "ours_instr_per_sample")?,
+        other: num(r, "other_instr_per_sample")?,
+        compared_with: text(r),
+        comparison_kind: gate.kind(),
+        ours_snr_db: num(snr, "ours")?,
+        other_snr_db: num(snr, "other")?,
+        extras: Vec::new(),
+    };
+    for e in r
+        .get("informational")
+        .and_then(Value::as_array)
+        .into_iter()
+        .flatten()
+    {
+        let label = e
+            .get("label")
+            .and_then(Value::as_str)
+            .unwrap_or_default()
+            .to_string();
+        let comparison_kind = match label.strip_prefix("information: ") {
+            None => gate.kind(),
+            Some(name) => extras
+                .iter()
+                .find(|x| match x {
+                    Reference::OwnKernel(k) => name.strip_prefix("ours:") == Some(*k),
+                    other => other.implementation() == name,
+                })
+                .map(|x| x.kind())
+                .ok_or_else(|| {
+                    anyhow!(
+                        "`{}` at `{}`: the plan has no informational comparison `{name}`",
+                        spec.name,
+                        plan.level
+                    )
+                })?,
+        };
+        m.extras.push(Extra {
+            label,
+            ours: num(e, "ours_instr_per_sample")?,
+            other: num(e, "other_instr_per_sample")?,
+            compared_with: text(e),
+            comparison_kind,
+            other_snr_db: e.get("other_snr_db").and_then(Value::as_f64),
+        });
+    }
+    Ok(m)
+}
+
+/// Judges the stored numbers of a results document of the counted levels again by `limits` and
+/// the plan, without a measurement (D2767): per record the status of `limits.json`, the verdict,
+/// the goal (a library comparison only) and the comparison kinds are written anew; the numbers,
+/// the names and the rest of the document stay as they are. The method's limits are the caps of
+/// `limits`.
+///
+/// # Errors
+/// A level that is not counted, a record of an unknown kernel, or a record without its numbers.
+#[allow(
+    clippy::large_stack_frames,
+    reason = "the plan table and serde_json values are large; xtask is a host tool"
+)]
+pub fn rejudge(doc: &Value, limits: &Limits) -> anyhow::Result<Rejudged> {
+    let mut out = Rejudged {
+        doc: doc.clone(),
+        ..Rejudged::default()
+    };
+    let caps = limits.caps;
+    if let Some(method) = out.doc.get_mut("method").and_then(Value::as_object_mut) {
+        let new = json!({ "release": caps.release, "dev": caps.dev, "warn": caps.warn, "goal": caps.goal });
+        if method.get("limits") != Some(&new) {
+            out.changes.push(format!(
+                "method.limits: {} -> {new}",
+                method.get("limits").unwrap_or(&Value::Null)
+            ));
+            method.insert("limits".into(), new);
+        }
+    }
+    let Some(levels) = out.doc.get_mut("levels").and_then(Value::as_object_mut) else {
+        bail!("the results document has no `levels`");
+    };
+    for (level, l) in levels.iter_mut() {
+        let plan = PLANS
+            .iter()
+            .find(|p| p.level == level && p.runner == Runner::Wasmtime)
+            .ok_or_else(|| anyhow!("the level `{level}` is not counted"))?;
+        let Some(kernels) = l.get_mut("kernels").and_then(Value::as_object_mut) else {
+            continue;
+        };
+        for (kernel, r) in kernels.iter_mut() {
+            let spec = KERNELS
+                .iter()
+                .find(|s| s.name == kernel)
+                .ok_or_else(|| anyhow!("`{kernel}` at `{level}` is not an entry of the table"))?;
+            let m = stored_measurement(plan, spec, r)?;
+            let report = evaluate(limits, level, std::slice::from_ref(&m));
+            let new = report
+                .records
+                .get(kernel.as_str())
+                .cloned()
+                .unwrap_or(Value::Null);
+            if let Verdict::Fail(why) = judge(&caps, limits.get(kernel, level), &m) {
+                out.failures.push(format!("{kernel} {level}: {why}"));
+            }
+            let Some(obj) = r.as_object_mut() else {
+                continue;
+            };
+            for key in DERIVED {
+                let (old, fresh) = (obj.get(key).cloned(), new.get(key).cloned());
+                if old != fresh {
+                    out.changes.push(format!(
+                        "{kernel} {level}: {key} {} -> {}",
+                        old.unwrap_or(Value::Null),
+                        fresh.clone().unwrap_or(Value::Null)
+                    ));
+                    match fresh {
+                        Some(v) => obj.insert(key.into(), v),
+                        None => obj.remove(key),
+                    };
+                }
+            }
+            let fresh_extras = new.get("informational").and_then(Value::as_array);
+            if let (Some(extras), Some(fresh)) = (
+                obj.get_mut("informational").and_then(Value::as_array_mut),
+                fresh_extras,
+            ) {
+                for (e, f) in extras.iter_mut().zip(fresh) {
+                    let Some(e) = e.as_object_mut() else { continue };
+                    for key in ["target", "meets_target"] {
+                        if e.remove(key).is_some() {
+                            out.changes
+                                .push(format!("{kernel} {level}: informational {key} removed"));
+                        }
+                    }
+                    if e.get("comparison_kind") != f.get("comparison_kind") {
+                        out.changes.push(format!(
+                            "{kernel} {level}: informational comparison_kind of {} -> {}",
+                            e.get("label").unwrap_or(&Value::Null),
+                            f["comparison_kind"]
+                        ));
+                        e.insert("comparison_kind".into(), f["comparison_kind"].clone());
+                    }
+                }
+            }
+        }
+    }
+    Ok(out)
+}
+
+/// The path of the results file of a counted platform.
+fn results_path(root: &Path, platform: &str) -> std::path::PathBuf {
+    root.join("benches")
+        .join("results")
+        .join(format!("{platform}.json"))
+}
+
+/// `cargo xtask count --platform <p> --rejudge`: [`rejudge`] on the committed results file,
+/// written back with `write`. `Ok(false)` if a record fails its judgement.
+fn rejudge_file(root: &Path, platform: &str, write: bool) -> anyhow::Result<bool> {
+    let path = results_path(root, platform);
+    let doc: Value = serde_json::from_str(
+        &std::fs::read_to_string(&path)
+            .with_context(|| format!("cannot read {}", path.display()))?,
+    )?;
+    let limits = Limits::parse(&std::fs::read_to_string(
+        root.join("benches").join("limits.json"),
+    )?)?;
+    let r = rejudge(&doc, &limits)?;
+    for c in &r.changes {
+        println!("changed: {c}");
+    }
+    for f in &r.failures {
+        eprintln!("FAIL: {f}");
+    }
+    if write && !r.changes.is_empty() {
+        let mut text = serde_json::to_string_pretty(&r.doc)?;
+        text.push('\n');
+        std::fs::write(&path, text)?;
+        println!("rejudged {}: {} changes", path.display(), r.changes.len());
+    }
+    Ok(r.failures.is_empty())
+}
+
+/// The check of `cargo xtask check` on the committed counts of `wasm32` (D2767): the derived
+/// fields of every record are those that [`rejudge`] gives (the status of `limits.json`, the
+/// verdict, the goal of a library comparison only, the comparison kinds of the plan), and no
+/// record fails its judgement (a `release` or `dev` entry against our own code, a waiver above
+/// its cap, D2779).
+///
+/// # Errors
+/// The results file or `benches/limits.json` cannot be read or parsed.
+pub fn check_counts(root: &Path) -> anyhow::Result<Vec<crate::scan::Finding>> {
+    let path = results_path(root, "wasm32");
+    let doc: Value = serde_json::from_str(
+        &std::fs::read_to_string(&path)
+            .with_context(|| format!("cannot read {}", path.display()))?,
+    )?;
+    let limits = Limits::parse(&std::fs::read_to_string(
+        root.join("benches").join("limits.json"),
+    )?)?;
+    let r = rejudge(&doc, &limits)?;
+    let finding = |message: String| crate::scan::Finding {
+        path: std::path::PathBuf::from("benches/results/wasm32.json"),
+        line: 0,
+        message,
+    };
+    let mut out: Vec<_> = r
+        .changes
+        .iter()
+        .map(|c| {
+            finding(format!(
+                "stale derived field ({c}); run `cargo xtask count --platform wasm32 --rejudge` (D2767)"
+            ))
+        })
+        .collect();
+    out.extend(
+        r.failures
+            .iter()
+            .map(|f| finding(format!("{f} (D14, D2767)"))),
+    );
+    Ok(out)
 }
 
 /// The manifest of the C references of `platform` (`benches/target/refs/<refs>/refs.json`,
@@ -1260,6 +1574,7 @@ mod tests {
             ours,
             other,
             compared_with: "volk".into(),
+            comparison_kind: ComparisonKind::Library,
             ours_snr_db: 130.0,
             other_snr_db: 130.0,
             extras: Vec::new(),
@@ -1284,7 +1599,6 @@ mod tests {
             waiver: waiver.map(Into::into),
             accuracy_waiver: accuracy.map(Into::into),
             accuracy_trade: None,
-            own_target: None,
         }
     }
 
@@ -1393,7 +1707,7 @@ mod tests {
     #[test]
     fn a_waiver_reports_but_does_not_fail() {
         let l = limits(
-            r#"{ "fft_4096": { "avx2": { "status": "dev", "waiver": "open item M13-1" } } }"#,
+            r#"{ "fft_4096": { "avx2": { "status": "dev", "waiver": "open item M13-1, awaiting the maintainer's decision" } } }"#,
         );
         let report = evaluate(&l, "avx2", &[m("fft_4096", 40.0, 10.0)]);
         assert!(report.ok);
@@ -1403,14 +1717,22 @@ mod tests {
 
     #[test]
     fn a_ratio_waiver_does_not_hide_an_accuracy_regression() {
-        let l = limit(Status::Dev, Some("M13-2"), None);
+        let l = limit(
+            Status::Dev,
+            Some("open item M13-2, awaiting the maintainer's decision"),
+            None,
+        );
         let mut x = m("k", 40.0, 10.0);
         x.ours_snr_db = 120.0;
         match judged(&l, &x) {
             Verdict::Fail(d) => assert!(d.contains("accuracy") && d.contains("M13-2"), "{d}"),
             v => panic!("{v:?}"),
         }
-        let both = limit(Status::Dev, Some("M13-2"), Some("M13-3"));
+        let both = limit(
+            Status::Dev,
+            Some("open item M13-2, awaiting the maintainer's decision"),
+            Some("M13-3"),
+        );
         assert!(matches!(judged(&both, &x), Verdict::Waived(_)));
         // An accuracy waiver alone does not cover the instruction count either.
         let acc = limit(Status::Dev, None, Some("M13-3"));
@@ -1472,44 +1794,161 @@ mod tests {
     }
 
     #[test]
-    fn an_own_target_is_recorded_for_the_own_kernel_comparison_and_never_judged() {
-        let l = limits(r#"{ "k": { "avx2": { "status": "release", "own_target": 0.60 } } }"#);
-        let mut x = m("k", 9.0, 10.0);
-        for (own, name) in [(20.0, "ours:w"), (10.0, "ours:w"), (10.0, "other")] {
-            x.extras.push(Extra {
-                label: format!("information: {name}"),
-                ours: 9.0,
-                other: own,
-                compared_with: name.into(),
-                other_snr_db: None,
-            });
-        }
-        let report = evaluate(&l, "avx2", &[x]);
-        assert!(report.ok, "a missed target does not fail");
-        let info = &report.records["k"]["informational"];
-        assert_eq!(info[0]["target"], 0.6);
-        assert_eq!(info[0]["meets_target"], true);
-        assert_eq!(info[1]["meets_target"], false);
-        assert!(info[2].get("target").is_none());
-        assert!(report.lines[1].contains("target 0.60: met"));
-        assert!(report.lines[2].contains("target 0.60: missed"));
-        assert!(!report.lines[3].contains("target"));
-        // The target does not replace the limit of the judged comparison.
-        let worse = evaluate(&l, "avx2", &[m("k", 11.5, 10.0)]);
-        assert!(!worse.ok);
-        for bad in ["0", "\"x\"", "-1"] {
-            let text = format!(
-                r#"{{ "k": {{ "avx2": {{ "status": "release", "own_target": {bad} }} }} }}"#
-            );
-            assert!(Limits::parse(&text).is_err(), "{bad}");
-        }
-        assert_eq!(
-            limits(r#"{ "k": { "avx2": { "status": "release" } } }"#)
-                .get("k", "avx2")
-                .unwrap()
-                .own_target,
-            None
+    fn an_own_kernel_comparison_is_bare_information_without_a_target() {
+        // `own_target` (D102) is no field any more: no target, no verdict on our own code (D2767).
+        assert!(
+            Limits::parse(r#"{ "k": { "avx2": { "status": "release", "own_target": 0.60 } } }"#)
+                .unwrap_err()
+                .to_string()
+                .contains("own_target")
         );
+        let l = limits(r#"{ "k": { "avx2": { "status": "release" } } }"#);
+        let mut x = m("k", 9.0, 10.0);
+        x.extras.push(Extra {
+            label: "information: ours:w".into(),
+            ours: 9.0,
+            other: 20.0,
+            compared_with: "ours:w".into(),
+            comparison_kind: ComparisonKind::OwnKernel,
+            other_snr_db: None,
+        });
+        let report = evaluate(&l, "avx2", &[x]);
+        let info = &report.records["k"]["informational"][0];
+        assert_eq!(info["ratio"], 0.45);
+        assert_eq!(info["comparison_kind"], "own_kernel");
+        assert!(info.get("target").is_none() && info.get("meets_target").is_none());
+        assert!(!report.lines[1].contains("target") && !report.lines[1].contains("met"));
+        assert!(report.lines[1].contains("own code: information"));
+    }
+
+    #[test]
+    fn release_and_dev_against_our_own_code_fail_and_have_no_goal() {
+        for (status, kind) in [
+            ("release", ComparisonKind::OwnFallback),
+            ("dev", ComparisonKind::OwnFallback),
+            ("release", ComparisonKind::OwnKernel),
+        ] {
+            let l = limits(&format!(
+                r#"{{ "k": {{ "simd128": {{ "status": "{status}" }} }} }}"#
+            ));
+            let mut x = m("k", 0.5, 1.0);
+            x.level = "simd128".into();
+            x.compared_with = "sdrk fallback".into();
+            x.comparison_kind = kind;
+            let report = evaluate(&l, "simd128", &[x]);
+            assert!(!report.ok, "{status} {kind:?}");
+            assert!(
+                report.lines[0].contains("judged against our own code"),
+                "{}",
+                report.lines[0]
+            );
+            assert!(report.records["k"].get("goal").is_none());
+            assert_eq!(report.records["k"]["comparison_kind"], kind.name());
+        }
+        // `info` against our own fallback is information: no failure, no goal.
+        let l = limits(r#"{ "k": { "simd128": { "status": "info" } } }"#);
+        let mut x = m("k", 0.5, 1.0);
+        x.comparison_kind = ComparisonKind::OwnFallback;
+        let report = evaluate(&l, "simd128", &[x]);
+        assert!(report.ok);
+        assert!(report.records["k"].get("goal").is_none());
+    }
+
+    #[test]
+    fn a_waiver_keeps_no_entry_above_its_cap_except_dev_awaiting_the_maintainer() {
+        let caps = Caps::default();
+        // A release entry above 1.10 with a plain waiver fails (D2779).
+        let w = limit(Status::Release, Some("open item I1-1: slow"), None);
+        assert!(matches!(
+            judge(&caps, Some(&w), &m("k", 11.5, 10.0)),
+            Verdict::Fail(_)
+        ));
+        // A dev entry up to 1.50 with a waiver is waived; above 1.50 only while it awaits the
+        // maintainer's decision and names its open item.
+        let d = limit(Status::Dev, Some("open item I1-1: slow"), None);
+        assert!(matches!(
+            judge(&caps, Some(&d), &m("k", 14.0, 10.0)),
+            Verdict::Pass | Verdict::Warn(_)
+        ));
+        assert!(matches!(
+            judge(&caps, Some(&d), &m("k", 16.0, 10.0)),
+            Verdict::Fail(_)
+        ));
+        let awaiting = limit(
+            Status::Dev,
+            Some("open item I1-1: 1.6 of the library, awaiting the maintainer's decision"),
+            None,
+        );
+        assert!(matches!(
+            judge(&caps, Some(&awaiting), &m("k", 16.0, 10.0)),
+            Verdict::Waived(_)
+        ));
+        let no_item = limit(
+            Status::Dev,
+            Some("awaiting the maintainer's decision"),
+            None,
+        );
+        assert!(matches!(
+            judge(&caps, Some(&no_item), &m("k", 16.0, 10.0)),
+            Verdict::Fail(_)
+        ));
+    }
+
+    #[test]
+    fn rejudge_writes_the_derived_fields_from_the_stored_numbers() {
+        let doc = json!({
+            "method": { "limits": { "release": 1.1, "dev": 1.5, "warn": 1.1, "goal": 1.0, "runtime": 1.02 } },
+            "levels": { "simd128": { "kernels": {
+                "rotate_cq15": {
+                    "ours_instr_per_sample": 5.0, "other_instr_per_sample": 10.0, "ratio": 0.5,
+                    "compared_with": "sdrk fallback", "status": "release", "verdict": "pass", "goal": true,
+                    "snr_db": { "ours": 120.0, "other": 120.0 },
+                },
+                "halfband_decimate": {
+                    "ours_instr_per_sample": 9.0, "other_instr_per_sample": 10.0, "ratio": 0.9,
+                    "compared_with": "liquid", "status": "release", "verdict": "pass", "goal": true,
+                    "snr_db": { "ours": 120.0, "other": 120.0 },
+                    "informational": [{ "label": "information: ours:halfband_ref_fir_decimate",
+                        "ours_instr_per_sample": 9.0, "other_instr_per_sample": 10.0, "ratio": 0.9,
+                        "compared_with": "ours:halfband_ref_fir_decimate", "target": 0.6, "meets_target": false,
+                        "other_snr_db": 120.0 }],
+                },
+            } } },
+        });
+        let l = limits(
+            r#"{ "rotate_cq15": { "simd128": { "status": "info" } }, "halfband_decimate": { "simd128": { "status": "release" } } }"#,
+        );
+        let r = rejudge(&doc, &l).unwrap();
+        assert_eq!(r.failures, Vec::<String>::new());
+        let k = &r.doc["levels"]["simd128"]["kernels"];
+        assert_eq!(k["rotate_cq15"]["status"], "info");
+        assert_eq!(k["rotate_cq15"]["verdict"], "info");
+        assert_eq!(k["rotate_cq15"]["comparison_kind"], "own_fallback");
+        assert!(k["rotate_cq15"].get("goal").is_none());
+        assert_eq!(k["rotate_cq15"]["ratio"], 0.5, "the numbers stay");
+        let h = &k["halfband_decimate"];
+        assert_eq!(h["comparison_kind"], "library");
+        assert_eq!(h["goal"], true);
+        assert_eq!(h["informational"][0]["comparison_kind"], "own_kernel");
+        assert!(h["informational"][0].get("meets_target").is_none());
+        assert!(r.doc["method"]["limits"].get("runtime").is_none());
+        // Judged again, nothing changes.
+        assert_eq!(rejudge(&r.doc, &l).unwrap().changes, Vec::<String>::new());
+        // A release entry against our own fallback fails the re-judgement.
+        let own = limits(
+            r#"{ "rotate_cq15": { "simd128": { "status": "release" } }, "halfband_decimate": { "simd128": { "status": "release" } } }"#,
+        );
+        let r = rejudge(&doc, &own).unwrap();
+        assert_eq!(r.failures.len(), 1, "{:?}", r.failures);
+        assert!(
+            r.failures[0].contains("rotate_cq15 simd128") && r.failures[0].contains("our own code")
+        );
+    }
+
+    #[test]
+    fn the_committed_counts_are_judged_by_the_limits() {
+        let root = Path::new(env!("CARGO_MANIFEST_DIR")).parent().unwrap();
+        assert_eq!(check_counts(root).unwrap(), Vec::new());
     }
 
     #[test]
@@ -1522,6 +1961,7 @@ mod tests {
             ours: 9.0,
             other: 6.0,
             compared_with: "volk_x: neon".into(),
+            comparison_kind: ComparisonKind::Library,
             other_snr_db: Some(120.0),
         });
         let report = evaluate(&l, "neon", &[x]);

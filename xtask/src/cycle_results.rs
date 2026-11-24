@@ -4,10 +4,14 @@
 //! add those of the file, everything else stays as it is) or `--all` (every entry on every
 //! level of the platform: the file is written anew). One record per entry and level with a core
 //! model: the comparison, the samples of the counted calls and, on the reference model and the
-//! counter-model of the level, the cycles per sample of ours and of the comparison (the library
-//! reference of D32, `sdrk fallback` where there is none; our `avx2` build for `avx2-runtime`, as
-//! information, whose gate takes the library from the `avx2` record, D2764) with the ratio, the efficiency and the coverage, in the judged cycle mode (`whole-loop`), and
-//! the SNR in dB of both sides against the f64 reference (`snr_db`, D34, D2749); on
+//! counter-model of the level, the cycles per sample of ours and of the comparison with the ratio,
+//! the efficiency and the coverage, in the judged cycle mode (`whole-loop`), and the SNR in dB of
+//! both sides against the f64 reference (`snr_db`, D34, D2749). The comparison is the library
+//! reference of D32; where there is none it is our own fallback (`sdrk fallback`), information
+//! only. `comparison_kind` says which (`library`, `own_fallback`, `own_build`, D2767): a record
+//! whose comparison is our own code never decides a status. The records of `avx2-runtime` compare
+//! with our own fixed `avx2` build (`own_build`, information) and name in `judged_against` the
+//! library of the `avx2` record that the gate judges them against (D2764). On
 //! the levels with a branch simulation (D1611) the branches and mispredictions per sample of
 //! both sides and the cost `cycles + mispredictions × penalty` on both models (D1612). An entry
 //! that was not simulated keeps its note. The file names the tools that made the records (the
@@ -91,6 +95,13 @@ pub fn record(cycles: &Value, branches: Option<&Value>) -> Value {
         "compared_with".into(),
         field(cycles, "compared_with").clone(),
     );
+    r.insert(
+        "comparison_kind".into(),
+        field(cycles, "comparison_kind").clone(),
+    );
+    if let Some(j) = cycles.get("judged_against") {
+        r.insert("judged_against".into(), j.clone());
+    }
     r.insert("samples".into(), field(cycles, "samples").clone());
     r.insert("cycle_mode".into(), field(cycles, "cycle_mode").clone());
     r.insert("snr_db".into(), field(cycles, "snr_db").clone());
@@ -817,6 +828,7 @@ mod tests {
         };
         json!({
             "compared_with": "a library",
+            "comparison_kind": "library",
             "samples": 4096,
             "cycle_mode": "whole-loop",
             "snr_db": { "ours": 999.0, "comparison": 82.64 },
@@ -866,6 +878,16 @@ mod tests {
         assert_eq!(r["cost"]["reference_model"]["ours"], 6.0);
         assert!(r["reference_model"]["ours"].get("blocks").is_none());
         assert_eq!(r["snr_db"], json!({ "ours": 999.0, "comparison": 82.64 }));
+        assert_eq!(r["comparison_kind"], "library");
+        assert!(r.get("judged_against").is_none());
+        let mut rt = simulated(1.0, 2.0);
+        rt["compared_with"] = json!("ours at avx2");
+        rt["comparison_kind"] = json!("own_build");
+        rt["judged_against"] =
+            json!({ "compared_with": "a library", "comparison_kind": "library" });
+        let r = record(&rt, None);
+        assert_eq!(r["comparison_kind"], "own_build");
+        assert_eq!(r["judged_against"]["comparison_kind"], "library");
         assert_eq!(
             record(&json!({ "note": "not simulated: x" }), None),
             json!({ "note": "not simulated: x" })

@@ -127,6 +127,78 @@ impl Reference {
             Reference::OwnLevel(_) | Reference::OwnKernel(_) => "ours",
         }
     }
+
+    /// Whether the comparison is a foreign library or our own code (D32, D2764).
+    #[must_use]
+    pub fn kind(self) -> ComparisonKind {
+        match self {
+            Reference::Fallback => ComparisonKind::OwnFallback,
+            Reference::OwnLevel(_) => ComparisonKind::OwnBuild,
+            Reference::OwnKernel(_) => ComparisonKind::OwnKernel,
+            Reference::Volk
+            | Reference::VolkNoFma
+            | Reference::VolkGeneric
+            | Reference::GnuRadio
+            | Reference::RustFft
+            | Reference::Fftw
+            | Reference::FftwInPlace
+            | Reference::KissFft
+            | Reference::Ne10
+            | Reference::Kfr
+            | Reference::Cmsis
+            | Reference::Liquid
+            | Reference::Libairspy
+            | Reference::RandDistr => ComparisonKind::Library,
+        }
+    }
+}
+
+/// What a comparison is, as the results record it (`comparison_kind`): a foreign library, or our
+/// own code. A comparison of our code with our own code is information only: it never decides a
+/// status, a goal or a target (the maintainer's measurement order, D32, D2764, D2767).
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub enum ComparisonKind {
+    /// A foreign reference library (VOLK, FFTW, CMSIS-DSP, liquid-dsp, ...).
+    Library,
+    /// Our own fallback (`sdrk fallback`, [`Reference::Fallback`]).
+    OwnFallback,
+    /// Our own build of another level (`ours at avx2`, [`Reference::OwnLevel`]).
+    OwnBuild,
+    /// Our own kernel on another workload (`ours:<kernel>`, [`Reference::OwnKernel`]).
+    OwnKernel,
+}
+
+impl ComparisonKind {
+    /// Every kind.
+    pub const ALL: [ComparisonKind; 4] = [
+        ComparisonKind::Library,
+        ComparisonKind::OwnFallback,
+        ComparisonKind::OwnBuild,
+        ComparisonKind::OwnKernel,
+    ];
+
+    /// The name in the results files.
+    #[must_use]
+    pub fn name(self) -> &'static str {
+        match self {
+            ComparisonKind::Library => "library",
+            ComparisonKind::OwnFallback => "own_fallback",
+            ComparisonKind::OwnBuild => "own_build",
+            ComparisonKind::OwnKernel => "own_kernel",
+        }
+    }
+
+    /// The kind of a name of the results files.
+    #[must_use]
+    pub fn parse(name: &str) -> Option<ComparisonKind> {
+        ComparisonKind::ALL.into_iter().find(|k| k.name() == name)
+    }
+
+    /// Whether the comparison is our own code.
+    #[must_use]
+    pub fn is_own(self) -> bool {
+        self != ComparisonKind::Library
+    }
 }
 
 /// The kind of comparison a kernel has.
@@ -1062,7 +1134,9 @@ pub struct LevelPlan {
     /// KFR is built for this level and gates the f32 and C32 biquads (D15); without it
     /// CMSIS-DSP does.
     pub kfr: bool,
-    /// Judged against our own numbers of this level instead of the libraries.
+    /// The fixed level whose build of ours the records of this level hold as information
+    /// (`avx2-runtime`: `ours at avx2`, [`Reference::OwnLevel`]). The gate judges the level
+    /// against the library of that level's record and the status that level has there (D2764).
     pub baseline: Option<&'static str>,
 }
 
@@ -2238,8 +2312,14 @@ pub struct EntryProfiles {
     pub samples: u64,
     /// Our side (the fallback for a fallback entry).
     pub ours: crate::mca::Counts,
-    /// The judged comparison.
+    /// The measured comparison: the judged one, or at a level with a baseline our own build of
+    /// that level (information).
     pub other: crate::mca::Counts,
+    /// What the measured comparison is (D2767).
+    pub comparison_kind: ComparisonKind,
+    /// At a level with a baseline (`avx2-runtime`): the library of the baseline level that the
+    /// gate judges against, and its kind (D2764, D2767).
+    pub judged_against: Option<(String, ComparisonKind)>,
     /// The SNR in dB of our side against the f64 reference (D34; 999: exact).
     pub ours_snr_db: f64,
     /// The SNR in dB of the judged comparison against the f64 reference.
@@ -2284,7 +2364,7 @@ pub fn branch_profiles(
         .ok_or_else(|| anyhow!("the platform `{platform}` has no level `{level}`"))?;
     if plan.baseline.is_some() {
         bail!(
-            "the level {level} is measured against our own build of another level, not against a reference (D2702)"
+            "the level {level} measures our own build of another level beside it (information); the gate judges it against the library of that level's record, whose branches are simulated there (D2764)"
         );
     }
     if !matches!(plan.runner, Runner::Host | Runner::Sde(_))
@@ -2359,7 +2439,8 @@ pub fn branch_profiles(
 /// before the first entry.
 #[allow(
     clippy::large_stack_frames,
-    reason = "std::process::Command and the plan table are large; xtask is a host tool"
+    clippy::too_many_lines,
+    reason = "std::process::Command and the plan table are large; one entry's profiles in the order of the sides; xtask is a host tool"
 )]
 pub fn profiles(
     root: &Path,
@@ -2389,12 +2470,12 @@ pub fn profiles(
     // level.
     let baseline = plan
         .baseline
-        .map(|base| -> anyhow::Result<Session> {
+        .map(|base| -> anyhow::Result<(Session, &'static LevelPlan)> {
             let base_plan = PLANS
                 .iter()
                 .find(|p| p.platform == platform && p.level == base)
                 .ok_or_else(|| anyhow!("the platform `{platform}` has no level `{base}`"))?;
-            self::session(root, base_plan, &refs)
+            Ok((self::session(root, base_plan, &refs)?, base_plan))
         })
         .transpose()?;
     let mut out = Vec::new();
@@ -2448,15 +2529,33 @@ pub fn profiles(
             let ours_restore = restore(&session)?;
             let ours = profile(&session, &ours_restore, spec.family.measured())?;
             let other = match &baseline {
-                Some(base) => profile(base, &restore(base)?, spec.family.measured())?,
+                Some((base, _)) => profile(base, &restore(base)?, spec.family.measured())?,
                 None => profile(&session, &ours_restore, gate.implementation())?,
             };
             // The accuracy of both sides on the same workload, as the count judged it (D34).
             let ours_snr_db =
                 session.snr(spec.name, spec.family.measured(), &session.volk_config)?;
             let other_snr_db = match &baseline {
-                Some(base) => base.snr(spec.name, spec.family.measured(), &base.volk_config)?,
+                Some((base, _)) => {
+                    base.snr(spec.name, spec.family.measured(), &base.volk_config)?
+                }
                 None => session.snr(spec.name, gate.implementation(), &session.volk_config)?,
+            };
+            // The comparison that the gate judges a level with a baseline against: that of the
+            // baseline level's record (D2764), named as that level names it.
+            let judged_against = match &baseline {
+                Some((base, base_plan)) => {
+                    let (lib, _) = comparisons(base_plan, spec);
+                    let info = base.query(&["info", spec.name])?;
+                    let name = info
+                        .get("impls")
+                        .and_then(|i| i.get(lib.implementation()))
+                        .and_then(Value::as_str)
+                        .unwrap_or(lib.implementation())
+                        .to_string();
+                    Some((name, lib.kind()))
+                }
+                None => None,
             };
             Ok(EntryProfiles {
                 kernel: spec.name.to_string(),
@@ -2464,6 +2563,8 @@ pub fn profiles(
                 samples: K * (N / standard.samples).max(1) * standard.samples,
                 ours,
                 other,
+                comparison_kind: gate.kind(),
+                judged_against,
                 ours_snr_db,
                 other_snr_db,
             })

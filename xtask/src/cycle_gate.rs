@@ -29,11 +29,12 @@
 //! [`SNR_MARGIN_DB`]; below that it passes only with an `accuracy_waiver` whose open items exist,
 //! as the count judged it before M13.1. A judged record without `snr_db` fails.
 //!
-//! **The accuracy trade (D2760, the threshold is the maintainer's to confirm).** A `release`
-//! entry above the release limit in cycles whose SNR is at least [`TRADE_DB`] above the
-//! comparison's stays `release` with an `accuracy_trade` text that names both SNR figures: it
-//! passes while the advantage holds and its ratio stays within the `dev` limit on both models,
-//! and fails as soon as either does not. A trade on an entry within its limit is a remark.
+//! **The accuracy trade (D2760, the maintainer's decision of 2026-11-24).** A `release` entry
+//! above the release limit in cycles whose SNR is at least [`TRADE_DB`] above the comparison's
+//! stays `release` with an `accuracy_trade` text that names both SNR figures: it passes while
+//! the advantage holds and its ratio stays at most [`TRADE_CAP`] on both models, and fails as
+//! soon as either does not ("3 dB better must not mean that we may be slow"). A trade on an
+//! entry within its limit is a remark.
 //!
 //! The instruction judgement of `simd128` stays in `cargo xtask count`.
 #![allow(clippy::print_stdout, clippy::print_stderr)]
@@ -59,8 +60,11 @@ const NOT_MEASURED: &str = "not simulated: not measured at";
 /// How far the SNR of ours may lie below the comparison's, in dB (D34).
 pub use crate::count::SNR_MARGIN_DB;
 /// The SNR advantage over the comparison, in dB, that lets a `release` entry above the release
-/// limit stay `release` with an `accuracy_trade` (D2760; proposed, the maintainer's to confirm).
+/// limit stay `release` with an `accuracy_trade` (D2760, the maintainer's decision).
 pub const TRADE_DB: f64 = 3.0;
+/// The highest ratio to the comparison, on each model, that an accuracy trade covers (D2760,
+/// the maintainer's decision: "3 dB better must not mean that we may be slow").
+pub const TRADE_CAP: f64 = 1.20;
 /// The SNR the measurement binary reports for an exact result.
 pub const EXACT_DB: f64 = 999.0;
 
@@ -478,8 +482,8 @@ pub enum Verdict {
     Warn(String),
     /// Above its limit on a model, with a waiver.
     Waived(String),
-    /// A `release` entry above the release limit, within the `dev` limit and at least
-    /// [`TRADE_DB`] more accurate than its comparison, with an `accuracy_trade` (D2760).
+    /// A `release` entry above the release limit, at most [`TRADE_CAP`] of its comparison on
+    /// both models and at least [`TRADE_DB`] more accurate, with an `accuracy_trade` (D2760).
     Traded(String),
     /// Above its limit without a waiver, a waiver that names a missing open item, or no entry
     /// in `benches/limits.json`.
@@ -623,11 +627,10 @@ pub fn judge_record(
         match (&limit.accuracy_trade, &limit.waiver) {
             (Some(t), _) => {
                 let advantage = r.snr.map(Snr::advantage);
-                if worst > caps.dev {
+                if worst > TRADE_CAP {
                     failing.push(format!(
-                        "{text}; the accuracy trade holds only within the dev limit of {:.2}x: {} (accuracy trade: {t})",
-                        caps.dev,
-                        ratios(r, caps.dev)
+                        "{text}; the accuracy trade holds only up to {TRADE_CAP:.2}x on both models: {} (D2760; accuracy trade: {t})",
+                        ratios(r, TRADE_CAP)
                     ));
                 } else if advantage.is_none_or(|a| a < TRADE_DB) {
                     failing.push(format!(
@@ -1288,7 +1291,7 @@ mod tests {
     }
 
     #[test]
-    fn an_accuracy_trade_keeps_release_while_three_db_and_the_dev_limit_hold() {
+    fn an_accuracy_trade_keeps_release_while_three_db_and_the_trade_cap_hold() {
         let l = |status: &str, extra: &str| {
             limits_with(&format!(
                 r#""k": {{"sse2": {{"status": "{status}", "accuracy_trade": "exact against 82.6 dB"{extra}}}}}"#
@@ -1302,9 +1305,9 @@ mod tests {
                 snr,
             )
         };
-        // Over the release limit, within dev, 3 dB or more above: traded.
-        for snr in [(85.6, 82.6), (999.0, 82.64)] {
-            let g = gate(&rec(1.3, Some(snr)), &l("release", ""));
+        // Over the release limit, at most 1.20 on both models, 3 dB or more above: traded.
+        for (ratio, snr) in [(1.2, (85.6, 82.6)), (1.15, (999.0, 82.64))] {
+            let g = gate(&rec(ratio, Some(snr)), &l("release", ""));
             assert_eq!(
                 (g.findings.len(), g.traded.len(), g.waived.len()),
                 (0, 1, 0),
@@ -1313,13 +1316,25 @@ mod tests {
             );
             assert!(g.traded[0].contains("traded for the accuracy"));
         }
-        // Less than 3 dB above, no accuracy, or over the dev limit: fails.
-        let g = gate(&rec(1.3, Some((85.59, 82.6))), &l("release", ""));
+        // Less than 3 dB above, no accuracy, or above 1.20 on a model (within dev or not): fails.
+        let g = gate(&rec(1.15, Some((85.59, 82.6))), &l("release", ""));
         assert!(g.findings[0].message.contains("at least 3 dB above"));
-        let g = gate(&rec(1.3, None), &l("release", ""));
+        let g = gate(&rec(1.15, None), &l("release", ""));
         assert_eq!(g.findings.len(), 1);
-        let g = gate(&rec(1.51, Some((999.0, 82.6))), &l("release", ""));
-        assert!(g.findings[0].message.contains("dev limit of 1.50x"));
+        for ratio in [1.2001, 1.3, 1.51] {
+            let g = gate(&rec(ratio, Some((999.0, 82.6))), &l("release", ""));
+            assert_eq!((g.findings.len(), g.traded.len()), (1, 0), "{ratio}");
+            assert!(g.findings[0].message.contains("only up to 1.20x"));
+        }
+        // The counter-model alone above 1.20 fails too.
+        let counter = with_snr(
+            results(&[("k", 1.15, 1.0, 1.25, 1.0, "CMSIS-DSP")], "sse2"),
+            "sse2",
+            "k",
+            Some((999.0, 82.6)),
+        );
+        let g = gate(&counter, &l("release", ""));
+        assert!(g.findings[0].message.contains("only up to 1.20x"));
         // Within the release limit: a remark.
         let g = gate(&rec(1.05, Some((999.0, 82.6))), &l("release", ""));
         assert_eq!((g.findings.len(), g.traded.len()), (0, 0));

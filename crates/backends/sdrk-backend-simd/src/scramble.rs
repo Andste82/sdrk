@@ -947,7 +947,8 @@ mod x86 {
     /// `docs/performance.md`): the gather form (`vpgatherdd`/`vgatherdps` from the static
     /// tables) simulated 0.80 / 3.93 (`C32`) and 0.66 / 4.81 (`CQ15`) cycles per sample at
     /// `b = 8` (`znver3` / `alderlake`), slower than the fallback on `alderlake`; the
-    /// per-sample loads 1.84 / 1.73 and 1.78 / 1.67.
+    /// per-sample loads 1.84 / 1.73 and 1.78 / 1.67, since [`words8`] 1.31 / 1.17 and
+    /// 1.21 / 1.13 (I13.1-3).
     #[inline(always)]
     fn avx2_form(plan: &Plan) -> Avx2Form {
         if plan.entries() <= 16 {

@@ -40,8 +40,8 @@ use sdrk_core::RealSample;
 use volk_sys::lv_32fc_t;
 
 use super::{
-    Aligned, BiquadEntry, Impl, Kernel, Layout, Pcg32, c32s, cq15s, describe_cmsis,
-    dot_scale_supports, noise_c32, snr_db,
+    Aligned, BiquadEntry, Impl, Kernel, Layout, Pcg32, c32_floats, c32_floats_mut, c32s, cq15s,
+    describe_cmsis, describe_kfr_ops, dot_scale_supports, noise_c32, snr_db,
 };
 
 // ---------------------------------------------------------------------------------------------
@@ -153,6 +153,11 @@ impl Kernel for MatrixK {
                 Impl::Fallback => matrix(&Fallback, &self.input, &mut self.out),
                 Impl::Volk => self.volk_composition(),
                 Impl::Cmsis => self.cmsis_composition(),
+                // KFR's one expression of the level (D2900).
+                Impl::Kfr => cref_sys::kfr_ops::stereo_matrix_f32(
+                    c32_floats(&self.input),
+                    c32_floats_mut(&mut self.out),
+                ),
                 other => unreachable!("stereo_matrix has no {other:?}"),
             }
             black_box(&self.out);
@@ -179,11 +184,17 @@ impl Kernel for MatrixK {
     }
 
     fn supports(&self, which: Impl) -> bool {
+        if which == Impl::Kfr {
+            return self.entry == BiquadEntry::Simd && cref_sys::kfr_ops::AVAILABLE;
+        }
         dot_scale_supports(self.entry, which, volk_sys::FULL)
     }
 
     fn describe(&self, which: Impl) -> &'static str {
         match which {
+            Impl::Kfr => describe_kfr_ops(
+                "make_complex(s + (d + d), s - (d + d)) of real(x), imag(x) on complex<float>, one pass",
+            ),
             Impl::Volk => {
                 "VOLK 3.3.0 composition: volk_32fc_deinterleave_32f_x2, volk_32f_x2_add_32f (d + d), volk_32f_x2_add_32f (s + d2), volk_32f_x2_subtract_32f (s - d2), volk_32f_x2_interleave_32fc (five passes over memory)"
             }
@@ -202,6 +213,18 @@ impl Kernel for MatrixK {
             &[]
         }
     }
+}
+
+/// `x` as `2 x.len()` `i16` values.
+fn cq15_shorts(x: &[CQ15]) -> &[i16] {
+    // SAFETY: `CQ15` is two `i16` (`repr(C)`); the slice borrows `x`.
+    unsafe { std::slice::from_raw_parts(x.as_ptr().cast(), 2 * x.len()) }
+}
+
+/// `x` as `2 x.len()` `i16` values, mutably.
+fn cq15_shorts_mut(x: &mut [CQ15]) -> &mut [i16] {
+    // SAFETY: as in `cq15_shorts`; the slice borrows `x` mutably.
+    unsafe { std::slice::from_raw_parts_mut(x.as_mut_ptr().cast(), 2 * x.len()) }
 }
 
 /// `stereo_matrix` of `n` `CQ15` pairs over the whole range of `i16` (it saturates often).
@@ -258,6 +281,11 @@ impl Kernel for MatrixCq15K {
                 Impl::Ours => matrix(&Sdrk, &self.input, &mut self.out),
                 Impl::Fallback => matrix(&Fallback, &self.input, &mut self.out),
                 Impl::Cmsis => self.cmsis_composition(),
+                // KFR's `satadd` / `satsub` on `int16_t` of the level (D2907).
+                Impl::Kfr => cref_sys::kfr_ops::stereo_matrix_i16(
+                    cq15_shorts(&self.input),
+                    cq15_shorts_mut(&mut self.out),
+                ),
                 other => unreachable!("stereo_matrix_cq15 has no {other:?}"),
             }
             black_box(&self.out);
@@ -288,12 +316,16 @@ impl Kernel for MatrixCq15K {
         match (self.entry, which) {
             (_, Impl::Fallback) | (BiquadEntry::Simd, Impl::Ours) => true,
             (_, Impl::Cmsis) => cmsis_dsp::AVAILABLE,
+            (BiquadEntry::Simd, Impl::Kfr) => cref_sys::kfr_ops::AVAILABLE,
             _ => false,
         }
     }
 
     fn describe(&self, which: Impl) -> &'static str {
         match which {
+            Impl::Kfr => describe_kfr_ops(
+                "make_complex(satadd(s, d2), satsub(s, d2)), d2 = satadd(d, d) on complex<int16_t> (two saturations), one pass",
+            ),
             Impl::Cmsis => describe_cmsis(
                 "arm_add_q15 (d + d, saturating), arm_add_q15 (s + d2), arm_sub_q15 (s - d2) on planar data",
             ),

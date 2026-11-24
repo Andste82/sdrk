@@ -43,7 +43,7 @@ use volk_sys::lv_32fc_t;
 
 use super::{
     Aligned, BiquadEntry, Impl, Kernel, Layout, Pcg32, c32s, cq15_pairs, cq15_pairs_mut, cq15s,
-    describe_cmsis, noise_c32, noise_cq15, snr_db,
+    describe_cmsis, describe_kfr_ops, noise_c32, noise_cq15, snr_db,
 };
 
 /// Samples per run of the library compositions: the phasor buffer of one run.
@@ -133,6 +133,8 @@ enum VolkKind {
     NoFma,
     /// `volk-generic.c`.
     Generic,
+    /// KFR's complex product of the level (`kfr-ops.cpp`, D2900, D2901), in the place of VOLK's.
+    Kfr,
 }
 
 /// The `C32` composition: per run of [`RUN`] samples the phasors looked up into `buf`, then
@@ -172,16 +174,24 @@ fn volk_scramble(
             VolkKind::Generic => {
                 volk_generic::multiply_32fc(pairs(x), b, pairs_mut(y));
             }
+            VolkKind::Kfr => {
+                cref_sys::kfr_ops::complex_mul(
+                    pairs(x).as_flattened(),
+                    b.as_flattened(),
+                    pairs_mut(y).as_flattened_mut(),
+                );
+            }
         }
     }
 }
 
 /// The `bits = 1` composition (the form of srsRAN's `srsran_scrambling_c`): per run of [`RUN`]
 /// samples the `±1.0` sequence of the index bits formed into `buf`, then VOLK's
-/// `volk_32fc_32f_multiply_32fc` (`generic`: its portable protokernel).
+/// `volk_32fc_32f_multiply_32fc` (`Generic`: its portable protokernel; `Kfr`: KFR's
+/// complex-by-real product of the level in its place).
 #[inline(never)]
 fn volk_sign_scramble(
-    generic: bool,
+    kind: VolkKind,
     input: &[C32],
     phase: &[u8],
     buf: &mut [f32],
@@ -196,18 +206,24 @@ fn volk_sign_scramble(
         for (v, &k) in b.iter_mut().zip(p) {
             *v = SIGNS[usize::from(k & 1)];
         }
-        if generic {
-            volk_generic::multiply_32fc_32f(pairs(x), b, pairs_mut(y));
-        } else {
+        match kind {
+            VolkKind::Generic => {
+                volk_generic::multiply_32fc_32f(pairs(x), b, pairs_mut(y));
+            }
+            VolkKind::Kfr => cref_sys::kfr_ops::complex_mul_real(
+                pairs(x).as_flattened(),
+                b,
+                pairs_mut(y).as_flattened_mut(),
+            ),
             // SAFETY: the three buffers hold `x.len()` elements and the output aliases no input.
-            unsafe {
+            VolkKind::Dispatch | VolkKind::NoFma => unsafe {
                 volk_sys::native::volk_32fc_32f_multiply_32fc(
                     y.as_mut_ptr().cast::<lv_32fc_t>(),
                     x.as_ptr().cast::<lv_32fc_t>(),
                     b.as_ptr(),
                     x.len() as u32,
                 );
-            }
+            },
         }
     }
 }
@@ -260,7 +276,10 @@ impl ScrambleC32K {
         let skew = layout.skew(8);
         let input = noise_c32(rng, layout.n, 0.9, skew);
         let phase = phase_bytes(rng, layout.n);
-        let rn = phase.iter().map(|&p| core::ffi::c_int::from(p & 3)).collect();
+        let rn = phase
+            .iter()
+            .map(|&p| core::ffi::c_int::from(p & 3))
+            .collect();
         ScrambleC32K {
             bits,
             entry,
@@ -288,19 +307,30 @@ impl Kernel for ScrambleC32K {
                     scramble_call(&Sdrk, &self.input, &self.phase, self.bits, &mut self.out);
                 }
                 Impl::Fallback => {
-                    scramble_call(&Fallback, &self.input, &self.phase, self.bits, &mut self.out);
+                    scramble_call(
+                        &Fallback,
+                        &self.input,
+                        &self.phase,
+                        self.bits,
+                        &mut self.out,
+                    );
                 }
-                Impl::Volk | Impl::VolkGeneric if self.bits == 1 => volk_sign_scramble(
-                    which == Impl::VolkGeneric,
+                Impl::Volk | Impl::VolkGeneric | Impl::Kfr if self.bits == 1 => volk_sign_scramble(
+                    match which {
+                        Impl::VolkGeneric => VolkKind::Generic,
+                        Impl::Kfr => VolkKind::Kfr,
+                        _ => VolkKind::Dispatch,
+                    },
                     &self.input,
                     black_box(&self.phase),
                     &mut self.signs,
                     &mut self.out,
                 ),
-                Impl::Volk | Impl::VolkNoFma | Impl::VolkGeneric => {
+                Impl::Volk | Impl::VolkNoFma | Impl::VolkGeneric | Impl::Kfr => {
                     let kind = match which {
                         Impl::Volk => VolkKind::Dispatch,
                         Impl::VolkNoFma => VolkKind::NoFma,
+                        Impl::Kfr => VolkKind::Kfr,
                         _ => VolkKind::Generic,
                     };
                     volk_scramble(
@@ -339,6 +369,7 @@ impl Kernel for ScrambleC32K {
             (BiquadEntry::Simd, Impl::Ours) | (_, Impl::Fallback) => true,
             (BiquadEntry::Simd, Impl::Volk) => volk_sys::FULL,
             (BiquadEntry::Simd, Impl::VolkNoFma) => self.bits != 1 && volk_nofma::AVAILABLE,
+            (BiquadEntry::Simd, Impl::Kfr) => cref_sys::kfr_ops::AVAILABLE,
             (BiquadEntry::Simd, Impl::GnuRadio) => self.bits == 2 && gr_dvbs2::AVAILABLE,
             (BiquadEntry::Fallback, Impl::VolkGeneric) => volk_generic::AVAILABLE,
             _ => false,
@@ -355,6 +386,12 @@ impl Kernel for ScrambleC32K {
             }
             Impl::Volk => {
                 "phasor lookup into a buffer of 256 + volk_32fc_x2_multiply_32fc (VOLK 3.3.0 dispatcher)"
+            }
+            Impl::Kfr if self.bits == 1 => describe_kfr_ops(
+                "+-1.0 sequence from the index bits into a buffer of 256 + x * s on complex<float> times float",
+            ),
+            Impl::Kfr => {
+                describe_kfr_ops("phasor lookup into a buffer of 256 + a * b on complex<float>")
             }
             Impl::VolkNoFma => match volk_nofma::protokernel() {
                 Some("u_avx") => {
@@ -429,7 +466,13 @@ impl Kernel for ScrambleCq15K {
                     scramble_call(&Sdrk, &self.input, &self.phase, self.bits, &mut self.out);
                 }
                 Impl::Fallback => {
-                    scramble_call(&Fallback, &self.input, &self.phase, self.bits, &mut self.out);
+                    scramble_call(
+                        &Fallback,
+                        &self.input,
+                        &self.phase,
+                        self.bits,
+                        &mut self.out,
+                    );
                 }
                 Impl::Cmsis => cmsis_scramble(
                     &self.table,
@@ -515,7 +558,11 @@ impl ScrambleBlockK {
 }
 
 #[inline(never)]
-fn block_call(block: &mut ScrambleBlock<C32, ArenaStorage<'static>>, input: &[C32], out: &mut [C32]) {
+fn block_call(
+    block: &mut ScrambleBlock<C32, ArenaStorage<'static>>,
+    input: &[C32],
+    out: &mut [C32],
+) {
     let mut done = 0;
     while done < input.len() {
         match block.process(black_box(&input[done..]), &mut out[done..]) {
@@ -549,9 +596,7 @@ impl Kernel for ScrambleBlockK {
             return 0.0;
         };
         let phase: Vec<u8> = (0..self.input.len())
-            .map(|_| {
-                (0..cfg.bits).fold(0u8, |acc, _| (acc << 1) | prbs.next_bit())
-            })
+            .map(|_| (0..cfg.bits).fold(0u8, |acc, _| (acc << 1) | prbs.next_bit()))
             .collect();
         let mut want = vec![C32::default(); self.input.len()];
         if Sdrk

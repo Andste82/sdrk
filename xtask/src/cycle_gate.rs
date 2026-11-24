@@ -54,7 +54,7 @@ use serde_json::Value;
 
 use crate::bench::{
     ComparisonKind, KERNELS, KernelSpec, LevelPlan, PLANS, Reference, SimdLevel, comparisons,
-    measured_level, reference_level, volk_functions_of, volk_protokernel,
+    measured_level, reference_level, volk_functions_of, volk_protokernel, volk_protokernel_level,
 };
 use crate::count::{Caps, Limits, Status};
 use crate::scan::Finding;
@@ -1134,8 +1134,15 @@ fn check_reference_levels_with(
 /// `dev` record whose judged comparison is VOLK's dispatch must name the VOLK functions it calls
 /// (`compared_with`), and none of them may run a `generic` protokernel in VOLK's machine of the
 /// level ([`volk_protokernel`]): portable C is no SIMD reference, so such an entry is `info` or
-/// has another library. At `avx2-runtime` the `avx2` record is judged (D2764).
+/// has another library. A protokernel of a lower SIMD level than the code the entry measures
+/// ([`volk_protokernel_level`] below [`measured_level`]: an AVX protokernel at `avx512`) counts
+/// as a lower reference level, as in [`check_reference_levels`] (D2900). At `avx2-runtime` the
+/// `avx2` record is judged (D2764).
 #[must_use]
+#[allow(
+    clippy::large_stack_frames,
+    reason = "the plan table and the findings are large; xtask is a host tool"
+)]
 pub fn check_volk_protokernels(results: &Results, limits: &Limits) -> Vec<Finding> {
     let mut out = Vec::new();
     for (level, rows) in results {
@@ -1175,7 +1182,7 @@ pub fn check_volk_protokernels(results: &Results, limits: &Limits) -> Vec<Findin
                     path: r.file.clone(),
                     line: 0,
                     message: format!(
-                        "`{entry}` at `{level}` is `{}` against VOLK, but {why}: portable C is no SIMD reference of the level (D2785); make the entry `info` or judge it against another library",
+                        "`{entry}` at `{level}` is `{}` against VOLK, but {why}: no like-with-like SIMD reference of the level (D2785, D2900); make the entry `info` or judge it against another library",
                         status_name(limit.status)
                     ),
                 });
@@ -1186,12 +1193,21 @@ pub fn check_volk_protokernels(results: &Results, limits: &Limits) -> Vec<Findin
                     "its comparison names no VOLK function (`{compared_with}`)"
                 ));
             }
+            let measured = measured_level(plan, spec);
             for (f, aligned) in functions {
                 match volk_protokernel(judged_plan, f, aligned) {
                     Some("generic") => fail(format!(
                         "`{f}` runs its `generic` protokernel in VOLK's machine of `{}`",
                         judged_plan.level
                     )),
+                    Some(p) if volk_protokernel_level(p).rank() < measured.rank() => {
+                        fail(format!(
+                            "`{f}` runs its `{p}` protokernel in VOLK's machine of `{}`, {} code below the `{}` code the entry measures (D2900)",
+                            judged_plan.level,
+                            volk_protokernel_level(p).name(),
+                            measured.name()
+                        ));
+                    }
                     Some(_) => {}
                     None => fail(format!(
                         "the `volk_config` of `{}` does not name `{f}`",
@@ -2393,6 +2409,67 @@ mod tests {
         )
         .unwrap();
         assert_eq!(check_volk_protokernels(&r, &info), Vec::new());
+    }
+
+    #[test]
+    fn a_volk_comparison_below_the_measured_level_is_found() {
+        // At `avx512` VOLK's dispatch of `volk_32fc_x2_multiply_32fc` is `a_avx2_fma` (D2900):
+        // a release record judged against it is a lower reference level; `rotator2` runs
+        // `a_avx512f` and passes; at `sse4.2` the SSE protokernels are like with like.
+        let text = limits_text(&[
+            ("fir", "avx512", "release"),
+            ("rotate", "avx512", "release"),
+            ("add_real", "sse4.2", "release"),
+        ]);
+        let limits = Limits::parse(&text).unwrap();
+        let mut r = results(
+            &[
+                ("fir", 1.0, 2.0, 1.0, 2.0, "volk_32fc_x2_multiply_32fc"),
+                (
+                    "rotate",
+                    1.0,
+                    2.0,
+                    1.0,
+                    2.0,
+                    "volk_32fc_s32fc_x2_rotator2_32fc",
+                ),
+            ],
+            "avx512",
+        );
+        r.extend(results(
+            &[("add_real", 1.0, 2.0, 1.0, 2.0, "volk_32f_x2_add_32f")],
+            "sse4.2",
+        ));
+        let f = check_volk_protokernels(&r, &limits);
+        let messages: Vec<&str> = f.iter().map(|f| f.message.as_str()).collect();
+        assert_eq!(f.len(), 1, "{messages:#?}");
+        assert!(
+            messages[0].starts_with("`fir` at `avx512` is `release`")
+                && messages[0].contains("`a_avx2_fma` protokernel")
+                && messages[0].contains("avx2 code below the `avx512` code"),
+            "{messages:#?}"
+        );
+        assert_eq!(volk_protokernel_level("generic"), SimdLevel::Scalar);
+        assert_eq!(volk_protokernel_level("u_sse3"), SimdLevel::Level("sse4.2"));
+        assert_eq!(
+            volk_protokernel_level("a_avx_fma"),
+            SimdLevel::Level("avx2")
+        );
+        assert_eq!(
+            volk_protokernel_level("u_avx512dq"),
+            SimdLevel::Level("avx512")
+        );
+        assert_eq!(volk_protokernel_level("neonv8"), SimdLevel::Level("neon"));
+        // The AVX-512BW protokernels are in no machine of VOLK 3.3.0.
+        let plan = |l: &str| PLANS.iter().find(|p| p.level == l).unwrap();
+        assert_eq!(
+            volk_protokernel(plan("avx512"), "volk_8i_convert_16i", true),
+            Some("a_avx2")
+        );
+        assert_eq!(
+            volk_protokernel(plan("avx512"), "volk_32f_x2_add_32f", false),
+            Some("u_avx512f")
+        );
     }
 
     #[test]

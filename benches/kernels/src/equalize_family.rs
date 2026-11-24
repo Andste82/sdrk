@@ -44,7 +44,7 @@ use sdrk_core::Reference;
 
 use super::{
     Aligned, BiquadEntry, Impl, Kernel, Layout, Pcg32, c32_pairs, c32_pairs_ref, c32s,
-    describe_cmsis, dot_windows, noise_c32, snr_db,
+    describe_cmsis, describe_kfr_ops, dot_windows, noise_c32, snr_db,
 };
 
 // ---------------------------------------------------------------------------------------------
@@ -107,6 +107,14 @@ impl DotComplexK {
                         .expect("volk-nofma");
                 black_box(C32::new(re, im))
             }
+            // KFR's `dotproduct` of `complex<float>` of the level (D2900, D2901).
+            Impl::Kfr => {
+                let [re, im] = cref_sys::kfr_ops::dot_complex(
+                    c32_pairs_ref(x).as_flattened(),
+                    c32_pairs_ref(w).as_flattened(),
+                );
+                black_box(C32::new(re, im))
+            }
             Impl::Cmsis => {
                 let (mut re, mut im) = (0.0f32, 0.0f32);
                 // SAFETY: `x` and `w` hold `len` interleaved complex samples; the results are
@@ -157,6 +165,7 @@ impl Kernel for DotComplexK {
             (_, Impl::Fallback) | (BiquadEntry::Simd, Impl::Ours) => true,
             (BiquadEntry::Simd, Impl::Volk) => volk_sys::FULL,
             (BiquadEntry::Simd, Impl::VolkNoFma) => cref_sys::volk_nofma::AVAILABLE,
+            (BiquadEntry::Simd, Impl::Kfr) => cref_sys::kfr_ops::AVAILABLE,
             (BiquadEntry::Fallback, Impl::Cmsis) => cmsis_dsp::AVAILABLE,
             _ => false,
         }
@@ -176,6 +185,7 @@ impl Kernel for DotComplexK {
                     "VOLK 3.3.0 volk_32fc_x2_dot_prod_32fc without FMA (benches/refs/volk-nofma.c)"
                 }
             },
+            Impl::Kfr => describe_kfr_ops("dotproduct(a, b) on complex<float>"),
             Impl::Cmsis => describe_cmsis("arm_cmplx_dot_prod_f32"),
             Impl::Fallback => "sdrk fallback",
             _ => "sdrk",

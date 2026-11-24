@@ -1,7 +1,8 @@
 //! M20: `mag` is accelerated and counted against VOLK, the `C32` `agc` is counted against the
 //! `agc_cc` loop of GNU Radio (information, D2768, D2769), and `agc_cq15` and `dc_block_real` are counted as information on
-//! every platform (`agc_cq15` and `dc_block_real` `Q15` are not accelerated; `dc_block_real`
-//! `f32` runs the block scan of the SIMD backend, which no SIMD library has). `benches/limits.json`
+//! every platform (`agc_cq15` and `dc_block_real` `Q15` are not accelerated); `dc_block_real`
+//! `f32`, the block scan of the SIMD backend, is judged against KFR's one-section `iir` (D2902).
+//! `benches/limits.json`
 //! must carry the entries at every level, the committed `simd128` counts must agree with it (the
 //! other levels are measured in cycles, D2700), and the Cortex-M4 report (no limits) counts all
 //! four kernels of the fallback.
@@ -13,7 +14,7 @@ use std::path::PathBuf;
 
 use serde_json::Value;
 
-const INFO_KERNELS: [&str; 3] = ["agc_cq15", "dc_block_real", "dc_block_real_q15"];
+const INFO_KERNELS: [&str; 2] = ["agc_cq15", "dc_block_real_q15"];
 
 /// The platforms with instruction counts and their levels.
 const PLATFORMS: [(&str, &[&str]); 1] = [("wasm32", &["simd128"])];
@@ -50,6 +51,31 @@ fn every_platform_reports_the_unaccelerated_kernels_as_information() {
                     "{platform}/{level}/{kernel}: {status}"
                 );
             }
+        }
+    }
+}
+
+#[test]
+fn dc_block_real_is_judged_against_kfr_at_every_level() {
+    // D2902: KFR's `iir` with one section, a library comparison at every level.
+    let limits = bench_file("limits.json");
+    for level in LEVELS {
+        assert_eq!(
+            limits["dc_block_real"][level]["status"].as_str(),
+            Some("release"),
+            "dc_block_real/{level}"
+        );
+    }
+    for (platform, levels) in PLATFORMS {
+        let result = bench_file(&format!("results/{platform}.json"));
+        for level in levels {
+            let entry = &result["levels"][*level]["kernels"]["dc_block_real"];
+            assert!(
+                entry
+                    .to_string()
+                    .contains("KFR 7.2.0 kfr::iir, iir_state<float, 1>"),
+                "{platform}/{level}/dc_block_real is not compared with KFR"
+            );
         }
     }
 }

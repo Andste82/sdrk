@@ -680,13 +680,9 @@ Reference model `skylake`, counter-model `znver2`, mode `whole-loop`; execution 
 | `qam_mod_block` | 9.11 | 9.11 | 1.00 | 11.19 | 11.19 | 1.00 | sdrk fallback |
 | `qam_mod_qam256_block` | 10.06 | 10.06 | 1.00 | 12.33 | 12.33 | 1.00 | sdrk fallback |
 | `qam_soft_bits_qam1024` | 7.89 | 7.88 | 1.00 | 9.05 | 9.05 | 1.00 | sdrk fallback |
-| `qam_soft_bits_qam16` | 1.35 | 1864.75 | 0.00 | 1.49 | 1588.52 | 0.00 | GNU Radio constellation_soft_decoder_cf with calc_soft_dec (constellation.cc of gr-digital; the exact log-likelihood ratio over all points, npwr 1, not max-log; no vector allocation per symbol, so faster than GNU Radio's object code) |
-| `qam_soft_bits_qam16_liquid` | 1.35 | 224.89 | 0.01 | 1.49 | 227.62 | 0.01 | liquid-dsp 1.8.3 modemcf_demodulate_soft of its own QAM modem (modem_common.proto.c; soft bytes with liquid's scale and labelling; the hard symbol and the soft bits per symbol) |
-| `qam_soft_bits_qam16_lut` | 1.35 | 78.15 | 0.02 | 1.49 | 66.60 | 0.02 | GNU Radio constellation_soft_decoder_cf with the look-up table of gen_soft_dec_lut (precision 8, npwr 1; constellation.cc of gr-digital; exact log-likelihood ratio, not max-log; the table lookup and a copy of 2 to 3 floats per symbol, no vector allocation) |
+| `qam_soft_bits_qam16` | 1.35 | 2.04 | 0.66 | 1.49 | 2.43 | 0.61 | sdrk fallback |
 | `qam_soft_bits_qam256` | 6.02 | 6.56 | 0.92 | 6.02 | 7.06 | 0.85 | sdrk fallback |
-| `qam_soft_bits_qam64` | 3.03 | 6763.49 | 0.00 | 3.34 | 5733.38 | 0.00 | GNU Radio constellation_soft_decoder_cf with calc_soft_dec (constellation.cc of gr-digital; the exact log-likelihood ratio over all points, npwr 1, not max-log; no vector allocation per symbol, so faster than GNU Radio's object code) |
-| `qam_soft_bits_qam64_liquid` | 3.03 | 274.51 | 0.01 | 3.34 | 273.82 | 0.01 | liquid-dsp 1.8.3 modemcf_demodulate_soft of its own QAM modem (modem_common.proto.c; soft bytes with liquid's scale and labelling; the hard symbol and the soft bits per symbol) |
-| `qam_soft_bits_qam64_lut` | 3.03 | 78.15 | 0.04 | 3.34 | 66.60 | 0.05 | GNU Radio constellation_soft_decoder_cf with the look-up table of gen_soft_dec_lut (precision 8, npwr 1; constellation.cc of gr-digital; exact log-likelihood ratio, not max-log; the table lookup and a copy of 2 to 3 floats per symbol, no vector allocation) |
+| `qam_soft_bits_qam64` | 3.03 | 4.57 | 0.66 | 3.34 | 4.31 | 0.77 | sdrk fallback |
 | `qam_soft_bits_qpsk` | 0.52 | 0.52 | 0.99 | 0.52 | 0.59 | 0.88 | sdrk fallback |
 | `rds_decode_block` | 9.18 | 9.18 | 1.00 | 11.91 | 11.91 | 1.00 | sdrk fallback |
 | `rds_demod_block` | 42.38 | 42.38 | 1.00 | 39.53 | 39.53 | 1.00 | sdrk fallback |
@@ -977,13 +973,9 @@ Reference model `skylake`, counter-model `znver2`, mode `whole-loop`; execution 
 | `qam_mod_block` | 8.71 | 8.71 | 1.00 | 10.47 | 10.47 | 1.00 | sdrk fallback |
 | `qam_mod_qam256_block` | 9.97 | 9.97 | 1.00 | 11.45 | 11.45 | 1.00 | sdrk fallback |
 | `qam_soft_bits_qam1024` | 7.20 | 7.19 | 1.00 | 8.07 | 8.06 | 1.00 | sdrk fallback |
-| `qam_soft_bits_qam16` | 1.35 | 1864.75 | 0.00 | 1.49 | 1588.52 | 0.00 | GNU Radio constellation_soft_decoder_cf with calc_soft_dec (constellation.cc of gr-digital; the exact log-likelihood ratio over all points, npwr 1, not max-log; no vector allocation per symbol, so faster than GNU Radio's object code) |
-| `qam_soft_bits_qam16_liquid` | 1.35 | 220.41 | 0.01 | 1.49 | 226.70 | 0.01 | liquid-dsp 1.8.3 modemcf_demodulate_soft of its own QAM modem (modem_common.proto.c; soft bytes with liquid's scale and labelling; the hard symbol and the soft bits per symbol) |
-| `qam_soft_bits_qam16_lut` | 1.35 | 78.15 | 0.02 | 1.49 | 66.60 | 0.02 | GNU Radio constellation_soft_decoder_cf with the look-up table of gen_soft_dec_lut (precision 8, npwr 1; constellation.cc of gr-digital; exact log-likelihood ratio, not max-log; the table lookup and a copy of 2 to 3 floats per symbol, no vector allocation) |
+| `qam_soft_bits_qam16` | 1.35 | 2.04 | 0.66 | 1.49 | 2.43 | 0.61 | sdrk fallback |
 | `qam_soft_bits_qam256` | 5.65 | 5.82 | 0.97 | 5.72 | 6.56 | 0.87 | sdrk fallback |
-| `qam_soft_bits_qam64` | 3.03 | 6763.49 | 0.00 | 3.34 | 5733.38 | 0.00 | GNU Radio constellation_soft_decoder_cf with calc_soft_dec (constellation.cc of gr-digital; the exact log-likelihood ratio over all points, npwr 1, not max-log; no vector allocation per symbol, so faster than GNU Radio's object code) |
-| `qam_soft_bits_qam64_liquid` | 3.03 | 269.16 | 0.01 | 3.34 | 274.90 | 0.01 | liquid-dsp 1.8.3 modemcf_demodulate_soft of its own QAM modem (modem_common.proto.c; soft bytes with liquid's scale and labelling; the hard symbol and the soft bits per symbol) |
-| `qam_soft_bits_qam64_lut` | 3.03 | 78.15 | 0.04 | 3.34 | 66.60 | 0.05 | GNU Radio constellation_soft_decoder_cf with the look-up table of gen_soft_dec_lut (precision 8, npwr 1; constellation.cc of gr-digital; exact log-likelihood ratio, not max-log; the table lookup and a copy of 2 to 3 floats per symbol, no vector allocation) |
+| `qam_soft_bits_qam64` | 3.03 | 4.06 | 0.74 | 3.34 | 3.92 | 0.85 | sdrk fallback |
 | `qam_soft_bits_qpsk` | 0.52 | 0.52 | 0.99 | 0.52 | 0.59 | 0.89 | sdrk fallback |
 | `rds_decode_block` | 8.74 | 8.74 | 1.00 | 11.50 | 11.50 | 1.00 | sdrk fallback |
 | `rds_demod_block` | 42.35 | 42.35 | 1.00 | 39.04 | 39.04 | 1.00 | sdrk fallback |
@@ -1275,13 +1267,9 @@ Reference model `znver3`, counter-model `alderlake`, mode `whole-loop`; executio
 | `qam_mod_block` | 4.39 | 4.39 | 1.00 | 4.57 | 4.57 | 1.00 | sdrk fallback |
 | `qam_mod_qam256_block` | 4.96 | 4.96 | 1.00 | 4.74 | 4.74 | 1.00 | sdrk fallback |
 | `qam_soft_bits_qam1024` | 5.53 | 5.53 | 1.00 | 4.31 | 4.31 | 1.00 | sdrk fallback |
-| `qam_soft_bits_qam16` | 0.52 | 1246.72 | 0.00 | 1.02 | 1332.14 | 0.00 | GNU Radio constellation_soft_decoder_cf with calc_soft_dec (constellation.cc of gr-digital; the exact log-likelihood ratio over all points, npwr 1, not max-log; no vector allocation per symbol, so faster than GNU Radio's object code) |
-| `qam_soft_bits_qam16_liquid` | 0.52 | 164.76 | 0.00 | 1.02 | 165.37 | 0.01 | liquid-dsp 1.8.3 modemcf_demodulate_soft of its own QAM modem (modem_common.proto.c; soft bytes with liquid's scale and labelling; the hard symbol and the soft bits per symbol) |
-| `qam_soft_bits_qam16_lut` | 0.52 | 56.48 | 0.01 | 1.02 | 55.13 | 0.02 | GNU Radio constellation_soft_decoder_cf with the look-up table of gen_soft_dec_lut (precision 8, npwr 1; constellation.cc of gr-digital; exact log-likelihood ratio, not max-log; the table lookup and a copy of 2 to 3 floats per symbol, no vector allocation) |
+| `qam_soft_bits_qam16` | 0.52 | 0.54 | 0.95 | 1.02 | 1.02 | 1.00 | sdrk fallback |
 | `qam_soft_bits_qam256` | 2.51 | 2.51 | 1.00 | 4.06 | 4.05 | 1.00 | sdrk fallback |
-| `qam_soft_bits_qam64` | 1.55 | 4422.74 | 0.00 | 1.42 | 4765.95 | 0.00 | GNU Radio constellation_soft_decoder_cf with calc_soft_dec (constellation.cc of gr-digital; the exact log-likelihood ratio over all points, npwr 1, not max-log; no vector allocation per symbol, so faster than GNU Radio's object code) |
-| `qam_soft_bits_qam64_liquid` | 1.55 | 235.45 | 0.01 | 1.42 | 218.48 | 0.01 | liquid-dsp 1.8.3 modemcf_demodulate_soft of its own QAM modem (modem_common.proto.c; soft bytes with liquid's scale and labelling; the hard symbol and the soft bits per symbol) |
-| `qam_soft_bits_qam64_lut` | 1.55 | 56.48 | 0.03 | 1.42 | 55.13 | 0.03 | GNU Radio constellation_soft_decoder_cf with the look-up table of gen_soft_dec_lut (precision 8, npwr 1; constellation.cc of gr-digital; exact log-likelihood ratio, not max-log; the table lookup and a copy of 2 to 3 floats per symbol, no vector allocation) |
+| `qam_soft_bits_qam64` | 1.55 | 1.79 | 0.86 | 1.42 | 1.80 | 0.79 | sdrk fallback |
 | `qam_soft_bits_qpsk` | 0.26 | 0.26 | 1.00 | 0.20 | 0.20 | 0.99 | sdrk fallback |
 | `rds_decode_block` | 7.28 | 7.28 | 1.00 | 7.98 | 7.98 | 1.00 | sdrk fallback |
 | `rds_demod_block` | 16.70 | 16.70 | 1.00 | 14.90 | 14.90 | 1.00 | sdrk fallback |
@@ -1300,9 +1288,7 @@ Reference model `znver3`, counter-model `alderlake`, mode `whole-loop`; executio
 | `stereo_matrix_fallback` | 0.63 | 0.60 | 1.06 | 0.86 | 0.53 | 1.61 | CMSIS-DSP 1.18.0 arm_add_f32 (d + d), arm_add_f32 (s + d2), arm_sub_f32 (s - d2) on planar data, generic C (-O3 -ffp-contract=off, LOOPUNROLL, avx2) |
 | `stereo_pll_fallback` | 63.32 | 57.06 | 1.11 | 79.41 | 78.06 | 1.02 | liquid-dsp 1.8.3 nco_crcf (LIQUID_VCO_INTERP): sincos at theta and 2 theta from the 1024-entry table, nco_crcf_adjust_frequency and nco_crcf_adjust_phase (double modulo in _constrain), nco_crcf_step; no lock detector, no integrator limit (-O3 -ffp-contract=off, avx2) |
 | `stereo_pll_q15_fallback` | 37.04 | 51.46 | 0.72 | 38.06 | 34.89 | 1.09 | CMSIS-DSP 1.18.0 arm_cos_q15 and arm_sin_q15 (twice) per sample in the loop of the kernel (the oscillator only: CMSIS-DSP has no PLL), generic C (-O3 -ffp-contract=off, LOOPUNROLL, avx2) |
-| `symbol_demap_qam16_block` | 0.52 | 1246.72 | 0.00 | 1.02 | 1332.14 | 0.00 | GNU Radio constellation_soft_decoder_cf with calc_soft_dec (constellation.cc of gr-digital; the exact log-likelihood ratio over all points, npwr 1, not max-log; no vector allocation per symbol, so faster than GNU Radio's object code) |
-| `symbol_demap_qam16_block_liquid` | 0.52 | 164.74 | 0.00 | 1.02 | 165.37 | 0.01 | liquid-dsp 1.8.3 modemcf_demodulate_soft of its own QAM modem (modem_common.proto.c; soft bytes with liquid's scale and labelling; the hard symbol and the soft bits per symbol) |
-| `symbol_demap_qam16_block_lut` | 0.52 | 47.02 | 0.01 | 1.02 | 35.13 | 0.03 | GNU Radio constellation_soft_decoder_cf with the look-up table of gen_soft_dec_lut (precision 8, npwr 1; constellation.cc of gr-digital; exact log-likelihood ratio, not max-log; the table lookup and a copy of 2 to 3 floats per symbol, no vector allocation) |
+| `symbol_demap_qam16_block` | 0.52 | 0.52 | 1.00 | 1.02 | 1.02 | 1.00 | sdrk fallback |
 | `symbol_demap_qam256_block` | 2.51 | 2.51 | 1.00 | 4.06 | 4.06 | 1.00 | sdrk fallback |
 | `symbol_demap_qam64_block` | 1.55 | 1.55 | 1.00 | 1.42 | 1.42 | 1.00 | sdrk fallback |
 | `symbol_map_block` | 5.78 | 5.78 | 1.00 | 7.55 | 7.55 | 1.00 | sdrk fallback |
@@ -1751,18 +1737,12 @@ Reference model `znver4`, counter-model `sapphirerapids`, mode `whole-loop`; exe
 | `qam_demod_search_block` | 65.99 | 65.99 | 1.00 | 75.04 | 75.04 | 1.00 | sdrk fallback |
 | `qam_frame_decode_block` | 74.15 | 74.15 | 1.00 | 82.32 | 82.32 | 1.00 | sdrk fallback |
 | `qam_frame_encode_block` | 5.02 | 5.02 | 1.00 | 4.12 | 4.12 | 1.00 | sdrk fallback |
-| `qam_mod_block` | 4.15 | 216.77 | 0.02 | 3.21 | 250.63 | 0.01 | GNU Radio constellation_modulator as the sum of its blocks: pack_k_bits_bb + chunks_to_symbols_bc + pfb_arb_resampler_ccf (32 filters of 88 taps and their derivative filters), VOLK's dispatched dot product of the level |
-| `qam_mod_block_liquid` | 4.15 | 50.39 | 0.08 | 3.21 | 57.96 | 0.06 | liquid-dsp 1.8.3 modemcf_modulate (arbitrary-constellation modem) + firinterp_crcf (the root-raised cosine of the block), the SIMD dot products of the level (the portable loop at simd128) |
-| `qam_mod_qam256_block` | 4.38 | 217.54 | 0.02 | 3.54 | 251.68 | 0.01 | GNU Radio constellation_modulator as the sum of its blocks: pack_k_bits_bb + chunks_to_symbols_bc + pfb_arb_resampler_ccf (32 filters of 88 taps and their derivative filters), VOLK's dispatched dot product of the level |
-| `qam_mod_qam256_block_liquid` | 4.38 | 51.41 | 0.09 | 3.54 | 59.48 | 0.06 | liquid-dsp 1.8.3 modemcf_modulate (arbitrary-constellation modem) + firinterp_crcf (the root-raised cosine of the block), the SIMD dot products of the level (the portable loop at simd128) |
+| `qam_mod_block` | 4.17 | 4.17 | 1.00 | 3.21 | 3.21 | 1.00 | sdrk fallback |
+| `qam_mod_qam256_block` | 4.41 | 4.41 | 1.00 | 3.54 | 3.54 | 1.00 | sdrk fallback |
 | `qam_soft_bits_qam1024` | 2.05 | 2.05 | 1.00 | 2.06 | 2.06 | 1.00 | sdrk fallback |
-| `qam_soft_bits_qam16` | 0.36 | 1224.82 | 0.00 | 0.35 | 1335.74 | 0.00 | GNU Radio constellation_soft_decoder_cf with calc_soft_dec (constellation.cc of gr-digital; the exact log-likelihood ratio over all points, npwr 1, not max-log; no vector allocation per symbol, so faster than GNU Radio's object code) |
-| `qam_soft_bits_qam16_liquid` | 0.36 | 159.85 | 0.00 | 0.35 | 173.32 | 0.00 | liquid-dsp 1.8.3 modemcf_demodulate_soft of its own QAM modem (modem_common.proto.c; soft bytes with liquid's scale and labelling; the hard symbol and the soft bits per symbol) |
-| `qam_soft_bits_qam16_lut` | 0.36 | 56.64 | 0.01 | 0.35 | 55.46 | 0.01 | GNU Radio constellation_soft_decoder_cf with the look-up table of gen_soft_dec_lut (precision 8, npwr 1; constellation.cc of gr-digital; exact log-likelihood ratio, not max-log; the table lookup and a copy of 2 to 3 floats per symbol, no vector allocation) |
+| `qam_soft_bits_qam16` | 0.36 | 0.43 | 0.84 | 0.33 | 0.52 | 0.63 | sdrk fallback |
 | `qam_soft_bits_qam256` | 1.21 | 1.21 | 1.00 | 1.01 | 1.01 | 1.00 | sdrk fallback |
-| `qam_soft_bits_qam64` | 0.77 | 4356.96 | 0.00 | 0.77 | 4781.46 | 0.00 | GNU Radio constellation_soft_decoder_cf with calc_soft_dec (constellation.cc of gr-digital; the exact log-likelihood ratio over all points, npwr 1, not max-log; no vector allocation per symbol, so faster than GNU Radio's object code) |
-| `qam_soft_bits_qam64_liquid` | 0.77 | 210.82 | 0.00 | 0.77 | 226.36 | 0.00 | liquid-dsp 1.8.3 modemcf_demodulate_soft of its own QAM modem (modem_common.proto.c; soft bytes with liquid's scale and labelling; the hard symbol and the soft bits per symbol) |
-| `qam_soft_bits_qam64_lut` | 0.77 | 56.64 | 0.01 | 0.77 | 55.46 | 0.01 | GNU Radio constellation_soft_decoder_cf with the look-up table of gen_soft_dec_lut (precision 8, npwr 1; constellation.cc of gr-digital; exact log-likelihood ratio, not max-log; the table lookup and a copy of 2 to 3 floats per symbol, no vector allocation) |
+| `qam_soft_bits_qam64` | 0.77 | 0.79 | 0.97 | 0.77 | 0.80 | 0.95 | sdrk fallback |
 | `qam_soft_bits_qpsk` | 0.14 | 0.26 | 0.52 | 0.13 | 0.20 | 0.67 | sdrk fallback |
 | `rds_decode_block` | 7.20 | 7.20 | 1.00 | 7.96 | 7.96 | 1.00 | sdrk fallback |
 | `rds_demod_block` | 477.58 | 477.33 | 1.00 | 50.81 | 50.79 | 1.00 | sdrk fallback |
@@ -1781,9 +1761,7 @@ Reference model `znver4`, counter-model `sapphirerapids`, mode `whole-loop`; exe
 | `stereo_matrix_fallback` | 0.48 | 0.60 | 0.80 | 0.54 | 0.53 | 1.02 | CMSIS-DSP 1.18.0 arm_add_f32 (d + d), arm_add_f32 (s + d2), arm_sub_f32 (s - d2) on planar data, generic C (-O3 -ffp-contract=off, LOOPUNROLL, avx512) |
 | `stereo_pll_fallback` | 61.34 | 56.30 | 1.09 | 74.40 | 78.06 | 0.95 | liquid-dsp 1.8.3 nco_crcf (LIQUID_VCO_INTERP): sincos at theta and 2 theta from the 1024-entry table, nco_crcf_adjust_frequency and nco_crcf_adjust_phase (double modulo in _constrain), nco_crcf_step; no lock detector, no integrator limit (-O3 -ffp-contract=off, avx512) |
 | `stereo_pll_q15_fallback` | 37.04 | 45.61 | 0.81 | 38.05 | 34.89 | 1.09 | CMSIS-DSP 1.18.0 arm_cos_q15 and arm_sin_q15 (twice) per sample in the loop of the kernel (the oscillator only: CMSIS-DSP has no PLL), generic C (-O3 -ffp-contract=off, LOOPUNROLL, avx512) |
-| `symbol_demap_qam16_block` | 0.36 | 1224.82 | 0.00 | 0.35 | 1335.74 | 0.00 | GNU Radio constellation_soft_decoder_cf with calc_soft_dec (constellation.cc of gr-digital; the exact log-likelihood ratio over all points, npwr 1, not max-log; no vector allocation per symbol, so faster than GNU Radio's object code) |
-| `symbol_demap_qam16_block_liquid` | 0.36 | 159.86 | 0.00 | 0.35 | 173.32 | 0.00 | liquid-dsp 1.8.3 modemcf_demodulate_soft of its own QAM modem (modem_common.proto.c; soft bytes with liquid's scale and labelling; the hard symbol and the soft bits per symbol) |
-| `symbol_demap_qam16_block_lut` | 0.36 | 47.18 | 0.01 | 0.35 | 35.46 | 0.01 | GNU Radio constellation_soft_decoder_cf with the look-up table of gen_soft_dec_lut (precision 8, npwr 1; constellation.cc of gr-digital; exact log-likelihood ratio, not max-log; the table lookup and a copy of 2 to 3 floats per symbol, no vector allocation) |
+| `symbol_demap_qam16_block` | 0.36 | 0.36 | 1.00 | 0.33 | 0.33 | 1.00 | sdrk fallback |
 | `symbol_demap_qam256_block` | 1.21 | 1.21 | 1.00 | 1.01 | 1.01 | 1.00 | sdrk fallback |
 | `symbol_demap_qam64_block` | 0.77 | 0.77 | 1.00 | 0.77 | 0.77 | 1.00 | sdrk fallback |
 | `symbol_map_block` | 1.28 | 1.28 | 1.00 | 2.17 | 2.17 | 1.00 | sdrk fallback |
@@ -2056,16 +2034,12 @@ Reference model `cortex-a72`, counter-model `cortex-a76`, mode `whole-loop`; exe
 | `qam_mod_block` | 14.04 | 14.04 | 1.00 | 13.08 | 13.08 | 1.00 | sdrk fallback |
 | `qam_mod_qam256_block` | 14.65 | 14.65 | 1.00 | 13.93 | 13.93 | 1.00 | sdrk fallback |
 | `qam_soft_bits_qam1024` | 15.10 | 15.10 | 1.00 | 9.08 | 9.08 | 1.00 | sdrk fallback |
-| `qam_soft_bits_qam16` | 3.04 | 1973.09 | 0.00 | 2.03 | 1412.59 | 0.00 | GNU Radio constellation_soft_decoder_cf with calc_soft_dec (constellation.cc of gr-digital; the exact log-likelihood ratio over all points, npwr 1, not max-log; no vector allocation per symbol, so faster than GNU Radio's object code) |
-| `qam_soft_bits_qam16_liquid` | 3.04 | 285.02 | 0.01 | 2.03 | 301.73 | 0.01 | liquid-dsp 1.8.3 modemcf_demodulate_soft of its own QAM modem (modem_common.proto.c; soft bytes with liquid's scale and labelling; the hard symbol and the soft bits per symbol) |
-| `qam_soft_bits_qam16_lut` | 3.04 | 63.03 | 0.05 | 2.03 | 45.97 | 0.04 | GNU Radio constellation_soft_decoder_cf with the look-up table of gen_soft_dec_lut (precision 8, npwr 1; constellation.cc of gr-digital; exact log-likelihood ratio, not max-log; the table lookup and a copy of 2 to 3 floats per symbol, no vector allocation) |
+| `qam_soft_bits_qam16` | 3.03 | 3.03 | 1.00 | 2.03 | 2.03 | 1.00 | sdrk fallback |
 | `qam_soft_bits_qam256` | 6.05 | 6.04 | 1.00 | 4.29 | 4.28 | 1.00 | sdrk fallback |
-| `qam_soft_bits_qam64` | 4.55 | 7009.65 | 0.00 | 3.03 | 5351.51 | 0.00 | GNU Radio constellation_soft_decoder_cf with calc_soft_dec (constellation.cc of gr-digital; the exact log-likelihood ratio over all points, npwr 1, not max-log; no vector allocation per symbol, so faster than GNU Radio's object code) |
-| `qam_soft_bits_qam64_liquid` | 4.55 | 340.79 | 0.01 | 3.03 | 361.04 | 0.01 | liquid-dsp 1.8.3 modemcf_demodulate_soft of its own QAM modem (modem_common.proto.c; soft bytes with liquid's scale and labelling; the hard symbol and the soft bits per symbol) |
-| `qam_soft_bits_qam64_lut` | 4.55 | 63.03 | 0.07 | 3.03 | 45.97 | 0.07 | GNU Radio constellation_soft_decoder_cf with the look-up table of gen_soft_dec_lut (precision 8, npwr 1; constellation.cc of gr-digital; exact log-likelihood ratio, not max-log; the table lookup and a copy of 2 to 3 floats per symbol, no vector allocation) |
+| `qam_soft_bits_qam64` | 4.54 | 4.54 | 1.00 | 3.03 | 3.03 | 1.00 | sdrk fallback |
 | `qam_soft_bits_qpsk` | 1.78 | 1.78 | 1.00 | 1.53 | 1.53 | 1.00 | sdrk fallback |
 | `rds_decode_block` | 12.14 | 12.14 | 1.00 | 13.67 | 13.67 | 1.00 | sdrk fallback |
-| `rds_demod_block` | 54.67 | 54.67 | 1.00 | 49.29 | 49.29 | 1.00 | sdrk fallback |
+| `rds_demod_block` | 54.78 | 54.78 | 1.00 | 49.56 | 49.56 | 1.00 | sdrk fallback |
 | `rds_shape` | 53.93 | 53.93 | 1.00 | 47.22 | 47.22 | 1.00 | sdrk fallback |
 | `real_to_complex` | 10.14 | 86.75 | 0.12 | 8.59 | 76.87 | 0.11 | liquid-dsp 1.8.3 firhilbf_decim_execute_block (dotprod_rrrf) with its NEON dot product (-O3 -ffp-contract=off, neon) |
 | `real_to_complex_cq15` | 10.68 | 17.90 | 0.60 | 8.74 | 17.14 | 0.51 | libairspy 1.0.10 iqconverter_int16 (truncating >> 15, 32-bit accumulator, the odd samples halved), conversion without remove_dc (-O3 -ffp-contract=off, neon) |
@@ -2081,9 +2055,7 @@ Reference model `cortex-a72`, counter-model `cortex-a76`, mode `whole-loop`; exe
 | `stereo_matrix_fallback` | 1.90 | 3.83 | 0.50 | 1.39 | 3.07 | 0.45 | CMSIS-DSP 1.18.0 arm_add_f32 (d + d), arm_add_f32 (s + d2), arm_sub_f32 (s - d2) on planar data, generic C (-O3 -ffp-contract=off, LOOPUNROLL, neon) |
 | `stereo_pll_fallback` | 84.51 | 86.93 | 0.97 | 56.44 | 57.23 | 0.99 | liquid-dsp 1.8.3 nco_crcf (LIQUID_VCO_INTERP): sincos at theta and 2 theta from the 1024-entry table, nco_crcf_adjust_frequency and nco_crcf_adjust_phase (double modulo in _constrain), nco_crcf_step; no lock detector, no integrator limit (-O3 -ffp-contract=off, neon) |
 | `stereo_pll_q15_fallback` | 41.07 | 100.31 | 0.41 | 39.08 | 88.00 | 0.44 | CMSIS-DSP 1.18.0 arm_cos_q15 and arm_sin_q15 (twice) per sample in the loop of the kernel (the oscillator only: CMSIS-DSP has no PLL), generic C (-O3 -ffp-contract=off, LOOPUNROLL, neon) |
-| `symbol_demap_qam16_block` | 3.04 | 1973.08 | 0.00 | 2.03 | 1412.58 | 0.00 | GNU Radio constellation_soft_decoder_cf with calc_soft_dec (constellation.cc of gr-digital; the exact log-likelihood ratio over all points, npwr 1, not max-log; no vector allocation per symbol, so faster than GNU Radio's object code) |
-| `symbol_demap_qam16_block_liquid` | 3.04 | 284.99 | 0.01 | 2.03 | 301.69 | 0.01 | liquid-dsp 1.8.3 modemcf_demodulate_soft of its own QAM modem (modem_common.proto.c; soft bytes with liquid's scale and labelling; the hard symbol and the soft bits per symbol) |
-| `symbol_demap_qam16_block_lut` | 3.04 | 63.02 | 0.05 | 2.03 | 45.97 | 0.04 | GNU Radio constellation_soft_decoder_cf with the look-up table of gen_soft_dec_lut (precision 8, npwr 1; constellation.cc of gr-digital; exact log-likelihood ratio, not max-log; the table lookup and a copy of 2 to 3 floats per symbol, no vector allocation) |
+| `symbol_demap_qam16_block` | 3.04 | 3.04 | 1.00 | 2.03 | 2.03 | 1.00 | sdrk fallback |
 | `symbol_demap_qam256_block` | 6.06 | 6.06 | 1.00 | 4.29 | 4.29 | 1.00 | sdrk fallback |
 | `symbol_demap_qam64_block` | 4.55 | 4.55 | 1.00 | 3.04 | 3.04 | 1.00 | sdrk fallback |
 | `symbol_map_block` | 7.08 | 7.08 | 1.00 | 9.07 | 9.07 | 1.00 | sdrk fallback |
@@ -2395,6 +2367,131 @@ Instructions per sample (wasmtime fuel, differential) of our kernel divided by t
 | `xcorr_fft_n512_fallback` | 517.29 | 1977.98 | 0.26 |  | liquid-dsp 1.8.3 fftfilt_cccf (benches/refs/liquid-fftfilt.c), liquid's own FFT |
 
 <!-- simd128-instructions:end -->
+
+## Efficiency verdicts without a SIMD library (issue #169)
+
+The ratios below were taken from the whole-loop simulations of the local runs of D2544 and D2547 (cycles per sample, reference model / counter model); the cycle tables above are the current numbers of the CI measurement.
+
+**Efficiency verdict of `costas`, `costas_qam16` and `costas_qam64` at the SIMD levels (issue #169, D2544).** GNU Radio has no SIMD path for these loops (`costas_loop_cc` and `constellation_receiver_cb` are scalar), so there is no SIMD library to compare with; the facade entries stay with our fallback (the recursion of D608) and are `info`. The verdict is the efficiency of the whole-loop simulation (the port bound of the executed instructions per sample divided by the simulated cycles), reference / counter model:
+
+| Entry | `sse2` | `sse4.2` | `avx2` | `avx512` | `neon` |
+| --- | --- | --- | --- | --- | --- |
+| `costas` (QPSK) | 0.27 / 0.46 | 0.27 / 0.46 | 0.31 / 0.25 | 0.31 / 0.24 | 0.34 / 0.59 |
+| `costas_qam16` | 0.21 / 0.32 | 0.21 / 0.32 | 0.20 / 0.19 | 0.19 / 0.17 | 0.27 / 0.49 |
+| `costas_qam64` | 0.21 / 0.32 | 0.21 / 0.32 | 0.21 / 0.21 | 0.20 / 0.18 | 0.39 / 0.64 |
+
+Every row is bound by latency: the phase of the next symbol is the phase of this one plus the frequency integrator and the proportional correction of this symbol's detector output, so the NCO step, the derotation, the detector and the loop filter form one chain per symbol that no SIMD width shortens (the lanes would need the next symbol's phase before it exists). The distance to the port bound (16 to 70 cycles per symbol against 55 to 180 simulated) is that chain, not unused throughput of the level; the verdict is that the loops are at the length of their recursion (the chain was shortened with the same bits in D1100 and in the QAM speed round, D1416 to D1418) and no SIMD path is missing. The rows are measured with `rustc 1.99.1`; the `x86_64` rows reproduce the committed ones, the `neon` row of `costas` does not (94.19 / 55.08 against 86.13 / 54.09, D2540, D2544).
+
+**Efficiency verdicts of the entries without a library at the SIMD levels (issue #169, D2547).** No library has `qam_frame_encode_block`, `qam_frame_decode_block`, `qam_acquire_block`, `iq_offset_block`, the framing of `sdrk-proto` (`frame_decode`, `frame_decode_block`, `frame_decode_four_block`, `frame_encode_block`), and none has a SIMD form of `symbol_sync` and `symbol_sync_real` (D562, the loop of the strobe positions; the fallback entry `symbol_sync_fallback` has GNU Radio's `symbol_sync_cc`). The verdict is the efficiency of the whole-loop simulation (port bound of the executed instructions divided by the simulated cycles) and its bottleneck, `T` throughput and `L` latency, reference / counter model:
+
+| Entry | `sse2` | `sse4.2` | `avx2` | `avx512` | `neon` |
+| --- | --- | --- | --- | --- | --- |
+| `qam_frame_encode_block` | 0.85T / 0.95T | 0.85T / 0.95T | 0.84T / 0.79L | 0.84T / 0.82T | 0.89T / 0.91T |
+| `qam_frame_decode_block` | 0.63L / 0.74L | 0.63L / 0.74L | 0.61L / 0.52L | 0.58L / 0.50L | 0.69L / 0.80L |
+| `qam_acquire_block` | 0.59L / 0.90T | 0.59L / 0.90T | 0.74L / 0.61L | 0.78L / 0.61L | 0.82T / 0.90T |
+| `iq_offset_block` | 0.94T / 1.00T | 0.85T / 0.92T | 0.82T / 0.70L | 0.82T / 0.70L | 0.66L / 0.76L |
+| `symbol_sync` | 0.26L / 0.45L | 0.25L / 0.44L | 0.34L / 0.24L | 0.34L / 0.24L | 0.32L / 0.62L |
+| `symbol_sync_real` | 0.28L / 0.47L | 0.27L / 0.46L | 0.32L / 0.23L | 0.33L / 0.23L | 0.36L / 0.73L |
+| `frame_decode` | 0.80L / 0.84T | 0.80L / 0.84T | 0.82T / 0.79L | 0.82T / 0.79L | 0.90T / 0.88T |
+| `frame_decode_block` | 0.79L / 0.81T | 0.79L / 0.81T | 0.62L / 0.75L | 0.62L / 0.75L | 0.90T / 0.93T |
+| `frame_decode_four_block` | 0.74L / 0.78L | 0.74L / 0.78L | 0.78L / 0.81T | 0.81T / 0.78L | 0.83T / 0.80L |
+| `frame_encode_block` | 0.33L / 0.47L | 0.33L / 0.47L | 0.33L / 0.33L | 0.33L / 0.33L | 0.60L / 0.67L |
+
+Seven of the ten entries are at 0.5 or above on every level and model, bound by the throughput of their work or by a short dependency chain; nothing is left that a SIMD form would take: the framing is byte- and bit-serial by its definition (the sync-word registers, the whitening and the CRC of `sdrk-proto` have no SIMD form, and the code is the same at every level), and `iq_offset_block` is a delay of one component. The three entries below 0.5 are bound by latency: `symbol_sync` and `symbol_sync_real` (0.23 to 0.73) by the recursion of the strobe positions (every position is the previous one plus the period and the correction of the previous error, M38), and `frame_encode_block` (0.33 to 0.67). Two checks of the issue:
+
+- **The QAM part of the frame entries matches `qam_mod_block` and `qam_demod_block`.** `qam_frame_encode_block` against `qam_mod_block` per output sample, reference / counter model: `sse2` 1.11 / 1.09; `sse4.2` 1.12 / 1.09; `avx2` 1.20 / 1.20; `avx512` 1.21 / 1.28; `neon` 1.08 / 1.08 (the ratio; the rest is `frame_encode` of the framing). `qam_frame_decode_block` against `qam_demod_block` per input sample, the difference in cycles (and the ratio): `sse2` +17.9 / +15.1 (1.16 / 1.15); `sse4.2` +18.0 / +14.9 (1.16 / 1.15); `avx2` +14.3 / +10.9 (1.22 / 1.15); `avx512` +13.7 / +11.2 (1.23 / 1.16); `neon` +24.7 / +23.5 (1.18 / 1.26). The QAM part is the same code with the same cost; the frame functions add 8 to 28 % when encoding and 15 to 26 % when decoding.
+- **The share of the 1024-point FFT in `qam_acquire_block`** (one `fft_1024` per 512 symbols, a sample is a symbol; the `fft_1024` row of the same run, cycles per transform against the cycles of the block per 512 symbols), reference / counter model: `sse2` 7366 of 26689 = 28 %, 6541 of 22628 = 29 %; `sse4.2` 7366 of 26272 = 28 %, 6541 of 22287 = 29 %; `avx2` 2402 of 13769 = 17 %, 2318 of 16682 = 14 %; `avx512` 2079 of 13190 = 16 %, 2000 of 15547 = 13 %; `neon` 13138 of 39560 = 33 %, 8749 of 24798 = 35 %. The rest is the normalized fourth power of every symbol and the peak search. The `fft_1024` row itself is compared with FFTW and KFR in its own entry.
+
+## PSK receiver against GNU Radio (BER and alignment changes, issue #169 §D)
+
+`cargo run --release --bin psk_ber [symbols [first seed [seeds]]]` in `benches/kernels` (with `SDRK_REFS_DIR` as for `cargo xtask count`; the code is `benches/kernels/src/psk_ber.rs`) runs `psk_demod` and GNU Radio's receiver chain (`fir_filter_ccf` with the matched filter, `symbol_sync_cc`, `costas_loop_cc` of the order 2, 4 or 8, the decision of `constellation_decoder_cb` as the nearest point, `diff_decoder_bb` for the differential case; the C translations of `benches/refs`) on the same signals. The signal is the output of `psk_mod` for random bits (8 samples per symbol, roll-off 0.35, span 10) turned by 0.3 rad with a carrier offset of 0.003 cycles per symbol, delayed by 3 samples, with white Gaussian noise for the Eb/N0 of the row (the power of the samples measured); both receivers run `carrier_bw` 0.02 and damping 0.707, `psk_demod` its default `sync_bw` 0.005 (D2553; 0.01 before) and GNU Radio's chain `sync_bw` 0.01 (`PSK_BER_SYNC_BW` sets that of `psk_demod`), in calls of 4096 samples. The bits are compared with the sent ones per window of 2000 symbols at the best alignment (the phase ambiguity of the carrier loop and the lag in symbols, searched around the alignment of the window before); the first 6000 symbols and the last 128 (still in the filters when the input ends) are not counted; an alignment change is a window whose best alignment differs from the one before. Eight seeds (2601 to 2608) of 200000 symbols are summed per row. The theory is `Q(sqrt(2 Eb/N0))` for BPSK and QPSK, `2/3 Q(sqrt(6 Eb/N0) sin(pi/8))` for 8PSK and `exp(-Eb/N0)/2` for non-coherent differential BPSK. Both receivers lose 0.2 to 0.4 dB against the theory (the filters, the timing and the carrier loops).
+
+Since D2553 the last 128 symbols are left out (before, the symbols still in the filters counted as errors of both receivers, about 10 symbols per seed) and the history of GNU Radio's matched filter is right in the last, shorter call (`GrFront` took it from the length of that call, which turned about 5 symbols of the chain wrong per seed); GNU Radio's BER at 8 dB is 1.96e-4 instead of 2.66e-4 (BPSK), and the tables of D2551 are replaced by these.
+
+Block default (`sync_bw` 0.005, D2553):
+
+| constellation | mode | Eb/N0 dB | theory | sdrk BER | GNU Radio BER | sdrk / GNU Radio | sdrk changes per 1e5 | GNU Radio changes per 1e5 | bits |
+| --- | --- | --- | --- | --- | --- | --- | --- | --- | --- |
+| BPSK | coherent | 2 | 3.751e-2 | 4.159e-2 | 3.934e-2 | 1.06 | 0.00 | 0.00 | 1536000 |
+| BPSK | coherent | 4 | 1.250e-2 | 1.381e-2 | 1.306e-2 | 1.06 | 0.00 | 0.00 | 1536000 |
+| BPSK | coherent | 6 | 2.388e-3 | 2.663e-3 | 2.503e-3 | 1.06 | 0.00 | 0.00 | 1536000 |
+| BPSK | coherent | 8 | 1.909e-4 | 2.155e-4 | 1.960e-4 | 1.10 | 0.00 | 0.00 | 1536000 |
+| QPSK | coherent | 2 | 3.751e-2 | 5.616e-2 | 5.050e-2 | 1.11 | 4.56 | 2.73 | 3072000 |
+| QPSK | coherent | 4 | 1.250e-2 | 1.445e-2 | 1.416e-2 | 1.02 | 0.07 | 0.07 | 3072000 |
+| QPSK | coherent | 6 | 2.388e-3 | 2.830e-3 | 2.761e-3 | 1.02 | 0.00 | 0.00 | 3072000 |
+| QPSK | coherent | 8 | 1.909e-4 | 2.542e-4 | 2.497e-4 | 1.02 | 0.00 | 0.00 | 3072000 |
+| 8PSK | coherent | 6 | 2.048e-2 | 3.946e-2 | 3.848e-2 | 1.03 | 5.14 | 5.92 | 4608000 |
+| 8PSK | coherent | 8 | 6.181e-3 | 7.441e-3 | 7.387e-3 | 1.01 | 0.00 | 0.00 | 4608000 |
+| 8PSK | coherent | 10 | 1.011e-3 | 1.288e-3 | 1.255e-3 | 1.03 | 0.00 | 0.00 | 4608000 |
+| 8PSK | coherent | 12 | 6.340e-5 | 9.266e-5 | 8.984e-5 | 1.03 | 0.00 | 0.00 | 4608000 |
+| BPSK | differential | 2 | 1.025e-1 | 1.078e-1 | 7.603e-2 | 1.42 | 0.00 | 0.00 | 1536000 |
+| BPSK | differential | 4 | 4.056e-2 | 4.290e-2 | 2.604e-2 | 1.65 | 0.00 | 0.00 | 1536000 |
+| BPSK | differential | 6 | 9.333e-3 | 9.995e-3 | 5.052e-3 | 1.98 | 0.00 | 0.00 | 1536000 |
+| BPSK | differential | 8 | 9.094e-4 | 1.014e-3 | 3.997e-4 | 2.54 | 0.00 | 0.00 | 1536000 |
+
+`sync_bw` 0.01 (the default before D2553):
+
+| constellation | mode | Eb/N0 dB | theory | sdrk BER | GNU Radio BER | sdrk / GNU Radio | sdrk changes per 1e5 | GNU Radio changes per 1e5 | bits |
+| --- | --- | --- | --- | --- | --- | --- | --- | --- | --- |
+| BPSK | coherent | 2 | 3.751e-2 | 7.077e-2 | 3.934e-2 | 1.80 | 8.79 | 0.00 | 1536000 |
+| BPSK | coherent | 4 | 1.250e-2 | 1.617e-2 | 1.306e-2 | 1.24 | 0.20 | 0.00 | 1536000 |
+| BPSK | coherent | 6 | 2.388e-3 | 3.068e-3 | 2.503e-3 | 1.23 | 0.00 | 0.00 | 1536000 |
+| BPSK | coherent | 8 | 1.909e-4 | 2.604e-4 | 1.960e-4 | 1.33 | 0.00 | 0.00 | 1536000 |
+| QPSK | coherent | 2 | 3.751e-2 | 6.084e-2 | 5.050e-2 | 1.20 | 5.86 | 2.73 | 3072000 |
+| QPSK | coherent | 4 | 1.250e-2 | 1.507e-2 | 1.416e-2 | 1.06 | 0.07 | 0.07 | 3072000 |
+| QPSK | coherent | 6 | 2.388e-3 | 2.985e-3 | 2.761e-3 | 1.08 | 0.00 | 0.00 | 3072000 |
+| QPSK | coherent | 8 | 1.909e-4 | 2.692e-4 | 2.497e-4 | 1.08 | 0.00 | 0.00 | 3072000 |
+| 8PSK | coherent | 6 | 2.048e-2 | 3.863e-2 | 3.848e-2 | 1.00 | 5.34 | 5.92 | 4608000 |
+| 8PSK | coherent | 8 | 6.181e-3 | 7.807e-3 | 7.387e-3 | 1.06 | 0.07 | 0.00 | 4608000 |
+| 8PSK | coherent | 10 | 1.011e-3 | 1.351e-3 | 1.255e-3 | 1.08 | 0.00 | 0.00 | 4608000 |
+| 8PSK | coherent | 12 | 6.340e-5 | 1.020e-4 | 8.984e-5 | 1.14 | 0.00 | 0.00 | 4608000 |
+| BPSK | differential | 2 | 1.025e-1 | 1.373e-1 | 7.603e-2 | 1.81 | 8.46 | 0.00 | 1536000 |
+| BPSK | differential | 4 | 4.056e-2 | 4.738e-2 | 2.604e-2 | 1.82 | 0.20 | 0.00 | 1536000 |
+| BPSK | differential | 6 | 9.333e-3 | 1.104e-2 | 5.052e-3 | 2.18 | 0.00 | 0.00 | 1536000 |
+| BPSK | differential | 8 | 9.094e-4 | 1.148e-3 | 3.997e-4 | 2.87 | 0.00 | 0.00 | 1536000 |
+
+`sync_bw` 0.0075 for `psk_demod` (and 0.004 for the 8PSK row: 6.856e-2 at 6 dB, 1.78 times, 7.88 changes; BPSK 1.03 to 1.04, QPSK 1.01 to 1.11):
+
+| constellation | mode | Eb/N0 dB | theory | sdrk BER | GNU Radio BER | sdrk / GNU Radio | sdrk changes per 1e5 | GNU Radio changes per 1e5 | bits |
+| --- | --- | --- | --- | --- | --- | --- | --- | --- | --- |
+| BPSK | coherent | 2 | 3.751e-2 | 5.132e-2 | 3.934e-2 | 1.30 | 1.56 | 0.00 | 1536000 |
+| BPSK | coherent | 4 | 1.250e-2 | 1.456e-2 | 1.306e-2 | 1.12 | 0.00 | 0.00 | 1536000 |
+| BPSK | coherent | 6 | 2.388e-3 | 2.838e-3 | 2.503e-3 | 1.13 | 0.00 | 0.00 | 1536000 |
+| BPSK | coherent | 8 | 1.909e-4 | 2.350e-4 | 1.960e-4 | 1.20 | 0.00 | 0.00 | 1536000 |
+| QPSK | coherent | 2 | 3.751e-2 | 5.741e-2 | 5.050e-2 | 1.14 | 4.75 | 2.73 | 3072000 |
+| QPSK | coherent | 4 | 1.250e-2 | 1.474e-2 | 1.416e-2 | 1.04 | 0.07 | 0.07 | 3072000 |
+| QPSK | coherent | 6 | 2.388e-3 | 2.897e-3 | 2.761e-3 | 1.05 | 0.00 | 0.00 | 3072000 |
+| QPSK | coherent | 8 | 1.909e-4 | 2.620e-4 | 2.497e-4 | 1.05 | 0.00 | 0.00 | 3072000 |
+| 8PSK | coherent | 6 | 2.048e-2 | 9.574e-2 | 3.848e-2 | 2.49 | 10.48 | 5.92 | 4608000 |
+| 8PSK | coherent | 8 | 6.181e-3 | 7.541e-3 | 7.387e-3 | 1.02 | 0.00 | 0.00 | 4608000 |
+| 8PSK | coherent | 10 | 1.011e-3 | 1.317e-3 | 1.255e-3 | 1.05 | 0.00 | 0.00 | 4608000 |
+| 8PSK | coherent | 12 | 6.340e-5 | 9.831e-5 | 8.984e-5 | 1.09 | 0.00 | 0.00 | 4608000 |
+| BPSK | differential | 2 | 1.025e-1 | 1.154e-1 | 7.603e-2 | 1.52 | 1.30 | 0.00 | 1536000 |
+| BPSK | differential | 4 | 4.056e-2 | 4.451e-2 | 2.604e-2 | 1.71 | 0.00 | 0.00 | 1536000 |
+| BPSK | differential | 6 | 9.333e-3 | 1.043e-2 | 5.052e-3 | 2.06 | 0.00 | 0.00 | 1536000 |
+| BPSK | differential | 8 | 9.094e-4 | 1.063e-3 | 3.997e-4 | 2.66 | 0.00 | 0.00 | 1536000 |
+
+Timing settling: `cargo run --release --bin psk_ber -- acquisition [symbols [first seed [seeds [sync_bw...]]]]` sends 8000 symbols at a high Eb/N0 (12 dB, 8PSK 18 dB) for each delay of 0 to 7 samples (every symbol phase) and seeds 2701 to 2704 (32 runs per row; carrier offset and phase as above) and counts the symbols up to the last decision error at the alignment of symbols 6872 to 7871 (a run whose final alignment still has errors is "not settled"):
+
+| constellation | Eb/N0 dB | receiver | median | 90 % | max | not settled |
+| --- | --- | --- | --- | --- | --- | --- |
+| BPSK | 12 | sdrk, sync_bw 0.01 | 0 | 47 | 258 | 0 |
+| BPSK | 12 | sdrk, sync_bw 0.0075 | 0 | 71 | 141 | 0 |
+| BPSK | 12 | sdrk, sync_bw 0.005 | 0 | 147 | 258 | 0 |
+| BPSK | 12 | GNU Radio, sync_bw 0.01 | 0 | 862 | 2078 | 0 |
+| QPSK | 12 | sdrk, sync_bw 0.01 | 8 | 55 | 142 | 0 |
+| QPSK | 12 | sdrk, sync_bw 0.0075 | 12 | 89 | 223 | 0 |
+| QPSK | 12 | sdrk, sync_bw 0.005 | 17 | 190 | 353 | 0 |
+| QPSK | 12 | GNU Radio, sync_bw 0.01 | 27 | 1185 | 2400 | 0 |
+| 8PSK | 18 | sdrk, sync_bw 0.01 | 19 | 115 | 237 | 0 |
+| 8PSK | 18 | sdrk, sync_bw 0.0075 | 47 | 150 | 310 | 0 |
+| 8PSK | 18 | sdrk, sync_bw 0.005 | 60 | 213 | 306 | 0 |
+| 8PSK | 18 | GNU Radio, sync_bw 0.01 | 281 | 2018 | 2032 | 0 |
+
+- **Coherent BPSK, QPSK and 8PSK.** With the default `sync_bw` 0.005 `psk_demod` is within 1 to 11 % of GNU Radio's chain (BPSK 1.06 to 1.10, QPSK 1.02 to 1.11, 8PSK 1.01 to 1.03) with 0 alignment changes for BPSK (QPSK 2 dB 4.56 against GNU Radio's 2.77, 8PSK 6 dB 5.14 against 5.86). At 0.01 it was 23 to 80 % above for BPSK with 8.79 alignment changes per 1e5 symbols at 2 dB against 0: the same nominal `sync_bw` is a wider loop in `psk_demod` than in `symbol_sync_cc` (the likely causes, not isolated: the factor `sps` in our gains, D565, and the cubic interpolator against the 8-tap MMSE, D2539). The carrier loop is not the cause (with `carrier_bw` 0.014 and 0.01 the BPSK rows at 0.01 did not change, D2551). The narrower loop keeps the settling well below that of the chain: at most 258 symbols for BPSK, 353 for QPSK and 306 for 8PSK (0.01: 258, 142 and 237), GNU Radio 2078, 2400 and 2032 (its carrier loop at the same `carrier_bw` and the 8-tap interpolator; the start is not isolated). 8PSK at 6 dB (a BER of 4e-2) is sensitive to the bandwidth: 0.0075 and 0.004 have slipping seeds (2.49 and 1.78 times, 10.48 and 7.88 changes), 0.005 and 0.01 not. The remaining gap of QPSK at 2 dB (1.11) is open item I169-2.
+
+- **Differential BPSK.** `psk_demod` with `differential` is a non-coherent detector (no carrier loop, the product of two symbols) and its BER is the theory of the non-coherent detector plus 5 to 12 % (1.0e-3 at 8 dB against `exp(-Eb/N0)/2` = 9.1e-4); GNU Radio's chain is coherent detection (`costas_loop_cc`) followed by the differential decoder, which has about twice the BER of coherent BPSK (4.0e-4 at 8 dB), so it is 1.4 to 2.5 times better at 2 to 8 dB (1.8 to 2.9 with `sync_bw` 0.01). These are two receivers with different work (the differential mode of `psk_demod` needs no carrier lock and follows frequency offsets that the loop of the chain would have to pull in), reported as information.
+- **Not compared.** Differential QPSK and differential 8PSK: the differential `psk_mod` steps the phase by the mapped phase (odd multiples of 45 degrees for QPSK and 8PSK, M40 and M40.1), so no point set of GNU Radio's `costas_loop_cc` (orders 4 and 8 lock to one point set) follows the signal, and GNU Radio's `diff_encoder_bb` steps by 0, 90, 180 and 270 degrees, another signal; `pi4` and `offset` likewise (no GNU Radio block). The receiver with the equalizer (`equalizer_taps`): the translations of GNU Radio's `linear_equalizer` in `benches/refs` run the decision-directed NLMS (QPSK points and the rectangular constellation of square QAM) without the CMA start of the QAM comparison, and a constellation of BPSK or 8PSK points is not among them; open item I169-3.
 
 ## Running the measurements
 

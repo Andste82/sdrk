@@ -49,6 +49,12 @@ pub(super) const SYNC_MAX_DEVIATION: f64 = 0.005;
 const TURN: f64 = 4_294_967_296.0;
 /// The smoothing factor of the `offset` lock detector (that of `costas`).
 const LOCK_ALPHA: f32 = 0.01;
+/// The default `sync_bw` (D2553, issue #169 I169-2): at 0.01 the timing loop cost coherent BPSK
+/// 23 to 80 % more bit errors than GNU Radio's chain at Eb/N0 2 to 8 dB and 8.8 alignment
+/// changes per 1e5 symbols at 2 dB; at 0.005 the BER is 2 to 11 % above the chain's and the loop
+/// still settles within 353 symbols (the chain within 2400), the value `qam_demod` uses for
+/// `qpsk` to `qam64`.
+const DEFAULT_SYNC_BW: f64 = 0.005;
 /// The `offset` lock detector turns on above this level (that of `costas`).
 const LOCK_ON: f32 = 0.5;
 /// The `offset` lock detector turns off below this level (that of `costas`).
@@ -155,9 +161,9 @@ pub static DESCRIPTION: BlockDescription = BlockDescription {
             kind: ParamKind::F64 {
                 min: 0.0001,
                 max: 0.1,
-                default: Some(0.01),
+                default: Some(DEFAULT_SYNC_BW),
             },
-            typical: "0.01",
+            typical: "0.005; up to 0.01 for a faster acquisition",
             mutability: Mutability::Build,
             description: "Loop bandwidth of the symbol timing, normalized to the symbol rate.",
         },
@@ -261,7 +267,7 @@ pub struct PskDemodConfig {
 
 impl Default for PskDemodConfig {
     /// `bpsk`, `symbol_rate_hz` 1200 (a placeholder: the pipeline requires the parameter),
-    /// `rolloff` 0.35, `span` 10, coherent, `sync_bw` 0.01, `carrier_bw` 0.02, `max_offset`
+    /// `rolloff` 0.35, `span` 10, coherent, `sync_bw` 0.005, `carrier_bw` 0.02, `max_offset`
     /// 0.05, variant plain, no equalizer.
     fn default() -> Self {
         Self {
@@ -270,7 +276,7 @@ impl Default for PskDemodConfig {
             rolloff: 0.35,
             span: 10,
             differential: false,
-            sync_bw: 0.01,
+            sync_bw: DEFAULT_SYNC_BW,
             carrier_bw: DEFAULT_LOOP_BW,
             max_offset: DEFAULT_MAX_OFFSET,
             variant: PskVariant::Plain,

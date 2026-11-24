@@ -28,9 +28,9 @@ on:
         type: string
         default: all
       shards:
-        description: Partitions per level when every entry is measured.
-        type: number
-        default: 4
+        description: Partitions per level when every entry is measured (a number; a string, so that a dispatch input passes through).
+        type: string
+        default: "4"
       repeat:
         description: Measure every partition twice and fail unless both results are identical.
         type: boolean

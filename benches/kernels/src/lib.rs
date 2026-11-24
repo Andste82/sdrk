@@ -1602,7 +1602,7 @@ impl Kernel for ConvertIn {
                     let values = values as usize;
                     cref_sys::kfr_ops::i8_to_f32(
                         i8s(&input[..values]),
-                        &mut floats(&mut self.out, self.n)[..values],
+                        floats(&mut self.out, values),
                         1.0 / 128.0,
                     );
                 }

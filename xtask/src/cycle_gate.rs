@@ -2393,6 +2393,10 @@ mod tests {
         )
         .unwrap();
         assert_eq!(check_volk_protokernels(&r, &info), Vec::new());
+    }
+
+    #[test]
+    fn the_volk_functions_and_protokernels_of_a_comparison() {
         // The functions of a comparison: the entry points, not the explicit protokernels.
         assert_eq!(
             volk_functions_of("volk_32fc_x2_multiply_conjugate_32fc + volk_32fc_s32f_atan2_32f"),

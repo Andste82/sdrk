@@ -90,15 +90,21 @@ jobs:
     outputs:
       key: ${{ steps.key.outputs.key }}
     steps:
-      - name: Packages of the pinned snapshot
+      - name: Packages of the image's mirror (CA certificates, zstd for the caches)
+        id: apt
         env:
           PACKAGES: ${{ env.LLVM_MCA_PACKAGES }}
         run: |
           # A mirror that answers 502/503 makes `apt-get update` warn and exit 0 (issue 38):
           # apt retries every download, `--error-on=any` turns a failed index into an error and
           # the loop retries the update. The image has no CA certificates, which the https
-          # snapshot needs: they come from the image's own mirror first.
+          # snapshot needs, and no zstd, without which actions/cache compresses with gzip and
+          # never finds a cache saved with zstd: both come from the image's own mirror first.
+          # The image deletes the downloaded packages after every install (docker-clean); they
+          # are kept for the cache of the next step (D2784).
           echo 'Acquire::Retries "5";' > /etc/apt/apt.conf.d/80-retries
+          rm -f /etc/apt/apt.conf.d/docker-clean
+          echo 'Binary::apt::APT::Keep-Downloaded-Packages "true";' > /etc/apt/apt.conf.d/81-keep-packages
           apt_update() {
             for i in 1 2 3 4 5; do
               apt-get update --error-on=any "$@" && return 0
@@ -107,10 +113,43 @@ jobs:
             return 1
           }
           apt_update
-          DEBIAN_FRONTEND=noninteractive apt-get install -y ca-certificates
-          apt_update --snapshot "$MEASURE_IMAGE_SNAPSHOT"
+          DEBIAN_FRONTEND=noninteractive apt-get install -y ca-certificates zstd
+          echo "key=apt-$MEASURE_IMAGE_TAG-$MEASURE_IMAGE_SNAPSHOT-$(echo "$PACKAGES" | sha256sum | cut -c1-16)" | tee -a "$GITHUB_OUTPUT"
+      - name: Restore the packages of the pinned snapshot
+        # The indexes and the .deb files of the snapshot, which never change for a pinned
+        # snapshot: a hit installs without snapshot.ubuntu.com (D2784). Saved on main only.
+        id: apt-cache
+        uses: actions/cache/restore@v4
+        with:
+          path: |
+            /var/cache/apt/archives/*.deb
+            /var/lib/apt/lists
+          key: ${{ steps.apt.outputs.key }}
+      - name: Packages of the pinned snapshot
+        env:
+          PACKAGES: ${{ env.LLVM_MCA_PACKAGES }}
+          CACHED: ${{ steps.apt-cache.outputs.cache-hit }}
+        run: |
+          apt_update() {
+            for i in 1 2 3 4 5; do
+              apt-get update --error-on=any "$@" && return 0
+              sleep $((i * 60))
+            done
+            return 1
+          }
+          if [ "$CACHED" != true ]; then
+            apt_update --snapshot "$MEASURE_IMAGE_SNAPSHOT"
+          fi
           # shellcheck disable=SC2086
           DEBIAN_FRONTEND=noninteractive apt-get install -y --snapshot "$MEASURE_IMAGE_SNAPSHOT" $PACKAGES
+      - name: Save the packages of the pinned snapshot
+        if: github.ref == 'refs/heads/main' && steps.apt-cache.outputs.cache-hit != 'true'
+        uses: actions/cache/save@v4
+        with:
+          path: |
+            /var/cache/apt/archives/*.deb
+            /var/lib/apt/lists
+          key: ${{ steps.apt.outputs.key }}
       - uses: actions/checkout@v4
       - name: Cache key
         id: key
@@ -156,15 +195,21 @@ jobs:
       options: --security-opt seccomp=unconfined
     timeout-minutes: 120
     steps:
-      - name: Packages of the pinned snapshot
+      - name: Packages of the image's mirror (CA certificates, zstd for the caches)
+        id: apt
         env:
           PACKAGES: ${{ env.AARCH64_PACKAGES }}
         run: |
           # A mirror that answers 502/503 makes `apt-get update` warn and exit 0 (issue 38):
           # apt retries every download, `--error-on=any` turns a failed index into an error and
           # the loop retries the update. The image has no CA certificates, which the https
-          # snapshot needs: they come from the image's own mirror first.
+          # snapshot needs, and no zstd, without which actions/cache compresses with gzip and
+          # never finds a cache saved with zstd: both come from the image's own mirror first.
+          # The image deletes the downloaded packages after every install (docker-clean); they
+          # are kept for the cache of the next step (D2784).
           echo 'Acquire::Retries "5";' > /etc/apt/apt.conf.d/80-retries
+          rm -f /etc/apt/apt.conf.d/docker-clean
+          echo 'Binary::apt::APT::Keep-Downloaded-Packages "true";' > /etc/apt/apt.conf.d/81-keep-packages
           apt_update() {
             for i in 1 2 3 4 5; do
               apt-get update --error-on=any "$@" && return 0
@@ -173,10 +218,43 @@ jobs:
             return 1
           }
           apt_update
-          DEBIAN_FRONTEND=noninteractive apt-get install -y ca-certificates
-          apt_update --snapshot "$MEASURE_IMAGE_SNAPSHOT"
+          DEBIAN_FRONTEND=noninteractive apt-get install -y ca-certificates zstd
+          echo "key=apt-$MEASURE_IMAGE_TAG-$MEASURE_IMAGE_SNAPSHOT-$(echo "$PACKAGES" | sha256sum | cut -c1-16)" | tee -a "$GITHUB_OUTPUT"
+      - name: Restore the packages of the pinned snapshot
+        # The indexes and the .deb files of the snapshot, which never change for a pinned
+        # snapshot: a hit installs without snapshot.ubuntu.com (D2784). Saved on main only.
+        id: apt-cache
+        uses: actions/cache/restore@v4
+        with:
+          path: |
+            /var/cache/apt/archives/*.deb
+            /var/lib/apt/lists
+          key: ${{ steps.apt.outputs.key }}
+      - name: Packages of the pinned snapshot
+        env:
+          PACKAGES: ${{ env.AARCH64_PACKAGES }}
+          CACHED: ${{ steps.apt-cache.outputs.cache-hit }}
+        run: |
+          apt_update() {
+            for i in 1 2 3 4 5; do
+              apt-get update --error-on=any "$@" && return 0
+              sleep $((i * 60))
+            done
+            return 1
+          }
+          if [ "$CACHED" != true ]; then
+            apt_update --snapshot "$MEASURE_IMAGE_SNAPSHOT"
+          fi
           # shellcheck disable=SC2086
           DEBIAN_FRONTEND=noninteractive apt-get install -y --snapshot "$MEASURE_IMAGE_SNAPSHOT" $PACKAGES
+      - name: Save the packages of the pinned snapshot
+        if: github.ref == 'refs/heads/main' && steps.apt-cache.outputs.cache-hit != 'true'
+        uses: actions/cache/save@v4
+        with:
+          path: |
+            /var/cache/apt/archives/*.deb
+            /var/lib/apt/lists
+          key: ${{ steps.apt.outputs.key }}
       - uses: actions/checkout@v4
       - uses: ./.github/actions/measure-env
         with:
@@ -237,15 +315,21 @@ jobs:
       fail-fast: false
       matrix: ${{ fromJSON(needs.plan.outputs.matrix) }}
     steps:
-      - name: Packages of the pinned snapshot
+      - name: Packages of the image's mirror (CA certificates, zstd for the caches)
+        id: apt
         env:
           PACKAGES: ${{ matrix.platform == 'aarch64' && env.AARCH64_PACKAGES || env.X86_PACKAGES }}
         run: |
           # A mirror that answers 502/503 makes `apt-get update` warn and exit 0 (issue 38):
           # apt retries every download, `--error-on=any` turns a failed index into an error and
           # the loop retries the update. The image has no CA certificates, which the https
-          # snapshot needs: they come from the image's own mirror first.
+          # snapshot needs, and no zstd, without which actions/cache compresses with gzip and
+          # never finds a cache saved with zstd: both come from the image's own mirror first.
+          # The image deletes the downloaded packages after every install (docker-clean); they
+          # are kept for the cache of the next step (D2784).
           echo 'Acquire::Retries "5";' > /etc/apt/apt.conf.d/80-retries
+          rm -f /etc/apt/apt.conf.d/docker-clean
+          echo 'Binary::apt::APT::Keep-Downloaded-Packages "true";' > /etc/apt/apt.conf.d/81-keep-packages
           apt_update() {
             for i in 1 2 3 4 5; do
               apt-get update --error-on=any "$@" && return 0
@@ -254,10 +338,43 @@ jobs:
             return 1
           }
           apt_update
-          DEBIAN_FRONTEND=noninteractive apt-get install -y ca-certificates
-          apt_update --snapshot "$MEASURE_IMAGE_SNAPSHOT"
+          DEBIAN_FRONTEND=noninteractive apt-get install -y ca-certificates zstd
+          echo "key=apt-$MEASURE_IMAGE_TAG-$MEASURE_IMAGE_SNAPSHOT-$(echo "$PACKAGES" | sha256sum | cut -c1-16)" | tee -a "$GITHUB_OUTPUT"
+      - name: Restore the packages of the pinned snapshot
+        # The indexes and the .deb files of the snapshot, which never change for a pinned
+        # snapshot: a hit installs without snapshot.ubuntu.com (D2784). Saved on main only.
+        id: apt-cache
+        uses: actions/cache/restore@v4
+        with:
+          path: |
+            /var/cache/apt/archives/*.deb
+            /var/lib/apt/lists
+          key: ${{ steps.apt.outputs.key }}
+      - name: Packages of the pinned snapshot
+        env:
+          PACKAGES: ${{ matrix.platform == 'aarch64' && env.AARCH64_PACKAGES || env.X86_PACKAGES }}
+          CACHED: ${{ steps.apt-cache.outputs.cache-hit }}
+        run: |
+          apt_update() {
+            for i in 1 2 3 4 5; do
+              apt-get update --error-on=any "$@" && return 0
+              sleep $((i * 60))
+            done
+            return 1
+          }
+          if [ "$CACHED" != true ]; then
+            apt_update --snapshot "$MEASURE_IMAGE_SNAPSHOT"
+          fi
           # shellcheck disable=SC2086
           DEBIAN_FRONTEND=noninteractive apt-get install -y --snapshot "$MEASURE_IMAGE_SNAPSHOT" $PACKAGES
+      - name: Save the packages of the pinned snapshot
+        if: github.ref == 'refs/heads/main' && steps.apt-cache.outputs.cache-hit != 'true'
+        uses: actions/cache/save@v4
+        with:
+          path: |
+            /var/cache/apt/archives/*.deb
+            /var/lib/apt/lists
+          key: ${{ steps.apt.outputs.key }}
       - uses: actions/checkout@v4
       - uses: ./.github/actions/measure-env
         with:

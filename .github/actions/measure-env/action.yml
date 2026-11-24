@@ -24,6 +24,9 @@ runs:
         "$HOME/.cargo/bin/rustup" toolchain install
     - uses: Swatinem/rust-cache@v2
       with:
+        # The dependencies only: the workspace crates are rebuilt (D2784).
+        cache-targets: "true"
+        cache-workspace-crates: "false"
         shared-key: measure-${{ inputs.platform }}
         save-if: ${{ github.ref == 'refs/heads/main' }}
     - name: The corrected llvm-mca (D942)

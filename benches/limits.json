@@ -2485,10 +2485,10 @@
   },
   "fft_64_fallback": {
     "sse2": {
-      "status": "dev"
+      "status": "release"
     },
     "sse4.2": {
-      "status": "dev"
+      "status": "release"
     },
     "avx2": {
       "status": "release"
@@ -2505,10 +2505,10 @@
   },
   "fft_1024_fallback": {
     "sse2": {
-      "status": "dev"
+      "status": "release"
     },
     "sse4.2": {
-      "status": "dev"
+      "status": "release"
     },
     "avx2": {
       "status": "release"
@@ -2525,10 +2525,10 @@
   },
   "fft_4096_fallback": {
     "sse2": {
-      "status": "dev"
+      "status": "release"
     },
     "sse4.2": {
-      "status": "dev"
+      "status": "release"
     },
     "avx2": {
       "status": "release"
@@ -2592,10 +2592,10 @@
   },
   "rfft_1024_fallback": {
     "sse2": {
-      "status": "dev"
+      "status": "release"
     },
     "sse4.2": {
-      "status": "dev"
+      "status": "release"
     },
     "avx2": {
       "status": "release"

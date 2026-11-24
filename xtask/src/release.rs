@@ -90,9 +90,11 @@ pub fn references(text: &str) -> Vec<String> {
             let after = &rest[i + marker.len()..];
             let id: String = after
                 .chars()
-                .take_while(|c| c.is_ascii_alphanumeric() || *c == '-')
+                .take_while(|c| c.is_ascii_alphanumeric() || *c == '-' || *c == '.')
                 .collect();
-            let id = id.trim_end_matches('-');
+            // Items of a point milestone carry a dot (`I13.1-6`); a dot or dash after the id
+            // ends the sentence.
+            let id = id.trim_end_matches(['-', '.']);
             if !id.is_empty() {
                 out.push(format!("{prefix}{id}"));
             }
@@ -510,6 +512,14 @@ mod tests {
         assert_eq!(
             references("see open item I20-1 and open item M13-4; issue #71, issue #71."),
             ["issue #71", "open item I20-1", "open item M13-4"]
+        );
+        assert_eq!(
+            references("open item I13.1-6, until; see open item I44.4-7. And open item I13.1-5"),
+            [
+                "open item I13.1-5",
+                "open item I13.1-6",
+                "open item I44.4-7"
+            ]
         );
         assert_eq!(workspace_members(&good().cargo_toml), ["crates/a", "xtask"]);
     }

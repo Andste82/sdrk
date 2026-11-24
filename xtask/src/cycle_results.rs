@@ -196,7 +196,7 @@ pub fn levels_of(cycles: &Value, branches: Option<&Value>) -> anyhow::Result<Map
 /// replace or add those of the document and every other record stays as it is. Returns the new
 /// document and the number of records replaced and added.
 ///
-/// `method` is that of the measured records (see [`method`]).
+/// `method` is that of the measured records (see `method()`).
 ///
 /// # Errors
 /// The document was made with other tools or another method (for example the other address

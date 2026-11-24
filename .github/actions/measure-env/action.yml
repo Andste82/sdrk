@@ -104,5 +104,5 @@ runs:
         grep -m1 '^flags' /proc/cpuinfo | tr ' ' '\n' | grep -E '^(sse|ssse|avx|fma|bmi|f16c|gfni|vaes|vpclmul|adx|amx)' | sort | tr '\n' ' ' || true
         echo
         gcc --version | head -n 1
-        valgrind --version
+        valgrind --version || true
         "$SDRK_LLVM_MCA" --version | grep 'LLVM version'

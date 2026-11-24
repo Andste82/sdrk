@@ -7,7 +7,7 @@
 #
 #   llvm_mca      builds llvm-mca 23.1.1 with assets/llvm-mca-23.1.1-sdrk-sched.patch, cached
 #                 by the patch, the LLVM version, the build recipe, the image and the snapshot
-#   reproduction  the check `costas` at `neon` 86.13 / 54.09 (D942) before anything else
+#   reproduction  the check `costas` at `neon` 86.13 / 54.10 (D942, D2761) before anything else
 #   plan          the partitions: one job per level, the whole set split into `shards`
 #   measure       `cargo measure ... --merge --results` per partition (optionally twice, to
 #                 show that the profiles are deterministic, I13.1-1)
@@ -146,8 +146,8 @@ jobs:
         run: ~/llvm-mca/bin/llvm-mca --version
 
   reproduction:
-    # The corrected llvm-mca must give the committed `costas` at `neon` (86.13 / 54.09 on
-    # cortex-a72 / cortex-a76) before any result counts.
+    # The corrected llvm-mca must give the committed `costas` at `neon` (86.13 / 54.10 on
+    # cortex-a72 / cortex-a76 since the detector limit of D2554, D2761) before any result counts.
     name: reproduction
     needs: llvm_mca
     runs-on: ubuntu-24.04

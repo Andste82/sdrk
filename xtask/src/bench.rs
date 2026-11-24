@@ -1752,7 +1752,7 @@ volk_16ic_deinterleave_16i_x2 neonv8 neonv8
 /// `volk_32fc_x2_multiply_conjugate_32fc`, `volk_32f_s32f_x2_convert_8u`), and the AVX-512BW
 /// protokernels of `volk_8i_convert_16i` and `volk_16i_x2_add_saturated_16i` are compiled into no
 /// machine, so those two run their AVX2 protokernels as well.
-const VOLK_AVX512_DISPATCH: &str = "\
+pub const VOLK_AVX512_DISPATCH: &str = "\
 volk_8i_s32f_convert_32f a_avx512 u_avx512
 volk_16i_s32f_convert_32f a_avx512 u_avx512
 volk_8i_convert_16i a_avx2 u_avx2

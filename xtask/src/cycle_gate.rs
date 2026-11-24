@@ -54,7 +54,7 @@ use serde_json::Value;
 
 use crate::bench::{
     ComparisonKind, KERNELS, KernelSpec, LevelPlan, PLANS, Reference, SimdLevel, comparisons,
-    measured_level, reference_level,
+    measured_level, reference_level, volk_functions_of, volk_protokernel,
 };
 use crate::count::{Caps, Limits, Status};
 use crate::scan::Finding;
@@ -1130,6 +1130,80 @@ fn check_reference_levels_with(
     out
 }
 
+/// The VOLK protokernels of the records (D2785, the refinement of G7 per kernel): a `release` or
+/// `dev` record whose judged comparison is VOLK's dispatch must name the VOLK functions it calls
+/// (`compared_with`), and none of them may run a `generic` protokernel in VOLK's machine of the
+/// level ([`volk_protokernel`]): portable C is no SIMD reference, so such an entry is `info` or
+/// has another library. At `avx2-runtime` the `avx2` record is judged (D2764).
+#[must_use]
+pub fn check_volk_protokernels(results: &Results, limits: &Limits) -> Vec<Finding> {
+    let mut out = Vec::new();
+    for (level, rows) in results {
+        let Some(plan) = PLANS.iter().find(|p| p.level == level) else {
+            continue;
+        };
+        let judged_plan = plan.baseline.map_or(Some(plan), |base| {
+            PLANS
+                .iter()
+                .find(|p| p.platform == plan.platform && p.level == base)
+        });
+        let Some(judged_plan) = judged_plan else {
+            continue;
+        };
+        for (entry, r) in rows {
+            let Some(r) = r else { continue };
+            let Some(spec) = KERNELS.iter().find(|s| s.name == entry) else {
+                continue;
+            };
+            let Some(limit) = limits.get(entry, level) else {
+                continue;
+            };
+            if limit.status == Status::Info || comparisons(judged_plan, spec).0 != Reference::Volk {
+                continue;
+            }
+            let compared_with = if plan.baseline.is_some() {
+                results
+                    .get(judged_plan.level)
+                    .and_then(|rows| rows.get(entry))
+                    .and_then(Option::as_ref)
+                    .map_or(r.compared_with.as_str(), |b| b.compared_with.as_str())
+            } else {
+                r.compared_with.as_str()
+            };
+            let mut fail = |why: String| {
+                out.push(Finding {
+                    path: r.file.clone(),
+                    line: 0,
+                    message: format!(
+                        "`{entry}` at `{level}` is `{}` against VOLK, but {why}: portable C is no SIMD reference of the level (D2785); make the entry `info` or judge it against another library",
+                        status_name(limit.status)
+                    ),
+                });
+            };
+            let functions = volk_functions_of(compared_with);
+            if functions.is_empty() {
+                fail(format!(
+                    "its comparison names no VOLK function (`{compared_with}`)"
+                ));
+            }
+            for (f, aligned) in functions {
+                match volk_protokernel(judged_plan, f, aligned) {
+                    Some("generic") => fail(format!(
+                        "`{f}` runs its `generic` protokernel in VOLK's machine of `{}`",
+                        judged_plan.level
+                    )),
+                    Some(_) => {}
+                    None => fail(format!(
+                        "the `volk_config` of `{}` does not name `{f}`",
+                        judged_plan.level
+                    )),
+                }
+            }
+        }
+    }
+    out
+}
+
 /// The comparison kinds of the records of `results` against the measurement plan (D2767): every
 /// record of a level of [`PLANS`] must carry the `comparison_kind` of its judged comparison
 /// ([`comparisons`]), and a record of a level with a baseline the `judged_against` kind of the
@@ -1266,9 +1340,10 @@ pub fn check(root: &Path, o: &Options) -> anyhow::Result<Vec<Finding>> {
     // No status decided by our own code, from the plan alone and from the records (D2767).
     let plan_findings = check_comparisons(&limits);
     let kind_findings = check_record_kinds(&results);
-    let level_findings = check_reference_levels(&limits);
+    let mut level_findings = check_reference_levels(&limits);
+    level_findings.extend(check_volk_protokernels(&results, &limits));
     println!(
-        "check cycles: the judged comparison of every release and dev entry is a foreign library: {} findings; the comparison kinds of the records follow the plan: {} findings (D2767); no release or dev entry is judged against a build of a lower SIMD level: {} findings (G7, D2782)",
+        "check cycles: the judged comparison of every release and dev entry is a foreign library: {} findings; the comparison kinds of the records follow the plan: {} findings (D2767); no release or dev entry is judged against a build of a lower SIMD level or a generic VOLK protokernel: {} findings (G7, D2782, D2785)",
         plan_findings.len(),
         kind_findings.len(),
         level_findings.len()
@@ -2240,6 +2315,116 @@ mod tests {
                 .iter()
                 .all(|(e, l)| l != "sse2" && l != "neon" && !e.ends_with("_fallback")),
             "{failed:?}"
+        );
+    }
+
+    #[test]
+    fn a_volk_comparison_that_runs_a_generic_protokernel_is_found() {
+        let root = Path::new(env!("CARGO_MANIFEST_DIR")).parent().unwrap();
+        let committed = load(&crate::cycle_results::dir(root)).unwrap();
+        let real = std::fs::read_to_string(root.join("benches/limits.json")).unwrap();
+        let limits = Limits::parse(&real).unwrap();
+        assert_eq!(check_volk_protokernels(&committed, &limits), Vec::new());
+        // `rotate` at `sse2`: `rotator2` is `generic` in VOLK's `sse2` machine; release there
+        // fails. `fir` names the aligned dot product (`a_sse`) and passes; a VOLK record that
+        // names no VOLK function fails; at `avx2` `rotator2` is `a_avx` and passes.
+        let text = limits_text(&[
+            ("rotate", "sse2", "release"),
+            ("fir", "sse2", "release"),
+            ("mag", "sse2", "dev"),
+            ("rotate", "avx2", "release"),
+        ]);
+        let limits = Limits::parse(&text).unwrap();
+        let mut r = results(
+            &[
+                (
+                    "rotate",
+                    1.0,
+                    2.0,
+                    1.0,
+                    2.0,
+                    "volk_32fc_s32fc_x2_rotator2_32fc",
+                ),
+                (
+                    "fir",
+                    1.0,
+                    2.0,
+                    1.0,
+                    2.0,
+                    "volk_32fc_32f_dot_prod_32fc_a as GNU Radio calls it",
+                ),
+                ("mag", 1.0, 2.0, 1.0, 2.0, "a library"),
+            ],
+            "sse2",
+        );
+        r.extend(results(
+            &[(
+                "rotate",
+                1.0,
+                2.0,
+                1.0,
+                2.0,
+                "volk_32fc_s32fc_x2_rotator2_32fc",
+            )],
+            "avx2",
+        ));
+        let f = check_volk_protokernels(&r, &limits);
+        let messages: Vec<&str> = f.iter().map(|f| f.message.as_str()).collect();
+        assert_eq!(f.len(), 2, "{messages:#?}");
+        assert!(
+            messages
+                .iter()
+                .any(|m| m.starts_with("`rotate` at `sse2` is `release`")
+                    && m.contains(
+                        "`volk_32fc_s32fc_x2_rotator2_32fc` runs its `generic` protokernel"
+                    ))
+        );
+        assert!(
+            messages
+                .iter()
+                .any(|m| m.starts_with("`mag` at `sse2` is `dev`")
+                    && m.contains("names no VOLK function"))
+        );
+        // As `info` they pass.
+        let info = Limits::parse(
+            &text
+                .replace("\"release\"", "\"info\"")
+                .replace("\"dev\"", "\"info\""),
+        )
+        .unwrap();
+        assert_eq!(check_volk_protokernels(&r, &info), Vec::new());
+        // The functions of a comparison: the entry points, not the explicit protokernels.
+        assert_eq!(
+            volk_functions_of("volk_32fc_x2_multiply_conjugate_32fc + volk_32fc_s32f_atan2_32f"),
+            vec![
+                ("volk_32fc_s32f_atan2_32f", true),
+                ("volk_32fc_x2_multiply_conjugate_32fc", true)
+            ]
+        );
+        assert_eq!(
+            volk_functions_of("VOLK 3.3.0 volk_32fc_x2_multiply_32fc_u_avx without FMA"),
+            Vec::new()
+        );
+        assert_eq!(
+            volk_functions_of("volk_32f_x2_dot_prod_32f_u"),
+            vec![("volk_32f_x2_dot_prod_32f", false)]
+        );
+        let plan = |l: &str| PLANS.iter().find(|p| p.level == l).unwrap();
+        assert_eq!(
+            volk_protokernel(plan("sse2"), "volk_8i_convert_16i", true),
+            Some("generic")
+        );
+        assert_eq!(
+            volk_protokernel(plan("sse4.2"), "volk_8i_convert_16i", true),
+            Some("a_sse4_1")
+        );
+        assert_eq!(
+            volk_protokernel(plan("avx512"), "volk_32fc_x2_multiply_32fc", true),
+            Some("a_avx2_fma")
+        );
+        assert_eq!(
+            volk_protokernel(plan("simd128"), "volk_32f_x2_add_32f", true),
+            Some("generic")
         );
     }
 

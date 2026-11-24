@@ -160,7 +160,7 @@ if [ -n "$kfr_cxx" ]; then
 fi
 
 stamp="$prefix/refs.stamp"
-want=$( (cat "${BASH_SOURCE[0]}" "$here/volk-wasm.c" "$here/gr-agc.c" "$here/gr-squelch.c" "$here/kfr-biquad.cpp" "$here/cmsis-biquad.c" "$here/cmsis-m4-heap.c" \
+want=$( (cat "${BASH_SOURCE[0]}" "$here/volk-wasm.c" "$here/gr-agc.c" "$here/gr-squelch.c" "$here/kfr-biquad.cpp" "$here/kfr-ops.cpp" "$here/cmsis-biquad.c" "$here/cmsis-m4-heap.c" \
     "$here/cmsis-dsp.c" "$here/gr-rotator.c" "$here/gr-fm-mod.c" "$here/gr-quad-demod.c" "$here/gr-fast-atan2f.c" "$here/gr-deemph.c" "$here/gr-crc.c" "$here/gr-scrambler.c" "$here/gr-snr-est.c" \
     "$here/liquid-dotprod.c" "$here/liquid-dcblock.c" "$here/liquid-halfband.c" "$here/liquid-fir.c" "$here/liquid-nco.c" "$here/liquid-ampmodem.c" "$here/liquid-randn.c" "$here/gr-fastnoise.c" "$here/gr-dvbs2-plscramble.c" "$here/airspy-iqconv.c" \
     "$here/volk-nofma.c" "$here/volk-generic.c" "$here/gr-costas.c" "$here/gr-equalizer.c" "$here/gr-constellation.c" "$here/liquid-channelizer.c" "$here/liquid-fftfilt.c" "$here/gr-symbol-sync.c" "$here/gr-psk-chain.c" "$here/gr-fir.c" "$here/gr-chunks.c" "$here/gr-softdec.c" "$here/liquid-modem.c" "$here/gr-fir-volk.h"; echo "$platform|$cc_version|$cxx_version|$kfr_cxx_version") | sha256sum | cut -d ' ' -f 1)
@@ -627,6 +627,15 @@ build_kfr_biquad() {
         $kfr_cxx $KFR_CXX_FLAGS $BIQUAD_OPT $march $KFR_WASM_FLAGS -I "$work/kfr/include" \
             -c "$here/kfr-biquad.cpp" -o "$work/kfr-$level.o"
         $ar rcs "$prefix/lib/libkfrbq-$level.a" "$work/kfr-$level.o"
+        # KFR's element-wise expressions (kfr-ops.cpp, D2785), the references at `sse2` where
+        # VOLK's machine runs a generic protokernel; x86-64 only. KFR_DISABLE_CHECKS drops the
+        # size checks of the expression assignment, whose error path needs the C++ run-time
+        # library (the sizes always match here).
+        if [ "$platform" = x86_64 ]; then
+            $kfr_cxx $KFR_CXX_FLAGS $BIQUAD_OPT $march -DKFR_DISABLE_CHECKS -I "$work/kfr/include" \
+                -c "$here/kfr-ops.cpp" -o "$work/kfr-ops-$level.o"
+            $ar rcs "$prefix/lib/libkfrops-$level.a" "$work/kfr-ops-$level.o"
+        fi
     done
 }
 
@@ -969,7 +978,7 @@ simd_levels() {
             liquidrandn) entry="\"liquid_dsp_randn\": { \"version\": \"$LIQUID_VERSION\", \"sha256\": \"$(sha256sum "$here/liquid-randn.c" | cut -d ' ' -f 1)\", \"build\": \"liquid-randn.c (randnf, crandnf over libc rand()): $GR_AGC_FLAGS\" }" ;;
             liquidhb) entry="\"liquid_dsp_halfband\": { \"version\": \"$LIQUID_VERSION\", \"sha256\": \"$LIQUID_SHA256\", \"build\": \"liquid-halfband.c over resamp2.proto.c, firhilb.proto.c and the dot products of the release, liquid-channelizer.c over firpfbch2.proto.c and liquid-fftfilt.c over fftfilt.proto.c, each with FFTW (not on wasm32) and with the FFT of the release: $BIQUAD_OPT, per level $(biquad_levels | tr , ' '), dot products (crcf / rrrf) $(for e in $(biquad_levels); do printf '%s=%s/%s ' "${e%%:*}" "$(liquid_simd "${e%%:*}" crcf)" "$(liquid_simd "${e%%:*}" rrrf)"; done)\" }" ;;
             airspy) entry="\"libairspy\": { \"version\": \"$AIRSPY_VERSION\", \"sha256\": \"$AIRSPY_SHA256\", \"build\": \"airspy-iqconv.c over iqconverter_float.c and iqconverter_int16.c (conversion without remove_dc; the SSE2 converter with the FreeBSD branch, x86_64 only): $BIQUAD_OPT, per level $(biquad_levels | tr , ' ')\" }" ;;
-            kfr) entry="\"kfr\": { \"version\": \"$KFR_VERSION\", \"sha256\": \"$KFR_SHA256\", \"build\": \"kfr-biquad.cpp: ${kfr_cxx} $KFR_CXX_FLAGS $BIQUAD_OPT$([ "$platform" = wasm32 ] && echo ", KFR_ARCH sse41 as emcc -msse4.1 (wasi-sdk sysroot and the SSE headers of Emscripten)"), per level $(biquad_levels)\" }" ;;
+            kfr) entry="\"kfr\": { \"version\": \"$KFR_VERSION\", \"sha256\": \"$KFR_SHA256\", \"build\": \"kfr-biquad.cpp$([ "$platform" = x86_64 ] && echo " and kfr-ops.cpp (-DKFR_DISABLE_CHECKS)"): ${kfr_cxx} $KFR_CXX_FLAGS $BIQUAD_OPT$([ "$platform" = wasm32 ] && echo ", KFR_ARCH sse41 as emcc -msse4.1 (wasi-sdk sysroot and the SSE headers of Emscripten)"), per level $(biquad_levels)\" }" ;;
             wasisysroot) entry="\"wasi_sysroot\": { \"version\": \"$WASISYSROOT_VERSION\", \"sha256\": \"$WASISYSROOT_SHA256\", \"build\": \"headers of libc++ and wasi-libc for KFR\" }" ;;
             emscripten) entry="\"emscripten\": { \"version\": \"$EMSCRIPTEN_VERSION\", \"sha256\": \"$EMSCRIPTEN_SHA256\", \"build\": \"SSE headers of system/include/compat for KFR\" }" ;;
             cmsisdsp) entry="\"cmsis_dsp\": { \"version\": \"$CMSISDSP_VERSION\", \"sha256\": \"$CMSISDSP_SHA256\", \"build\": \"$([ "$platform" = cortex-m4 ] && echo "CMSIS-Core, DSP extension and FPU, cmsis-biquad.c and cmsis-m4-heap.c" || echo "generic C with cmsis-biquad.c and cmsis-dsp.c"): $CMSISDSP_DEFINES $BIQUAD_OPT, per level $(biquad_levels | tr , ' ')\" }" ;;

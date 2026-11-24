@@ -565,6 +565,46 @@ mod against_the_reference {
     use super::*;
     use sdrk_core::Reference;
 
+    /// A wide loop with a small detector gain and impulses in the input, so that both clamps
+    /// of the loop (the integrator at `max_deviation` and the proportional step at a quarter
+    /// period) act often: the fallback takes them as branches (issue #169), the reference as
+    /// written.
+    #[test]
+    fn fallback_equals_reference_with_the_clamps_active() {
+        for ted in [Ted::Gardner, Ted::MuellerMuller] {
+            for (i, sps) in [2.0, 4.1, 8.0, 10.1].into_iter().enumerate() {
+                let mut x = noisy_qpsk(120 + i as u64, sps);
+                for (j, v) in x.iter_mut().enumerate() {
+                    if j % 97 == 13 {
+                        *v = C32::new(40.0, -40.0);
+                    }
+                }
+                let mut a = SymbolSyncState::<C32>::new(sps, ted, 0.1, DAMP, 0.05, 0.05).unwrap();
+                let mut b = a;
+                let ya = whole(&Fallback, &mut a, &x);
+                let yb = whole(&Reference, &mut b, &x);
+                assert_eq!(bits_c(&ya), bits_c(&yb), "{ted:?} {sps}");
+                assert_eq!(a, b);
+                let mut c = SymbolSyncState::<C32>::new(sps, ted, 0.1, DAMP, 0.05, 0.05).unwrap();
+                let yc = chunked(&Fallback, &mut c, &x, 990 + i as u64);
+                assert_eq!(bits_c(&ya), bits_c(&yc), "{ted:?} {sps} chunked");
+
+                let mut x = noisy_real(130 + i as u64, sps);
+                for (j, v) in x.iter_mut().enumerate() {
+                    if j % 89 == 7 {
+                        *v = -50.0;
+                    }
+                }
+                let mut a = SymbolSyncState::<f32>::new(sps, ted, 0.1, DAMP, 0.05, 0.05).unwrap();
+                let mut b = a;
+                let ya = whole(&Fallback, &mut a, &x);
+                let yb = whole(&Reference, &mut b, &x);
+                assert_eq!(bits_r(&ya), bits_r(&yb), "{ted:?} {sps} real");
+                assert_eq!(a, b);
+            }
+        }
+    }
+
     #[test]
     fn fallback_equals_reference() {
         for ted in [Ted::Gardner, Ted::MuellerMuller] {

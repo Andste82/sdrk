@@ -2322,24 +2322,34 @@ Instructions per sample (wasmtime fuel, differential) of our kernel divided by t
 | `preemph_limit` | 98.56 | 98.56 | 1.00 | info | sdrk fallback |
 | `preemph_limit_q15` | 448.58 | 448.58 | 1.00 | info | sdrk fallback |
 | `preemph_limit_stereo` | 126.84 | 126.84 | 1.00 | info | sdrk fallback |
-| `psk_mod_block` | 96.37 | 96.37 | 1.00 | info | sdrk fallback |
-| `pulse_match_block` | 266.12 | 266.12 | 1.00 | info | sdrk fallback |
-| `pulse_shape_block` | 88.47 | 88.47 | 1.00 | info | sdrk fallback |
+| `psk_demod_block` | 367.78 | 2233.43 | 0.16 | info | GNU Radio fir_filter_ccf + symbol_sync_cc + costas_loop_cc + constellation_decoder_cb (the sum of the blocks of the receiver chain, generic compiler flags; no acquisition and no lock watches) |
+| `psk_mod_block` | 96.37 | 5353.10 | 0.02 | info | GNU Radio constellation_modulator as the sum of its blocks: pack_k_bits_bb + chunks_to_symbols_bc + pfb_arb_resampler_ccf (32 filters of 88 taps and their derivative filters), VOLK's generic dot product (the wasm32 build of VOLK has no SIMD) |
+| `psk_mod_block_liquid` | 96.37 | 426.59 | 0.23 | info | liquid-dsp 1.8.3 modemcf_modulate (arbitrary-constellation modem) + firinterp_crcf (the root-raised cosine of the block), the SIMD dot products of the level (the portable loop at simd128) |
+| `pulse_match_block` | 266.12 | 2475.18 | 0.11 | info | GNU Radio fir_filter_ccf (fir_filter_ccf_impl.cc of gr-filter) with VOLK's generic dot product (the wasm32 build of VOLK has no SIMD), generic compiler flags |
+| `pulse_match_block_liquid` | 266.12 | 2291.19 | 0.12 | info | liquid-dsp 1.8.3 firfilt_crcf (firfilt.proto.c), the SIMD dot product of the level (the portable loop at simd128) |
+| `pulse_shape_block` | 88.47 | 387.30 | 0.23 | info | GNU Radio interp_fir_filter_ccf (interp_fir_filter_impl.cc of gr-filter) with VOLK's generic dot product (the wasm32 build of VOLK has no SIMD), generic compiler flags |
+| `pulse_shape_block_liquid` | 88.47 | 414.07 | 0.21 | info | liquid-dsp 1.8.3 firinterp_crcf (firinterp.proto.c, firpfb.proto.c), the SIMD dot products of the level (the portable loop at simd128) |
 | `qam_acquire_block` | 348.39 | 348.39 | 1.00 | info | sdrk fallback |
-| `qam_demod_block` | 558.62 | 558.62 | 1.00 | info | sdrk fallback |
-| `qam_demod_qam256_block` | 547.51 | 547.51 | 1.00 | info | sdrk fallback |
-| `qam_demod_search_block` | 605.77 | 605.77 | 1.00 | info | sdrk fallback |
-| `qam_frame_decode_block` | 643.17 | 643.17 | 1.00 | info | sdrk fallback |
+| `qam_demod_block` | 540.18 | 2501.07 | 0.22 | info | GNU Radio fir_filter_ccf + symbol_sync_cc + linear_equalizer + constellation_receiver_cb (the sum of the blocks of the receiver chain, generic compiler flags and VOLK generic dot products; no acquisition, no blind equalizer stage and no lock watches) |
+| `qam_demod_qam256_block` | 529.05 | 529.05 | 1.00 | info | sdrk fallback |
+| `qam_demod_search_block` | 587.01 | 587.01 | 1.00 | info | sdrk fallback |
+| `qam_frame_decode_block` | 624.74 | 624.74 | 1.00 | info | sdrk fallback |
 | `qam_frame_encode_block` | 97.81 | 97.81 | 1.00 | info | sdrk fallback |
-| `qam_mod_block` | 93.11 | 93.11 | 1.00 | info | sdrk fallback |
-| `qam_mod_qam256_block` | 95.80 | 95.80 | 1.00 | info | sdrk fallback |
+| `qam_mod_block` | 93.11 | 5357.73 | 0.02 | info | GNU Radio constellation_modulator as the sum of its blocks: pack_k_bits_bb + chunks_to_symbols_bc + pfb_arb_resampler_ccf (32 filters of 88 taps and their derivative filters), VOLK's generic dot product (the wasm32 build of VOLK has no SIMD) |
+| `qam_mod_block_liquid` | 93.11 | 427.59 | 0.22 | info | liquid-dsp 1.8.3 modemcf_modulate (arbitrary-constellation modem) + firinterp_crcf (the root-raised cosine of the block), the SIMD dot products of the level (the portable loop at simd128) |
+| `qam_mod_qam256_block` | 95.80 | 5366.98 | 0.02 | info | GNU Radio constellation_modulator as the sum of its blocks: pack_k_bits_bb + chunks_to_symbols_bc + pfb_arb_resampler_ccf (32 filters of 88 taps and their derivative filters), VOLK's generic dot product (the wasm32 build of VOLK has no SIMD) |
+| `qam_mod_qam256_block_liquid` | 95.80 | 433.34 | 0.22 | info | liquid-dsp 1.8.3 modemcf_modulate (arbitrary-constellation modem) + firinterp_crcf (the root-raised cosine of the block), the SIMD dot products of the level (the portable loop at simd128) |
 | `qam_soft_bits_qam1024` | 39.06 | 39.04 | 1.00 | info | sdrk fallback |
-| `qam_soft_bits_qam16` | 14.80 | 15.54 | 0.95 | info | sdrk fallback |
+| `qam_soft_bits_qam16` | 14.80 | 4080.04 | 0.00 | info | GNU Radio constellation_soft_decoder_cf with calc_soft_dec (constellation.cc of gr-digital; the exact log-likelihood ratio over all points, npwr 1, not max-log; no vector allocation per symbol, so faster than GNU Radio's object code) |
+| `qam_soft_bits_qam16_liquid` | 14.80 | 1310.32 | 0.01 | info | liquid-dsp 1.8.3 modemcf_demodulate_soft of its own QAM modem (modem_common.proto.c; soft bytes with liquid's scale and labelling; the hard symbol and the soft bits per symbol) |
+| `qam_soft_bits_qam16_lut` | 14.80 | 139.04 | 0.11 | info | GNU Radio constellation_soft_decoder_cf with the look-up table of gen_soft_dec_lut (precision 8, npwr 1; constellation.cc of gr-digital; exact log-likelihood ratio, not max-log; the table lookup and a copy of 2 to 3 floats per symbol, no vector allocation) |
 | `qam_soft_bits_qam256` | 32.56 | 32.54 | 1.00 | info | sdrk fallback |
-| `qam_soft_bits_qam64` | 23.80 | 47.54 | 0.50 | info | sdrk fallback |
+| `qam_soft_bits_qam64` | 23.80 | 17702.04 | 0.00 | info | GNU Radio constellation_soft_decoder_cf with calc_soft_dec (constellation.cc of gr-digital; the exact log-likelihood ratio over all points, npwr 1, not max-log; no vector allocation per symbol, so faster than GNU Radio's object code) |
+| `qam_soft_bits_qam64_liquid` | 23.80 | 1800.52 | 0.01 | info | liquid-dsp 1.8.3 modemcf_demodulate_soft of its own QAM modem (modem_common.proto.c; soft bytes with liquid's scale and labelling; the hard symbol and the soft bits per symbol) |
+| `qam_soft_bits_qam64_lut` | 23.80 | 147.04 | 0.16 | info | GNU Radio constellation_soft_decoder_cf with the look-up table of gen_soft_dec_lut (precision 8, npwr 1; constellation.cc of gr-digital; exact log-likelihood ratio, not max-log; the table lookup and a copy of 2 to 3 floats per symbol, no vector allocation) |
 | `qam_soft_bits_qpsk` | 6.30 | 9.54 | 0.66 | info | sdrk fallback |
 | `rds_decode_block` | 84.97 | 84.97 | 1.00 | info | sdrk fallback |
-| `rds_demod_block` | 340.22 | 340.22 | 1.00 | info | sdrk fallback |
+| `rds_demod_block` | 338.75 | 338.75 | 1.00 | info | sdrk fallback |
 | `rds_shape` | 168.41 | 169.41 | 0.99 | info | sdrk fallback |
 | `real_to_complex` | 52.87 | 275.00 | 0.19 |  | liquid-dsp 1.8.3 firhilbf_decim_execute_block (dotprod_rrrf) with its portable dot product (-O3 -ffp-contract=off, simd128) |
 | `real_to_complex_cq15` | 67.97 | 126.54 | 0.54 | info | libairspy 1.0.10 iqconverter_int16 (truncating >> 15, 32-bit accumulator, the odd samples halved), conversion without remove_dc (-O3 -ffp-contract=off, simd128) |
@@ -2355,12 +2365,22 @@ Instructions per sample (wasmtime fuel, differential) of our kernel divided by t
 | `stereo_matrix_fallback` | 10.78 | 47.34 | 0.23 |  | CMSIS-DSP 1.18.0 arm_add_f32 (d + d), arm_add_f32 (s + d2), arm_sub_f32 (s - d2) on planar data, generic C (-O3 -ffp-contract=off, LOOPUNROLL, simd128) |
 | `stereo_pll_fallback` | 190.06 | 143.86 | 1.32 | waived | liquid-dsp 1.8.3 nco_crcf (LIQUID_VCO_INTERP): sincos at theta and 2 theta from the 1024-entry table, nco_crcf_adjust_frequency and nco_crcf_adjust_phase (double modulo in _constrain), nco_crcf_step; no lock detector, no integrator limit (-O3 -ffp-contract=off, simd128) |
 | `stereo_pll_q15_fallback` | 183.05 | 228.04 | 0.80 | info | CMSIS-DSP 1.18.0 arm_cos_q15 and arm_sin_q15 (twice) per sample in the loop of the kernel (the oscillator only: CMSIS-DSP has no PLL), generic C (-O3 -ffp-contract=off, LOOPUNROLL, simd128) |
-| `symbol_demap_qam16_block` | 14.80 | 14.80 | 1.00 | info | sdrk fallback |
+| `symbol_demap_qam16_block` | 14.80 | 4080.03 | 0.00 | info | GNU Radio constellation_soft_decoder_cf with calc_soft_dec (constellation.cc of gr-digital; the exact log-likelihood ratio over all points, npwr 1, not max-log; no vector allocation per symbol, so faster than GNU Radio's object code) |
+| `symbol_demap_qam16_block_liquid` | 14.80 | 1310.23 | 0.01 | info | liquid-dsp 1.8.3 modemcf_demodulate_soft of its own QAM modem (modem_common.proto.c; soft bytes with liquid's scale and labelling; the hard symbol and the soft bits per symbol) |
+| `symbol_demap_qam16_block_lut` | 14.80 | 139.03 | 0.11 | info | GNU Radio constellation_soft_decoder_cf with the look-up table of gen_soft_dec_lut (precision 8, npwr 1; constellation.cc of gr-digital; exact log-likelihood ratio, not max-log; the table lookup and a copy of 2 to 3 floats per symbol, no vector allocation) |
 | `symbol_demap_qam256_block` | 32.56 | 32.56 | 1.00 | info | sdrk fallback |
-| `symbol_demap_qam64_block` | 23.80 | 23.80 | 1.00 | info | sdrk fallback |
-| `symbol_map_block` | 33.53 | 33.53 | 1.00 | info | sdrk fallback |
-| `symbol_sync` | 138.13 | 138.13 | 1.00 | info | sdrk fallback |
-| `symbol_sync_real` | 64.45 | 64.45 | 1.00 | info | sdrk fallback |
+| `symbol_demap_qam64_block` | 23.80 | 17702.03 | 0.00 | info | GNU Radio constellation_soft_decoder_cf with calc_soft_dec (constellation.cc of gr-digital; the exact log-likelihood ratio over all points, npwr 1, not max-log; no vector allocation per symbol, so faster than GNU Radio's object code) |
+| `symbol_demap_qam64_block_liquid` | 23.80 | 1800.37 | 0.01 | info | liquid-dsp 1.8.3 modemcf_demodulate_soft of its own QAM modem (modem_common.proto.c; soft bytes with liquid's scale and labelling; the hard symbol and the soft bits per symbol) |
+| `symbol_demap_qam64_block_lut` | 23.80 | 147.03 | 0.16 | info | GNU Radio constellation_soft_decoder_cf with the look-up table of gen_soft_dec_lut (precision 8, npwr 1; constellation.cc of gr-digital; exact log-likelihood ratio, not max-log; the table lookup and a copy of 2 to 3 floats per symbol, no vector allocation) |
+| `symbol_map_block` | 33.53 | 140.03 | 0.24 | info | GNU Radio pack_k_bits_bb + chunks_to_symbols_bc (pack_k_bits.cc of gr-blocks, chunks_to_symbols_impl.cc of gr-digital), the table of the points of the block, generic compiler flags |
+| `symbol_map_block_liquid` | 33.53 | 108.02 | 0.31 | info | liquid-dsp 1.8.3 modemcf_modulate on the arbitrary-constellation modem of the points of the block (modem_arb.proto.c), the bits packed by the wrapper |
+| `symbol_map_block_qam64` | 40.53 | 177.03 | 0.23 | info | GNU Radio pack_k_bits_bb + chunks_to_symbols_bc (pack_k_bits.cc of gr-blocks, chunks_to_symbols_impl.cc of gr-digital), the table of the points of the block, generic compiler flags |
+| `symbol_map_block_qam64_liquid` | 40.53 | 150.02 | 0.27 | info | liquid-dsp 1.8.3 modemcf_modulate on the arbitrary-constellation modem of the points of the block (modem_arb.proto.c), the bits packed by the wrapper |
+| `symbol_map_block_qpsk` | 59.56 | 103.03 | 0.58 | info | GNU Radio pack_k_bits_bb + chunks_to_symbols_bc (pack_k_bits.cc of gr-blocks, chunks_to_symbols_impl.cc of gr-digital), the table of the points of the block, generic compiler flags |
+| `symbol_map_block_qpsk_liquid` | 59.56 | 100.02 | 0.60 | info | liquid-dsp 1.8.3 modemcf_modulate on the arbitrary-constellation modem of the points of the block (modem_arb.proto.c), the bits packed by the wrapper |
+| `symbol_sync` | 101.80 | 101.80 | 1.00 | info | sdrk fallback |
+| `symbol_sync_fallback` | 101.80 | 156.98 | 0.65 | info | GNU Radio symbol_sync_cc (symbol_sync_cc_impl.cc of gr-digital, TED_GARDNER, IR_MMSE_8TAP, generic compiler flags; reference does different work: an 8-tap MMSE interpolator against our 4-point Lagrange polynomial) |
+| `symbol_sync_real` | 46.96 | 46.96 | 1.00 | info | sdrk fallback |
 | `xcorr_fft_n4096` | 217.07 | 2752.17 | 0.08 | info | liquid-dsp 1.8.3 fftfilt_cccf (benches/refs/liquid-fftfilt.c), liquid's own FFT |
 | `xcorr_fft_n4096_fallback` | 693.03 | 2752.17 | 0.25 |  | liquid-dsp 1.8.3 fftfilt_cccf (benches/refs/liquid-fftfilt.c), liquid's own FFT |
 | `xcorr_fft_n512` | 186.81 | 1977.98 | 0.09 | info | liquid-dsp 1.8.3 fftfilt_cccf (benches/refs/liquid-fftfilt.c), liquid's own FFT |

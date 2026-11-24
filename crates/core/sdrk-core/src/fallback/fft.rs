@@ -107,20 +107,9 @@ fn bit_reverse_quarter<T>(data: &mut [T], log2n: u32) {
         let i = 2 * u;
         #[cfg(not(any(target_arch = "x86", target_arch = "x86_64", target_arch = "wasm32")))]
         let j = i.reverse_bits() >> shift;
-        #[cfg(not(any(target_arch = "x86", target_arch = "x86_64")))]
         if i < j {
             data.swap(i, j);
             data.swap(i + half + 1, j + half + 1);
-        }
-        // On x86 the pairs `i < j` are swapped without a branch on `i < j` (whose outcome
-        // follows no pattern the predictor learns: about one misprediction every four samples
-        // at 64 points): the partner is `j` or `i` itself, chosen by a conditional move, and a
-        // swap of a sample with itself changes nothing.
-        #[cfg(any(target_arch = "x86", target_arch = "x86_64"))]
-        {
-            let k = if i < j { j } else { i };
-            data.swap(i, k);
-            data.swap(i + half + 1, k + half + 1);
         }
         data.swap(i + 1, j + half);
         #[cfg(any(target_arch = "x86", target_arch = "x86_64", target_arch = "wasm32"))]
@@ -189,7 +178,7 @@ fn quad_c32<const INV: bool>(x: [&mut C32; 4], w: C32, wa: C32, wb: C32) {
 /// orders the operands, which is why a transform that may meet one keeps the scalar stages.
 #[cfg(any(target_arch = "x86", target_arch = "x86_64"))]
 mod two {
-    use super::{C32, Result, check_twiddles, stage_c32, tw_error};
+    use super::{C32, FftScale, Result, check_twiddles, stage_c32, tw_error};
 
     /// Two samples `[re0, im0, re1, im1]`.
     type Lanes = [f32; 4];
@@ -221,6 +210,59 @@ mod two {
                 .fold(true, |ok, w| within(ok, w, 1.0)),
         };
         twiddles & data.iter().fold(true, |ok, x| within(ok, x, DATA_BOUND))
+    }
+
+    /// The transform of [`super::Fallback`] for data that [`fits`]: the bit reversal of
+    /// [`bit_reverse_select`], the stages of [`stages`] and the scaling of the inverse. A
+    /// function of its own, so that the transform of the smaller sizes stays as small as it was
+    /// where it is inlined (`channelize` runs 16 points per hop).
+    #[inline(never)]
+    pub(super) fn fft(
+        data: &mut [C32],
+        tw: &[C32],
+        n: usize,
+        log2n: u32,
+        stride: usize,
+        inverse: bool,
+    ) -> Result<FftScale> {
+        bit_reverse_select(data, log2n);
+        if inverse {
+            stages::<true>(data, tw, n, log2n, stride)?;
+            let g = 1.0 / n as f32;
+            for x in data.iter_mut() {
+                *x = C32::new(x.re * g, x.im * g);
+            }
+            Ok(FftScale {
+                exponent: log2n as i32,
+            })
+        } else {
+            stages::<false>(data, tw, n, log2n, stride)?;
+            Ok(FftScale { exponent: 0 })
+        }
+    }
+
+    /// [`super::bit_reverse_quarter`] without a branch on `i < j`, whose outcome follows no
+    /// pattern the predictor learns (about one misprediction every four samples at 64 points):
+    /// the partner of `i` is `j` or `i` itself, chosen by a conditional move, and a swap of a
+    /// sample with itself changes nothing. The same permutation. `data.len()` is `2^log2n`.
+    pub(super) fn bit_reverse_select<T>(data: &mut [T], log2n: u32) {
+        let n = data.len();
+        if log2n < 2 || n != 1 << log2n {
+            super::bit_reverse_quarter(data, log2n);
+            return;
+        }
+        let half = n / 2;
+        let mut j = 0usize;
+        for u in 0..half / 2 {
+            let i = 2 * u;
+            let k = if i < j { j } else { i };
+            data.swap(i, k);
+            data.swap(i + half + 1, k + half + 1);
+            data.swap(i + 1, j + half);
+            // `j = rev_{log2n - 1}(u)` carried as in `bit_reverse_quarter`.
+            let t = (!u).trailing_zeros();
+            j ^= half - (half >> (t + 1));
+        }
     }
 
     /// The stages of the transform after the bit reversal, as [`super::stages_c32`] groups them
@@ -1205,21 +1247,16 @@ impl Fft<C32> for Fallback {
         check_len(plan.n, data.len())?;
         let tw = plan.twiddles.as_ref();
         let inverse = dir == Direction::Inverse;
-        bit_reverse_quarter(data, plan.log2n);
         let (n, log2n, stride) = (plan.n, plan.log2n, plan.tw_stride);
-        // On x86 the stages run on two samples at a time where no infinity or NaN can arise
-        // (the same bits, see `two`).
+        // On x86 the transforms of 64 points and more in which no infinity or NaN can arise
+        // run on two samples per vector (the same bits, see `two`).
         #[cfg(any(target_arch = "x86", target_arch = "x86_64"))]
-        let lanes = n >= two::MIN_N && two::fits(data, tw, n, stride);
-        #[cfg(not(any(target_arch = "x86", target_arch = "x86_64")))]
-        let lanes = false;
+        if n >= two::MIN_N && two::fits(data, tw, n, stride) {
+            return two::fft(data, tw, n, log2n, stride, inverse);
+        }
+        bit_reverse_quarter(data, plan.log2n);
         if inverse {
-            if lanes {
-                #[cfg(any(target_arch = "x86", target_arch = "x86_64"))]
-                two::stages::<true>(data, tw, n, log2n, stride)?;
-            } else {
-                stages_c32::<true>(data, tw, n, log2n, stride)?;
-            }
+            stages_c32::<true>(data, tw, n, log2n, stride)?;
             let g = 1.0 / plan.n as f32;
             for x in data.iter_mut() {
                 *x = C32::new(x.re * g, x.im * g);
@@ -1228,12 +1265,7 @@ impl Fft<C32> for Fallback {
                 exponent: plan.log2n as i32,
             })
         } else {
-            if lanes {
-                #[cfg(any(target_arch = "x86", target_arch = "x86_64"))]
-                two::stages::<false>(data, tw, n, log2n, stride)?;
-            } else {
-                stages_c32::<false>(data, tw, n, log2n, stride)?;
-            }
+            stages_c32::<false>(data, tw, n, log2n, stride)?;
             Ok(FftScale { exponent: 0 })
         }
     }
@@ -1711,6 +1743,12 @@ mod tests {
             let mut quarter: std::vec::Vec<usize> = (0..n).collect();
             bit_reverse_quarter(&mut quarter, log2n);
             assert_eq!(quarter, want, "log2n={log2n}");
+            #[cfg(any(target_arch = "x86", target_arch = "x86_64"))]
+            {
+                let mut select: std::vec::Vec<usize> = (0..n).collect();
+                two::bit_reverse_select(&mut select, log2n);
+                assert_eq!(select, want, "log2n={log2n}");
+            }
             assert!(
                 got.iter()
                     .enumerate()

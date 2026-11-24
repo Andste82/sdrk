@@ -528,7 +528,10 @@ fn measure_cycles(root: &Path, o: &Options, entries: &[String]) -> Part {
                 continue;
             };
             match cycles_of_level(root, plan, models, entries, o.cycle_mode, profiler) {
-                Ok((table, value)) => {
+                Ok((table, value, entries_ok)) => {
+                    // An entry that failed fails the run, as in the branches: its note must not
+                    // replace a committed record unnoticed.
+                    part.ok &= entries_ok;
                     let _ = writeln!(
                         part.table,
                         "\ncycles, {platform} {level} (llvm-mca; reference model {}, counter-model {}; judged in the mode {}; counts: {}; only the ratio means something):",
@@ -566,7 +569,8 @@ fn model_json(ours: &crate::mca::Simulation, other: &crate::mca::Simulation) -> 
 }
 
 /// The cycles table and JSON of one level: per entry both cycle modes, `mode` first (the
-/// top-level fields of the entry), the other one under `other_cycle_mode`.
+/// top-level fields of the entry), the other one under `other_cycle_mode`; false when an entry
+/// failed (an entry that is not measured at the level is no failure).
 #[allow(
     clippy::large_stack_frames,
     reason = "std::process::Command and serde_json values are large; xtask is a host tool"
@@ -578,8 +582,9 @@ fn cycles_of_level(
     entries: &[String],
     mode: crate::mca::CycleMode,
     profiler: crate::bench::Profiler,
-) -> anyhow::Result<(String, Value)> {
+) -> anyhow::Result<(String, Value, bool)> {
     let mut table = String::new();
+    let mut ok = true;
     let _ = writeln!(
         table,
         "{:<26} {:<10} {:<23} {:>9} {:>9} {:>6} {:>6} {:<10} {:>8}  comparison",
@@ -605,6 +610,7 @@ fn cycles_of_level(
                 value.insert(kernel, v);
             }
             Err(err) => {
+                ok &= err.to_string().starts_with("not measured at the level");
                 let note = format!("not simulated: {err:#}");
                 let _ = writeln!(table, "{kernel:<26} {note}");
                 value.insert(kernel, json!({ "note": note, "block_counts": counts }));
@@ -612,7 +618,7 @@ fn cycles_of_level(
         }
     }
     table.push_str(&fallback_verdicts(&value));
-    Ok((table, Value::Object(value)))
+    Ok((table, Value::Object(value), ok))
 }
 
 /// The cycles per sample of ours of a simulated entry on `model` (`reference_model` or
@@ -1026,7 +1032,9 @@ pub fn run(root: &Path, args: &[&str]) -> anyhow::Result<bool> {
     text.push('\n');
     std::fs::write(&path, &text)?;
     let mut written = Vec::new();
-    if let Some(cycles) = cycles.as_ref().filter(|_| o.writes()) {
+    // A failed entry writes nothing: its note would replace the committed record.
+    let unwritten = o.writes() && cycles.as_ref().is_some_and(|c| !c.ok);
+    if let Some(cycles) = cycles.as_ref().filter(|c| o.writes() && c.ok) {
         let platforms = if o.platforms.is_empty() {
             default_platforms(std::env::consts::ARCH)
         } else {
@@ -1059,6 +1067,9 @@ pub fn run(root: &Path, args: &[&str]) -> anyhow::Result<bool> {
         for p in &written {
             println!("results in {}", p.display());
         }
+    }
+    if unwritten {
+        eprintln!("results not written: the cycles of an entry or a level failed");
     }
     Ok(cycles
         .iter()

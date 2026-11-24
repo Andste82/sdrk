@@ -323,17 +323,6 @@ impl Verdict {
     }
 }
 
-/// How a level is judged.
-#[derive(Clone, Copy, Debug, PartialEq, Eq)]
-pub enum Rule {
-    /// Against an established library (or our fallback): the entry of `limits.json`, which
-    /// must exist.
-    Reference,
-    /// Against our own numbers of another level (run-time detection against the fixed level):
-    /// [`Caps::runtime`]; without an entry in `limits.json` the entry is `release`.
-    OwnLevel,
-}
-
 /// `ratio` (above `cap`) with as many decimals as it takes to print above the cap:
 /// `1.0215x` rather than a `1.02x` that "exceeds" a limit of `1.02x`.
 fn over(ratio: f64, cap: f64) -> String {
@@ -347,26 +336,22 @@ fn over(ratio: f64, cap: f64) -> String {
     format!("{ratio:.digits$}x")
 }
 
-/// Judges a measurement. The instruction ratio and the accuracy are checked independently, and
-/// each exceedance needs its own waiver (`waiver`, `accuracy_waiver`).
+/// Judges a measurement against its comparison (an established library or our fallback) by
+/// its entry of `limits.json`, which must exist. The instruction ratio and the accuracy are
+/// checked independently, and each exceedance needs its own waiver (`waiver`,
+/// `accuracy_waiver`).
 #[must_use]
-pub fn judge(caps: &Caps, rule: Rule, limit: Option<&Limit>, m: &Measurement) -> Verdict {
-    let release = Limit::release();
-    let limit = match (limit, rule) {
-        (Some(l), _) => l,
-        (None, Rule::OwnLevel) => &release,
-        (None, Rule::Reference) => {
-            return Verdict::Fail(format!(
-                "no entry for `{}` at `{}` in benches/limits.json",
-                m.kernel, m.level
-            ));
-        }
+pub fn judge(caps: &Caps, limit: Option<&Limit>, m: &Measurement) -> Verdict {
+    let Some(limit) = limit else {
+        return Verdict::Fail(format!(
+            "no entry for `{}` at `{}` in benches/limits.json",
+            m.kernel, m.level
+        ));
     };
-    let cap = match (limit.status, rule) {
-        (Status::Info, _) => return Verdict::Info(limit.waiver.clone().unwrap_or_default()),
-        (Status::Release, Rule::Reference) => caps.release,
-        (Status::Release, Rule::OwnLevel) => caps.runtime,
-        (Status::Dev, _) => caps.dev,
+    let cap = match limit.status {
+        Status::Info => return Verdict::Info(limit.waiver.clone().unwrap_or_default()),
+        Status::Release => caps.release,
+        Status::Dev => caps.dev,
     };
     let status = limit.status.name();
     let ratio = m.ratio();
@@ -413,12 +398,12 @@ pub fn judge(caps: &Caps, rule: Rule, limit: Option<&Limit>, m: &Measurement) ->
             "the accuracy is within {SNR_MARGIN_DB:.0} dB: the accuracy waiver is no longer needed ({w})"
         ));
     }
-    if limit.status == Status::Dev && rule == Rule::Reference && ratio <= caps.warn {
+    if limit.status == Status::Dev && ratio <= caps.warn {
         notes.push(format!(
             "{ratio:.2}x: ready to be promoted from dev to release (release limit {:.2}x)",
             caps.release
         ));
-    } else if ratio > caps.warn && rule == Rule::Reference {
+    } else if ratio > caps.warn {
         notes.push(format!(
             "{ratio:.2}x is above {:.2}x ({status} limit {cap:.2}x)",
             caps.warn
@@ -465,7 +450,7 @@ pub struct Report {
 
 /// Judges all measurements of one level.
 #[must_use]
-pub fn evaluate(limits: &Limits, rule: Rule, level: &str, measurements: &[Measurement]) -> Report {
+pub fn evaluate(limits: &Limits, level: &str, measurements: &[Measurement]) -> Report {
     let caps = &limits.caps;
     let mut report = Report {
         ok: true,
@@ -473,18 +458,14 @@ pub fn evaluate(limits: &Limits, rule: Rule, level: &str, measurements: &[Measur
     };
     for m in measurements {
         let limit = limits.get(&m.kernel, level);
-        let verdict = judge(caps, rule, limit, m);
+        let verdict = judge(caps, limit, m);
         if matches!(verdict, Verdict::Fail(_)) {
             report.ok = false;
         }
         if let Some(why) = blocks_release(limit, &verdict) {
             report.blockers.push(format!("{} {level}: {why}", m.kernel));
         }
-        let status = match (limit, rule) {
-            (Some(l), _) => l.status.name(),
-            (None, Rule::OwnLevel) => "release",
-            (None, Rule::Reference) => "unlisted",
-        };
+        let status = limit.map_or("unlisted", |l| l.status.name());
         let goal = m.ratio() <= caps.goal;
         let mut line = format!(
             "{:<22} {:<12} {:>8.2} vs {:>8.2} instr/sample  ratio {:>5.2}{}  [{status}]  {}",
@@ -1029,7 +1010,7 @@ pub fn run(root: &Path, args: &[&str]) -> anyhow::Result<bool> {
     let mut volk_flags = Value::Null;
     let results = measure_levels(root, &plans, &options)?;
     for (plan, result) in plans.iter().zip(&results) {
-        let judged = evaluate(&limits, Rule::Reference, plan.level, &result.measurements);
+        let judged = evaluate(&limits, plan.level, &result.measurements);
         for line in &judged.lines {
             println!("{line}");
         }
@@ -1318,13 +1299,13 @@ mod tests {
     }
 
     fn judged(l: &Limit, x: &Measurement) -> Verdict {
-        judge(&CAPS, Rule::Reference, Some(l), x)
+        judge(&CAPS, Some(l), x)
     }
 
     #[test]
     fn a_slow_release_kernel_fails_the_command() {
         let l = limits(r#"{ "dummy_slow": { "avx2": { "status": "release" } } }"#);
-        let report = evaluate(&l, Rule::Reference, "avx2", &[m("dummy_slow", 20.0, 10.0)]);
+        let report = evaluate(&l, "avx2", &[m("dummy_slow", 20.0, 10.0)]);
         assert!(!report.ok);
         assert!(report.lines[0].contains("FAIL"), "{}", report.lines[0]);
         assert!(report.lines[0].contains("2.00x"));
@@ -1371,7 +1352,7 @@ mod tests {
         );
         assert_eq!(l.caps.release, 1.10);
         assert_eq!(l.caps.dev, 1.50);
-        let report = evaluate(&l, Rule::Reference, "avx2", &[m("k", 11.2, 10.0)]);
+        let report = evaluate(&l, "avx2", &[m("k", 11.2, 10.0)]);
         assert!(!report.ok, "{}", report.lines[0]);
         assert!(Limits::parse(r#"{ "_limits": { "release": 0 } }"#).is_err());
         assert!(Limits::parse(r#"{ "_limits": { "fast": 1.0 } }"#).is_err());
@@ -1389,7 +1370,7 @@ mod tests {
     fn a_kernel_that_is_not_listed_fails() {
         let l = limits("{}");
         assert_eq!(l.get("anything", "avx2"), None);
-        let report = evaluate(&l, Rule::Reference, "avx2", &[m("anything", 5.0, 10.0)]);
+        let report = evaluate(&l, "avx2", &[m("anything", 5.0, 10.0)]);
         assert!(!report.ok);
         assert!(report.lines[0].contains("no entry"), "{}", report.lines[0]);
     }
@@ -1397,13 +1378,13 @@ mod tests {
     #[test]
     fn a_failing_ratio_is_printed_above_the_limit() {
         let l = limit(Status::Release, None, None);
-        let v = judge(&CAPS, Rule::OwnLevel, Some(&l), &m("rotate", 6.66, 6.52));
+        let v = judge(&CAPS, Some(&l), &m("rotate", 7.505, 6.52));
         assert!(
-            v.detail().starts_with("1.021x instructions per sample"),
+            v.detail().starts_with("1.151x instructions per sample"),
             "{}",
             v.detail()
         );
-        assert!(v.detail().contains("limit of 1.02x"), "{}", v.detail());
+        assert!(v.detail().contains("limit of 1.15x"), "{}", v.detail());
         assert_eq!(over(1.3, 1.15), "1.30x");
     }
 
@@ -1424,7 +1405,7 @@ mod tests {
         let l = limits(
             r#"{ "fft_4096": { "avx2": { "status": "dev", "waiver": "open item M13-1" } } }"#,
         );
-        let report = evaluate(&l, Rule::Reference, "avx2", &[m("fft_4096", 40.0, 10.0)]);
+        let report = evaluate(&l, "avx2", &[m("fft_4096", 40.0, 10.0)]);
         assert!(report.ok);
         assert!(report.lines[0].contains("waived") && report.lines[0].contains("M13-1"));
         assert_eq!(report.records["fft_4096"]["verdict"], "waived");
@@ -1478,50 +1459,14 @@ mod tests {
         assert!(blocks_release(Some(&stale), &judged(&stale, &m("k", 9.0, 10.0))).is_some());
         let info = limit(Status::Info, Some("no SSE code in VOLK"), None);
         assert!(blocks_release(Some(&info), &judged(&info, &m("k", 9.0, 10.0))).is_some());
-        assert!(
-            blocks_release(
-                None,
-                &judge(&CAPS, Rule::Reference, None, &m("k", 1.0, 1.0))
-            )
-            .is_some()
-        );
+        assert!(blocks_release(None, &judge(&CAPS, None, &m("k", 1.0, 1.0))).is_some());
         let l = limits(
             r#"{ "k": { "avx2": { "status": "dev" } }, "j": { "avx2": { "status": "release" } } }"#,
         );
-        let report = evaluate(
-            &l,
-            Rule::Reference,
-            "avx2",
-            &[m("k", 9.0, 10.0), m("j", 9.0, 10.0)],
-        );
+        let report = evaluate(&l, "avx2", &[m("k", 9.0, 10.0), m("j", 9.0, 10.0)]);
         assert!(report.ok);
         assert_eq!(report.blockers.len(), 1, "{:?}", report.blockers);
         assert!(report.blockers[0].starts_with("k avx2"));
-    }
-
-    #[test]
-    fn run_time_detection_is_judged_against_our_fixed_level() {
-        let mut x = m("k", 10.3, 10.0);
-        x.level = "avx2-runtime".into();
-        assert!(
-            matches!(judge(&CAPS, Rule::OwnLevel, None, &x), Verdict::Fail(d) if d.contains("1.02x"))
-        );
-        x.ours = 10.1;
-        assert_eq!(judge(&CAPS, Rule::OwnLevel, None, &x), Verdict::Pass);
-        let waived = limit(Status::Release, Some("M14-9"), None);
-        x.ours = 10.5;
-        assert!(matches!(
-            judge(&CAPS, Rule::OwnLevel, Some(&waived), &x),
-            Verdict::Waived(_)
-        ));
-        let report = evaluate(
-            &limits("{}"),
-            Rule::OwnLevel,
-            "avx2-runtime",
-            &[m("k", 10.1, 10.0)],
-        );
-        assert!(report.ok);
-        assert_eq!(report.records["k"]["status"], "release");
     }
 
     #[test]
@@ -1529,7 +1474,7 @@ mod tests {
         let l = limits(
             r#"{ "rotate": { "sse2": { "status": "info", "waiver": "VOLK has no SSE rotator" } } }"#,
         );
-        let report = evaluate(&l, Rule::Reference, "sse2", &[m("rotate", 400.0, 10.0)]);
+        let report = evaluate(&l, "sse2", &[m("rotate", 400.0, 10.0)]);
         assert!(report.ok);
         assert!(report.lines[0].contains("info") && report.lines[0].contains("SSE rotator"));
         assert_eq!(report.records["rotate"]["verdict"], "info");
@@ -1549,7 +1494,7 @@ mod tests {
                 other_snr_db: None,
             });
         }
-        let report = evaluate(&l, Rule::Reference, "avx2", &[x]);
+        let report = evaluate(&l, "avx2", &[x]);
         assert!(report.ok, "a missed target does not fail");
         let info = &report.records["k"]["informational"];
         assert_eq!(info[0]["target"], 0.6);
@@ -1560,7 +1505,7 @@ mod tests {
         assert!(report.lines[2].contains("target 0.60: missed"));
         assert!(!report.lines[3].contains("target"));
         // The target does not replace the limit of the judged comparison.
-        let worse = evaluate(&l, Rule::Reference, "avx2", &[m("k", 11.5, 10.0)]);
+        let worse = evaluate(&l, "avx2", &[m("k", 11.5, 10.0)]);
         assert!(!worse.ok);
         for bad in ["0", "\"x\"", "-1"] {
             let text = format!(
@@ -1589,7 +1534,7 @@ mod tests {
             compared_with: "volk_x: neon".into(),
             other_snr_db: Some(120.0),
         });
-        let report = evaluate(&l, Rule::Reference, "neon", &[x]);
+        let report = evaluate(&l, "neon", &[x]);
         assert_eq!(report.records["k"]["goal"], true);
         assert_eq!(report.records["k"]["informational"][0]["ratio"], 1.5);
         assert!(report.lines[1].contains("cheapest"), "{:?}", report.lines);

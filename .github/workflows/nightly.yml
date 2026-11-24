@@ -3,9 +3,12 @@
 # wasm32 and the Cortex-M4, fuzzing, the long run), and the cycle measurement of every entry
 # (measure.yml, `measure_nightly`, D2709). By hand on a branch, `measure_only` runs the cycle
 # measurement alone, of the entries `kernels` at the levels `levels` (`gh workflow run
-# nightly.yml --ref <branch> -f measure_only=true -f kernels="fir agc" -f levels="avx2 neon"`). When main has not changed since the last green nightly run, the pull-request tests are skipped and
-# only the long jobs run (except on Sunday, so that a change of the environment, a new
-# toolchain or runner image, still shows within a week). A failure opens or updates an issue.
+# nightly.yml --ref <branch> -f measure_only=true -f kernels="fir agc" -f levels="avx2 neon"`).
+# When main has not changed since the last nightly run whose tree was green, the pull-request
+# tests and the cycle measurement are skipped and only the long jobs run (except on Sunday, so
+# that a change of the environment, a new toolchain or runner image, still shows within a
+# week). The tree decides alone: a run of the measurement only, or a failed measurement, does
+# not make a run green or red for that. A failure opens or updates an issue.
 name: nightly
 
 on:
@@ -49,7 +52,7 @@ permissions:
 
 jobs:
   delta:
-    # Whether main changed since the last green nightly run.
+    # Whether main changed since the last nightly run whose tree jobs all passed.
     name: delta
     runs-on: ubuntu-24.04
     timeout-minutes: 10
@@ -70,9 +73,24 @@ jobs:
           if [ "${{ github.event_name }}" = "workflow_dispatch" ]; then
             [ "$SKIP_INPUT" = "true" ] && skip=true
           elif [ "$SCHEDULE" != "17 3 * * 0" ]; then
-            last=$(gh run list --repo "$GITHUB_REPOSITORY" --workflow nightly.yml --branch main \
-              --status success --limit 1 --json headSha --jq '.[0].headSha // ""')
-            echo "last green nightly: ${last:-none}, now: $GITHUB_SHA"
+            # Judged by the jobs of the tree, not the conclusion of the run: a `measure_only` run
+            # skips the tree and may still succeed, and a failed measurement must not make
+            # every night rerun the pull-request tests.
+            last=""
+            for id in $(gh run list --repo "$GITHUB_REPOSITORY" --workflow nightly.yml --branch main \
+              --status completed --limit 20 --json databaseId --jq '.[].databaseId'); do
+              green=$(gh run view "$id" --repo "$GITHUB_REPOSITORY" --json jobs --jq \
+                '[.jobs[] | select(.name | startswith("tree / "))] as $t
+                 | ($t | length) > 0
+                   and ($t | all(.conclusion == "success" or .conclusion == "skipped"))
+                   and ($t | any(.conclusion == "success"))')
+              if [ "$green" = true ]; then
+                last=$(gh run view "$id" --repo "$GITHUB_REPOSITORY" --json headSha --jq .headSha)
+                echo "last nightly run with a green tree: $id"
+                break
+              fi
+            done
+            echo "its commit: ${last:-none}, now: $GITHUB_SHA"
             [ "$last" = "$GITHUB_SHA" ] && skip=true
           fi
           echo "skip_pr_nodes=$skip" | tee -a "$GITHUB_OUTPUT"
@@ -87,7 +105,11 @@ jobs:
       skip_pr_nodes: ${{ needs.delta.outputs.skip_pr_nodes == 'true' }}
 
   measure_nightly:
-    # The scheduled runs have no inputs: every entry on every level.
+    # The scheduled runs have no inputs: every entry on every level, unless main is unchanged
+    # since the last green tree (the measurement is deterministic, D2710); a dispatch always
+    # measures.
+    needs: delta
+    if: ${{ github.event_name == 'workflow_dispatch' || needs.delta.outputs.skip_pr_nodes != 'true' }}
     uses: ./.github/workflows/measure.yml
     with:
       kernels: ${{ inputs.kernels || 'all' }}

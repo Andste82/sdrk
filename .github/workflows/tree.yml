@@ -306,7 +306,9 @@ jobs:
           compression-level: 0
 
   test_x64_linux_sde_avx512:
-    name: test_x64_linux_sde_avx512 (${{ matrix.part }}/2)
+    # Three partitions: with two, the first took up to 40 minutes (runs 45222596111,
+    # 45205810583) and set the critical path of a pull request.
+    name: test_x64_linux_sde_avx512 (${{ matrix.part }}/3)
     needs: build_x64_linux_sde_avx512
     if: ${{ !inputs.skip_pr_nodes }}
     runs-on: ubuntu-24.04
@@ -314,7 +316,7 @@ jobs:
     strategy:
       fail-fast: false
       matrix:
-        part: [1, 2]
+        part: [1, 2, 3]
     env:
       SDRK_EXPECT_LEVEL: avx512
     steps:
@@ -327,7 +329,7 @@ jobs:
       - uses: ./.github/actions/nextest-run
         with:
           artifact: nextest-x64-linux-sde-avx512
-          args: --partition count:${{ matrix.part }}/2
+          args: --partition count:${{ matrix.part }}/3
 
   test_x64_linux_sde_avx512_fixed_arch:
     # The workspace run enables `std` of the backend, so it dispatches at run time; this run
@@ -354,9 +356,9 @@ jobs:
             --target x86_64-unknown-linux-gnu
 
   test_x64_linux_sde_runtime:
-    # The CPUIDs of `cargo xtask count` for sse2 and sse4.2; `-chip_check_cpuid 1` stops the
-    # run at any instruction above them. This runs the SSE2 and SSE4.2 arms of the run-time
-    # dispatch, which no x86-64 runner selects.
+    # The CPUIDs of the sse2 and sse4.2 profiles of `cargo measure` (`cargo xtask sde-cpuid`);
+    # `-chip_check_cpuid 1` stops the run at any instruction above them. This runs the SSE2 and
+    # SSE4.2 arms of the run-time dispatch, which no x86-64 runner selects.
     name: test_x64_linux_sde_runtime
     needs: build_x64_linux
     if: ${{ !inputs.skip_pr_nodes }}
@@ -462,11 +464,16 @@ jobs:
           compression-level: 0
 
   test_arm64_linux:
-    name: test_arm64_linux
+    # Two partitions, as under SDE: in one job the suite took about 28 minutes.
+    name: test_arm64_linux (${{ matrix.part }}/2)
     needs: build_arm64_linux
     if: ${{ !inputs.skip_pr_nodes }}
     runs-on: ubuntu-24.04-arm
     timeout-minutes: 60
+    strategy:
+      fail-fast: false
+      matrix:
+        part: [1, 2]
     env:
       SDRK_EXPECT_LEVEL: neon
     steps:
@@ -475,6 +482,7 @@ jobs:
       - uses: ./.github/actions/nextest-run
         with:
           artifact: nextest-arm64-linux
+          args: --partition count:${{ matrix.part }}/2
 
   test_arm64_linux_fallback:
     name: test_arm64_linux_fallback
@@ -515,15 +523,42 @@ jobs:
         run: cargo test -p sdrk-backend-simd
 
   # ---------------------------------------------------------------------------------------
-  # wasm32: WASI in wasmtime (build and test, four variants in one job) and the package.
+  # wasm32: WASI in wasmtime (build and test, four variants, one job each) and the package.
   test_wasm32:
-    name: test_wasm32
+    # One job per variant: in one job the four ran one after another (about 11 minutes each,
+    # most of it the debug test programs under wasmtime) and set the critical path of a pull
+    # request at about 45 minutes.
+    name: test_wasm32 (${{ matrix.variant }})
     needs: check
     if: ${{ !inputs.docs_only }}
     runs-on: ubuntu-24.04
-    # 90: the four variants run the tests of `sdrk-blocks` in debug builds; the tests of
-    # `snr_estimate` (M44.4) take about 11 minutes of them (D2524).
-    timeout-minutes: 90
+    # The tests of `sdrk-blocks` run in debug builds; the tests of `snr_estimate` (M44.4) took
+    # about 11 minutes of the four variants together (D2524).
+    timeout-minutes: 45
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - variant: scalar
+            level: scalar
+            rustflags: ""
+            # The crates that need `proptest` or the file system of a host do not build for
+            # WASI; sdrk-proto is tested in this variant only.
+            args: -p sdrk-device -p sdrk-core -p sdrk-backend-simd -p sdrk -p sdrk-proto -p sdrk-blocks
+          - variant: simd128
+            level: simd128
+            rustflags: "-C target-feature=+simd128"
+            args: -p sdrk-device -p sdrk-core -p sdrk-backend-simd -p sdrk -p sdrk-blocks
+          - variant: relaxed-simd
+            # M14; the contracts must still hold.
+            level: simd128
+            rustflags: "-C target-feature=+simd128,+relaxed-simd"
+            args: -p sdrk-device -p sdrk-core -p sdrk-backend-simd -p sdrk -p sdrk-blocks --features sdrk/relaxed-simd
+          - variant: tables
+            # The static tables, with their own SIMD128 code.
+            level: simd128
+            rustflags: "-C target-feature=+simd128"
+            args: -p sdrk-device -p sdrk-core -p sdrk-backend-simd -p sdrk -p sdrk-blocks --features sdrk/nco-tables,sdrk/fft-tables
     steps:
       - uses: actions/checkout@v4
       - uses: ./.github/actions/rust
@@ -537,32 +572,16 @@ jobs:
           echo "$WASMTIME_SHA256  $HOME/wasmtime.tar.xz" | sha256sum -c -
           tar -xJf ~/wasmtime.tar.xz -C "$HOME"
           echo "$HOME/$name" >> "$GITHUB_PATH"
-      # The default stack of wasmtime catches stack frames above the 4 KiB rule. The crates that
-      # need `proptest` or the file system of a host do not build for WASI. One target directory
-      # for the four variants: the dependencies are shared where the flags allow it.
+      # The default stack of wasmtime catches stack frames above the 4 KiB rule.
       - name: wasmtime as the runner of wasm32-wasip1
         shell: bash
         run: |
           echo "CARGO_TARGET_WASM32_WASIP1_RUNNER=wasmtime run --env SDRK_EXPECT_LEVEL --dir=$GITHUB_WORKSPACE --" >> "$GITHUB_ENV"
-      - name: Without simd128 (scalar)
+      - name: Test (${{ matrix.variant }})
         env:
-          SDRK_EXPECT_LEVEL: scalar
-        run: cargo test --target wasm32-wasip1 --target-dir target/wasm -p sdrk-device -p sdrk-core -p sdrk-backend-simd -p sdrk -p sdrk-proto -p sdrk-blocks
-      - name: With simd128
-        env:
-          RUSTFLAGS: "-C target-feature=+simd128"
-          SDRK_EXPECT_LEVEL: simd128
-        run: cargo test --target wasm32-wasip1 --target-dir target/wasm -p sdrk-device -p sdrk-core -p sdrk-backend-simd -p sdrk -p sdrk-blocks
-      - name: With simd128 and relaxed SIMD (M14; the contracts must still hold)
-        env:
-          RUSTFLAGS: "-C target-feature=+simd128,+relaxed-simd"
-          SDRK_EXPECT_LEVEL: simd128
-        run: cargo test --target wasm32-wasip1 --target-dir target/wasm -p sdrk-device -p sdrk-core -p sdrk-backend-simd -p sdrk -p sdrk-blocks --features sdrk/relaxed-simd
-      - name: With simd128 and the static tables (their own SIMD128 code)
-        env:
-          RUSTFLAGS: "-C target-feature=+simd128"
-          SDRK_EXPECT_LEVEL: simd128
-        run: cargo test --target wasm32-wasip1 --target-dir target/wasm -p sdrk-device -p sdrk-core -p sdrk-backend-simd -p sdrk -p sdrk-blocks --features sdrk/nco-tables,sdrk/fft-tables
+          RUSTFLAGS: ${{ matrix.rustflags }}
+          SDRK_EXPECT_LEVEL: ${{ matrix.level }}
+        run: cargo test --target wasm32-wasip1 --target-dir target/wasm ${{ matrix.args }}
 
   test_wasm_web:
     name: test_wasm_web
@@ -776,8 +795,10 @@ jobs:
   # `gh workflow run nightly.yml --ref <branch>`.
   count_wasm32:
     # Instructions per sample at simd128 (wasmtime fuel), judged by benches/limits.json.
+    # It builds its own wasmtime and target and takes nothing from test_wasm32, so it does not
+    # wait for those tests.
     name: count_wasm32
-    needs: test_wasm32
+    needs: check
     if: ${{ inputs.scope == 'full' }}
     runs-on: ubuntu-24.04
     container:

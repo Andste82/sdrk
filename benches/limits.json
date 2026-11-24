@@ -257,7 +257,7 @@
       "status": "release"
     },
     "avx2-runtime": {
-      "status": "dev"
+      "status": "release"
     },
     "avx512": {
       "status": "release"

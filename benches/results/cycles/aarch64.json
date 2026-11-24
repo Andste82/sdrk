@@ -2031,11 +2031,11 @@
             },
             "cpu": "cortex-a76",
             "ours": {
-              "coverage": 0.9909763006978511,
-              "cycles_per_sample": 0.6883550637963094,
-              "efficiency": 0.8600030063778158
+              "coverage": 0.9925157363215051,
+              "cycles_per_sample": 0.6870475626970167,
+              "efficiency": 0.8605538320530882
             },
-            "ratio": 0.800022906803591
+            "ratio": 0.7985032973968756
           },
           "cycle_mode": "whole-loop",
           "reference_model": {
@@ -2046,11 +2046,11 @@
             },
             "cpu": "cortex-a72",
             "ours": {
-              "coverage": 0.9909763006978511,
-              "cycles_per_sample": 0.8283143029474669,
-              "efficiency": 0.8024008375568087
+              "coverage": 0.9925157363215051,
+              "cycles_per_sample": 0.8274034430361772,
+              "efficiency": 0.8022463492365504
             },
-            "ratio": 0.6220338715577152
+            "ratio": 0.6213498489408774
           },
           "samples": 65536,
           "snr_db": {
@@ -2107,11 +2107,11 @@
             },
             "cpu": "cortex-a76",
             "ours": {
-              "coverage": 0.9906003105186273,
-              "cycles_per_sample": 1.063354577840295,
-              "efficiency": 0.8401783727657048
+              "coverage": 0.9906049092980056,
+              "cycles_per_sample": 1.0633570350112849,
+              "efficiency": 0.8404738341302418
             },
-            "ratio": 0.9847534161894419
+            "ratio": 0.9847556917309939
           },
           "cycle_mode": "whole-loop",
           "reference_model": {
@@ -2122,11 +2122,11 @@
             },
             "cpu": "cortex-a72",
             "ours": {
-              "coverage": 0.9906003105186273,
-              "cycles_per_sample": 1.472568493216917,
-              "efficiency": 0.8630539695344476
+              "coverage": 0.9906049092980056,
+              "cycles_per_sample": 1.473064427421128,
+              "efficiency": 0.8629769022341532
             },
-            "ratio": 1.1016634700113959
+            "ratio": 1.1020344901702712
           },
           "samples": 65536,
           "snr_db": {

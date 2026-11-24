@@ -1,3 +1,5 @@
+<p align="center"><img src="assets/sdrk-logo.png" alt="SDRk Logo"></p>
+
 # SDRk
 
 **Software-defined radio building blocks in Rust: fast, exact, and the same everywhere — from a microcontroller to the browser.**

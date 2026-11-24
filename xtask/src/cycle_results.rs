@@ -196,21 +196,25 @@ pub fn levels_of(cycles: &Value, branches: Option<&Value>) -> anyhow::Result<Map
 /// replace or add those of the document and every other record stays as it is. Returns the new
 /// document and the number of records replaced and added.
 ///
+/// `method` is that of the measured records (see [`method`]).
+///
 /// # Errors
-/// The document was made with other tools, or a measured level has another header (models,
-/// mode, profiler) than the document: its records would not be comparable, so the whole
-/// platform is to be measured again with `--all`.
+/// The document was made with other tools or another method (for example the other address
+/// space, D2710), or a measured level has another header (models, mode, profiler) than the
+/// document: its records would not be comparable, so the whole platform is to be measured
+/// again with `--all`.
 pub fn merge(
     doc: Option<Value>,
     platform: &str,
     tools: &Value,
+    method: &Value,
     measured: &Map<String, Value>,
     replace: bool,
 ) -> anyhow::Result<(Value, usize, usize)> {
     let fresh = || {
         json!({
             "platform": platform,
-            "method": method(),
+            "method": method,
             "tools": tools,
             "levels": {},
         })
@@ -226,8 +230,12 @@ pub fn merge(
             tools
         );
     }
-    if let Some(o) = doc.as_object_mut() {
-        o.insert("method".into(), method());
+    if field(&doc, "method") != method {
+        bail!(
+            "the records of {platform} were made with another method ({}), this run has {}; measure every entry again with `cargo measure --all --platform {platform}`",
+            field(&doc, "method"),
+            method
+        );
     }
     let levels = doc
         .get_mut("levels")
@@ -450,7 +458,7 @@ pub fn write(
         Err(e) if e.kind() == std::io::ErrorKind::NotFound => None,
         Err(e) => return Err(e).with_context(|| format!("cannot read {}", path.display())),
     };
-    let (doc, replaced, added) = merge(old, platform, tools, measured, replace)?;
+    let (doc, replaced, added) = merge(old, platform, tools, &method(), measured, replace)?;
     std::fs::create_dir_all(dir)?;
     let mut text = serde_json::to_string_pretty(&doc)?;
     text.push('\n');
@@ -497,11 +505,19 @@ fn documents(dir: &Path) -> anyhow::Result<Vec<(PathBuf, Value)>> {
 /// environment).
 ///
 /// # Errors
-/// A file cannot be read, parsed or written, or [`merge`] refuses.
+/// A source cannot be read, no source holds a results file, a file cannot be parsed or
+/// written, or [`merge`] refuses.
 pub fn merge_dirs(into: &Path, sources: &[PathBuf]) -> anyhow::Result<()> {
+    let sources = sources
+        .iter()
+        .map(|src| documents(src))
+        .collect::<anyhow::Result<Vec<_>>>()?;
+    if sources.iter().all(Vec::is_empty) {
+        bail!("no source holds a results file (`<platform>.json`): nothing was measured");
+    }
     std::fs::create_dir_all(into)?;
     for src in sources {
-        for (file, doc) in documents(src)? {
+        for (file, doc) in src {
             let platform = doc
                 .get("platform")
                 .and_then(Value::as_str)
@@ -516,20 +532,16 @@ pub fn merge_dirs(into: &Path, sources: &[PathBuf]) -> anyhow::Result<()> {
                 Err(e) if e.kind() == std::io::ErrorKind::NotFound => None,
                 Err(e) => return Err(e).with_context(|| format!("cannot read {}", path.display())),
             };
-            if let Some(old) = &old
-                && field(old, "method") != field(&doc, "method")
-            {
-                bail!(
-                    "{} was made with another method than {}",
-                    file.display(),
-                    path.display()
-                );
-            }
-            let (mut merged, replaced, added) =
-                merge(old, platform, field(&doc, "tools"), levels, false)?;
-            if let Some(o) = merged.as_object_mut() {
-                o.insert("method".into(), field(&doc, "method").clone());
-            }
+            let merged = merge(
+                old,
+                platform,
+                field(&doc, "tools"),
+                field(&doc, "method"),
+                levels,
+                false,
+            );
+            let (merged, replaced, added) =
+                merged.with_context(|| format!("cannot merge {}", file.display()))?;
             let mut text = serde_json::to_string_pretty(&merged)?;
             text.push('\n');
             std::fs::write(&path, text)
@@ -553,24 +565,64 @@ const COMPARED: [(&str, &str); 4] = [
     ("counter_model", "comparison"),
 ];
 
-/// The differences of the records of `fresh` from those of `base` (the committed results),
-/// one line each: a simulated record whose cycles per sample of ours or of the comparison
-/// differ by more than `tolerance` (relative) on either model, a record that `base` does not
-/// have, and a record that was simulated in `base` and not in `fresh`. Records of `base` that
-/// `fresh` does not have (a selection) are not compared.
+/// The relative difference of `y` from `x`.
+fn relative(x: f64, y: f64) -> f64 {
+    if x == 0.0 {
+        if y == 0.0 { 0.0 } else { f64::INFINITY }
+    } else {
+        (y / x - 1.0).abs()
+    }
+}
+
+/// The differences of the records of `fresh` from those of `base` (the committed results).
+#[derive(Debug, Default, PartialEq, Eq)]
+pub struct Differences {
+    /// One line each: a simulated record whose cycles per sample of ours or of the comparison
+    /// differ by more than the tolerance (relative) on either model, a record that `base` does
+    /// not have, a record that was simulated in `base` and not in `fresh`, and, for a complete
+    /// run, a record of `base` that `fresh` does not have.
+    pub drift: Vec<String>,
+    /// For information (the gate judges the cycles, D2708): a record whose cost (cycles +
+    /// mispredictions x penalty, D1611) differs by more than the tolerance on a model.
+    pub cost: Vec<String>,
+}
+
+/// The differences of the records of `fresh` from those of `base`. Records of `base` that
+/// `fresh` does not have are compared only when `complete` (every entry at every level was
+/// measured): then each of them is a difference, as a lost partition would otherwise pass.
 #[must_use]
 #[allow(
     clippy::large_stack_frames,
     reason = "the serde_json values are built in place; xtask is a host tool"
 )]
-pub fn differences(base: &[Value], fresh: &[Value], tolerance: f64) -> Vec<String> {
+pub fn differences(base: &[Value], fresh: &[Value], tolerance: f64, complete: bool) -> Differences {
     let record = |docs: &[Value], platform: &str, level: &str, entry: &str| -> Option<Value> {
         docs.iter()
             .find(|d| field(d, "platform").as_str() == Some(platform))
             .and_then(|d| d.get("levels")?.get(level)?.get("entries")?.get(entry))
             .cloned()
     };
-    let mut out = Vec::new();
+    let mut d = Differences::default();
+    if complete {
+        for doc in base {
+            let platform = field(doc, "platform").as_str().unwrap_or_default();
+            for (level, l) in field(doc, "levels").as_object().into_iter().flatten() {
+                for entry in field(l, "entries")
+                    .as_object()
+                    .into_iter()
+                    .flatten()
+                    .map(|e| e.0)
+                {
+                    if record(fresh, platform, level, entry).is_none() {
+                        d.drift.push(format!(
+                            "{platform} {level} {entry}: in the committed results, missing in this complete run"
+                        ));
+                    }
+                }
+            }
+        }
+    }
+    let out = &mut d.drift;
     for doc in fresh {
         let platform = field(doc, "platform").as_str().unwrap_or_default();
         for (level, l) in field(doc, "levels").as_object().into_iter().flatten() {
@@ -605,12 +657,7 @@ pub fn differences(base: &[Value], fresh: &[Value], tolerance: f64) -> Vec<Strin
                         drift.push(format!("{m} {side}: missing"));
                         continue;
                     };
-                    let rel = if x == 0.0 {
-                        if y == 0.0 { 0.0 } else { f64::INFINITY }
-                    } else {
-                        (y / x - 1.0).abs()
-                    };
-                    if rel > tolerance {
+                    if relative(x, y) > tolerance {
                         drift.push(format!(
                             "{} {side} {x:.4} -> {y:.4} ({:+.2} %)",
                             field(&b, m).get("cpu").and_then(Value::as_str).unwrap_or(m),
@@ -621,10 +668,28 @@ pub fn differences(base: &[Value], fresh: &[Value], tolerance: f64) -> Vec<Strin
                 if !drift.is_empty() {
                     out.push(format!("{name}: {}", drift.join(", ")));
                 }
+                let mut cost = Vec::new();
+                for (m, c) in field(r, "cost").as_object().into_iter().flatten() {
+                    for side in ["ours", "comparison"] {
+                        let get = |v: &Value| v.get(side)?.as_f64();
+                        if let (Some(x), Some(y)) = (get(field(field(&b, "cost"), m)), get(c))
+                            && relative(x, y) > tolerance
+                        {
+                            cost.push(format!(
+                                "{} {side} {x:.4} -> {y:.4} ({:+.2} %)",
+                                c.get("cpu").and_then(Value::as_str).unwrap_or(m),
+                                (y / x - 1.0) * 100.0
+                            ));
+                        }
+                    }
+                }
+                if !cost.is_empty() {
+                    d.cost.push(format!("{name}: cost {}", cost.join(", ")));
+                }
             }
         }
     }
-    out
+    d
 }
 
 /// The reproduction check of the corrected `llvm-mca` (D942): `costas` at `neon`, ours, on the
@@ -667,12 +732,13 @@ pub fn check_reproduction(dir: &Path) -> anyhow::Result<()> {
     Ok(())
 }
 
-/// `cargo xtask results <merge --into DIR SRC... | compare BASE FRESH [--tolerance T] | repro DIR>`.
+/// `cargo xtask results <merge --into DIR SRC... | compare BASE FRESH [--tolerance T]
+/// [--complete] | repro DIR>`.
 ///
 /// # Errors
 /// Wrong arguments, or a file that cannot be read, parsed or written.
 pub fn run(args: &[&str]) -> anyhow::Result<bool> {
-    const USAGE: &str = "usage: cargo xtask results <merge --into DIR SRC... | compare BASE FRESH [--tolerance T] | repro DIR>";
+    const USAGE: &str = "usage: cargo xtask results <merge --into DIR SRC... | compare BASE FRESH [--tolerance T] [--complete] | repro DIR>";
     match args {
         ["merge", "--into", into, sources @ ..] if !sources.is_empty() => {
             let sources: Vec<PathBuf> = sources.iter().map(PathBuf::from).collect();
@@ -680,31 +746,46 @@ pub fn run(args: &[&str]) -> anyhow::Result<bool> {
             Ok(true)
         }
         ["compare", base, fresh, rest @ ..] => {
-            let tolerance = match rest {
-                [] => 0.01,
-                ["--tolerance", t] => t
-                    .parse::<f64>()
-                    .ok()
-                    .filter(|t| *t >= 0.0)
-                    .ok_or_else(|| anyhow!("`--tolerance` takes a number >= 0"))?,
-                _ => bail!("{USAGE}"),
-            };
+            let (mut tolerance, mut complete, mut rest) = (0.01, false, rest);
+            loop {
+                rest = match rest {
+                    [] => break,
+                    ["--complete", r @ ..] => {
+                        complete = true;
+                        r
+                    }
+                    ["--tolerance", t, r @ ..] => {
+                        tolerance = t
+                            .parse::<f64>()
+                            .ok()
+                            .filter(|t| *t >= 0.0)
+                            .ok_or_else(|| anyhow!("`--tolerance` takes a number >= 0"))?;
+                        r
+                    }
+                    _ => bail!("{USAGE}"),
+                };
+            }
             let load = |d: &str| -> anyhow::Result<Vec<Value>> {
                 Ok(documents(Path::new(d))?
                     .into_iter()
                     .map(|(_, v)| v)
                     .collect())
             };
-            let diff = differences(&load(base)?, &load(fresh)?, tolerance);
-            for line in &diff {
+            let d = differences(&load(base)?, &load(fresh)?, tolerance, complete);
+            for line in &d.cost {
+                println!("info: {line}");
+            }
+            for line in &d.drift {
                 println!("{line}");
             }
             println!(
-                "results compare: {} records of {fresh} differ from {base} by more than {:.2} % on a model, or are new or missing",
-                diff.len(),
-                tolerance * 100.0
+                "results compare: {} records of {fresh} differ from {base} by more than {:.2} % on a model, or are new or missing{}; {} differ in the cost (for information)",
+                d.drift.len(),
+                tolerance * 100.0,
+                if complete { " (a complete run)" } else { "" },
+                d.cost.len()
             );
-            Ok(diff.is_empty())
+            Ok(d.drift.is_empty())
         }
         ["repro", dir] => {
             check_reproduction(Path::new(dir))?;
@@ -795,6 +876,7 @@ mod tests {
             None,
             "x86_64",
             &tools,
+            &method(),
             &measured(&[("a", 1.0), ("b", 1.5)]),
             false,
         )
@@ -805,6 +887,7 @@ mod tests {
             Some(doc),
             "x86_64",
             &tools,
+            &method(),
             &measured(&[("b", 1.25), ("c", 0.5)]),
             false,
         )
@@ -825,26 +908,43 @@ mod tests {
             Some(doc.clone()),
             "x86_64",
             &tools,
+            &method(),
             &measured(&[("b", 1.25), ("c", 0.5)]),
             false,
         )
         .unwrap();
         assert_eq!(again, doc);
         // A full run drops what it did not measure.
-        let (full, _, _) =
-            merge(Some(doc), "x86_64", &tools, &measured(&[("c", 0.5)]), true).unwrap();
+        let (full, _, _) = merge(
+            Some(doc),
+            "x86_64",
+            &tools,
+            &method(),
+            &measured(&[("c", 0.5)]),
+            true,
+        )
+        .unwrap();
         assert!(full["levels"]["sse2"]["entries"].get("a").is_none());
     }
 
     #[test]
     fn merge_refuses_other_tools_and_another_header() {
         let tools = json!({ "llvm-mca": "23.1.1" });
-        let (doc, _, _) = merge(None, "x86_64", &tools, &measured(&[("a", 1.0)]), false).unwrap();
+        let (doc, _, _) = merge(
+            None,
+            "x86_64",
+            &tools,
+            &method(),
+            &measured(&[("a", 1.0)]),
+            false,
+        )
+        .unwrap();
         let other = json!({ "llvm-mca": "24.0.0" });
         let err = merge(
             Some(doc.clone()),
             "x86_64",
             &other,
+            &method(),
             &measured(&[("a", 1.0)]),
             false,
         )
@@ -855,6 +955,7 @@ mod tests {
                 Some(doc.clone()),
                 "x86_64",
                 &other,
+                &method(),
                 &measured(&[("a", 1.0)]),
                 true
             )
@@ -862,8 +963,29 @@ mod tests {
         );
         let mut changed = measured(&[("a", 1.0)]);
         changed["sse2"]["block_counts"] = json!("callgrind");
-        let err = merge(Some(doc), "x86_64", &tools, &changed, false).unwrap_err();
+        let err = merge(
+            Some(doc.clone()),
+            "x86_64",
+            &tools,
+            &method(),
+            &changed,
+            false,
+        )
+        .unwrap_err();
         assert!(err.to_string().contains("block_counts"), "{err}");
+        // Records of another method (another address space, D2710) are not mixed into one file.
+        let mut randomized = method();
+        randomized["address_space"] = json!("randomized");
+        let err = merge(
+            Some(doc),
+            "x86_64",
+            &tools,
+            &randomized,
+            &measured(&[("a", 1.0)]),
+            false,
+        )
+        .unwrap_err();
+        assert!(err.to_string().contains("another method"), "{err}");
     }
 
     #[test]
@@ -913,6 +1035,7 @@ mod tests {
             None,
             "x86_64",
             &json!({ "llvm-mca": "23.1.1" }),
+            &method(),
             &measured(entries),
             true,
         )
@@ -925,7 +1048,13 @@ mod tests {
         let base = doc_of(&[("a", 1.0), ("b", 1.0), ("c", 1.0)]);
         // Within 1 %, 2 % slower on both models, a new record.
         let fresh = doc_of(&[("a", 1.009), ("b", 1.02), ("n", 1.0)]);
-        let d = differences(std::slice::from_ref(&base), &[fresh], 0.01);
+        let d = differences(
+            std::slice::from_ref(&base),
+            std::slice::from_ref(&fresh),
+            0.01,
+            false,
+        )
+        .drift;
         assert_eq!(d.len(), 2, "{d:?}");
         assert!(
             d[0].starts_with("x86_64 sse2 b: skylake ours 1.0000 -> 1.0200 (+2.00 %)"),
@@ -935,7 +1064,7 @@ mod tests {
         // A record that is no longer simulated; `c` is not in the selection and not compared.
         let mut lost = doc_of(&[("a", 1.0)]);
         lost["levels"]["sse2"]["entries"]["a"] = json!({ "note": "not simulated: the run failed" });
-        let d = differences(std::slice::from_ref(&base), &[lost], 0.01);
+        let d = differences(std::slice::from_ref(&base), &[lost], 0.01, false).drift;
         assert_eq!(d.len(), 1);
         assert!(
             d[0].contains("now \"not simulated: the run failed\""),
@@ -945,10 +1074,21 @@ mod tests {
             differences(
                 std::slice::from_ref(&base),
                 std::slice::from_ref(&base),
-                0.0
+                0.0,
+                true
             ),
-            Vec::<String>::new()
+            Differences::default()
         );
+        // A complete run names the committed records it lacks (`c`, a lost partition).
+        let d = differences(std::slice::from_ref(&base), &[fresh], 0.01, true).drift;
+        assert_eq!(d.len(), 3, "{d:?}");
+        assert!(
+            d[0].contains("x86_64 sse2 c: in the committed results, missing"),
+            "{d:?}"
+        );
+        // So does it for a platform that is missing as a whole.
+        let d = differences(std::slice::from_ref(&base), &[], 0.01, true).drift;
+        assert_eq!(d.len(), 4, "{d:?}");
     }
 
     #[test]
@@ -980,6 +1120,12 @@ mod tests {
         .unwrap();
         assert!(merge_dirs(&into, &[p3]).is_err());
         assert!(run(&["merge", "--into", "x"]).is_err());
+        // Nothing to merge (every partition failed): an error, not an empty result.
+        let empty = root.path().join("empty");
+        std::fs::create_dir_all(&empty).unwrap();
+        let err = merge_dirs(&root.path().join("none"), &[empty]).unwrap_err();
+        assert!(err.to_string().contains("no source"), "{err}");
+        assert!(merge_dirs(&into, &[root.path().join("missing")]).is_err());
     }
 
     #[test]

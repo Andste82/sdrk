@@ -6,14 +6,16 @@
 # measure_only=true -f kernels="<names>" -f levels="<levels>"` (without the rest of the tree).
 #
 #   llvm_mca      builds llvm-mca 23.1.1 with assets/llvm-mca-23.1.1-sdrk-sched.patch, cached
-#                 by the patch, the LLVM version, the image and the snapshot
+#                 by the patch, the LLVM version, the build recipe, the image and the snapshot
 #   reproduction  the check `costas` at `neon` 86.13 / 54.09 (D942) before anything else
 #   plan          the partitions: one job per level, the whole set split into `shards`
 #   measure       `cargo measure ... --merge --results` per partition (optionally twice, to
 #                 show that the profiles are deterministic, I13.1-1)
-#   results       merges the partitions, shows the drift against the committed results (fails
-#                 above 1 % on either model), runs `cargo xtask check cycles` on them (D321 and
-#                 the release gate in cycles) and uploads them as the artifact `cycle-results`
+#   results       fails first if a partition failed; merges the partitions, uploads them as the
+#                 artifact `cycle-results`, shows the drift against the committed results (fails
+#                 above 1 % on either model; a complete run also on a lost record; the cost for
+#                 information) and runs `cargo xtask check cycles` on them (D321 and the release
+#                 gate in cycles)
 name: measure
 
 on:
@@ -51,6 +53,10 @@ env:
   CI_QEMU_SHA256: a3717477d8e2c84d630bfffbc20f6cd3293eb45aa1e6dac6d0cc27689991c9e1
   LLVM_MCA_VERSION: 23.1.1
   LLVM_MCA_SHA256: ebe9be46fe8756d58c5b198ffad0fa2a766257add81a4dc52179bfacc7888ee6
+  # The version of the build recipe (the step "Build llvm-mca" below: the cmake flags, the
+  # targets, the compilers), part of the cache key: bump it with every change of that step, or
+  # the old cached binary is used.
+  LLVM_MCA_RECIPE: "1"
   # The pinned image (the digest in `container.image` below) and its apt snapshot, as the count
   # jobs of tree.yml: the compilers of the C references, glibc and the profilers are the same
   # in every run.
@@ -109,7 +115,7 @@ jobs:
       - name: Cache key
         id: key
         shell: bash
-        run: echo "key=llvm-mca-$LLVM_MCA_VERSION-${{ hashFiles('assets/llvm-mca-23.1.1-sdrk-sched.patch') }}-$MEASURE_IMAGE_TAG-$MEASURE_IMAGE_SNAPSHOT" | tee -a "$GITHUB_OUTPUT"
+        run: echo "key=llvm-mca-$LLVM_MCA_VERSION-r$LLVM_MCA_RECIPE-${{ hashFiles('assets/llvm-mca-23.1.1-sdrk-sched.patch') }}-$MEASURE_IMAGE_TAG-$MEASURE_IMAGE_SNAPSHOT" | tee -a "$GITHUB_OUTPUT"
       - name: Cache the corrected llvm-mca
         id: cache
         uses: actions/cache@v4
@@ -187,6 +193,7 @@ jobs:
     timeout-minutes: 5
     outputs:
       matrix: ${{ steps.plan.outputs.matrix }}
+      count: ${{ steps.plan.outputs.count }}
       partial: ${{ steps.plan.outputs.partial }}
     steps:
       - name: Partitions
@@ -214,6 +221,7 @@ jobs:
           partial = not everything or len(levels) < len(platforms)
           with open(os.environ["GITHUB_OUTPUT"], "a") as out:
               out.write(f"matrix={json.dumps({'include': include})}\n")
+              out.write(f"count={len(include)}\n")
               out.write(f"partial={'true' if partial else 'false'}\n")
           print(json.dumps(include, indent=1), "partial:", partial)
 
@@ -294,6 +302,18 @@ jobs:
     runs-on: ubuntu-24.04
     timeout-minutes: 30
     steps:
+      - name: Every partition measured
+        # First, so that a failed or skipped partition is the reported cause (run 45345601777:
+        # a failed reproduction showed as a merge error and an empty "ok" gate). The failed
+        # partitions are the red `measure (...)` jobs of the run; their results are not
+        # merged, and no `cycle-results` artifact is made of an incomplete run.
+        env:
+          MEASURE: ${{ needs.measure.result }}
+        run: |
+          if [ "$MEASURE" != success ]; then
+            echo "::error::the partitions did not all succeed (measure: $MEASURE); see the failed measure, reproduction or llvm_mca jobs of this run"
+            exit 1
+          fi
       - uses: actions/checkout@v4
       - uses: ./.github/actions/rust
         with:
@@ -303,7 +323,17 @@ jobs:
           pattern: cycles-*
           path: target/parts
       - name: Merge the partitions
-        run: cargo xtask results merge --into target/cycle-results target/parts/*
+        id: merge
+        env:
+          PARTITIONS: ${{ needs.plan.outputs.count }}
+        run: |
+          found=$(find target/parts -mindepth 1 -maxdepth 1 -type d -name 'cycles-*' | wc -l)
+          echo "partitions: $found of $PARTITIONS"
+          if [ "$found" != "$PARTITIONS" ]; then
+            echo "::error::$found partition results of $PARTITIONS were downloaded"
+            exit 1
+          fi
+          cargo xtask results merge --into target/cycle-results target/parts/*
       - name: Keep the merged results
         uses: actions/upload-artifact@v4
         with:
@@ -311,12 +341,8 @@ jobs:
           path: target/cycle-results
           retention-days: 30
       - name: Drift against the committed results (fails above 1 % on either model)
-        run: cargo xtask results compare benches/results/cycles target/cycle-results
+        # A complete run (every entry at every level) also names the committed records it lacks.
+        run: cargo xtask results compare benches/results/cycles target/cycle-results ${{ needs.plan.outputs.partial == 'false' && '--complete' || '' }}
       - name: Gates in cycles on the fresh results (D321, the release gate)
-        if: success() || failure()
+        if: (success() || failure()) && steps.merge.outcome == 'success'
         run: cargo xtask check cycles --results target/cycle-results ${{ needs.plan.outputs.partial == 'true' && '--partial' || '' }}
-      - name: A partition failed
-        if: needs.measure.result != 'success'
-        run: |
-          echo "measure: ${{ needs.measure.result }}"
-          exit 1

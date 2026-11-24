@@ -1,6 +1,6 @@
 //! M19: `squelch` is not accelerated. The `C32` variant is gated against the `pwr_squelch_cc`
-//! loop of GNU Radio (`release` at every level but `avx2-runtime`, which runs the baseline
-//! build of the same fallback and stays `info`); `squelch_cq15` has no counterpart and is
+//! loop of GNU Radio (`release` at every level, `avx2-runtime` included, which is judged against
+//! the library as every level, D2764); `squelch_cq15` has no counterpart and is
 //! counted as information at every level. The committed `simd128` counts must agree with
 //! `benches/limits.json` (the other levels are measured in cycles, D2700).
 
@@ -33,8 +33,8 @@ fn bench_file(name: &str) -> Value {
 }
 
 /// The status `benches/limits.json` gives an entry.
-fn expected_status(kernel: &str, level: &str) -> &'static str {
-    if kernel == "squelch" && level != "avx2-runtime" {
+fn expected_status(kernel: &str) -> &'static str {
+    if kernel == "squelch" {
         "release"
     } else {
         "info"
@@ -55,7 +55,7 @@ fn the_simd128_counts_report_squelch_with_the_status_of_the_limits() {
                 let before_reference = status == Some("info")
                     && entry["compared_with"].as_str() == Some("sdrk fallback");
                 assert!(
-                    status == Some(expected_status(kernel, level)) || before_reference,
+                    status == Some(expected_status(kernel)) || before_reference,
                     "{platform}/{level}/{kernel}: {status:?}"
                 );
             }
@@ -72,7 +72,7 @@ fn the_limits_file_gates_squelch_c32_against_gnu_radio() {
             let status = entry["status"].as_str();
             assert_eq!(
                 status,
-                Some(expected_status(kernel, level)),
+                Some(expected_status(kernel)),
                 "{kernel}/{level}: {status:?}"
             );
             if status == Some("info") {

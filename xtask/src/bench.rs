@@ -178,7 +178,7 @@ pub enum Family {
     OwnVsLiquid,
     /// A workload of an own-kernel comparison ([`Reference::OwnKernel`], D69): measured as
     /// [`Family::Own`], but not a kernel of the library, so it has no entry at a level that is
-    /// judged against another build of ours (`avx2-runtime`: the workload runs a kernel whose
+    /// measured against another build of ours (`avx2-runtime`: the workload runs a kernel whose
     /// run-time path is judged by its own entry).
     Workload,
     /// The f32 and C32 biquads (D15): KFR's SIMD cascade where the level has a build of it
@@ -2283,7 +2283,9 @@ pub fn branch_profiles(
         .find(|p| p.platform == platform && p.level == level)
         .ok_or_else(|| anyhow!("the platform `{platform}` has no level `{level}`"))?;
     if plan.baseline.is_some() {
-        bail!("the level {level} is judged against our own numbers, not against a reference");
+        bail!(
+            "the level {level} is measured against our own build of another level, not against a reference (D2702)"
+        );
     }
     if !matches!(plan.runner, Runner::Host | Runner::Sde(_))
         || !crate::branches::simulated_level(level)
@@ -2345,8 +2347,9 @@ pub fn branch_profiles(
 /// The instruction profiles of `kernels` at `level` of `platform` (level 2 of the measurement
 /// policy): per entry, the execution counts per instruction of the counted calls for our side
 /// and for the judged comparison, taken by `profiler` in the environment of the runs of the
-/// level (D68); at a level judged against our own build of another level (`avx2-runtime`), the
-/// other side is our entry in the binary of that level (D2702). The FFTs have the
+/// level (D68); at a level measured against our own build of another level (`avx2-runtime`), the
+/// other side is our entry in the binary of that level (D2702), information only: the gate
+/// judges the level against the library of that level's record (D2764). The FFTs have the
 /// restore of their input subtracted. An entry that cannot be profiled (not measured at the
 /// level, a run that fails) is returned with its error, so that the report can name it.
 ///
@@ -2381,8 +2384,9 @@ pub fn profiles(
     }
     let refs = references(root, plan.refs)?;
     let session = session(root, plan, &refs)?;
-    // A level judged against our own build of another level (`avx2-runtime` against `avx2`,
-    // D2702): the other side is the same entry in the binary of that level.
+    // A level measured against our own build of another level (`avx2-runtime` against `avx2`,
+    // D2702, information since D2764): the other side is the same entry in the binary of that
+    // level.
     let baseline = plan
         .baseline
         .map(|base| -> anyhow::Result<Session> {
@@ -3707,12 +3711,8 @@ mod tests {
                 let limit = limit.unwrap_or_else(|| panic!("{name} at {}: no entry", p.level));
                 // Information at every level against liquid and rand_distr, which do different
                 // work, and GNU Radio's `fastnoise_source`, which does less (M48 §5), and for the
-                // block, which no library has; the run-time-detection build of the kernel
-                // entries is judged against the `avx2` build of the SIMD path.
-                if p.level == "avx2-runtime" && name.starts_with("gauss_noise") {
-                    assert_eq!(limit.status, Status::Release, "{name} at {}", p.level);
-                    continue;
-                }
+                // block, which no library has; the run-time-detection build too, judged against
+                // the library of the `avx2` record as every level (D2764).
                 assert_eq!(limit.status, Status::Info, "{name} at {}", p.level);
                 assert!(limit.waiver.is_some(), "{name} at {}", p.level);
             }

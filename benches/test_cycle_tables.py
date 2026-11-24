@@ -82,6 +82,30 @@ class GenerateTest(unittest.TestCase):
                                  "#### Simulated cycles at `avx2-runtime` (`x86_64`)",
                                  "#### Simulated cycles at `neon` (`aarch64`)"])
 
+    def test_the_run_time_level_compares_with_the_library_of_the_avx2_record(self):
+        avx2 = results({"agc": record(13.0, 36.0, "GNU Radio agc_cc", (119.85, 118.88)),
+                        "dot_cq15": record(0.3, 1.0, "sdrk fallback")}, "avx2", "x86_64")
+        rt = results({"agc": record(16.0, 13.0, "ours at avx2", (119.85, 119.85)),
+                      "dot_cq15": record(0.31, 0.3, "ours at avx2"),
+                      "lost": record(1.0, 1.0, "ours at avx2")}, "avx2", "x86_64")
+        avx2["levels"]["avx2-runtime"] = rt["levels"]["avx2"]
+        text = ct.block({"x86_64": avx2})
+        part = text[text.index("`avx2-runtime`"):]
+        # Ours of the run-time build against the library's cycles and SNR of the avx2 record; the
+        # ratio to our avx2 build (16 / 13) is the information column.
+        self.assertIn("| `agc` | 16.00 | 36.00 | 0.44 | 16.00 | 36.00 | 0.44 | 119.8 / 118.9 | 1.23 / 1.23 "
+                      "| GNU Radio agc_cc |", part)
+        self.assertIn("| `dot_cq15` | 0.31 | 1.00 | 0.31 | 0.31 | 1.00 | 0.31 | 120.0 / exact | 1.03 / 1.03 "
+                      "| sdrk fallback |", part)
+        self.assertIn("| SNR (dB, ours / comparison) | ours / avx2 build (znver4 / sapphirerapids, information) "
+                      "| comparison |", part)
+        self.assertIn("(D2764)", part)
+        self.assertIn("- `lost`: no `avx2` record with the comparison; ours / avx2 build 1.00 / 1.00.", part)
+        # The avx2 table itself is unchanged.
+        avx2_part = text[:text.index("`avx2-runtime`")]
+        self.assertIn("| `agc` | 13.00 | 36.00 | 0.36 | 13.00 | 36.00 | 0.36 | 119.8 / 118.9 | GNU Radio agc_cc |",
+                      avx2_part)
+
     def test_main_writes_the_block_and_check_finds_a_hand_edit(self):
         with tempfile.TemporaryDirectory() as tmp:
             res = os.path.join(tmp, "cycles")

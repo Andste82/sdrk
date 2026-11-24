@@ -15,6 +15,11 @@ the comparison. An entry whose `benches/limits.json` entry at the level has an `
 An entry that could not be simulated is listed below its table with its note. Only the ratios mean
 something (D33, D68); the absolute cycles are no hardware figures.
 
+The table of `avx2-runtime` compares, like every level, with the reference library (D2764): our
+cycles and SNR of the run-time-detection build against the comparison's of the `avx2` record of the
+entry (the same workload on the same core models); the ratio of ours to our own fixed `avx2` build,
+which the record holds, is an extra column of information.
+
 The block is generated from the results files alone and is not edited by hand: a change of the
 numbers is a change of the results files (`cargo measure ... --merge`), then this script.
 `--check` writes nothing and fails when the block differs from what the results files give,
@@ -48,6 +53,8 @@ PREFIXES = ["convert", "rotate", "scramble", "fir", "resample", "mag", "quad_dem
             "window", "power_db", "agc", "dc_block", "deemphasis", "biquad", "dot", "scale",
             "add", "mul", "interleave", "deinterleave", "oscillate", "fft", "rfft"]
 NOT_MEASURED = "not simulated: not measured at"
+# The level judged against the comparison of another level's record (D2764), and that level.
+RUNTIME, RUNTIME_LIBRARY = "avx2-runtime", "avx2"
 
 
 def load(results_dir):
@@ -85,21 +92,49 @@ def accuracy(snr, traded=False):
     return cell + " (accuracy trade)" if traded else cell
 
 
-def render(platform, level, lv, trades=frozenset()):
-    """The text lines of one level of a results document; None when it has no entry."""
+def against_library(v, lib):
+    """The record `v` of `avx2-runtime` against the comparison of the `avx2` record `lib` (D2764):
+    the models and the SNR with the comparison's figures of `lib`, the comparison's name, and the
+    ratios to our own `avx2` build as information; None without `lib`."""
+    if not lib or "reference_model" not in lib:
+        return None
+    def m(key):
+        o, c = v[key]["ours"]["cycles_per_sample"], lib[key]["comparison"]["cycles_per_sample"]
+        return {"cpu": v[key]["cpu"], "ours": {"cycles_per_sample": o},
+                "comparison": {"cycles_per_sample": c}, "ratio": o / c}
+    out = {"compared_with": lib.get("compared_with", ""), "reference_model": m("reference_model"),
+           "counter_model": m("counter_model"),
+           "own": (v["reference_model"]["ratio"], v["counter_model"]["ratio"])}
+    snr, lsnr = v.get("snr_db"), lib.get("snr_db")
+    if snr and lsnr:
+        out["snr_db"] = {"ours": snr["ours"], "comparison": lsnr.get("comparison", lsnr.get("other"))}
+    return out
+
+
+def render(platform, level, lv, trades=frozenset(), library=None):
+    """The text lines of one level of a results document; None when it has no entry. `library`
+    (the entries of the `avx2` level) makes the table of `avx2-runtime` (D2764)."""
     entries = lv.get("entries", {})
     if not entries:
         return None
+    runtime = library is not None
     ref_cpu, cnt_cpu = lv["reference_model"], lv["counter_model"]
     counts = lv.get("block_counts") or "the counter of the level"
     out = [f"#### Simulated cycles at `{level}` (`{platform}`)", "",
            f"Reference model `{ref_cpu}`, counter-model `{cnt_cpu}`, mode `{lv['cycle_mode']}`; "
-           f"execution counts: {counts}.", "",
-           f"| Entry | ours {ref_cpu} (cycles/sample) | comparison {ref_cpu} (cycles/sample) "
-           f"| ratio {ref_cpu} (ours/comparison) | ours {cnt_cpu} (cycles/sample) "
-           f"| comparison {cnt_cpu} (cycles/sample) | ratio {cnt_cpu} (ours/comparison) "
-           f"| SNR (dB, ours / comparison) | comparison |",
-           "| --- | ---: | ---: | ---: | ---: | ---: | ---: | ---: | --- |"]
+           f"execution counts: {counts}.", ""]
+    if runtime:
+        out += [f"Judged like every level against the reference library: the comparison is the one of the "
+                f"`{RUNTIME_LIBRARY}` record of the entry, its cycles and SNR on the same workload and models (D2764). "
+                f"The column `ours / {RUNTIME_LIBRARY} build` is ours against our own fixed `{RUNTIME_LIBRARY}` build, "
+                f"information only.", ""]
+    extra_head, extra_rule = (f" ours / {RUNTIME_LIBRARY} build ({ref_cpu} / {cnt_cpu}, information) |", " ---: |") \
+        if runtime else ("", "")
+    out += [f"| Entry | ours {ref_cpu} (cycles/sample) | comparison {ref_cpu} (cycles/sample) "
+            f"| ratio {ref_cpu} (ours/comparison) | ours {cnt_cpu} (cycles/sample) "
+            f"| comparison {cnt_cpu} (cycles/sample) | ratio {cnt_cpu} (ours/comparison) "
+            f"| SNR (dB, ours / comparison) |{extra_head} comparison |",
+            f"| --- | ---: | ---: | ---: | ---: | ---: | ---: | ---: |{extra_rule} --- |"]
     failed, skipped = [], []
     for name in sorted(entries, key=order):
         v = entries[name]
@@ -107,13 +142,22 @@ def render(platform, level, lv, trades=frozenset()):
             note = v.get("note") or "not simulated"
             (skipped if note.startswith(NOT_MEASURED) else failed).append((name, note))
             continue
+        extra = ""
+        if runtime:
+            own = f"{fmt(v['reference_model']['ratio'])} / {fmt(v['counter_model']['ratio'])}"
+            judged = against_library(v, library.get(name))
+            if judged is None:
+                failed.append((name, f"no `{RUNTIME_LIBRARY}` record with the comparison; "
+                                     f"ours / {RUNTIME_LIBRARY} build {own}"))
+                continue
+            v, extra = judged, f" {own} |"
         r, c = v["reference_model"], v["counter_model"]
         comp = v.get("compared_with", "").replace("|", "\\|")
         out.append(f"| `{name}` | {fmt(r['ours']['cycles_per_sample'])} "
                    f"| {fmt(r['comparison']['cycles_per_sample'])} | {fmt(r['ratio'])} "
                    f"| {fmt(c['ours']['cycles_per_sample'])} "
                    f"| {fmt(c['comparison']['cycles_per_sample'])} | {fmt(c['ratio'])} "
-                   f"| {accuracy(v.get('snr_db'), (name, level) in trades)} | {comp} |")
+                   f"| {accuracy(v.get('snr_db'), (name, level) in trades)} |{extra} {comp} |")
     out.append("")
     for name, note in failed:
         out.append(f"- `{name}`: {note}.")
@@ -137,7 +181,9 @@ def block(docs, trades=frozenset()):
     keys = [k for k in LEVELS if k in present] + sorted(k for k in present if k not in LEVELS)
     text = []
     for platform, level in keys:
-        lines = render(platform, level, docs[platform]["levels"][level], trades)
+        levels = docs[platform]["levels"]
+        library = levels.get(RUNTIME_LIBRARY, {}).get("entries", {}) if level == RUNTIME else None
+        lines = render(platform, level, levels[level], trades, library)
         if lines:
             text += lines
     return "\n".join(text).rstrip("\n")

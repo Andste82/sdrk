@@ -106,11 +106,11 @@ fn the_limits_file_judges_agc_against_gnu_radio_at_every_level() {
     }
     // `neon` runs the fallback (D335); in cycles it is within the release limit (D2746).
     assert_eq!(limits["agc"]["neon"]["status"].as_str(), Some("release"));
-    // The run-time detection is above 1.02 of `avx2` in cycles: `dev` with open item I13.1-4
-    // (D2746).
+    // The run-time detection is judged against GNU Radio as every level (D2764): 0.45 / 0.54
+    // of `agc_cc` in cycles (D2765).
     assert_eq!(
         limits["agc"]["avx2-runtime"]["status"].as_str(),
-        Some("dev")
+        Some("release")
     );
 }
 

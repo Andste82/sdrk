@@ -2,7 +2,9 @@
 //! committed cycle results `benches/results/cycles/<platform>.json` (D2704), so CI enforces them
 //! without running `llvm-mca`.
 //!
-//! **SIMD against its own fallback (D321).** For every level and every entry `<k>` whose
+//! **SIMD against its own fallback (D321).** A check, never a status: a violation is a
+//! finding of its own and no entry of `benches/limits.json` is derived from it (D2764).
+//! For every level and every entry `<k>` whose
 //! results also have `<k>_fallback`, the cycles per sample of ours, rounded to the two decimals
 //! of the published tables, must satisfy `cycles(<k>) <= cycles(<k>_fallback)` on the reference
 //! model **and** on the counter-model of the level. A level delegated to the fallback
@@ -14,8 +16,12 @@
 //! **The release gate (D14 in cycles, M13.1 §3, D2708).** Every simulated entry and level is
 //! judged by its entry in `benches/limits.json`: `release` needs `cycles(ours) <=
 //! _limits.release × cycles(comparison)` on **both** models of the level, `dev` the same with
-//! `_limits.dev`; `info` is not judged. The level `avx2-runtime` is judged against our own
-//! `avx2` build with `_limits.runtime` (D2702); an entry for it is needed only to relax that.
+//! `_limits.dev`; `info` is not judged. The level `avx2-runtime` is judged like every level,
+//! against the reference library (D2764, the maintainer's decision): its record holds our cycles
+//! of the run-time-detection build and, as information, those of our fixed `avx2` build; the
+//! library's cycles and SNR come from the `avx2` record of the entry (the same workload on the
+//! same core models), from the committed results when judged results lack it. An entry whose
+//! `avx2` comparison is our own fallback (no library) must be `info` there, as at `avx2`.
 //! An exceedance passes only with a `waiver` whose open items exist (a waiver that names none
 //! states the reason in its text, as `release-check` accepts); a waiver of an entry within its
 //! limit, a `dev` entry within `_limits.warn` (ready for `release`) and a ratio above
@@ -53,8 +59,12 @@ use crate::scan::Finding;
 const OWN_FALLBACK: &str = "sdrk fallback";
 /// The suffix of the fallback entry of a kernel.
 const FALLBACK: &str = "_fallback";
-/// The level judged against our own build of another level (D2702).
+/// The level with run-time detection: its record compares with our own build of
+/// [`RUNTIME_LIBRARY_LEVEL`] (information), and the gate judges it against the library of that
+/// level's record (D2702, D2764).
 const RUNTIME_LEVEL: &str = "avx2-runtime";
+/// The level whose record holds the library's cycles and SNR for [`RUNTIME_LEVEL`].
+const RUNTIME_LIBRARY_LEVEL: &str = "avx2";
 /// The note of an entry that the level does not measure.
 const NOT_MEASURED: &str = "not simulated: not measured at";
 
@@ -571,7 +581,8 @@ fn judge_accuracy(
 }
 
 /// Judges one simulated entry and level by its limit (`None`: not listed): the cycles against
-/// the cap of its status, the accuracy (D34) and an accuracy trade (D2760).
+/// the cap of its status, the accuracy (D34) and an accuracy trade (D2760). At `avx2-runtime`
+/// `r` is the record against the library ([`against_library`]).
 #[must_use]
 #[allow(
     clippy::too_many_lines,
@@ -580,27 +591,18 @@ fn judge_accuracy(
 )]
 pub fn judge_record(
     caps: &Caps,
-    level: &str,
     limit: Option<&crate::count::Limit>,
     open_items: &str,
     r: &Record,
 ) -> Verdict {
-    let runtime = level == RUNTIME_LEVEL;
-    let release = crate::count::Limit::release();
-    let limit = match (limit, runtime) {
-        (Some(l), _) => l,
-        (None, true) => &release,
-        (None, false) => return Verdict::Fail("no entry in benches/limits.json".into()),
+    let Some(limit) = limit else {
+        return Verdict::Fail("no entry in benches/limits.json".into());
     };
     if let Some(t) = &limit.accuracy_trade {
-        if limit.status != Status::Release || runtime {
+        if limit.status != Status::Release {
             return Verdict::Fail(format!(
-                "an `accuracy_trade` is only for a `release` entry against a comparison, not for {} (accuracy trade: {t})",
-                if runtime {
-                    "the run-time level".to_string()
-                } else {
-                    format!("a `{}` entry", status_name(limit.status))
-                }
+                "an `accuracy_trade` is only for a `release` entry against a comparison, not for a `{}` entry (accuracy trade: {t})",
+                status_name(limit.status)
             ));
         }
         if limit.waiver.is_some() {
@@ -609,19 +611,14 @@ pub fn judge_record(
             ));
         }
     }
-    let cap = match (limit.status, runtime) {
-        (Status::Info, _) => return Verdict::Info,
-        (Status::Release, false) => caps.release,
-        (Status::Release, true) => caps.runtime,
-        (Status::Dev, _) => caps.dev,
+    let cap = match limit.status {
+        Status::Info => return Verdict::Info,
+        Status::Release => caps.release,
+        Status::Dev => caps.dev,
     };
     let status = status_name(limit.status);
     let worst = r.reference.ratio.max(r.counter.ratio);
-    let against = if runtime {
-        "our avx2 build".to_string()
-    } else {
-        format!("`{}`", r.compared_with)
-    };
+    let against = format!("`{}`", r.compared_with);
     let (mut failing, mut waived, mut traded, mut notes) =
         (Vec::new(), Vec::new(), Vec::new(), Vec::new());
     if worst > cap {
@@ -675,20 +672,18 @@ pub fn judge_record(
                 ratios(r, cap)
             ));
         }
-        if !runtime {
-            if limit.status == Status::Dev && worst <= caps.warn {
-                notes.push(format!(
-                    "{}: ready to be promoted from dev to release (release limit {:.2}x)",
-                    ratios(r, caps.warn),
-                    caps.release
-                ));
-            } else if worst > caps.warn {
-                notes.push(format!(
-                    "{} is above {:.2}x ({status} limit {cap:.2}x)",
-                    ratios(r, caps.warn),
-                    caps.warn
-                ));
-            }
+        if limit.status == Status::Dev && worst <= caps.warn {
+            notes.push(format!(
+                "{}: ready to be promoted from dev to release (release limit {:.2}x)",
+                ratios(r, caps.warn),
+                caps.release
+            ));
+        } else if worst > caps.warn {
+            notes.push(format!(
+                "{} is above {:.2}x ({status} limit {cap:.2}x)",
+                ratios(r, caps.warn),
+                caps.warn
+            ));
         }
     }
     judge_accuracy(limit, open_items, r, &mut failing, &mut waived, &mut notes);
@@ -738,25 +733,111 @@ pub struct Gate {
     pub goal: usize,
 }
 
+/// The record of `avx2-runtime` against the reference library (D2764): our cycles and SNR of the
+/// run-time-detection build `rt`, the library's of the `avx2` record `avx2` of the same entry
+/// (the same workload on the same core models). The comparison of `rt` with our fixed `avx2`
+/// build is information and is not used.
+///
+/// # Errors
+/// The two records are simulated on other core models.
+pub fn against_library(rt: &Record, avx2: &Record) -> Result<Record, String> {
+    let model = |ours: &Model, lib: &Model| {
+        if ours.cpu == lib.cpu {
+            Ok(Model {
+                cpu: ours.cpu.clone(),
+                ours: ours.ours,
+                comparison: lib.comparison,
+                ratio: ours.ours / lib.comparison,
+            })
+        } else {
+            Err(format!(
+                "the `{RUNTIME_LIBRARY_LEVEL}` record with the library's cycles is simulated on `{}`, the `{RUNTIME_LEVEL}` record on `{}`",
+                lib.cpu, ours.cpu
+            ))
+        }
+    };
+    Ok(Record {
+        file: rt.file.clone(),
+        compared_with: avx2.compared_with.clone(),
+        reference: model(&rt.reference, &avx2.reference)?,
+        counter: model(&rt.counter, &avx2.counter)?,
+        snr: rt.snr.zip(avx2.snr).map(|(ours, lib)| Snr {
+            ours: ours.ours,
+            comparison: lib.comparison,
+        }),
+    })
+}
+
+/// The record that the release gate judges for `entry` at `level`: `r` itself, or at
+/// `avx2-runtime` the record against the library of the `avx2` record (from `results`, else
+/// from `committed`), D2764. `Err` says why there is none; `None` for an `info` entry without
+/// one (it is not judged).
+fn judged_record(
+    results: &Results,
+    committed: Option<&Results>,
+    limit: Option<&crate::count::Limit>,
+    entry: &str,
+    level: &str,
+    r: &Record,
+) -> Result<Option<Record>, String> {
+    // Not listed: `judge_record` reports the missing entry.
+    let (true, Some(limit)) = (level == RUNTIME_LEVEL, limit) else {
+        return Ok(Some(r.clone()));
+    };
+    let judged = limit.status != Status::Info;
+    let avx2 = [Some(results), committed]
+        .into_iter()
+        .flatten()
+        .find_map(|res| res.get(RUNTIME_LIBRARY_LEVEL)?.get(entry)?.as_ref());
+    let Some(avx2) = avx2 else {
+        return if judged {
+            Err(format!(
+                "no simulated `{RUNTIME_LIBRARY_LEVEL}` record of the entry, whose library comparison judges `{RUNTIME_LEVEL}` (D2764)"
+            ))
+        } else {
+            Ok(None)
+        };
+    };
+    if judged && avx2.compared_with == OWN_FALLBACK {
+        return Err(format!(
+            "the comparison at `{RUNTIME_LIBRARY_LEVEL}` is our own fallback, not a library: the entry is `info` at `{RUNTIME_LEVEL}` as at `{RUNTIME_LIBRARY_LEVEL}` (D2764)"
+        ));
+    }
+    against_library(r, avx2).map(Some)
+}
+
 /// Judges every simulated record of `results` by `benches/limits.json` (the release gate of
 /// M13.1 §3). With `partial` (a selection of entries) a listed entry without a record is not a
-/// finding.
+/// finding. `committed` gives the `avx2` records with the library's cycles for the records of
+/// `avx2-runtime` when `results` lacks them (D2764).
 #[must_use]
 #[allow(
     clippy::large_stack_frames,
     reason = "the findings are built in place; xtask is a host tool"
 )]
-pub fn judge_release(results: &Results, limits: &Limits, open_items: &str, partial: bool) -> Gate {
+pub fn judge_release(
+    results: &Results,
+    committed: Option<&Results>,
+    limits: &Limits,
+    open_items: &str,
+    partial: bool,
+) -> Gate {
     let caps = &limits.caps;
     let mut out = Gate::default();
     let path = PathBuf::from("benches/limits.json");
     for (level, rows) in results {
         for (entry, r) in rows {
             let Some(r) = r else { continue };
-            let verdict = judge_record(caps, level, limits.get(entry, level), open_items, r);
+            let limit = limits.get(entry, level);
+            let (verdict, judged) = match judged_record(results, committed, limit, entry, level, r)
+            {
+                Ok(Some(j)) => (judge_record(caps, limit, open_items, &j), Some(j)),
+                Ok(None) => (Verdict::Info, None),
+                Err(t) => (Verdict::Fail(t), None),
+            };
             if verdict != Verdict::Info {
                 out.judged += 1;
-                if r.reference.ratio.max(r.counter.ratio) <= caps.goal && level != RUNTIME_LEVEL {
+                if judged.is_some_and(|j| j.reference.ratio.max(j.counter.ratio) <= caps.goal) {
                     out.goal += 1;
                 }
             }
@@ -885,7 +966,19 @@ pub fn check(root: &Path, o: &Options) -> anyhow::Result<Vec<Finding>> {
     let open_items = read("docs/open-items.md")?;
     let fallbacks = judge_fallbacks(&results, &limits_json, &open_items, o.partial)?;
     let limits = Limits::parse(&limits_json)?;
-    let gate = judge_release(&results, &limits, &open_items, o.partial);
+    // Other results (a measurement of a selection of levels) take the library's cycles of
+    // `avx2-runtime` from the committed `avx2` records where they lack them (D2764).
+    let committed = match &o.results {
+        Some(_) => Some(load(&crate::cycle_results::dir(root))?),
+        None => None,
+    };
+    let gate = judge_release(
+        &results,
+        committed.as_ref(),
+        &limits,
+        &open_items,
+        o.partial,
+    );
     println!(
         "check cycles ({}): {} SIMD entries and levels against their fallback, {} waived (D321)",
         dir.display(),
@@ -930,7 +1023,7 @@ mod tests {
 
     const OPEN: &str = "| M30 | I30-9: a gap | why | what |\n";
 
-    /// A results document of `sse2` (and `avx2-runtime` with `runtime`) with the entries
+    /// The results of one level with the entries
     /// `(name, ours ref, other ref, ours counter, other counter, comparison)`.
     fn results(rows: &[(&str, f64, f64, f64, f64, &str)], level: &str) -> Results {
         let entries: serde_json::Map<String, Value> = rows
@@ -974,12 +1067,12 @@ mod tests {
 
     fn limits_with(entry: &str) -> String {
         format!(
-            r#"{{"_limits": {{"release": 1.1, "dev": 1.5, "warn": 1.1, "goal": 1.0, "runtime": 1.02}}, {entry}}}"#
+            r#"{{"_limits": {{"release": 1.1, "dev": 1.5, "warn": 1.1, "goal": 1.0}}, {entry}}}"#
         )
     }
 
     fn gate(r: &Results, limits: &str) -> Gate {
-        judge_release(r, &Limits::parse(limits).unwrap(), OPEN, false)
+        judge_release(r, None, &Limits::parse(limits).unwrap(), OPEN, false)
     }
 
     #[test]
@@ -1155,24 +1248,153 @@ mod tests {
         assert!(g.warnings[0].contains("no longer needed"));
     }
 
-    #[test]
-    fn the_run_time_level_is_judged_against_our_avx2_build_with_the_runtime_limit() {
-        let none = limits_with(r#""j": {"sse2": {"status": "info"}}"#);
-        let r = results(&[("k", 1.03, 1.0, 1.0, 1.0, "ours at avx2")], RUNTIME_LEVEL);
-        let g = gate(&r, &none);
-        assert_eq!(g.findings.len(), 1);
-        assert!(g.findings[0].message.contains("our avx2 build"));
-        assert!(g.findings[0].message.contains("1.02x"));
-        let r = results(
-            &[("k", 1.02, 1.0, 1.01, 1.0, "ours at avx2")],
+    /// `avx2` with `k` against the library `volk` at 1.00 cycles per sample on both models, and
+    /// `avx2-runtime` with `k` at `ours` cycles per sample on both models against our `avx2`
+    /// build at 0.90.
+    fn run_time(ours: (f64, f64), avx2_comparison: &str) -> Results {
+        let mut r = results(&[("k", 0.9, 1.0, 0.9, 1.0, avx2_comparison)], "avx2");
+        r.extend(results(
+            &[("k", ours.0, 0.9, ours.1, 0.9, "ours at avx2")],
             RUNTIME_LEVEL,
+        ));
+        r
+    }
+
+    #[test]
+    fn the_run_time_level_is_judged_against_the_library_of_the_avx2_record() {
+        let l = limits_with(
+            r#""k": {"avx2": {"status": "release"}, "avx2-runtime": {"status": "release"}}"#,
         );
-        assert_eq!(gate(&r, &none).findings.len(), 0);
-        // An entry of its own relaxes it.
-        let dev = limits_with(r#""k": {"avx2-runtime": {"status": "dev"}}"#);
-        let r = results(&[("k", 1.4, 1.0, 1.0, 1.0, "ours at avx2")], RUNTIME_LEVEL);
-        let g = gate(&r, &dev);
-        assert_eq!((g.findings.len(), g.warnings.len()), (0, 0));
+        // 1.20 / 1.15 of our avx2 build is information: 1.08 / 1.035 of the library passes.
+        let g = gate(&run_time((1.08, 1.035), "volk"), &l);
+        assert_eq!((g.judged, g.findings.len()), (2, 0), "{:?}", g.findings);
+        // Above the release limit of the library on one model fails and names the library.
+        let g = gate(&run_time((1.12, 1.0), "volk"), &l);
+        assert_eq!(g.findings.len(), 1);
+        let m = &g.findings[0].message;
+        assert!(
+            m.contains("`k` at `avx2-runtime`") && m.contains("`volk`"),
+            "{m}"
+        );
+        assert!(
+            m.contains("1.12 / 1.00") && m.contains("release limit of 1.10x"),
+            "{m}"
+        );
+        assert!(!m.contains("our avx2 build"), "{m}");
+        // `dev` with the dev limit, and the remark of an entry ready for release.
+        let dev = limits_with(
+            r#""k": {"avx2": {"status": "release"}, "avx2-runtime": {"status": "dev"}}"#,
+        );
+        let g = gate(&run_time((1.4, 1.0), "volk"), &dev);
+        assert_eq!(g.findings.len(), 0);
+        let g = gate(&run_time((1.05, 1.0), "volk"), &dev);
+        assert!(
+            g.warnings[0].contains("ready to be promoted"),
+            "{:?}",
+            g.warnings
+        );
+        // At the goal against the library counts, whatever our avx2 build gives.
+        let g = gate(&run_time((0.95, 0.95), "volk"), &l);
+        assert_eq!(g.goal, 2);
+        // No entry of its own fails, as at every level.
+        let only_avx2 = limits_with(r#""k": {"avx2": {"status": "release"}}"#);
+        let g = gate(&run_time((1.0, 1.0), "volk"), &only_avx2);
+        assert!(
+            g.findings[0]
+                .message
+                .contains("no entry in benches/limits.json")
+        );
+    }
+
+    #[test]
+    fn the_run_time_level_takes_the_accuracy_of_the_library_from_the_avx2_record() {
+        let l = limits_with(
+            r#""k": {"avx2": {"status": "info"}, "avx2-runtime": {"status": "release"}}"#,
+        );
+        let r = |lib: f64| {
+            let r = with_snr(run_time((1.0, 1.0), "volk"), "avx2", "k", Some((90.0, lib)));
+            with_snr(r, RUNTIME_LEVEL, "k", Some((100.0, 100.0)))
+        };
+        // Ours 100 dB at the run-time level against 101 dB of the library passes, 101.5 fails
+        // (the comparison of the run-time record, our avx2 build, is not used).
+        assert_eq!(gate(&r(101.0), &l).findings.len(), 0);
+        let g = gate(&r(101.5), &l);
+        assert!(g.findings[0].message.contains("below the comparison"));
+        assert!(g.findings[0].message.contains("101.5 dB"));
+        // An accuracy trade holds at the run-time level as at every level.
+        let trade = limits_with(
+            r#""k": {"avx2": {"status": "info"}, "avx2-runtime": {"status": "release", "accuracy_trade": "exact against 82.6 dB"}}"#,
+        );
+        let r = with_snr(
+            with_snr(
+                run_time((1.15, 1.0), "volk"),
+                "avx2",
+                "k",
+                Some((999.0, 82.6)),
+            ),
+            RUNTIME_LEVEL,
+            "k",
+            Some((999.0, 999.0)),
+        );
+        let g = gate(&r, &trade);
+        assert_eq!(
+            (g.findings.len(), g.traded.len()),
+            (0, 1),
+            "{:?}",
+            g.findings
+        );
+    }
+
+    #[test]
+    fn the_run_time_level_without_a_library_at_avx2_is_info() {
+        let rt = |status: &str| {
+            limits_with(&format!(
+                r#""k": {{"avx2": {{"status": "info"}}, "avx2-runtime": {{"status": "{status}"}}}}"#
+            ))
+        };
+        let r = run_time((1.0, 1.0), OWN_FALLBACK);
+        for status in ["release", "dev"] {
+            let g = gate(&r, &rt(status));
+            assert_eq!(g.findings.len(), 1, "{status}");
+            assert!(
+                g.findings[0]
+                    .message
+                    .contains("our own fallback, not a library")
+            );
+        }
+        let g = gate(&r, &rt("info"));
+        assert_eq!((g.judged, g.findings.len()), (0, 0));
+    }
+
+    #[test]
+    fn the_run_time_level_takes_the_avx2_record_from_the_committed_results() {
+        let l = limits_with(r#""k": {"avx2-runtime": {"status": "release"}}"#);
+        let both = run_time((1.0, 1.0), "volk");
+        let mut alone = both.clone();
+        alone.remove("avx2");
+        let limits = Limits::parse(&l).unwrap();
+        // Without an `avx2` record a judged entry fails, an `info` entry is not judged.
+        let g = judge_release(&alone, None, &limits, OPEN, true);
+        assert_eq!(g.findings.len(), 1);
+        assert!(g.findings[0].message.contains("no simulated `avx2` record"));
+        let info =
+            Limits::parse(&limits_with(r#""k": {"avx2-runtime": {"status": "info"}}"#)).unwrap();
+        assert_eq!(
+            judge_release(&alone, None, &info, OPEN, true)
+                .findings
+                .len(),
+            0
+        );
+        // The committed results give the library's cycles.
+        let g = judge_release(&alone, Some(&both), &limits, OPEN, true);
+        assert_eq!((g.judged, g.findings.len()), (1, 0), "{:?}", g.findings);
+        // Other core models are a finding.
+        let mut other = both.clone();
+        if let Some(Some(a)) = other.get_mut("avx2").and_then(|rows| rows.get_mut("k")) {
+            a.reference.cpu = "znver3".into();
+        }
+        let g = judge_release(&alone, Some(&other), &limits, OPEN, true);
+        assert!(g.findings[0].message.contains("simulated on `znver3`"));
     }
 
     #[test]
@@ -1182,19 +1404,19 @@ mod tests {
         );
         let r = results(&[("j", 1.0, 1.0, 1.0, 1.0, "volk")], "sse2");
         let limits = Limits::parse(&l).unwrap();
-        let g = judge_release(&r, &limits, OPEN, false);
+        let g = judge_release(&r, None, &limits, OPEN, false);
         // `j` has no entry, `k` has no record; `m` is `info`.
         assert_eq!(g.findings.len(), 2);
         assert!(g.findings.iter().any(|f| {
             f.message
                 .contains("`k` at `sse2` has an entry but no record")
         }));
-        let g = judge_release(&r, &limits, OPEN, true);
+        let g = judge_release(&r, None, &limits, OPEN, true);
         assert_eq!(g.findings.len(), 1);
         // A record that failed is a finding even in a selection.
         let mut failed = r.clone();
         failed.get_mut("sse2").unwrap().insert("k".into(), None);
-        let g = judge_release(&failed, &limits, OPEN, true);
+        let g = judge_release(&failed, None, &limits, OPEN, true);
         assert!(
             g.findings
                 .iter()
@@ -1212,7 +1434,7 @@ mod tests {
         );
         let limits = Limits::parse(&l).unwrap();
         assert_eq!(
-            judge_release(&results(&[], "sse2"), &limits, OPEN, true)
+            judge_release(&results(&[], "sse2"), None, &limits, OPEN, true)
                 .findings
                 .len(),
             0
@@ -1357,7 +1579,7 @@ mod tests {
         let g = gate(&rec(1.05, Some((999.0, 82.6))), &l("release", ""));
         assert_eq!((g.findings.len(), g.traded.len()), (0, 0));
         assert!(g.warnings[0].contains("accuracy trade is no longer needed"));
-        // Only on a release entry, not with a waiver, not at the run-time level.
+        // Only on a release entry, not with a waiver.
         let g = gate(&rec(1.3, Some((999.0, 82.6))), &l("dev", ""));
         assert!(g.findings[0].message.contains("only for a `release` entry"));
         let g = gate(&rec(1.3, Some((999.0, 82.6))), &l("info", ""));
@@ -1367,10 +1589,6 @@ mod tests {
             &l("release", r#", "waiver": "open item I30-9""#),
         );
         assert!(g.findings[0].message.contains("not both"));
-        let rt =
-            limits_with(r#""k": {"avx2-runtime": {"status": "release", "accuracy_trade": "x"}}"#);
-        let r = results(&[("k", 1.0, 1.0, 1.0, 1.0, "ours at avx2")], RUNTIME_LEVEL);
-        assert_eq!(gate(&r, &rt).findings.len(), 1);
         // A trade does not cover an accuracy below the comparison of another entry's kind:
         // the accuracy is judged on its own.
         let g = gate(&rec(1.0, Some((90.0, 100.0))), &l("release", ""));

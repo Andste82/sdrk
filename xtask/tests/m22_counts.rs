@@ -53,13 +53,12 @@ fn every_biquad_entry_has_its_status_at_every_level() {
                 assert!(entry["waiver"].is_string(), "{kernel}/{level}");
             }
         }
-        // avx2-runtime follows the run-time rule (no entry), except `biquad_real_q15`, which is
-        // above 1.02 of `avx2` in cycles (`dev`, open item I13.1-5, D2746); the fallback entries
-        // are not measured there.
-        if kernel == "biquad_real_q15" {
+        // avx2-runtime is judged against the library of `avx2` as every level (D2764): the SIMD
+        // entries have the status of `avx2`; the fallback entries are not measured there.
+        if SIMD.contains(&kernel) {
             assert_eq!(
                 limits[kernel]["avx2-runtime"]["status"].as_str(),
-                Some("dev"),
+                Some(status),
                 "{kernel}"
             );
         } else {

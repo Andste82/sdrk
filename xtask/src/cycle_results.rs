@@ -6,7 +6,8 @@
 //! model: the comparison, the samples of the counted calls and, on the reference model and the
 //! counter-model of the level, the cycles per sample of ours and of the comparison (the library
 //! reference of D32, `sdrk fallback` where there is none, our `avx2` build for `avx2-runtime`)
-//! with the ratio, the efficiency and the coverage, in the judged cycle mode (`whole-loop`); on
+//! with the ratio, the efficiency and the coverage, in the judged cycle mode (`whole-loop`), and
+//! the SNR in dB of both sides against the f64 reference (`snr_db`, D34, D2749); on
 //! the levels with a branch simulation (D1611) the branches and mispredictions per sample of
 //! both sides and the cost `cycles + mispredictions × penalty` on both models (D1612). An entry
 //! that was not simulated keeps its note. The file names the tools that made the records (the
@@ -77,6 +78,10 @@ fn model(m: &Value) -> Value {
 /// `cargo measure` document) and its branches (the entry of the `branches` section, if the
 /// level has a branch simulation).
 #[must_use]
+#[allow(
+    clippy::large_stack_frames,
+    reason = "the serde_json values are built in place; xtask is a host tool"
+)]
 pub fn record(cycles: &Value, branches: Option<&Value>) -> Value {
     if cycles.get("reference_model").is_none() {
         return json!({ "note": field(cycles, "note") });
@@ -88,6 +93,7 @@ pub fn record(cycles: &Value, branches: Option<&Value>) -> Value {
     );
     r.insert("samples".into(), field(cycles, "samples").clone());
     r.insert("cycle_mode".into(), field(cycles, "cycle_mode").clone());
+    r.insert("snr_db".into(), field(cycles, "snr_db").clone());
     for key in ["reference_model", "counter_model"] {
         r.insert(key.into(), model(field(cycles, key)));
     }
@@ -693,9 +699,10 @@ pub fn differences(base: &[Value], fresh: &[Value], tolerance: f64, complete: bo
 }
 
 /// The reproduction check of the corrected `llvm-mca` (D942): `costas` at `neon`, ours, on the
-/// reference and the counter-model, in the two decimals of the tables.
+/// reference and the counter-model, in the two decimals of the tables (54.09 on the
+/// counter-model before the detector limit of D2554, 54.10 since, D2761).
 pub const REPRODUCTION: (&str, &str, &str, [f64; 2]) =
-    ("aarch64", "neon", "costas", [86.13, 54.09]);
+    ("aarch64", "neon", "costas", [86.13, 54.10]);
 
 /// Checks the reproduction record in the results of `dir`.
 ///
@@ -812,6 +819,7 @@ mod tests {
             "compared_with": "a library",
             "samples": 4096,
             "cycle_mode": "whole-loop",
+            "snr_db": { "ours": 999.0, "comparison": 82.64 },
             "reference_model": m("skylake"),
             "counter_model": m("znver2"),
             "counter_vs_reference": 1.0,
@@ -857,6 +865,7 @@ mod tests {
         assert_eq!(r["cost"]["reference_model"]["penalty"], 20.0);
         assert_eq!(r["cost"]["reference_model"]["ours"], 6.0);
         assert!(r["reference_model"]["ours"].get("blocks").is_none());
+        assert_eq!(r["snr_db"], json!({ "ours": 999.0, "comparison": 82.64 }));
         assert_eq!(
             record(&json!({ "note": "not simulated: x" }), None),
             json!({ "note": "not simulated: x" })
@@ -1137,10 +1146,11 @@ mod tests {
                 "costas": { "reference_model": m(ours_ref), "counter_model": m(ours_counter) } } } } });
             std::fs::write(root.path().join("aarch64.json"), doc.to_string()).unwrap();
         };
-        write_costas(86.131_242, 54.094_621);
+        write_costas(86.130_259, 54.104_008);
         check_reproduction(root.path()).unwrap();
-        write_costas(86.14, 54.09);
+        // The value before the detector limit of D2554 no longer reproduces.
+        write_costas(86.131_242, 54.094_621);
         let err = check_reproduction(root.path()).unwrap_err();
-        assert!(err.to_string().contains("86.14 / 54.09"), "{err}");
+        assert!(err.to_string().contains("86.13 / 54.09"), "{err}");
     }
 }

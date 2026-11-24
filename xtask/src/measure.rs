@@ -23,6 +23,9 @@
 //!   comparison on one model means something; the absolute cycles are no hardware figures.
 //!   `avx2-runtime` (the run-time detection of the level, on the models of `avx2`) is compared
 //!   with our own entry in the fixed `avx2` build (D2702).
+//!   Per entry also the accuracy of both sides on the same workload: the SNR against the f64
+//!   reference of the measurement binary (`snr_db`, D34, D2749), judged by
+//!   `cargo xtask check cycles`.
 //!
 //! The result is printed as tables and written to `target/measure/<kernel>.json`
 //! (`target/measure/all.json` with `--all`, which selects every entry and golden kernel).
@@ -726,6 +729,10 @@ fn entry_cycles(
     let mut entry = serde_json::Map::new();
     entry.insert("compared_with".into(), json!(e.compared_with));
     entry.insert("samples".into(), json!(e.samples));
+    entry.insert(
+        "snr_db".into(),
+        json!({ "ours": round2(e.ours_snr_db), "comparison": round2(e.other_snr_db) }),
+    );
     let mut per_mode = per_mode.into_iter();
     if let Some(Value::Object(primary)) = per_mode.next() {
         entry.extend(primary);
@@ -734,7 +741,19 @@ fn entry_cycles(
         entry.insert("other_cycle_mode".into(), other);
     }
     table.push_str(&rows_text);
+    let _ = writeln!(
+        table,
+        "{:<26} accuracy against the f64 reference: ours {} dB, comparison {} dB (D34)",
+        "",
+        crate::cycle_gate::snr_text(e.ours_snr_db),
+        crate::cycle_gate::snr_text(e.other_snr_db),
+    );
     Ok(Value::Object(entry))
+}
+
+/// `x` rounded to two decimals, as the results files keep the SNR.
+fn round2(x: f64) -> f64 {
+    (x * 100.0).round() / 100.0
 }
 
 /// The mispredictions per sample of the selected entries (D1611) on every x86-64 level that

@@ -2,13 +2,17 @@
 docs/performance.md.
 
 Usage: python3 -I benches/cycle_tables.py [--check] [--doc FILE] [--results DIR] [--counts FILE]
+       [--limits FILE]
 
 Reads the committed cycle results `benches/results/cycles/<platform>.json` (written by
 `cargo measure <kernel> --merge` and `cargo measure --all`, D2704) and writes one table per level
 between the markers `<!-- cycle-tables:begin -->` and `<!-- cycle-tables:end -->` of
 docs/performance.md: per entry the cycles per sample of ours and of the comparison on the
-reference model and on the counter-model of the level, the two ratios and the comparison. An
-entry that could not be simulated is listed below its table with its note. Only the ratios mean
+reference model and on the counter-model of the level, the two ratios, the accuracy of both sides
+(the SNR in dB against the f64 reference, `ours / comparison`, D34; `exact` for an exact result) and
+the comparison. An entry whose `benches/limits.json` entry at the level has an `accuracy_trade`
+(D2760) is marked `(accuracy trade)` in the accuracy column (`--limits FILE` takes another file).
+An entry that could not be simulated is listed below its table with its note. Only the ratios mean
 something (D33, D68); the absolute cycles are no hardware figures.
 
 The block is generated from the results files alone and is not edited by hand: a change of the
@@ -19,7 +23,7 @@ copies).
 
 The second block, between `<!-- simd128-instructions:begin -->` and `<!-- simd128-instructions:end -->`,
 is the one level without a core model (M13.1): instructions per sample of ours and of the
-comparison at `simd128`, from `benches/results/wasm32.json` (`--counts FILE`, by default next to the
+comparison at `simd128` with the accuracy of both sides, from `benches/results/wasm32.json` (`--counts FILE`, by default next to the
 cycle results directory). It is written only when that file exists.
 """
 import json
@@ -30,6 +34,8 @@ import sys
 ROOT = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
 DOC = os.path.join(ROOT, "docs", "performance.md")
 RESULTS = os.path.join(ROOT, "benches", "results", "cycles")
+LIMITS = os.path.join(ROOT, "benches", "limits.json")
+EXACT = 999.0
 BEGIN = "<!-- cycle-tables:begin -->"
 END = "<!-- cycle-tables:end -->"
 SIMD_BEGIN = "<!-- simd128-instructions:begin -->"
@@ -66,7 +72,20 @@ def fmt(x):
     return f"{x:.2f}"
 
 
-def render(platform, level, lv):
+def db(x):
+    """An SNR in dB, one decimal; `exact` for the value of an exact result."""
+    return "exact" if x >= EXACT else f"{x:.1f}"
+
+
+def accuracy(snr, traded=False):
+    """The accuracy cell: `ours / comparison` in dB, `-` without an SNR."""
+    if not snr:
+        return "-"
+    cell = f"{db(snr['ours'])} / {db(snr.get('comparison', snr.get('other')))}"
+    return cell + " (accuracy trade)" if traded else cell
+
+
+def render(platform, level, lv, trades=frozenset()):
     """The text lines of one level of a results document; None when it has no entry."""
     entries = lv.get("entries", {})
     if not entries:
@@ -79,8 +98,8 @@ def render(platform, level, lv):
            f"| Entry | ours {ref_cpu} (cycles/sample) | comparison {ref_cpu} (cycles/sample) "
            f"| ratio {ref_cpu} (ours/comparison) | ours {cnt_cpu} (cycles/sample) "
            f"| comparison {cnt_cpu} (cycles/sample) | ratio {cnt_cpu} (ours/comparison) "
-           f"| comparison |",
-           "| --- | ---: | ---: | ---: | ---: | ---: | ---: | --- |"]
+           f"| SNR (dB, ours / comparison) | comparison |",
+           "| --- | ---: | ---: | ---: | ---: | ---: | ---: | ---: | --- |"]
     failed, skipped = [], []
     for name in sorted(entries, key=order):
         v = entries[name]
@@ -93,7 +112,8 @@ def render(platform, level, lv):
         out.append(f"| `{name}` | {fmt(r['ours']['cycles_per_sample'])} "
                    f"| {fmt(r['comparison']['cycles_per_sample'])} | {fmt(r['ratio'])} "
                    f"| {fmt(c['ours']['cycles_per_sample'])} "
-                   f"| {fmt(c['comparison']['cycles_per_sample'])} | {fmt(c['ratio'])} | {comp} |")
+                   f"| {fmt(c['comparison']['cycles_per_sample'])} | {fmt(c['ratio'])} "
+                   f"| {accuracy(v.get('snr_db'), (name, level) in trades)} | {comp} |")
     out.append("")
     for name, note in failed:
         out.append(f"- `{name}`: {note}.")
@@ -104,14 +124,20 @@ def render(platform, level, lv):
     return out
 
 
-def block(docs):
+def trades_of(limits):
+    """The (entry, level) pairs of `benches/limits.json` with an `accuracy_trade`."""
+    return frozenset((k, l) for k, levels in limits.items() if not k.startswith("_")
+                     for l, e in levels.items() if isinstance(e, dict) and "accuracy_trade" in e)
+
+
+def block(docs, trades=frozenset()):
     """The whole generated block from the results documents, levels in the order of LEVELS (others
     after them, sorted)."""
     present = [(p, l) for p, d in docs.items() for l in d.get("levels", {})]
     keys = [k for k in LEVELS if k in present] + sorted(k for k in present if k not in LEVELS)
     text = []
     for platform, level in keys:
-        lines = render(platform, level, docs[platform]["levels"][level])
+        lines = render(platform, level, docs[platform]["levels"][level], trades)
         if lines:
             text += lines
     return "\n".join(text).rstrip("\n")
@@ -121,14 +147,14 @@ def simd128_block(counts):
     """The table of `simd128` instructions per sample from the results document of wasm32."""
     kernels = counts["levels"]["simd128"]["kernels"]
     out = ["| Entry | ours (instructions/sample) | comparison (instructions/sample) | ratio (ours/comparison) "
-           "| status | comparison |", "| --- | ---: | ---: | ---: | --- | --- |"]
+           "| SNR (dB, ours / comparison) | status | comparison |", "| --- | ---: | ---: | ---: | ---: | --- | --- |"]
     for name in sorted(kernels, key=order):
         k = kernels[name]
         status = k["status"] if k["status"] != "release" else ""
         verdict = {"waived": "waived", "fail": "fail"}.get(k["verdict"], "")
         mark = " ".join(x for x in (status, verdict) if x)
         out.append(f"| `{name}` | {fmt(k['ours_instr_per_sample'])} | {fmt(k['other_instr_per_sample'])} "
-                   f"| {fmt(k['ratio'])} | {mark} | {k['compared_with'].replace('|', chr(92) + '|')} |")
+                   f"| {fmt(k['ratio'])} | {accuracy(k.get('snr_db'))} | {mark} | {k['compared_with'].replace('|', chr(92) + '|')} |")
     return "\n".join(out)
 
 
@@ -157,7 +183,7 @@ def differences(old, new):
 
 def main(argv=None):
     args = list(sys.argv[1:] if argv is None else argv)
-    doc_path, results_dir, check, counts_path = DOC, RESULTS, False, None
+    doc_path, results_dir, check, counts_path, limits_path = DOC, RESULTS, False, None, LIMITS
     while args:
         a = args.pop(0)
         if a == "--check":
@@ -168,12 +194,18 @@ def main(argv=None):
             results_dir = args.pop(0)
         elif a == "--counts" and args:
             counts_path = args.pop(0)
+        elif a == "--limits" and args:
+            limits_path = args.pop(0)
         else:
             sys.exit(f"unknown argument {a!r}; usage: cycle_tables.py [--check] [--doc FILE] "
-                     f"[--results DIR] [--counts FILE]")
+                     f"[--results DIR] [--counts FILE] [--limits FILE]")
     if counts_path is None:
         counts_path = os.path.join(os.path.dirname(os.path.abspath(results_dir)), "wasm32.json")
-    blocks = [(BEGIN, END, block(load(results_dir)))]
+    trades = frozenset()
+    if os.path.exists(limits_path):
+        with open(limits_path) as fh:
+            trades = trades_of(json.load(fh))
+    blocks = [(BEGIN, END, block(load(results_dir), trades))]
     if os.path.exists(counts_path):
         with open(counts_path) as fh:
             blocks.append((SIMD_BEGIN, SIMD_END, simd128_block(json.load(fh))))

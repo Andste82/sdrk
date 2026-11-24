@@ -1633,6 +1633,22 @@ impl Session {
         Ok(args)
     }
 
+    /// The SNR in dB of one run of `which` on the workload of `kernel`, against the f64
+    /// reference of the measurement binary (999 for an exact result): the accuracy of D34,
+    /// in the environment of the level ([`Session::command`]).
+    pub(crate) fn snr(&self, kernel: &str, which: &str, volk_config: &Path) -> anyhow::Result<f64> {
+        let out = self.plain(&Run {
+            args: ["accuracy", kernel, which]
+                .map(ToString::to_string)
+                .to_vec(),
+            volk_config,
+        })?;
+        let v: Value = serde_json::from_str(out.trim()).context("accuracy output")?;
+        v.get("snr_db")
+            .and_then(Value::as_f64)
+            .ok_or_else(|| anyhow!("no snr_db in {out}"))
+    }
+
     /// Runs the measurement binary without a profiler and returns its standard output.
     pub(crate) fn plain(&self, run: &Run<'_>) -> anyhow::Result<String> {
         let (program, args) = self.launcher()?;
@@ -2224,6 +2240,10 @@ pub struct EntryProfiles {
     pub ours: crate::mca::Counts,
     /// The judged comparison.
     pub other: crate::mca::Counts,
+    /// The SNR in dB of our side against the f64 reference (D34; 999: exact).
+    pub ours_snr_db: f64,
+    /// The SNR in dB of the judged comparison against the f64 reference.
+    pub other_snr_db: f64,
 }
 
 /// The branch counts of one count entry (D1611): ours and the judged comparison.
@@ -2427,12 +2447,21 @@ pub fn profiles(
                 Some(base) => profile(base, &restore(base)?, spec.family.measured())?,
                 None => profile(&session, &ours_restore, gate.implementation())?,
             };
+            // The accuracy of both sides on the same workload, as the count judged it (D34).
+            let ours_snr_db =
+                session.snr(spec.name, spec.family.measured(), &session.volk_config)?;
+            let other_snr_db = match &baseline {
+                Some(base) => base.snr(spec.name, spec.family.measured(), &base.volk_config)?,
+                None => session.snr(spec.name, gate.implementation(), &session.volk_config)?,
+            };
             Ok(EntryProfiles {
                 kernel: spec.name.to_string(),
                 compared_with,
                 samples: K * (N / standard.samples).max(1) * standard.samples,
                 ours,
                 other,
+                ours_snr_db,
+                other_snr_db,
             })
         };
         out.push((spec.name.to_string(), entry()));

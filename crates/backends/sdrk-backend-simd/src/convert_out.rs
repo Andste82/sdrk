@@ -32,7 +32,10 @@
 //!   minimum, which turns the negative bytes of the lanes with `b = 127` (where the value cannot
 //!   be negative otherwise) into 127, and as signed minimum (SSE2, which has no `pminsb`: the
 //!   unsigned minimum after flipping the sign bits of both). AVX-512 caps `x` at 1 before the
-//!   conversion instead and takes the signed minimum with -1 under the mask of `x < -2^-54`.
+//!   conversion instead and takes the signed minimum with -1 under the mask of `x < -2^-54`;
+//!   on 64 floats per step it does not cap and bounds the 64 bytes after the saturating packs:
+//!   the unsigned minimum with 127 outside the mask (the byte -128 of `i32::MIN`) and the signed
+//!   minimum with -1 under it.
 //!   Each form is checked against the `f64` formula for all 2^32 inputs. `rint(...) - 128` is
 //!   saturated to `i8` and turned into the offset binary byte by flipping the sign bit.
 //!
@@ -300,14 +303,16 @@ mod x86 {
         _mm256_permutevar8x32_epi32, _mm256_set1_epi8, _mm256_set1_ps, _mm256_setr_epi32,
         _mm256_sub_ps, _mm256_xor_si256, _mm512_cmp_ps_mask, _mm512_cvtsepi32_epi8,
         _mm512_cvtsepi32_epi16, _mm512_fmadd_ps, _mm512_mask_cvtsepi32_storeu_epi8,
-        _mm512_mask_cvtsepi32_storeu_epi16, _mm512_mask_min_epi32, _mm512_maskz_cvtps_epi32,
-        _mm512_maskz_loadu_ps, _mm512_min_ps, _mm512_mul_ps, _mm512_set1_epi32, _mm512_set1_ps,
+        _mm512_mask_cvtsepi32_storeu_epi16, _mm512_mask_min_epi8, _mm512_mask_min_epi32,
+        _mm512_mask_min_epu8, _mm512_maskz_cvtps_epi32, _mm512_maskz_loadu_ps, _mm512_min_ps,
+        _mm512_mul_ps, _mm512_packs_epi16, _mm512_packs_epi32, _mm512_permutexvar_epi32,
+        _mm512_set1_epi8, _mm512_set1_epi32, _mm512_set1_ps, _mm512_setr_epi32, _mm512_xor_si512,
     };
     use core::hint::black_box;
     use fearless_simd::prelude::*;
-    use fearless_simd::{f32x4, f32x8, f32x16, u8x16, u8x32};
+    use fearless_simd::{f32x4, f32x8, f32x16, u8x16, u8x32, u8x64};
 
-    use super::{BELOW, C, Kind, S8, S16, TINY, quarters, run, tail};
+    use super::{BELOW, C, Kind, S8, S16, TINY, blocks, quarters, run, tail};
 
     fearless_simd::kernel!(
         /// AVX-512 over all values (the last partial vector with masked loads and stores);
@@ -340,6 +345,16 @@ mod x86 {
                 );
                 _mm512_mask_min_epi32(r, neg, r, minus_one)
             };
+            // The same without the cap and the bound: `rint(y - C)` of `y = x * 128` (NaN as
+            // 0, `i32::MIN` where `y - C >= 2^31`), and the mask `neg` of the bound.
+            let unbounded = |x: __m512| -> (__m512i, u16) {
+                let ord = _mm512_cmp_ps_mask::<_CMP_ORD_Q>(x, x);
+                let neg = _mm512_cmp_ps_mask::<_CMP_LT_OQ>(x, below);
+                (
+                    _mm512_maskz_cvtps_epi32(ord, _mm512_fmadd_ps(x, s8, minus_c)),
+                    neg,
+                )
+            };
             let load = |x: &[f32]| -> __m512 { f32x16::from_slice(t, x).into() };
             let i8_bytes = |x: __m512, u8_out: bool| -> __m128i {
                 if u8_out {
@@ -354,10 +369,66 @@ mod x86 {
                     let q: u8x32<_> = q.simd_into(t);
                     q.store_slice(o);
                 }),
-                Kind::I8 | Kind::U8 => run(input, out, 16, 16, 4, |i, o| {
-                    let q: u8x16<_> = i8_bytes(load(i), kind == Kind::U8).simd_into(t);
+                Kind::I8 => run(input, out, 16, 16, 4, |i, o| {
+                    let q: u8x16<_> = i8_bytes(load(i), false).simd_into(t);
                     q.store_slice(o);
                 }),
+                // `CU8`: 64 floats per step, the four vectors narrowed by `vpackssdw` and
+                // `vpacksswb` (both saturate, as `vpmovsdb` does), which work within the 128-bit
+                // lanes, and put in order by one `vpermd`; the bound by -1 is applied once to
+                // the 64 bytes (`vpminsb` under the four masks `neg` side by side; the bound
+                // commutes with the saturation) instead of to each vector of `i32` (D2821).
+                // Then 16 floats per step.
+                Kind::U8 => {
+                    let order =
+                        _mm512_setr_epi32(0, 4, 8, 12, 1, 5, 9, 13, 2, 6, 10, 14, 3, 7, 11, 15);
+                    let sign64 = _mm512_set1_epi8(i8::MIN);
+                    let low64 = _mm512_set1_epi8(i8::MAX);
+                    let wide = blocks(input, out, 64, 64, |i, o| {
+                        let (ab, cd) = i.split_at(32);
+                        let (a, b) = ab.split_at(16);
+                        let (c, d) = cd.split_at(16);
+                        let [(a, na), (b, nb), (c, nc), (d, nd)] =
+                            [a, b, c, d].map(|x| unbounded(load(x)));
+                        // The four masks side by side, `na` in the low bits (`kunpckwd`,
+                        // `kunpckdq`; written by the compiler, the masks went through general
+                        // registers, `vpinsrw` and the stack).
+                        let neg: u64;
+                        // SAFETY: the three instructions read and write mask registers only; no
+                        // memory, no stack, no flags, and AVX-512BW is a target feature here.
+                        unsafe {
+                            core::arch::asm!(
+                                "kunpckwd {ab}, {nb}, {na}",
+                                "kunpckwd {cd}, {nd}, {nc}",
+                                "kunpckdq {k}, {cd}, {ab}",
+                                k = lateout(kreg) neg,
+                                ab = out(kreg) _,
+                                cd = out(kreg) _,
+                                na = in(kreg) na,
+                                nb = in(kreg) nb,
+                                nc = in(kreg) nc,
+                                nd = in(kreg) nd,
+                                options(pure, nomem, nostack, preserves_flags)
+                            );
+                        }
+                        let lo = _mm512_packs_epi32(a, b);
+                        let hi = _mm512_packs_epi32(c, d);
+                        let q = _mm512_permutexvar_epi32(order, _mm512_packs_epi16(lo, hi));
+                        // Where `x >= -2^-54` (and NaN, whose byte is 0) the byte is the value
+                        // in 0 to 127 or -128 from `i32::MIN`, which the unsigned minimum with
+                        // 127 turns into 127; where `x < -2^-54` the signed minimum with -1.
+                        let q = _mm512_mask_min_epu8(q, !neg, q, low64);
+                        let q = _mm512_mask_min_epi8(q, neg, q, minus_one);
+                        let q: u8x64<_> = _mm512_xor_si512(q, sign64).simd_into(t);
+                        q.store_slice(o);
+                    });
+                    let i = input.get(wide..).unwrap_or_default();
+                    let o = out.get_mut(wide..).unwrap_or_default();
+                    wide + run(i, o, 16, 16, 1, |i, o| {
+                        let q: u8x16<_> = i8_bytes(load(i), true).simd_into(t);
+                        q.store_slice(o);
+                    })
+                }
             };
             let rest = input.get(done..).unwrap_or_default();
             let n = rest.len().min(15);

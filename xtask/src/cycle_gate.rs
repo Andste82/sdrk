@@ -187,6 +187,10 @@ fn model(r: &Value, key: &str) -> Option<Model> {
 /// # Errors
 /// Invalid JSON, a document without `levels`, a level that is already in `into` (two files
 /// with one level), or a simulated record without both models.
+#[allow(
+    clippy::large_stack_frames,
+    reason = "the Windows file system calls and the records are large; xtask is a host tool"
+)]
 pub fn add_results(file: &Path, text: &str, into: &mut Results) -> anyhow::Result<()> {
     let doc: Value =
         serde_json::from_str(text).with_context(|| format!("cannot parse {}", file.display()))?;

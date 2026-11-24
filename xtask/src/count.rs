@@ -1295,6 +1295,10 @@ fn results_path(root: &Path, platform: &str) -> std::path::PathBuf {
 
 /// `cargo xtask count --platform <p> --rejudge`: [`rejudge`] on the committed results file,
 /// written back with `write`. `Ok(false)` if a record fails its judgement.
+#[allow(
+    clippy::large_stack_frames,
+    reason = "the Windows file system calls and the records are large; xtask is a host tool"
+)]
 fn rejudge_file(root: &Path, platform: &str, write: bool) -> anyhow::Result<bool> {
     let path = results_path(root, platform);
     let doc: Value = serde_json::from_str(
@@ -1328,6 +1332,10 @@ fn rejudge_file(root: &Path, platform: &str, write: bool) -> anyhow::Result<bool
 ///
 /// # Errors
 /// The results file or `benches/limits.json` cannot be read or parsed.
+#[allow(
+    clippy::large_stack_frames,
+    reason = "the Windows file system calls and the records are large; xtask is a host tool"
+)]
 pub fn check_counts(root: &Path) -> anyhow::Result<Vec<crate::scan::Finding>> {
     let path = results_path(root, "wasm32");
     let doc: Value = serde_json::from_str(

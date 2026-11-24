@@ -38,7 +38,8 @@
 # | liquid-dsp `fftfilt_cccf` (FFT-based FIR filter, overlap-add with a transform of 2 n points per block of n samples) | 1.8.3 (the release tarball: `fftfilt.proto.c` with liquid's FFT of the channelizer row above), see liquid-fftfilt.c | MIT | x86_64, aarch64, wasm32 (in the halfband library of each level) | the reference of `xcorr_fft_n512` and `xcorr_fft_n4096` (FFTW 3.3.10; on wasm32 liquid's own FFT, information) and of their `_fallback` entries (liquid's own FFT), M50 §5 |
 # | liquid-dsp `nco_crcf` (`LIQUID_VCO_INTERP`) | 1.8.3 (nco.proto.c: the interpolated sine table, `_sincos`, `_adjust_frequency`, `_adjust_phase`, `_constrain` and `_step`), see liquid-nco.c | MIT | x86_64, aarch64, wasm32 (static, one object file) | the scalar reference of the `f32` `stereo_pll` fallback (the loop gains of SDRk applied through `_adjust_frequency` and `_adjust_phase`) |
 # | libairspy | 1.0.10 (iqconverter_float.c and iqconverter_int16.c; the last release under the MIT licence, later ones are under a restrictive licence and must not be used) | MIT | x86_64, aarch64, wasm32 (static, one library per level), see airspy-iqconv.c | the SSE2 reference of the `C32` `real_to_complex` and information next to the fallback; the `CQ15` `real_to_complex` (`iqconverter_int16`, a lower accuracy class), conversion only, without `remove_dc` |
-# | KFR | 7.2.0 | GPL-2.0-or-later | x86_64 (one library per level), aarch64 (clang++), wasm32 (clang++, KFR's Emscripten configuration: `sse41` over the SSE headers of Emscripten); the header-only `kfr::iir`, see kfr-biquad.cpp | the SIMD reference of `biquad` and `biquad_real` (D15) |
+# | KFR | 7.2.0 | GPL-2.0-or-later | x86_64 (one library per level), aarch64 (clang++), wasm32 (clang++, KFR's Emscripten configuration: `sse41` over the SSE headers of Emscripten); the header-only `kfr::iir`, see kfr-biquad.cpp, and its element-wise expressions, see kfr-ops.cpp (libkfrops-<level>.a) | the SIMD reference of `biquad` and `biquad_real` (D15), of `dc_block`, `dc_block_real` and `deemphasis` (one section, D2902), of the entries whose VOLK protokernel is generic at `sse2` (D2785, D2901) or below `avx512` (D2900), and of `interleave_cq15` (D2901) |
+# | SLEEF | 3.9.0 | BSL-1.0 | x86_64, aarch64 (CMake, static, libm only, one build per level with the -march of the level; on aarch64 cross-compiled with the host tools of a native configuration), see sleef-ops.c | the SIMD references of `power_db` (`Sleef_log10f*_u10`), `quad_demod` at `sse2` and `sse4.2` (`Sleef_atan2f4_u10`) and `oscillate` (`Sleef_sincosf*_u10`), D2903 |
 # | CMSIS-DSP | 1.18.0 | Apache-2.0 | x86_64, aarch64, wasm32 (one library per level), generic C; cortex-m4 with the DSP extension and the FPU (biquads only); see cmsis-biquad.c and cmsis-dsp.c | the scalar reference of the biquad fallbacks (D16); the gate of `biquad` and `biquad_real` at `simd128` (D15); the comparison of the Cortex-M4 report (D27); the scalar references of the fallback round (conversions, products, magnitudes, sine and arc tangent, logarithm, FIR filters, FFTs: libcmsisdsp-<level>.a) |
 # | wasi-sdk sysroot | 34.0 | Apache-2.0 WITH LLVM-exception (libc++), the licenses of wasi-libc | wasm32 (headers only: libc++ and wasi-libc for the KFR shim, which needs no C++ run-time library) | KFR needs a C++ standard library |
 # | Emscripten | 6.0.12 | MIT or NCSA | wasm32 (headers only: the `*intrin.h` of system/include/compat, SSE written with SIMD128) | KFR's x86 code on wasm32, as emcc builds it with `-msse4.1 -msimd128` |
@@ -108,6 +109,10 @@ EMSCRIPTEN_SHA256=795ef929e4dee52bf03de3742c4252bb121e742afac896378d969b5da2db86
 LIQUID_VERSION=1.8.3
 LIQUID_URL=https://github.com/jgaeddert/liquid-dsp/archive/refs/tags/v$LIQUID_VERSION.tar.gz
 LIQUID_SHA256=18fa83b73db8bb6fe6ea0376e4b5aecf8645970f4604d10d9dadbf609f3f95e2
+# SLEEF: the vectorized math functions of power_db, quad_demod and oscillate (D2903).
+SLEEF_VERSION=3.9.0
+SLEEF_URL=https://github.com/shibatch/sleef/archive/refs/tags/$SLEEF_VERSION.tar.gz
+SLEEF_SHA256=af60856abac08a3b5e72a8d156dd71fec1f7ac23de8ee67793f45f9edcdf0908
 # libairspy: the last release under the MIT licence.
 AIRSPY_VERSION=1.0.10
 AIRSPY_URL=https://github.com/airspy/airspyone_host/archive/refs/tags/v$AIRSPY_VERSION.tar.gz
@@ -160,7 +165,7 @@ if [ -n "$kfr_cxx" ]; then
 fi
 
 stamp="$prefix/refs.stamp"
-want=$( (cat "${BASH_SOURCE[0]}" "$here/volk-wasm.c" "$here/gr-agc.c" "$here/gr-squelch.c" "$here/kfr-biquad.cpp" "$here/kfr-ops.cpp" "$here/cmsis-biquad.c" "$here/cmsis-m4-heap.c" \
+want=$( (cat "${BASH_SOURCE[0]}" "$here/volk-wasm.c" "$here/gr-agc.c" "$here/gr-squelch.c" "$here/kfr-biquad.cpp" "$here/kfr-ops.cpp" "$here/sleef-ops.c" "$here/liquid-rresamp.c" "$here/cmsis-biquad.c" "$here/cmsis-m4-heap.c" \
     "$here/cmsis-dsp.c" "$here/gr-rotator.c" "$here/gr-fm-mod.c" "$here/gr-quad-demod.c" "$here/gr-fast-atan2f.c" "$here/gr-deemph.c" "$here/gr-crc.c" "$here/gr-scrambler.c" "$here/gr-snr-est.c" \
     "$here/liquid-dotprod.c" "$here/liquid-dcblock.c" "$here/liquid-halfband.c" "$here/liquid-fir.c" "$here/liquid-nco.c" "$here/liquid-ampmodem.c" "$here/liquid-randn.c" "$here/gr-fastnoise.c" "$here/gr-dvbs2-plscramble.c" "$here/airspy-iqconv.c" \
     "$here/volk-nofma.c" "$here/volk-generic.c" "$here/gr-costas.c" "$here/gr-equalizer.c" "$here/gr-constellation.c" "$here/liquid-channelizer.c" "$here/liquid-fftfilt.c" "$here/gr-symbol-sync.c" "$here/gr-psk-chain.c" "$here/gr-fir.c" "$here/gr-chunks.c" "$here/gr-softdec.c" "$here/liquid-modem.c" "$here/gr-fir-volk.h"; echo "$platform|$cc_version|$cxx_version|$kfr_cxx_version") | sha256sum | cut -d ' ' -f 1)
@@ -627,15 +632,14 @@ build_kfr_biquad() {
         $kfr_cxx $KFR_CXX_FLAGS $BIQUAD_OPT $march $KFR_WASM_FLAGS -I "$work/kfr/include" \
             -c "$here/kfr-biquad.cpp" -o "$work/kfr-$level.o"
         $ar rcs "$prefix/lib/libkfrbq-$level.a" "$work/kfr-$level.o"
-        # KFR's element-wise expressions (kfr-ops.cpp, D2785), the references at `sse2` where
-        # VOLK's machine runs a generic protokernel; x86-64 only. KFR_DISABLE_CHECKS drops the
-        # size checks of the expression assignment, whose error path needs the C++ run-time
-        # library (the sizes always match here).
-        if [ "$platform" = x86_64 ]; then
-            $kfr_cxx $KFR_CXX_FLAGS $BIQUAD_OPT $march -DKFR_DISABLE_CHECKS -I "$work/kfr/include" \
-                -c "$here/kfr-ops.cpp" -o "$work/kfr-ops-$level.o"
-            $ar rcs "$prefix/lib/libkfrops-$level.a" "$work/kfr-ops-$level.o"
-        fi
+        # KFR's element-wise expressions (kfr-ops.cpp, D2785, D2900, D2901), the references where
+        # VOLK runs a generic or lower-level protokernel and where no other SIMD library has the
+        # operation, with the flags of the biquad (on wasm32 its Emscripten configuration).
+        # KFR_DISABLE_CHECKS drops the size checks of the expression assignment, whose error path
+        # needs the C++ run-time library (the sizes always match here).
+        $kfr_cxx $KFR_CXX_FLAGS $BIQUAD_OPT $march $KFR_WASM_FLAGS -DKFR_DISABLE_CHECKS -I "$work/kfr/include" \
+            -c "$here/kfr-ops.cpp" -o "$work/kfr-ops-$level.o"
+        $ar rcs "$prefix/lib/libkfrops-$level.a" "$work/kfr-ops-$level.o"
     done
 }
 
@@ -758,6 +762,13 @@ build_liquid_halfband() {
                 -DSDRK_LIQUID_SIMD=$simd $LIQUID_HB_RENAME -c "$here/liquid-halfband.c" -o "$dir/halfband$f.o"
             objects+=("$dir/halfband$f.o")
         done
+        # The rational-rate resamplers rresamp_crcf and rresamp_rrrf (liquid-rresamp.c) with the
+        # portable dot products, the references of the resample fallbacks (D2904).
+        for f in 1 2; do
+            $cc $BIQUAD_OPT $march "${inc[@]}" -I "$src/src/filter/src" -DSDRK_LIQUID_KIND=$f \
+                $LIQUID_HB_RENAME -Wno-unused-result -c "$here/liquid-rresamp.c" -o "$dir/rresamp$f.o"
+            objects+=("$dir/rresamp$f.o")
+        done
         $ar rcs "$prefix/lib/libliquidhb-$level.a" "${objects[@]}"
     done
 }
@@ -829,6 +840,39 @@ build_volk_generic() {
     done
 }
 
+# SLEEF (CMake, libm only, static), one build per level with the -march of the level, and the
+# wrapper sleef-ops.c compiled for the level into the same archive: libsleefops-<level>.a. Every
+# build has SLEEF's vector extensions of the platform; the wrapper calls the one of the level
+# (sse2, sse4, avx2, avx512f, advsimd). On aarch64 SLEEF is cross-compiled with the host tools of
+# a native configuration (its NATIVE_BUILD_DIR); the tests, the DFT, the quad-precision and the
+# GNU ABI libraries are not built.
+SLEEF_CMAKE="-DCMAKE_BUILD_TYPE=Release -DBUILD_SHARED_LIBS=OFF -DSLEEF_BUILD_TESTS=OFF -DSLEEF_BUILD_GNUABI_LIBS=OFF -DSLEEF_BUILD_DFT=OFF -DSLEEF_BUILD_QUAD=OFF -DSLEEF_ENABLE_TLFLOAT=OFF -DSLEEF_SHOW_CONFIG=OFF"
+build_sleef() {
+    fetch "$SLEEF_URL" "$SLEEF_SHA256" "sleef-$SLEEF_VERSION.tar.gz"
+    unpack "sleef-$SLEEF_VERSION.tar.gz" sleef
+    local entry level march cross=()
+    if [ "$platform" = aarch64 ]; then
+        # shellcheck disable=SC2086
+        cmake -S "$work/sleef" -B "$work/sleef-native" -G Ninja $SLEEF_CMAKE \
+            -DCMAKE_C_COMPILER="${HOST_CC:-gcc}" >"$work/sleef-native.log"
+        cmake --build "$work/sleef-native" -j "$jobs" --target sleef >>"$work/sleef-native.log"
+        cross=(-DCMAKE_SYSTEM_NAME=Linux -DCMAKE_SYSTEM_PROCESSOR=aarch64 -DCMAKE_CROSSCOMPILING=TRUE
+            -DCMAKE_CXX_COMPILER="$cxx" -DNATIVE_BUILD_DIR="$work/sleef-native")
+    fi
+    for entry in $(biquad_levels); do
+        level=${entry%%:*}
+        march=${entry#*:}
+        march=${march//,/ }
+        # shellcheck disable=SC2086
+        cmake -S "$work/sleef" -B "$work/sleef-$level" -G Ninja $SLEEF_CMAKE "${cross[@]}" \
+            -DCMAKE_C_COMPILER="$cc" -DCMAKE_C_FLAGS="$march" >"$work/sleef-$level.log"
+        cmake --build "$work/sleef-$level" -j "$jobs" --target sleef >>"$work/sleef-$level.log"
+        $cc $BIQUAD_OPT $march -I "$work/sleef-$level/include" -c "$here/sleef-ops.c" -o "$work/sleef-ops-$level.o"
+        cp "$work/sleef-$level/lib/libsleef.a" "$prefix/lib/libsleefops-$level.a"
+        $ar rs "$prefix/lib/libsleefops-$level.a" "$work/sleef-ops-$level.o"
+    done
+}
+
 KISSFFT_FLAGS=""
 GR_AGC_FLAGS=""
 libraries=()
@@ -861,7 +905,8 @@ case $platform in
         build_airspy
         build_volk_nofma
         build_volk_generic
-        libraries=(volk fftw kissfft gragc grsquelch grfallback grcrc grscrambler grsnrest grcostas grsymsync grequalizer grconstellation grvolk liquiddc liquidnco liquidam liquidrandn grfastnoise grdvbs2 kfr cmsisdsp liquidhb airspy volknofma volkgeneric)
+        build_sleef
+        libraries=(volk fftw kissfft gragc grsquelch grfallback grcrc grscrambler grsnrest grcostas grsymsync grequalizer grconstellation grvolk liquiddc liquidnco liquidam liquidrandn grfastnoise grdvbs2 kfr cmsisdsp liquidhb airspy volknofma volkgeneric sleef)
         ;;
     aarch64)
         build_volk
@@ -892,7 +937,8 @@ case $platform in
         build_airspy
         build_volk_nofma
         build_volk_generic
-        libraries=(volk fftw kissfft ne10 gragc grsquelch grfallback grcrc grscrambler grsnrest grcostas grsymsync grequalizer grconstellation grvolk liquiddc liquidnco liquidam liquidrandn grfastnoise grdvbs2 kfr cmsisdsp liquidhb airspy volknofma volkgeneric)
+        build_sleef
+        libraries=(volk fftw kissfft ne10 gragc grsquelch grfallback grcrc grscrambler grsnrest grcostas grsymsync grequalizer grconstellation grvolk liquiddc liquidnco liquidam liquidrandn grfastnoise grdvbs2 kfr cmsisdsp liquidhb airspy volknofma volkgeneric sleef)
         ;;
     wasm32)
         build_volk_wasm
@@ -976,15 +1022,16 @@ simd_levels() {
             grfastnoise) entry="\"gnuradio_fastnoise_source\": { \"version\": \"main at ec1bf15\", \"sha256\": \"$(sha256sum "$here/gr-fastnoise.c" | cut -d ' ' -f 1)\", \"build\": \"$GR_AGC_FLAGS\" }" ;;
             grdvbs2) entry="\"gnuradio_dvbs2_plscramble\": { \"version\": \"main at ec1bf15\", \"sha256\": \"$(sha256sum "$here/gr-dvbs2-plscramble.c" | cut -d ' ' -f 1)\", \"build\": \"$GR_AGC_FLAGS\" }" ;;
             liquidrandn) entry="\"liquid_dsp_randn\": { \"version\": \"$LIQUID_VERSION\", \"sha256\": \"$(sha256sum "$here/liquid-randn.c" | cut -d ' ' -f 1)\", \"build\": \"liquid-randn.c (randnf, crandnf over libc rand()): $GR_AGC_FLAGS\" }" ;;
-            liquidhb) entry="\"liquid_dsp_halfband\": { \"version\": \"$LIQUID_VERSION\", \"sha256\": \"$LIQUID_SHA256\", \"build\": \"liquid-halfband.c over resamp2.proto.c, firhilb.proto.c and the dot products of the release, liquid-channelizer.c over firpfbch2.proto.c and liquid-fftfilt.c over fftfilt.proto.c, each with FFTW (not on wasm32) and with the FFT of the release: $BIQUAD_OPT, per level $(biquad_levels | tr , ' '), dot products (crcf / rrrf) $(for e in $(biquad_levels); do printf '%s=%s/%s ' "${e%%:*}" "$(liquid_simd "${e%%:*}" crcf)" "$(liquid_simd "${e%%:*}" rrrf)"; done)\" }" ;;
+            liquidhb) entry="\"liquid_dsp_halfband\": { \"version\": \"$LIQUID_VERSION\", \"sha256\": \"$LIQUID_SHA256\", \"build\": \"liquid-halfband.c over resamp2.proto.c, firhilb.proto.c and the dot products of the release, liquid-channelizer.c over firpfbch2.proto.c and liquid-fftfilt.c over fftfilt.proto.c, each with FFTW (not on wasm32) and with the FFT of the release, liquid-rresamp.c over firpfb.proto.c and rresamp.proto.c (portable dot products): $BIQUAD_OPT, per level $(biquad_levels | tr , ' '), dot products (crcf / rrrf) $(for e in $(biquad_levels); do printf '%s=%s/%s ' "${e%%:*}" "$(liquid_simd "${e%%:*}" crcf)" "$(liquid_simd "${e%%:*}" rrrf)"; done)\" }" ;;
             airspy) entry="\"libairspy\": { \"version\": \"$AIRSPY_VERSION\", \"sha256\": \"$AIRSPY_SHA256\", \"build\": \"airspy-iqconv.c over iqconverter_float.c and iqconverter_int16.c (conversion without remove_dc; the SSE2 converter with the FreeBSD branch, x86_64 only): $BIQUAD_OPT, per level $(biquad_levels | tr , ' ')\" }" ;;
-            kfr) entry="\"kfr\": { \"version\": \"$KFR_VERSION\", \"sha256\": \"$KFR_SHA256\", \"build\": \"kfr-biquad.cpp$([ "$platform" = x86_64 ] && echo " and kfr-ops.cpp (-DKFR_DISABLE_CHECKS)"): ${kfr_cxx} $KFR_CXX_FLAGS $BIQUAD_OPT$([ "$platform" = wasm32 ] && echo ", KFR_ARCH sse41 as emcc -msse4.1 (wasi-sdk sysroot and the SSE headers of Emscripten)"), per level $(biquad_levels)\" }" ;;
+            kfr) entry="\"kfr\": { \"version\": \"$KFR_VERSION\", \"sha256\": \"$KFR_SHA256\", \"build\": \"kfr-biquad.cpp and kfr-ops.cpp (-DKFR_DISABLE_CHECKS): ${kfr_cxx} $KFR_CXX_FLAGS $BIQUAD_OPT$([ "$platform" = wasm32 ] && echo ", KFR_ARCH sse41 as emcc -msse4.1 (wasi-sdk sysroot and the SSE headers of Emscripten)"), per level $(biquad_levels)\" }" ;;
             wasisysroot) entry="\"wasi_sysroot\": { \"version\": \"$WASISYSROOT_VERSION\", \"sha256\": \"$WASISYSROOT_SHA256\", \"build\": \"headers of libc++ and wasi-libc for KFR\" }" ;;
             emscripten) entry="\"emscripten\": { \"version\": \"$EMSCRIPTEN_VERSION\", \"sha256\": \"$EMSCRIPTEN_SHA256\", \"build\": \"SSE headers of system/include/compat for KFR\" }" ;;
             cmsisdsp) entry="\"cmsis_dsp\": { \"version\": \"$CMSISDSP_VERSION\", \"sha256\": \"$CMSISDSP_SHA256\", \"build\": \"$([ "$platform" = cortex-m4 ] && echo "CMSIS-Core, DSP extension and FPU, cmsis-biquad.c and cmsis-m4-heap.c" || echo "generic C with cmsis-biquad.c and cmsis-dsp.c"): $CMSISDSP_DEFINES $BIQUAD_OPT, per level $(biquad_levels | tr , ' ')\" }" ;;
             cmsiscore) entry="\"cmsis_core\": { \"version\": \"$CMSISCORE_VERSION\", \"sha256\": \"$CMSISCORE_SHA256\", \"build\": \"headers of CMSIS/Core/Include\" }" ;;
             volknofma) entry="\"volk_nofma\": { \"version\": \"$VOLK_VERSION\", \"sha256\": \"$(sha256sum "$here/volk-nofma.c" | cut -d ' ' -f 1)\", \"build\": \"volk-nofma.c over volk_32fc_x2_multiply_32fc.h and volk_32fc_x2_dot_prod_32fc.h ($([ "$platform" = aarch64 ] && echo neon || echo u_avx)): $BIQUAD_OPT, per level $(biquad_levels | tr , ' ' | tr ' ' '\n' | grep -E '^(avx2|avx512|neon):' | tr '\n' ' ' | sed 's/ $//')\" }" ;;
-            volkgeneric) entry="\"volk_generic\": { \"version\": \"$VOLK_VERSION\", \"sha256\": \"$(sha256sum "$here/volk-generic.c" | cut -d ' ' -f 1)\", \"build\": \"volk-generic.c over the generic protokernels of volk_32f_x2_interleave_32fc.h, volk_32fc_deinterleave_32f_x2.h, volk_16ic_deinterleave_16i_x2.h, volk_32fc_x2_multiply_32fc.h and volk_32fc_32f_multiply_32fc.h: $BIQUAD_OPT, per level $(biquad_levels | tr , ' ')\" }" ;;
+            volkgeneric) entry="\"volk_generic\": { \"version\": \"$VOLK_VERSION\", \"sha256\": \"$(sha256sum "$here/volk-generic.c" | cut -d ' ' -f 1)\", \"build\": \"volk-generic.c over the generic protokernels of volk_32f_x2_interleave_32fc.h, volk_32fc_deinterleave_32f_x2.h, volk_16ic_deinterleave_16i_x2.h, volk_32fc_x2_multiply_32fc.h, volk_32fc_32f_multiply_32fc.h, volk_32f_s32f_convert_16i.h, volk_32f_s32f_convert_8i.h, volk_32f_s32f_x2_convert_8u.h, volk_32fc_x2_multiply_conjugate_32fc.h and volk_32fc_s32f_atan2_32f.h: $BIQUAD_OPT, per level $(biquad_levels | tr , ' ')\" }" ;;
+            sleef) entry="\"sleef\": { \"version\": \"$SLEEF_VERSION\", \"sha256\": \"$SLEEF_SHA256\", \"build\": \"CMake Release, static, libm only ($SLEEF_CMAKE), CMAKE_C_FLAGS the -march of the level, with sleef-ops.c ($(sha256sum "$here/sleef-ops.c" | cut -d ' ' -f 1)): $BIQUAD_OPT, per level $(biquad_levels | tr , ' '); vector extension per level $([ "$platform" = aarch64 ] && echo "neon=advsimd" || echo "sse2=sse2 sse4.2=sse4 avx2=avx2 avx512=avx512f")\" }" ;;
             ne10) entry="\"ne10\": { \"version\": \"$NE10_COMMIT\", \"sha256\": \"$NE10_SHA256\", \"build\": \"CMake Release, DSP module\" }" ;;
         esac
         # The SIMD level each build is compiled for, per measured level (G7 of the measurement
@@ -995,7 +1042,7 @@ simd_levels() {
         # the same.
         case $lib in
             volk) mode=$([ "$platform" = wasm32 ] && echo scalar || echo same) ;;
-            fftw | kfr | volknofma | ne10 | grvolk) mode=same ;;
+            fftw | kfr | volknofma | ne10 | grvolk | sleef) mode=same ;;
             liquidhb) mode=liquid ;;
             airspy) mode=airspy ;;
             cmsisdsp) mode=$([ "$platform" = cortex-m4 ] && echo same || echo scalar) ;;

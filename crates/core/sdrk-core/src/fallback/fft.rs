@@ -12,8 +12,9 @@
 //! the loads, stores and twiddle reads of the fused stages are saved.
 //! Block floating point needs the largest magnitude between the stages and runs them one by one.
 //!
-//! On x86 the `C32` stage pairs run on two samples per vector (`two`) whenever no infinity or
-//! NaN can arise in the transform, with the same butterflies and the same bits.
+//! On x86 the `C32` stage pairs of 64 points and more run on two samples per vector (`two`)
+//! whenever no infinity or NaN can arise in the transform, with the same butterflies and the
+//! same bits.
 
 // `(a + b) * 0.5` is the specified, exact halving; `f32::midpoint` is not part of the contract.
 #![allow(clippy::manual_midpoint, clippy::many_single_char_names)]
@@ -192,6 +193,13 @@ mod two {
 
     /// Two samples `[re0, im0, re1, im1]`.
     type Lanes = [f32; 4];
+
+    /// The smallest size that takes the lanes. Below it the check of [`fits`] and the
+    /// preparation of the twiddles cost more than the lanes save: `channelize_fallback` (16
+    /// points per hop) measured 3 to 15 % more cycles with the lanes on every x86 level (CI run
+    /// 45471656947), while 64 points gain 7 to 29 % (`sapphirerapids` at `avx512` excepted,
+    /// 5 % more).
+    pub(super) const MIN_N: usize = 64;
 
     /// The largest component magnitude of the data for the lanes: `2^96`.
     const DATA_BOUND: f32 = 79_228_162_514_264_337_593_543_950_336.0;
@@ -1202,7 +1210,7 @@ impl Fft<C32> for Fallback {
         // On x86 the stages run on two samples at a time where no infinity or NaN can arise
         // (the same bits, see `two`).
         #[cfg(any(target_arch = "x86", target_arch = "x86_64"))]
-        let lanes = two::fits(data, tw, n, stride);
+        let lanes = n >= two::MIN_N && two::fits(data, tw, n, stride);
         #[cfg(not(any(target_arch = "x86", target_arch = "x86_64")))]
         let lanes = false;
         if inverse {

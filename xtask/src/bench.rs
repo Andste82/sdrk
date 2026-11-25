@@ -4478,18 +4478,15 @@ mod tests {
             comparisons(plan("avx512"), kernel("mul")),
             (Reference::Kfr, vec![Reference::Volk, Reference::VolkNoFma])
         );
-        for level in levels
-            .into_iter()
-            .filter(|l| !matches!(*l, "sse2" | "avx512"))
-        {
+        // At `simd128` KFR gates as well (D2850).
+        assert_eq!(
+            comparisons(plan("simd128"), kernel("mul")),
+            (Reference::Kfr, vec![Reference::Volk])
+        );
+        for level in ["sse4.2", "avx2", "neon"] {
             let (gate, extras) = comparisons(plan(level), kernel("mul"));
-            if level == "simd128" {
-                assert_eq!(gate, Reference::Kfr, "mul at {level}");
-                assert_eq!(extras, vec![Reference::Volk], "mul at {level}");
-                continue;
-            }
             assert_eq!(gate, Reference::Volk, "mul at {level}");
-            if matches!(level, "avx2" | "avx512" | "neon") {
+            if matches!(level, "avx2" | "neon") {
                 assert_eq!(
                     extras.first(),
                     Some(&Reference::VolkNoFma),

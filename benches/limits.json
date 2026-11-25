@@ -485,7 +485,7 @@
     },
     "neon": {
       "status": "info",
-      "waiver": "no established library has a SIMD `CQ15` FIR with real `Q15` taps on our levels (VOLK's `volk_16ic_x2_dot_prod_16ic` takes complex taps and saturates its 16-bit sums, GNU Radio has no 16-bit FIR); the comparison is our own fallback, reported as information, and the branch is judged by its efficiency (D32); at this level the kernel runs the fallback (hotfix D65: its one-output-at-a-time SIMD branch took more simulated cycles than the grouped fallback on both core models of the level), so the entry compares the fallback with itself and reads 1.00 until a grouped SIMD branch replaces it"
+      "waiver": "no established library has a SIMD `CQ15` FIR with real `Q15` taps on our levels (VOLK's `volk_16ic_x2_dot_prod_16ic` takes complex taps and saturates its 16-bit sums, GNU Radio has no 16-bit FIR); the comparison is our own fallback, reported as information, and the branch is judged by its efficiency (D32); at this level the kernel runs the fallback (the switch of hotfix D65, D2838: its one-output-at-a-time SIMD branch took more simulated cycles than the exact lanes of the fallback, D2830, on both core models of the level), so the entry compares the fallback with itself and reads 1.00 until a grouped SIMD branch replaces it"
     },
     "simd128": {
       "status": "info",

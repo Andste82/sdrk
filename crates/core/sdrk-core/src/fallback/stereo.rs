@@ -44,6 +44,17 @@ fn clamp_f32(v: f32, limit: f32) -> f32 {
     if v < -limit { -limit } else { v }
 }
 
+/// `clamp_f32(flush_denormal(v), limit)` with the test of the flush beside the clamp instead of
+/// before it: where `v` is flushed, the clamp of `+0` is `+0` (the limit is not negative), and
+/// elsewhere the flush leaves `v` as it is, so the value is the same for every `v` (NaN stays a
+/// NaN). The clamp no longer waits for the flush, which shortens the loop-carried chain of the
+/// phase by the comparison and the select of the flush.
+#[inline]
+fn flush_clamp(v: f32, limit: f32) -> f32 {
+    let c = clamp_f32(v, limit);
+    if libm::fabsf(v) < 1e-30 { 0.0 } else { c }
+}
+
 /// The scalars of the `f32` loop.
 struct LoopF32 {
     kp: f32,
@@ -116,7 +127,7 @@ fn run_f32<const CHECK: bool, const MODE: u8>(
             0.0
         };
         *o = C32::new(x, if stereo && diff { x * s2 } else { 0.0 });
-        integ = clamp_f32(flush_denormal(integ + ki * e), imax);
+        integ = flush_clamp(integ + ki * e, imax);
         let f = kp * e + integ;
         let corr = phase_step(f64::from(f), TURN);
         phase = phase.wrapping_add(step0).wrapping_add(corr);
@@ -357,6 +368,57 @@ impl StereoEncodeRds for Fallback {
 mod tests {
     use super::*;
     use crate::Fallback;
+
+    /// `flush_clamp` is the clamp of the flushed value bit for bit: around the flush threshold
+    /// and the limits, the signed zeros, the infinities and NaN, for limits from 0 to infinity
+    /// and NaN, and every 4099th bit pattern.
+    #[test]
+    fn flush_clamp_equals_the_clamp_of_the_flushed_value() {
+        let t = 1e-30f32;
+        let specials = [
+            0.0,
+            -0.0,
+            t,
+            -t,
+            f32::from_bits(t.to_bits() - 1),
+            -f32::from_bits(t.to_bits() - 1),
+            f32::from_bits(t.to_bits() + 1),
+            f32::MIN_POSITIVE,
+            -f32::MIN_POSITIVE,
+            1e-45,
+            -1e-45,
+            0.25,
+            -0.25,
+            1.0,
+            -1.0,
+            f32::MAX,
+            f32::MIN,
+            f32::INFINITY,
+            f32::NEG_INFINITY,
+            f32::NAN,
+        ];
+        let limits = [
+            0.0,
+            1e-31,
+            1e-30,
+            1e-29,
+            0.25,
+            1.0,
+            f32::MAX,
+            f32::INFINITY,
+            f32::NAN,
+        ];
+        let values = specials
+            .into_iter()
+            .chain((0..=u32::MAX).step_by(4099).map(f32::from_bits));
+        for v in values {
+            for &limit in &limits {
+                let want = clamp_f32(flush_denormal(v), limit);
+                let got = flush_clamp(v, limit);
+                assert_eq!(got.to_bits(), want.to_bits(), "v {v:e} limit {limit:e}");
+            }
+        }
+    }
 
     /// The saturating chains of the `CQ15` matrix equal the clamp of the exact `i32` sum for
     /// every `d` and every 97th `s` plus the corners (the exhaustive sweep of all 2^32 pairs is

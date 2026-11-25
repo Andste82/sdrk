@@ -67,6 +67,8 @@ pub mod ffi {
         fn arm_scale_q15(src: *const i16, scale_fract: i16, shift: i8, dst: *mut i16, n: u32);
         fn arm_add_q15(a: *const i16, b: *const i16, dst: *mut i16, n: u32);
         fn arm_offset_q15(src: *const i16, offset: i16, dst: *mut i16, n: u32);
+        fn arm_offset_f32(src: *const f32, offset: f32, dst: *mut f32, n: u32);
+        fn arm_clip_f32(src: *const f32, dst: *mut f32, low: f32, high: f32, n: u32);
         fn arm_sub_q15(a: *const i16, b: *const i16, dst: *mut i16, n: u32);
         fn arm_add_f32(a: *const f32, b: *const f32, dst: *mut f32, n: u32);
         fn arm_sub_f32(a: *const f32, b: *const f32, dst: *mut f32, n: u32);
@@ -364,6 +366,30 @@ pub fn offset_q15(src: &[i16], offset: i16, dst: &mut [i16]) {
         src.as_ptr(),
         offset,
         dst.as_mut_ptr(),
+        block(src.len())
+    ));
+}
+
+/// `arm_offset_f32`: `dst[i] = src[i] + offset`.
+pub fn offset_f32(src: &[f32], offset: f32, dst: &mut [f32]) {
+    same(src.len(), dst.len(), "offset_f32");
+    call!(arm_offset_f32(
+        src.as_ptr(),
+        offset,
+        dst.as_mut_ptr(),
+        block(src.len())
+    ));
+}
+
+/// `arm_clip_f32`: `dst[i] = high` where `src[i] > high`, `low` where `src[i] < low`, else
+/// `src[i]` (generic C: a NaN fails both comparisons and is copied).
+pub fn clip_f32(src: &[f32], dst: &mut [f32], low: f32, high: f32) {
+    same(src.len(), dst.len(), "clip_f32");
+    call!(arm_clip_f32(
+        src.as_ptr(),
+        dst.as_mut_ptr(),
+        low,
+        high,
         block(src.len())
     ));
 }

@@ -154,7 +154,9 @@ pub fn satadd_i16(a: &[i16], b: &[i16], output: &mut [i16]) {
     }
 }
 
-/// `output[i] = clamp(round(input[i] * scale + bias), 0, 255)` (ties to even).
+/// The `CU8` contract of SDRk in KFR: `output[i] = clamp(round(a * scale + bias), 0, 255)` in
+/// `f64` with `a` the input and a NaN as 0 (O2 group 1, D2955). KFR's `round` rounds ties to even
+/// from SSE4.1 and ties away from zero at `sse2` and on AArch64.
 ///
 /// # Panics
 /// If the lengths differ.

@@ -145,6 +145,22 @@ fn cmsis_scale_and_products() {
     for (o, &x) in q.iter().zip(&qa) {
         assert_eq!(i32::from(*o), (i32::from(x) + 30000).clamp(-32768, 32767));
     }
+    cm::offset_f32(&a, 1.0, &mut out);
+    for (o, x) in out.iter().zip(&a) {
+        assert_eq!(*o, x + 1.0);
+    }
+    // The clip of the `am_mod` composition: the bounds where exceeded, a NaN copied (generic C
+    // compares `>` and `<`, which a NaN fails), so the composition has no NaN rule.
+    let wide: Vec<f32> = a.iter().map(|x| x * 3.0).chain([f32::NAN, -0.0]).collect();
+    let mut clipped = vec![0.0f32; wide.len()];
+    cm::clip_f32(&wide, &mut clipped, -1.0, 1.0);
+    for (o, x) in clipped.iter().zip(&wide) {
+        if x.is_nan() {
+            assert!(o.is_nan(), "clip passes NaN");
+        } else {
+            assert_eq!(o.to_bits(), x.clamp(-1.0, 1.0).to_bits());
+        }
+    }
 
     let (ca, cb) = (pairs(&a[..20]), pairs(&b[..20]));
     let mut cout = [[0.0f32; 2]; 10];
@@ -881,4 +897,20 @@ fn volk_nofma_complex_dot_product() {
         cref_sys::volk_nofma::protokernel(),
         Some("u_avx" | "neon")
     ));
+}
+
+#[test]
+fn kfr_cu8_contract() {
+    require!(cref_sys::kfr_ops::AVAILABLE, "KFR's element-wise expressions");
+    // The `CU8` contract: NaN as 0, `rint(x 128 + 127.5)` in `f64`, clamped (D2955). No input
+    // is a multiple of `1 / 128` (a tie of the formula, where KFR's rounding differs by level).
+    let mut x: Vec<f32> = signal(61, 5).iter().map(|v| v * 1.5 + 1e-5).collect();
+    x.extend([f32::NAN, -f32::NAN, f32::INFINITY, f32::NEG_INFINITY, -1e-30, 1e-30, 3.0]);
+    let mut out = vec![0u8; x.len()];
+    cref_sys::kfr_ops::f32_to_u8(&x, &mut out, 128.0, 127.5);
+    for (o, v) in out.iter().zip(&x) {
+        let a = if v.is_nan() { 0.0 } else { f64::from(*v) };
+        let want = (a * 128.0 + 127.5).round_ties_even().clamp(0.0, 255.0);
+        assert_eq!(f64::from(*o), want, "x = {v}");
+    }
 }

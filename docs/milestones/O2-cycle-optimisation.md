@@ -108,8 +108,378 @@ Not level switches; they keep the result of the contract for inputs the vector c
 
 ## Targets
 
-TARGETS
+From the full CI measurement of every entry on every level on 05ff2d25 (CI run 45641571494, merged into `benches/results/cycles/*.json`; the `simd128` counts of its job `count_wasm32`, unchanged against the committed file) and `benches/limits.json`. Cycles per sample on the reference model / the counter-model of the level; a ratio is ours divided by the other on the same model; "own fallback" is the `_fallback` entry of the same level (a `_fallback` entry has none; `avx2-runtime` is judged through `avx2`, D2764). SNR 999 is an exact result. Status from `benches/limits.json`.
+
+### Group 1: same-work references
+
+| Entry | Level | Ours (cycles per sample, ref. / counter) | Library (cycles per sample, ref. / counter) | Ours / library (ref. / counter) | Own fallback (cycles per sample, ref. / counter) | Ours / own fallback (ref. / counter) | Models (ref. / counter) | SNR in dB (ours / library) | Status |
+| --- | --- | --- | --- | --- | --- | --- | --- | --- | --- |
+| `am_mod_fallback` | `sse2` | 1.09 / 1.16 | 0.59 / 0.72 | 1.842 / 1.613 | — / — | — / — | skylake / znver2 | 150.80 / 150.80 | `dev` |
+| `am_mod_fallback` | `sse4.2` | 1.09 / 1.16 | 0.59 / 0.72 | 1.842 / 1.613 | — / — | — / — | skylake / znver2 | 150.80 / 150.80 | `dev` |
+| `am_mod_fallback` | `avx2` | 0.65 / 0.47 | 0.53 / 0.54 | 1.225 / 0.867 | — / — | — / — | znver3 / alderlake | 150.80 / 150.80 | `dev` |
+| `am_mod_fallback` | `avx512` | 0.38 / 0.30 | 0.53 / 0.54 | 0.726 / 0.560 | — / — | — / — | znver4 / sapphirerapids | 150.80 / 150.80 | `release` |
+| `am_mod_fallback` | `neon` | 2.91 / 1.52 | 1.28 / 1.03 | 2.273 / 1.478 | — / — | — / — | cortex-a72 / cortex-a76 | 150.80 / 152.07 | `dev` |
+| `am_mod` | `sse2` | 1.09 / 1.16 | — / — | — / — | 1.09 / 1.16 | 1.000 / 1.000 | skylake / znver2 | 150.80 / — | `info` |
+| `am_mod` | `sse4.2` | 1.09 / 1.16 | — / — | — / — | 1.09 / 1.16 | 1.000 / 1.000 | skylake / znver2 | 150.80 / — | `info` |
+| `am_mod` | `avx2` | 0.65 / 0.47 | — / — | — / — | 0.65 / 0.47 | 1.000 / 1.000 | znver3 / alderlake | 150.80 / — | `info` |
+| `am_mod` | `avx2-runtime` | 0.65 / 0.47 | — / — | — / — | — / — | — / — | znver3 / alderlake | 150.80 / — | `info` |
+| `am_mod` | `avx512` | 0.38 / 0.30 | — / — | — / — | 0.38 / 0.30 | 1.000 / 1.000 | znver4 / sapphirerapids | 150.80 / — | `info` |
+| `am_mod` | `neon` | 2.91 / 1.52 | — / — | — / — | 2.91 / 1.52 | 1.000 / 1.000 | cortex-a72 / cortex-a76 | 150.80 / — | `info` |
+| `convert_out_cu8` | `sse2` | 1.59 / 1.55 | 1.27 / 1.27 | 1.252 / 1.225 | 5.43 / 5.74 | 0.292 / 0.271 | skylake / znver2 | 47.27 / 47.27 | `dev` |
+| `convert_out_cu8` | `sse4.2` | 1.57 / 1.52 | 1.33 / 1.39 | 1.177 / 1.094 | 4.70 / 4.41 | 0.334 / 0.346 | skylake / znver2 | 47.27 / 47.27 | `dev` |
+| `convert_out_cu8` | `avx2` | 0.53 / 0.67 | 0.54 / 0.60 | 0.985 / 1.114 | 1.67 / 1.82 | 0.319 / 0.369 | znver3 / alderlake | 47.27 / 47.27 | `dev` |
+| `convert_out_cu8` | `avx2-runtime` | 0.53 / 0.66 | — / — | — / — | — / — | — / — | znver3 / alderlake | 47.27 / — | `dev` |
+| `convert_out_cu8` | `avx512` | 0.53 / 0.49 | 10.20 / 8.39 | 0.052 / 0.058 | 1.22 / 1.33 | 0.435 / 0.370 | znver4 / sapphirerapids | 47.27 / 47.27 | `release` |
+| `convert_out_cu8` | `neon` | 2.91 / 2.09 | 2.66 / 2.15 | 1.094 / 0.974 | 7.14 / 4.35 | 0.408 / 0.481 | cortex-a72 / cortex-a76 | 47.27 / 47.27 | `release` |
+| `convert_out_cu8_fallback` | `sse2` | 5.43 / 5.74 | 12.29 / 14.25 | 0.442 / 0.402 | — / — | — / — | skylake / znver2 | 47.27 / 47.27 | `release` |
+| `convert_out_cu8_fallback` | `sse4.2` | 4.70 / 4.41 | 2.83 / 2.72 | 1.658 / 1.621 | — / — | — / — | skylake / znver2 | 47.27 / 47.27 | `dev` |
+| `convert_out_cu8_fallback` | `avx2` | 1.67 / 1.82 | 1.22 / 1.49 | 1.371 / 1.224 | — / — | — / — | znver3 / alderlake | 47.27 / 47.27 | `dev` |
+| `convert_out_cu8_fallback` | `avx512` | 1.22 / 1.33 | 0.68 / 1.27 | 1.805 / 1.041 | — / — | — / — | znver4 / sapphirerapids | 47.27 / 47.27 | `dev` |
+| `convert_out_cu8_fallback` | `neon` | 7.14 / 4.35 | 4.90 / 2.84 | 1.456 / 1.532 | — / — | — / — | cortex-a72 / cortex-a76 | 47.27 / 47.27 | `dev` |
+| `convert_out_real_ru8` | `sse2` | 0.81 / 0.79 | 0.64 / 0.64 | 1.260 / 1.233 | 2.72 / 2.88 | 0.296 / 0.274 | skylake / znver2 | 47.25 / 47.25 | `dev` |
+| `convert_out_real_ru8` | `sse4.2` | 0.80 / 0.77 | 0.67 / 0.70 | 1.190 / 1.105 | 2.36 / 2.21 | 0.338 / 0.350 | skylake / znver2 | 47.25 / 47.25 | `dev` |
+| `convert_out_real_ru8` | `avx2` | 0.27 / 0.34 | 0.28 / 0.30 | 0.992 / 1.132 | 0.84 / 0.92 | 0.326 / 0.376 | znver3 / alderlake | 47.25 / 47.25 | `dev` |
+| `convert_out_real_ru8` | `avx2-runtime` | 0.27 / 0.34 | — / — | — / — | — / — | — / — | znver3 / alderlake | 47.25 / — | `dev` |
+| `convert_out_real_ru8` | `avx512` | 0.27 / 0.25 | 5.11 / 4.20 | 0.054 / 0.060 | 0.61 / 0.67 | 0.445 / 0.377 | znver4 / sapphirerapids | 47.25 / 47.25 | `release` |
+| `convert_out_real_ru8` | `neon` | 1.47 / 1.06 | 1.34 / 1.08 | 1.102 / 0.985 | 3.58 / 2.18 | 0.411 / 0.487 | cortex-a72 / cortex-a76 | 47.25 / 47.25 | `dev` |
+| `convert_out_real_ru8_fallback` | `sse2` | 2.72 / 2.88 | 6.15 / 7.13 | 0.443 / 0.404 | — / — | — / — | skylake / znver2 | 47.25 / 47.25 | `release` |
+| `convert_out_real_ru8_fallback` | `sse4.2` | 2.36 / 2.21 | 1.42 / 1.36 | 1.661 / 1.623 | — / — | — / — | skylake / znver2 | 47.25 / 47.25 | `dev` |
+| `convert_out_real_ru8_fallback` | `avx2` | 0.84 / 0.92 | 0.61 / 0.75 | 1.372 / 1.226 | — / — | — / — | znver3 / alderlake | 47.25 / 47.25 | `dev` |
+| `convert_out_real_ru8_fallback` | `avx512` | 0.61 / 0.67 | 0.34 / 0.64 | 1.797 / 1.046 | — / — | — / — | znver4 / sapphirerapids | 47.25 / 47.25 | `dev` |
+| `convert_out_real_ru8_fallback` | `neon` | 3.58 / 2.18 | 2.46 / 1.42 | 1.457 / 1.533 | — / — | — / — | cortex-a72 / cortex-a76 | 47.25 / 47.25 | `dev` |
+
+`simd128` (instructions per sample):
+
+| Entry | Ours (instructions per sample) | Judged library (instructions per sample) | VOLK `-O3 -msimd128` (instructions per sample) | Ours / judged | Ours / stronger (D2953) | Own fallback (instructions per sample) | Ours / own fallback | Status |
+| --- | --- | --- | --- | --- | --- | --- | --- | --- |
+| `am_mod_fallback` | 10.54 | 46.02 | — | 0.229 | 0.229 | — | — | `release` |
+| `am_mod` | 10.54 | — | — | — | — | 10.54 | 1.000 | `info` |
+| `convert_out_cu8` | 15.17 | 29.03 | — | 0.523 | 0.523 | 26.57 | 0.571 | `info` |
+| `convert_out_cu8_fallback` | 26.57 | 27.03 | — | 0.983 | 0.983 | — | — | `release` |
+| `convert_out_real_ru8` | 7.63 | 14.53 | — | 0.525 | 0.525 | 13.31 | 0.573 | `info` |
+| `convert_out_real_ru8_fallback` | 13.31 | 13.53 | — | 0.984 | 0.984 | — | — | `release` |
+
+Above 1.50 (D2950, to be solved in O2 or handled by group 1): `am_mod_fallback` at `sse2` and `sse4.2` (1.842 / 1.613) and `neon` (2.273 on `cortex-a72`). `avx2` 1.225 on `znver3`; `avx512` and `simd128` are `release`. The SIMD entry `am_mod` is the fallback's loop on every level (1.000, group 3b). `convert_out_cu8` and `convert_out_real_ru8` (SIMD) are `dev` at `sse2` (1.25 / 1.23), `sse4.2` (1.18 / 1.09 and 1.19 / 1.105) and `avx2` (1.114 and 1.132 on `alderlake`); `release` at `avx512`, `cu8` also at `neon` (`ru8` 1.102 on `cortex-a72`). Same SNR as VOLK (47.27 / 47.25 dB): the extra work (NaN rule, exact rounding) shows in no number of the measurement, so group 1 has to state what it buys. Their fallbacks are in group 4.
+
+### Group 2: accuracy
+
+| Entry | Level | Ours (cycles per sample, ref. / counter) | Library (cycles per sample, ref. / counter) | Ours / library (ref. / counter) | Own fallback (cycles per sample, ref. / counter) | Ours / own fallback (ref. / counter) | Models (ref. / counter) | SNR in dB (ours / library) | Status |
+| --- | --- | --- | --- | --- | --- | --- | --- | --- | --- |
+| `oscillate` | `sse2` | 2.30 / 2.28 | 36.86 / 28.44 | 0.062 / 0.080 | 4.90 / 6.35 | 0.470 / 0.359 | skylake / znver2 | 133.23 / 141.71 | `release` |
+| `oscillate` | `sse4.2` | 2.29 / 2.57 | 22.92 / 21.71 | 0.100 / 0.118 | 4.90 / 6.35 | 0.467 / 0.404 | skylake / znver2 | 133.23 / 141.71 | `release` |
+| `oscillate` | `avx2` | 1.40 / 1.45 | 4.93 / 4.57 | 0.283 / 0.316 | 2.27 / 4.03 | 0.615 / 0.359 | znver3 / alderlake | 133.23 / 141.71 | `release` |
+| `oscillate` | `avx2-runtime` | 1.40 / 1.45 | — / — | — / — | — / — | — / — | znver3 / alderlake | 133.23 / — | `release` |
+| `oscillate` | `avx512` | 0.43 / 2.08 | 6.46 / 8.59 | 0.067 / 0.242 | 0.76 / 3.79 | 0.570 / 0.549 | znver4 / sapphirerapids | 133.23 / 141.71 | `release` |
+| `oscillate` | `neon` | 5.55 / 3.28 | 35.40 / 23.70 | 0.157 / 0.138 | 8.10 / 10.06 | 0.685 / 0.326 | cortex-a72 / cortex-a76 | 133.23 / 141.71 | `release` |
+| `oscillate_fallback` | `sse2` | 4.90 / 6.35 | 56.29 / 51.64 | 0.087 / 0.123 | — / — | — / — | skylake / znver2 | 133.23 / 140.77 | `release` |
+| `oscillate_fallback` | `sse4.2` | 4.90 / 6.35 | 51.98 / 50.82 | 0.094 / 0.125 | — / — | — / — | skylake / znver2 | 133.23 / 140.77 | `release` |
+| `oscillate_fallback` | `avx2` | 2.27 / 4.03 | 31.51 / 80.72 | 0.072 / 0.050 | — / — | — / — | znver3 / alderlake | 133.23 / 140.77 | `release` |
+| `oscillate_fallback` | `avx512` | 0.76 / 3.79 | 78.52 / 90.69 | 0.010 / 0.042 | — / — | — / — | znver4 / sapphirerapids | 133.23 / 140.77 | `release` |
+| `oscillate_fallback` | `neon` | 8.10 / 10.06 | 52.62 / 46.15 | 0.154 / 0.218 | — / — | — / — | cortex-a72 / cortex-a76 | 133.23 / 140.77 | `release` |
+| `deemphasis_fallback` | `sse2` | 12.09 / 9.76 | 13.15 / 17.11 | 0.920 / 0.570 | — / — | — / — | skylake / znver2 | 145.36 / 151.98 | `release` |
+| `deemphasis_fallback` | `sse4.2` | 12.09 / 9.76 | 13.15 / 17.11 | 0.920 / 0.570 | — / — | — / — | skylake / znver2 | 145.36 / 151.98 | `release` |
+| `deemphasis_fallback` | `avx2` | 9.55 / 11.58 | 10.80 / 23.14 | 0.884 / 0.501 | — / — | — / — | znver3 / alderlake | 145.36 / 151.98 | `release` |
+| `deemphasis_fallback` | `avx512` | 10.21 / 11.11 | 10.80 / 23.14 | 0.945 / 0.480 | — / — | — / — | znver4 / sapphirerapids | 145.36 / 151.98 | `release` |
+| `deemphasis_fallback` | `neon` | 15.07 / 10.06 | 18.10 / 21.07 | 0.833 / 0.477 | — / — | — / — | cortex-a72 / cortex-a76 | 145.36 / 151.98 | `release` |
+| `fir_decimate_fallback` | `sse2` | 15.09 / 15.82 | 38.80 / 23.74 | 0.389 / 0.666 | — / — | — / — | skylake / znver2 | 133.29 / 134.33 | `release` |
+| `fir_decimate_fallback` | `sse4.2` | 15.09 / 15.82 | 38.81 / 23.69 | 0.389 / 0.668 | — / — | — / — | skylake / znver2 | 133.29 / 134.33 | `release` |
+| `fir_decimate_fallback` | `avx2` | 11.63 / 11.54 | 71.28 / 32.88 | 0.163 / 0.351 | — / — | — / — | znver3 / alderlake | 133.29 / 134.33 | `release` |
+| `fir_decimate_fallback` | `avx512` | 11.12 / 10.28 | 71.32 / 38.89 | 0.156 / 0.264 | — / — | — / — | znver4 / sapphirerapids | 133.29 / 134.33 | `release` |
+| `fir_decimate_fallback` | `neon` | 32.76 / 25.71 | 34.10 / 41.23 | 0.961 / 0.624 | — / — | — / — | cortex-a72 / cortex-a76 | 133.29 / 134.33 | `release` |
+| `am_mod_fallback` | `neon` | 2.91 / 1.52 | 1.28 / 1.03 | 2.273 / 1.478 | — / — | — / — | cortex-a72 / cortex-a76 | 150.80 / 152.07 | `dev` |
+
+`simd128` (instructions per sample):
+
+| Entry | Ours (instructions per sample) | Judged library (instructions per sample) | VOLK `-O3 -msimd128` (instructions per sample) | Ours / judged | Ours / stronger (D2953) | Own fallback (instructions per sample) | Ours / own fallback | Status |
+| --- | --- | --- | --- | --- | --- | --- | --- | --- |
+| `oscillate` | 22.04 | — | — | — | — | 28.28 | 0.779 | `info` |
+| `oscillate_fallback` | 28.28 | 175.01 | — | 0.162 | 0.162 | — | — | `release` |
+| `deemphasis_fallback` | 27.53 | 150.07 | — | 0.183 | 0.183 | — | — | `release` |
+| `fir_decimate_fallback` | 147.84 | 138.12 | — | 1.070 | 1.070 | — | — | `release` |
+
+Below the library by more than 1 dB: `oscillate` and `oscillate_fallback` 133.23 dB against SLEEF 141.71 dB (8.5 dB) and liquid-dsp 140.77 dB (7.5 dB) on every level, with ample speed room (at most 0.316 of SLEEF, 0.218 of liquid-dsp); `deemphasis_fallback` 145.36 against 151.98 dB (6.6 dB), speed room small on the reference models (0.920 `skylake`, 0.945 `znver4`, 0.884 `znver3`, 0.833 `cortex-a72`); `fir_decimate_fallback` 133.29 against 134.33 dB (1.04 dB), speed room except `neon` (0.961 on `cortex-a72`); `am_mod_fallback` at `neon` 150.80 against 152.07 dB (1.27 dB, and 2.27 times slower, group 1).
+
+### Group 3a: the Q15 / CQ15 FIR SIMD entries (D65 switch), ours / own fallback
+
+| Entry | Level | Ours (cycles per sample, ref. / counter) | Library (cycles per sample, ref. / counter) | Ours / library (ref. / counter) | Own fallback (cycles per sample, ref. / counter) | Ours / own fallback (ref. / counter) | Models (ref. / counter) | SNR in dB (ours / library) | Status |
+| --- | --- | --- | --- | --- | --- | --- | --- | --- | --- |
+| `fir_cq15` | `sse2` | 142.26 / 188.05 | — / — | — / — | 142.26 / 188.05 | 1.000 / 1.000 | skylake / znver2 | 999.00 / — | `info` |
+| `fir_cq15` | `sse4.2` | 47.76 / 49.10 | — / — | — / — | 142.26 / 188.05 | 0.336 / 0.261 | skylake / znver2 | 999.00 / — | `info` |
+| `fir_cq15` | `avx2` | 40.45 / 60.95 | — / — | — / — | 40.45 / 60.95 | 1.000 / 1.000 | znver3 / alderlake | 999.00 / — | `info` |
+| `fir_cq15` | `avx2-runtime` | 41.11 / 61.89 | — / — | — / — | — / — | — / — | znver3 / alderlake | 999.00 / — | `info` |
+| `fir_cq15` | `avx512` | 40.37 / 45.20 | — / — | — / — | 40.37 / 45.20 | 1.000 / 1.000 | znver4 / sapphirerapids | 999.00 / — | `info` |
+| `fir_cq15` | `neon` | 106.10 / 92.51 | — / — | — / — | 107.54 / 97.99 | 0.987 / 0.944 | cortex-a72 / cortex-a76 | 999.00 / — | `info` |
+| `fir_decimate_cq15` | `sse2` | 28.57 / 34.29 | — / — | — / — | 28.57 / 34.29 | 1.000 / 1.000 | skylake / znver2 | 999.00 / — | `info` |
+| `fir_decimate_cq15` | `sse4.2` | 8.87 / 9.34 | — / — | — / — | 35.07 / 28.09 | 0.253 / 0.333 | skylake / znver2 | 999.00 / — | `info` |
+| `fir_decimate_cq15` | `avx2` | 21.61 / 22.05 | — / — | — / — | 21.61 / 22.05 | 1.000 / 1.000 | znver3 / alderlake | 999.00 / — | `info` |
+| `fir_decimate_cq15` | `avx2-runtime` | 18.97 / 20.01 | — / — | — / — | — / — | — / — | znver3 / alderlake | 999.00 / — | `info` |
+| `fir_decimate_cq15` | `avx512` | 11.57 / 11.17 | — / — | — / — | 16.80 / 18.22 | 0.689 / 0.613 | znver4 / sapphirerapids | 999.00 / — | `info` |
+| `fir_decimate_cq15` | `neon` | 14.98 / 14.64 | — / — | — / — | 14.98 / 14.64 | 1.000 / 1.000 | cortex-a72 / cortex-a76 | 999.00 / — | `info` |
+| `fir_interpolate_cq15` | `sse2` | 137.49 / 207.95 | — / — | — / — | 137.49 / 207.95 | 1.000 / 1.000 | skylake / znver2 | 999.00 / — | `info` |
+| `fir_interpolate_cq15` | `sse4.2` | 51.44 / 53.59 | — / — | — / — | 137.49 / 207.95 | 0.374 / 0.258 | skylake / znver2 | 999.00 / — | `info` |
+| `fir_interpolate_cq15` | `avx2` | 52.53 / 71.44 | — / — | — / — | 52.53 / 71.44 | 1.000 / 1.000 | znver3 / alderlake | 999.00 / — | `info` |
+| `fir_interpolate_cq15` | `avx2-runtime` | 52.41 / 71.69 | — / — | — / — | — / — | — / — | znver3 / alderlake | 999.00 / — | `info` |
+| `fir_interpolate_cq15` | `avx512` | 54.43 / 63.07 | — / — | — / — | 54.43 / 63.07 | 1.000 / 1.000 | znver4 / sapphirerapids | 999.00 / — | `info` |
+| `fir_interpolate_cq15` | `neon` | 75.80 / 76.00 | — / — | — / — | 127.87 / 145.98 | 0.593 / 0.521 | cortex-a72 / cortex-a76 | 999.00 / — | `info` |
+| `resample_cq15` | `sse2` | 168.72 / 240.51 | — / — | — / — | 168.72 / 240.51 | 1.000 / 1.000 | skylake / znver2 | 999.00 / — | `info` |
+| `resample_cq15` | `sse4.2` | 49.95 / 51.77 | — / — | — / — | 168.72 / 240.51 | 0.296 / 0.215 | skylake / znver2 | 999.00 / — | `info` |
+| `resample_cq15` | `avx2` | 117.51 / 113.18 | — / — | — / — | 117.51 / 113.18 | 1.000 / 1.000 | znver3 / alderlake | 999.00 / — | `info` |
+| `resample_cq15` | `avx2-runtime` | 97.21 / 110.41 | — / — | — / — | — / — | — / — | znver3 / alderlake | 999.00 / — | `info` |
+| `resample_cq15` | `avx512` | 66.27 / 68.77 | — / — | — / — | 84.14 / 88.98 | 0.788 / 0.773 | znver4 / sapphirerapids | 999.00 / — | `info` |
+| `resample_cq15` | `neon` | 145.75 / 118.45 | — / — | — / — | 193.78 / 184.91 | 0.752 / 0.641 | cortex-a72 / cortex-a76 | 999.00 / — | `info` |
+| `fir_interpolate_real_q15` | `sse2` | 70.71 / 101.24 | — / — | — / — | 70.71 / 101.24 | 1.000 / 1.000 | skylake / znver2 | 999.00 / — | `info` |
+| `fir_interpolate_real_q15` | `sse4.2` | 26.58 / 32.31 | — / — | — / — | 70.71 / 101.24 | 0.376 / 0.319 | skylake / znver2 | 999.00 / — | `info` |
+| `fir_interpolate_real_q15` | `avx2` | 42.13 / 38.06 | — / — | — / — | 42.13 / 38.06 | 1.000 / 1.000 | znver3 / alderlake | 999.00 / — | `info` |
+| `fir_interpolate_real_q15` | `avx2-runtime` | 43.09 / 40.75 | — / — | — / — | — / — | — / — | znver3 / alderlake | 999.00 / — | `info` |
+| `fir_interpolate_real_q15` | `avx512` | 22.72 / 29.27 | — / — | — / — | 22.72 / 29.27 | 1.000 / 1.000 | znver4 / sapphirerapids | 999.00 / — | `info` |
+| `fir_interpolate_real_q15` | `neon` | 73.09 / 73.97 | — / — | — / — | 73.09 / 73.97 | 1.000 / 1.000 | cortex-a72 / cortex-a76 | 999.00 / — | `info` |
+| `resample_real_q15` | `sse2` | 103.67 / 144.16 | — / — | — / — | 103.67 / 144.16 | 1.000 / 1.000 | skylake / znver2 | 999.00 / — | `info` |
+| `resample_real_q15` | `sse4.2` | 25.84 / 31.40 | — / — | — / — | 103.67 / 144.16 | 0.249 / 0.218 | skylake / znver2 | 999.00 / — | `info` |
+| `resample_real_q15` | `avx2` | 60.80 / 66.72 | — / — | — / — | 112.73 / 99.45 | 0.539 / 0.671 | znver3 / alderlake | 999.00 / — | `info` |
+| `resample_real_q15` | `avx2-runtime` | 60.54 / 66.87 | — / — | — / — | — / — | — / — | znver3 / alderlake | 999.00 / — | `info` |
+| `resample_real_q15` | `avx512` | 33.26 / 36.27 | — / — | — / — | 100.33 / 85.43 | 0.332 / 0.425 | znver4 / sapphirerapids | 999.00 / — | `info` |
+| `resample_real_q15` | `neon` | 97.68 / 78.50 | — / — | — / — | 113.65 / 107.66 | 0.860 / 0.729 | cortex-a72 / cortex-a76 | 999.00 / — | `info` |
+
+`simd128` (instructions per sample):
+
+| Entry | Ours (instructions per sample) | Judged library (instructions per sample) | VOLK `-O3 -msimd128` (instructions per sample) | Ours / judged | Ours / stronger (D2953) | Own fallback (instructions per sample) | Ours / own fallback | Status |
+| --- | --- | --- | --- | --- | --- | --- | --- | --- |
+| `fir_cq15` | 841.33 | — | — | — | — | 934.94 | 0.900 | `info` |
+| `fir_decimate_cq15` | 185.86 | — | — | — | — | 205.53 | 0.904 | `info` |
+| `fir_interpolate_cq15` | 638.42 | — | — | — | — | 638.42 | 1.000 | `info` |
+| `resample_cq15` | 976.93 | — | — | — | — | 1075.66 | 0.908 | `info` |
+| `fir_interpolate_real_q15` | 451.84 | — | — | — | — | 451.84 | 1.000 | `info` |
+| `resample_real_q15` | 598.51 | — | — | — | — | 875.80 | 0.683 | `info` |
+
+Target: at most 0.80 of the fallback on both models at every level. Above it today (1.000 is the D65 switch): `sse2` all six; `avx2` all but `resample_real_q15` (0.539 / 0.671); `avx512` `fir_cq15`, `fir_interpolate_cq15`, `fir_interpolate_real_q15` (switched), `resample_cq15` 0.788 / 0.773 (just within); `neon` `fir_decimate_cq15` and `fir_interpolate_real_q15` (switched), `fir_cq15` 0.987 / 0.944 (kept, no gain), `resample_real_q15` 0.860 / 0.729; `simd128` `fir_interpolate_cq15` and `fir_interpolate_real_q15` (switched, 1.00), `fir_cq15` and `fir_decimate_cq15` 0.90, `resample_cq15` 0.91. Within the target: every `sse4.2` row (0.215 to 0.376, the `pmaddwd` progressions of D340), `fir_decimate_cq15` at `avx512`, `fir_interpolate_cq15` and `resample_cq15` at `neon`, `resample_real_q15` at `avx2`, `avx512` and `simd128`. `avx2-runtime`: `fir_interpolate_real_q15` 43.09 / 40.75 against 42.13 / 38.06 of the fixed `avx2` build (1.023 / 1.071, information, group 4).
+
+### Group 3a: Q15 kernels without a SIMD branch at sse2 (the sse4.2 row shows what the SSE4.1/SSSE3 branch gives)
+
+| Entry | Level | Ours (cycles per sample, ref. / counter) | Library (cycles per sample, ref. / counter) | Ours / library (ref. / counter) | Own fallback (cycles per sample, ref. / counter) | Ours / own fallback (ref. / counter) | Models (ref. / counter) | SNR in dB (ours / library) | Status |
+| --- | --- | --- | --- | --- | --- | --- | --- | --- | --- |
+| `am_mod_cq15` | `sse2` | 2.62 / 3.12 | — / — | — / — | 2.62 / 3.12 | 1.000 / 1.000 | skylake / znver2 | 92.65 / — | `info` |
+| `am_mod_cq15` | `sse4.2` | 0.31 / 0.37 | — / — | — / — | 1.23 / 1.15 | 0.250 / 0.318 | skylake / znver2 | 92.65 / — | `info` |
+| `biquad_cq15` | `sse2` | 24.94 / 31.17 | — / — | — / — | 24.94 / 31.17 | 1.000 / 1.000 | skylake / znver2 | 71.59 / — | `info` |
+| `biquad_cq15` | `sse4.2` | 16.13 / 15.63 | — / — | — / — | 24.43 / 31.16 | 0.660 / 0.501 | skylake / znver2 | 71.59 / — | `info` |
+| `biquad_real_q15` | `sse2` | 14.12 / 15.13 | — / — | — / — | 14.12 / 15.13 | 1.000 / 1.000 | skylake / znver2 | 71.45 / — | `info` |
+| `biquad_real_q15` | `sse4.2` | 12.08 / 11.32 | — / — | — / — | 14.13 / 15.13 | 0.855 / 0.749 | skylake / znver2 | 71.45 / — | `info` |
+| `mul_cq15` | `sse2` | 5.03 / 3.90 | — / — | — / — | 5.03 / 3.90 | 1.000 / 1.000 | skylake / znver2 | 94.36 / — | `info` |
+| `mul_cq15` | `sse4.2` | 1.43 / 1.48 | — / — | — / — | 3.04 / 2.89 | 0.469 / 0.514 | skylake / znver2 | 94.36 / — | `info` |
+| `mul_real_q15` | `sse2` | 0.97 / 1.02 | — / — | — / — | 0.97 / 1.02 | 1.000 / 1.000 | skylake / znver2 | 91.62 / — | `info` |
+| `mul_real_q15` | `sse4.2` | 0.20 / 0.24 | — / — | — / — | 0.67 / 0.55 | 0.295 / 0.427 | skylake / znver2 | 91.62 / — | `info` |
+| `scale_cq15` | `sse2` | 2.03 / 2.11 | — / — | — / — | 2.03 / 2.11 | 1.000 / 1.000 | skylake / znver2 | 93.67 / — | `info` |
+| `scale_cq15` | `sse4.2` | 0.26 / 0.26 | — / — | — / — | 1.10 / 1.02 | 0.237 / 0.256 | skylake / znver2 | 93.67 / — | `info` |
+
+`simd128` (instructions per sample):
+
+| Entry | Ours (instructions per sample) | Judged library (instructions per sample) | VOLK `-O3 -msimd128` (instructions per sample) | Ours / judged | Ours / stronger (D2953) | Own fallback (instructions per sample) | Ours / own fallback | Status |
+| --- | --- | --- | --- | --- | --- | --- | --- | --- |
+| `mul_cq15` | 15.17 | — | — | — | — | 15.17 | 1.000 | `info` |
+
+All six run the fallback at `sse2` (1.000); the `sse4.2` branches give 0.237 to 0.660 of the fallback, `biquad_real_q15` 0.855 / 0.749 (above 0.80 on `skylake` at `sse4.2` as well). `mul_cq15` has no `simd128` path either (1.00). The six FIR kernels at `sse2` are in the table above.
+
+### Group 3b: SIMD entries no faster than their fallback
+
+| Entry | Level | Ours (cycles per sample, ref. / counter) | Library (cycles per sample, ref. / counter) | Ours / library (ref. / counter) | Own fallback (cycles per sample, ref. / counter) | Ours / own fallback (ref. / counter) | Models (ref. / counter) | SNR in dB (ours / library) | Status |
+| --- | --- | --- | --- | --- | --- | --- | --- | --- | --- |
+| `am_mod` | `sse2` | 1.09 / 1.16 | — / — | — / — | 1.09 / 1.16 | 1.000 / 1.000 | skylake / znver2 | 150.80 / — | `info` |
+| `am_mod` | `sse4.2` | 1.09 / 1.16 | — / — | — / — | 1.09 / 1.16 | 1.000 / 1.000 | skylake / znver2 | 150.80 / — | `info` |
+| `am_mod` | `avx2` | 0.65 / 0.47 | — / — | — / — | 0.65 / 0.47 | 1.000 / 1.000 | znver3 / alderlake | 150.80 / — | `info` |
+| `am_mod` | `avx2-runtime` | 0.65 / 0.47 | — / — | — / — | — / — | — / — | znver3 / alderlake | 150.80 / — | `info` |
+| `am_mod` | `avx512` | 0.38 / 0.30 | — / — | — / — | 0.38 / 0.30 | 1.000 / 1.000 | znver4 / sapphirerapids | 150.80 / — | `info` |
+| `am_mod` | `neon` | 2.91 / 1.52 | — / — | — / — | 2.91 / 1.52 | 1.000 / 1.000 | cortex-a72 / cortex-a76 | 150.80 / — | `info` |
+| `am_mod_cq15` | `sse2` | 2.62 / 3.12 | — / — | — / — | 2.62 / 3.12 | 1.000 / 1.000 | skylake / znver2 | 92.65 / — | `info` |
+| `am_mod_cq15` | `sse4.2` | 0.31 / 0.37 | — / — | — / — | 1.23 / 1.15 | 0.250 / 0.318 | skylake / znver2 | 92.65 / — | `info` |
+| `am_mod_cq15` | `avx2` | 0.20 / 0.21 | — / — | — / — | 0.43 / 0.56 | 0.473 / 0.368 | znver3 / alderlake | 92.65 / — | `info` |
+| `am_mod_cq15` | `avx2-runtime` | 0.20 / 0.21 | — / — | — / — | — / — | — / — | znver3 / alderlake | 92.65 / — | `info` |
+| `am_mod_cq15` | `avx512` | 0.14 / 0.20 | — / — | — / — | 0.32 / 0.48 | 0.431 / 0.426 | znver4 / sapphirerapids | 92.65 / — | `info` |
+| `am_mod_cq15` | `neon` | 0.90 / 0.77 | — / — | — / — | 1.72 / 1.33 | 0.524 / 0.576 | cortex-a72 / cortex-a76 | 92.65 / — | `info` |
+| `mag` | `avx512` | 0.64 / 0.76 | 1.28 / 1.54 | 0.496 / 0.494 | 0.64 / 0.76 | 0.999 / 0.999 | znver4 / sapphirerapids | 150.54 / 150.92 | `release` |
+| `mag` | `neon` | 8.58 / 1.77 | 8.59 / 1.79 | 0.998 / 0.988 | 8.56 / 1.77 | 1.002 / 0.997 | cortex-a72 / cortex-a76 | 150.54 / 150.95 | `release` |
+| `mul` | `sse2` | 1.53 / 1.59 | 2.68 / 2.81 | 0.570 / 0.567 | 1.53 / 1.59 | 1.001 / 1.001 | skylake / znver2 | 148.50 / 148.50 | `release` |
+| `stereo_matrix` | `neon` | 1.90 / 1.39 | 5.74 / 5.23 | 0.331 / 0.267 | 1.90 / 1.39 | 1.001 / 1.001 | cortex-a72 / cortex-a76 | 151.28 / 151.28 | `release` |
+| `stereo_matrix_cq15` | `neon` | 0.77 / 0.76 | — / — | — / — | 0.77 / 0.76 | 1.002 / 1.002 | cortex-a72 / cortex-a76 | 999.00 / — | `info` |
+| `dot_cq15` | `neon` | 0.90 / 0.90 | — / — | — / — | 0.90 / 0.90 | 0.999 / 1.000 | cortex-a72 / cortex-a76 | 82.20 / — | `info` |
+| `interleave` | `avx2` | 0.26 / 0.51 | 0.27 / 0.52 | 0.971 / 0.974 | 0.26 / 0.51 | 0.995 / 0.993 | znver3 / alderlake | 999.00 / 999.00 | `release` |
+| `interleave_cq15` | `avx2` | 0.14 / 0.13 | 6.55 / 7.64 | 0.021 / 0.017 | 0.13 / 0.13 | 1.010 / 0.999 | znver3 / alderlake | 999.00 / 999.00 | `release` |
+| `deinterleave` | `avx2` | 0.26 / 0.26 | 0.39 / 0.40 | 0.662 / 0.651 | 0.26 / 0.26 | 0.991 / 0.984 | znver3 / alderlake | 999.00 / 999.00 | `release` |
+| `convert_cq15_cs8` | `avx2` | 0.14 / 0.14 | 0.14 / 0.18 | 0.967 / 0.764 | 0.14 / 0.14 | 0.992 / 0.986 | znver3 / alderlake | 999.00 / 999.00 | `release` |
+| `equalize` | `sse2` | 138.46 / 145.11 | 355.18 / 390.47 | 0.390 / 0.372 | 138.46 / 145.11 | 1.000 / 1.000 | skylake / znver2 | 999.00 / 129.96 | `info` |
+| `equalize` | `sse4.2` | 135.40 / 133.75 | 271.02 / 292.38 | 0.500 / 0.457 | 135.40 / 133.75 | 1.000 / 1.000 | skylake / znver2 | 999.00 / 129.82 | `info` |
+| `equalize` | `avx2` | 111.94 / 152.23 | 1074.99 / 289.89 | 0.104 / 0.525 | 111.94 / 152.23 | 1.000 / 1.000 | znver3 / alderlake | 999.00 / 130.26 | `info` |
+| `equalize` | `avx2-runtime` | 105.10 / 100.09 | — / — | — / — | — / — | — / — | znver3 / alderlake | 999.00 / — | `info` |
+| `equalize` | `avx512` | 104.01 / 146.19 | 1094.85 / 323.95 | 0.095 / 0.451 | 104.01 / 146.19 | 1.000 / 1.000 | znver4 / sapphirerapids | 999.00 / 130.26 | `info` |
+| `equalize` | `neon` | 216.21 / 183.98 | 329.80 / 359.68 | 0.656 / 0.512 | 216.21 / 183.98 | 1.000 / 1.000 | cortex-a72 / cortex-a76 | 999.00 / 129.52 | `info` |
+| `equalize_qam16` | `sse2` | 159.59 / 158.25 | 357.76 / 396.73 | 0.446 / 0.399 | 159.59 / 158.25 | 1.000 / 1.000 | skylake / znver2 | 999.00 / 129.81 | `info` |
+| `equalize_qam16` | `sse4.2` | 160.09 / 152.75 | 273.34 / 297.82 | 0.586 / 0.513 | 160.09 / 152.75 | 1.000 / 1.000 | skylake / znver2 | 999.00 / 129.85 | `info` |
+| `equalize_qam16` | `avx2` | 119.94 / 164.27 | 1088.28 / 294.40 | 0.110 / 0.558 | 119.94 / 164.27 | 1.000 / 1.000 | znver3 / alderlake | 999.00 / 130.02 | `info` |
+| `equalize_qam16` | `avx2-runtime` | 129.16 / 111.96 | — / — | — / — | — / — | — / — | znver3 / alderlake | 999.00 / — | `info` |
+| `equalize_qam16` | `avx512` | 121.27 / 169.39 | 1100.18 / 328.53 | 0.110 / 0.516 | 121.27 / 169.39 | 1.000 / 1.000 | znver4 / sapphirerapids | 999.00 / 130.02 | `info` |
+| `equalize_qam16` | `neon` | 229.29 / 190.02 | 357.37 / 388.90 | 0.642 / 0.489 | 229.29 / 190.02 | 1.000 / 1.000 | cortex-a72 / cortex-a76 | 999.00 / 130.13 | `info` |
+| `equalize_qam64` | `sse2` | 159.59 / 158.25 | 357.76 / 396.73 | 0.446 / 0.399 | 159.59 / 158.25 | 1.000 / 1.000 | skylake / znver2 | 999.00 / 130.61 | `info` |
+| `equalize_qam64` | `sse4.2` | 160.09 / 152.75 | 273.34 / 297.82 | 0.586 / 0.513 | 160.09 / 152.75 | 1.000 / 1.000 | skylake / znver2 | 999.00 / 130.57 | `info` |
+| `equalize_qam64` | `avx2` | 123.94 / 170.30 | 1088.28 / 294.40 | 0.114 / 0.578 | 123.94 / 170.30 | 1.000 / 1.000 | znver3 / alderlake | 999.00 / 130.82 | `info` |
+| `equalize_qam64` | `avx2-runtime` | 129.16 / 112.47 | — / — | — / — | — / — | — / — | znver3 / alderlake | 999.00 / — | `info` |
+| `equalize_qam64` | `avx512` | 121.24 / 168.37 | 1100.18 / 328.53 | 0.110 / 0.512 | 121.24 / 168.37 | 1.000 / 1.000 | znver4 / sapphirerapids | 999.00 / 130.82 | `info` |
+| `equalize_qam64` | `neon` | 244.37 / 189.01 | 357.37 / 388.90 | 0.684 / 0.486 | 244.37 / 189.01 | 1.000 / 1.000 | cortex-a72 / cortex-a76 | 999.00 / 131.03 | `info` |
+| `equalize_qam256` | `sse2` | 160.64 / 164.28 | — / — | — / — | 160.64 / 164.28 | 1.000 / 1.000 | skylake / znver2 | 999.00 / — | `info` |
+| `equalize_qam256` | `sse4.2` | 159.18 / 158.86 | — / — | — / — | 159.18 / 158.86 | 1.000 / 1.000 | skylake / znver2 | 999.00 / — | `info` |
+| `equalize_qam256` | `avx2` | 142.06 / 174.29 | — / — | — / — | 142.06 / 174.29 | 1.000 / 1.000 | znver3 / alderlake | 999.00 / — | `info` |
+| `equalize_qam256` | `avx2-runtime` | 134.21 / 116.33 | — / — | — / — | — / — | — / — | znver3 / alderlake | 999.00 / — | `info` |
+| `equalize_qam256` | `avx512` | 125.31 / 173.38 | — / — | — / — | 125.31 / 173.38 | 1.000 / 1.000 | znver4 / sapphirerapids | 999.00 / — | `info` |
+| `equalize_qam256` | `neon` | 252.46 / 186.09 | — / — | — / — | 252.46 / 186.09 | 1.000 / 1.000 | cortex-a72 / cortex-a76 | 999.00 / — | `info` |
+| `equalize_qam1024` | `sse2` | 160.64 / 164.28 | — / — | — / — | 160.64 / 164.28 | 1.000 / 1.000 | skylake / znver2 | 999.00 / — | `info` |
+| `equalize_qam1024` | `sse4.2` | 159.18 / 158.86 | — / — | — / — | 159.18 / 158.86 | 1.000 / 1.000 | skylake / znver2 | 999.00 / — | `info` |
+| `equalize_qam1024` | `avx2` | 142.06 / 174.29 | — / — | — / — | 142.06 / 174.29 | 1.000 / 1.000 | znver3 / alderlake | 999.00 / — | `info` |
+| `equalize_qam1024` | `avx2-runtime` | 134.21 / 116.33 | — / — | — / — | — / — | — / — | znver3 / alderlake | 999.00 / — | `info` |
+| `equalize_qam1024` | `avx512` | 125.31 / 173.38 | — / — | — / — | 125.31 / 173.38 | 1.000 / 1.000 | znver4 / sapphirerapids | 999.00 / — | `info` |
+| `equalize_qam1024` | `neon` | 252.46 / 186.09 | — / — | — / — | 252.46 / 186.09 | 1.000 / 1.000 | cortex-a72 / cortex-a76 | 999.00 / — | `info` |
+
+`simd128` (instructions per sample):
+
+| Entry | Ours (instructions per sample) | Judged library (instructions per sample) | VOLK `-O3 -msimd128` (instructions per sample) | Ours / judged | Ours / stronger (D2953) | Own fallback (instructions per sample) | Ours / own fallback | Status |
+| --- | --- | --- | --- | --- | --- | --- | --- | --- |
+| `am_mod` | 10.54 | — | — | — | — | 10.54 | 1.000 | `info` |
+| `am_mod_cq15` | 3.92 | — | — | — | — | 8.80 | 0.445 | `info` |
+| `equalize` | 1017.52 | — | — | — | — | 1017.52 | 1.000 | `info` |
+| `equalize_qam16` | 1065.53 | — | — | — | — | 1065.53 | 1.000 | `info` |
+| `equalize_qam64` | 1064.53 | — | — | — | — | 1064.53 | 1.000 | `info` |
+| `equalize_qam256` | 1020.53 | — | — | — | — | 1020.53 | 1.000 | `info` |
+| `equalize_qam1024` | 1020.53 | — | — | — | — | 1020.53 | 1.000 | `info` |
+
+At 1.000 (the same code or within 1 %): `am_mod` on every level (no branch); `mag` at `avx512` (0.999 / 0.999) and `neon` (1.002 / 0.997); `mul` at `sse2` (1.001 / 1.001); `stereo_matrix` and `stereo_matrix_cq15` at `neon` (1.001, 1.002); `dot_cq15` at `neon` (0.999 / 1.000); `interleave` (0.995 / 0.993), `interleave_cq15` (1.010 / 0.999), `deinterleave` (0.991 / 0.984) and `convert_cq15_cs8` (0.992 / 0.986) at `avx2`; `equalize` and the four QAM `equalize` entries on every level (the fallback's loop, D841). `am_mod_cq15` is within the target except at `sse2` (group 3a).
+
+### Group 4: above 1.10 of the library
+
+| Entry | Level | Ours (cycles per sample, ref. / counter) | Library (cycles per sample, ref. / counter) | Ours / library (ref. / counter) | Own fallback (cycles per sample, ref. / counter) | Ours / own fallback (ref. / counter) | Models (ref. / counter) | SNR in dB (ours / library) | Status |
+| --- | --- | --- | --- | --- | --- | --- | --- | --- | --- |
+| `fft_cq15_1024` | `neon` | 11.77 / 10.10 | 8.91 / 10.01 | 1.320 / 1.009 | 120.91 / 100.37 | 0.097 / 0.101 | cortex-a72 / cortex-a76 | 63.54 / 44.79 | `dev` |
+| `fft_cq15_1024_full_scale` | `neon` | 10.93 / 9.01 | 8.91 / 10.01 | 1.227 / 0.900 | — / — | — / — | cortex-a72 / cortex-a76 | 59.88 / 56.90 | `dev` |
+| `convert_out_cu8_fallback` | `sse2` | 5.43 / 5.74 | 12.29 / 14.25 | 0.442 / 0.402 | — / — | — / — | skylake / znver2 | 47.27 / 47.27 | `release` |
+| `convert_out_cu8_fallback` | `sse4.2` | 4.70 / 4.41 | 2.83 / 2.72 | 1.658 / 1.621 | — / — | — / — | skylake / znver2 | 47.27 / 47.27 | `dev` |
+| `convert_out_cu8_fallback` | `avx2` | 1.67 / 1.82 | 1.22 / 1.49 | 1.371 / 1.224 | — / — | — / — | znver3 / alderlake | 47.27 / 47.27 | `dev` |
+| `convert_out_cu8_fallback` | `avx512` | 1.22 / 1.33 | 0.68 / 1.27 | 1.805 / 1.041 | — / — | — / — | znver4 / sapphirerapids | 47.27 / 47.27 | `dev` |
+| `convert_out_cu8_fallback` | `neon` | 7.14 / 4.35 | 4.90 / 2.84 | 1.456 / 1.532 | — / — | — / — | cortex-a72 / cortex-a76 | 47.27 / 47.27 | `dev` |
+| `convert_out_real_ru8_fallback` | `sse2` | 2.72 / 2.88 | 6.15 / 7.13 | 0.443 / 0.404 | — / — | — / — | skylake / znver2 | 47.25 / 47.25 | `release` |
+| `convert_out_real_ru8_fallback` | `sse4.2` | 2.36 / 2.21 | 1.42 / 1.36 | 1.661 / 1.623 | — / — | — / — | skylake / znver2 | 47.25 / 47.25 | `dev` |
+| `convert_out_real_ru8_fallback` | `avx2` | 0.84 / 0.92 | 0.61 / 0.75 | 1.372 / 1.226 | — / — | — / — | znver3 / alderlake | 47.25 / 47.25 | `dev` |
+| `convert_out_real_ru8_fallback` | `avx512` | 0.61 / 0.67 | 0.34 / 0.64 | 1.797 / 1.046 | — / — | — / — | znver4 / sapphirerapids | 47.25 / 47.25 | `dev` |
+| `convert_out_real_ru8_fallback` | `neon` | 3.58 / 2.18 | 2.46 / 1.42 | 1.457 / 1.533 | — / — | — / — | cortex-a72 / cortex-a76 | 47.25 / 47.25 | `dev` |
+| `convert_out_cs8_fallback` | `sse2` | 2.32 / 2.48 | 11.72 / 14.21 | 0.198 / 0.175 | — / — | — / — | skylake / znver2 | 47.31 / 47.31 | `release` |
+| `convert_out_cs8_fallback` | `sse4.2` | 1.91 / 1.88 | 2.77 / 2.52 | 0.688 / 0.747 | — / — | — / — | skylake / znver2 | 47.31 / 47.31 | `release` |
+| `convert_out_cs8_fallback` | `avx2` | 1.06 / 1.02 | 1.17 / 1.43 | 0.911 / 0.717 | — / — | — / — | znver3 / alderlake | 47.31 / 47.31 | `release` |
+| `convert_out_cs8_fallback` | `avx512` | 0.73 / 0.84 | 0.56 / 1.27 | 1.310 / 0.663 | — / — | — / — | znver4 / sapphirerapids | 47.31 / 47.31 | `dev` |
+| `convert_out_cs8_fallback` | `neon` | 5.80 / 3.09 | 4.47 / 2.65 | 1.299 / 1.168 | — / — | — / — | cortex-a72 / cortex-a76 | 47.31 / 47.31 | `dev` |
+| `convert_out_real_rs8_fallback` | `sse2` | 1.17 / 1.25 | 5.86 / 7.11 | 0.199 / 0.175 | — / — | — / — | skylake / znver2 | 47.24 / 47.24 | `release` |
+| `convert_out_real_rs8_fallback` | `sse4.2` | 0.96 / 0.94 | 1.39 / 1.26 | 0.691 / 0.750 | — / — | — / — | skylake / znver2 | 47.24 / 47.24 | `release` |
+| `convert_out_real_rs8_fallback` | `avx2` | 0.54 / 0.52 | 0.59 / 0.72 | 0.916 / 0.723 | — / — | — / — | znver3 / alderlake | 47.24 / 47.24 | `release` |
+| `convert_out_real_rs8_fallback` | `avx512` | 0.37 / 0.43 | 0.28 / 0.64 | 1.316 / 0.670 | — / — | — / — | znver4 / sapphirerapids | 47.24 / 47.24 | `dev` |
+| `convert_out_real_rs8_fallback` | `neon` | 2.91 / 1.55 | 2.24 / 1.33 | 1.300 / 1.170 | — / — | — / — | cortex-a72 / cortex-a76 | 47.24 / 47.24 | `dev` |
+| `stereo_matrix_fallback` | `sse2` | 1.55 / 1.67 | 1.07 / 1.38 | 1.445 / 1.211 | — / — | — / — | skylake / znver2 | 151.28 / 151.28 | `dev` |
+| `stereo_matrix_fallback` | `sse4.2` | 1.19 / 1.34 | 1.07 / 1.38 | 1.116 / 0.969 | — / — | — / — | skylake / znver2 | 151.28 / 151.28 | `dev` |
+| `stereo_matrix_fallback` | `avx2` | 0.44 / 0.65 | 0.60 / 0.53 | 0.737 / 1.211 | — / — | — / — | znver3 / alderlake | 151.28 / 151.28 | `dev` |
+| `stereo_matrix_fallback` | `avx512` | 0.48 / 0.54 | 0.60 / 0.53 | 0.800 / 1.020 | — / — | — / — | znver4 / sapphirerapids | 151.28 / 151.28 | `release` |
+| `stereo_matrix_fallback` | `neon` | 1.90 / 1.39 | 3.83 / 3.07 | 0.495 / 0.453 | — / — | — / — | cortex-a72 / cortex-a76 | 151.28 / 151.28 | `release` |
+| `fir_decimate_cq15_fallback` | `sse2` | 28.57 / 34.29 | 24.93 / 25.79 | 1.146 / 1.330 | — / — | — / — | skylake / znver2 | 999.00 / 82.19 | `dev` |
+| `fir_decimate_cq15_fallback` | `sse4.2` | 35.07 / 28.09 | 27.95 / 22.79 | 1.255 / 1.232 | — / — | — / — | skylake / znver2 | 999.00 / 82.19 | `dev` |
+| `fir_decimate_cq15_fallback` | `avx2` | 21.61 / 22.05 | 42.02 / 17.52 | 0.514 / 1.258 | — / — | — / — | znver3 / alderlake | 999.00 / 82.19 | `dev` |
+| `fir_decimate_cq15_fallback` | `avx512` | 16.80 / 18.22 | 37.21 / 20.44 | 0.451 / 0.891 | — / — | — / — | znver4 / sapphirerapids | 999.00 / 82.19 | `release` |
+| `fir_interpolate_real_q15_fallback` | `sse2` | 70.71 / 101.24 | 68.81 / 82.21 | 1.028 / 1.231 | — / — | — / — | skylake / znver2 | 999.00 / 80.35 | `dev` |
+| `fir_interpolate_real_q15_fallback` | `sse4.2` | 70.71 / 101.24 | 68.81 / 82.21 | 1.028 / 1.231 | — / — | — / — | skylake / znver2 | 999.00 / 80.35 | `dev` |
+| `fir_interpolate_cq15_fallback` | `sse2` | 137.49 / 207.95 | 137.61 / 164.43 | 0.999 / 1.265 | — / — | — / — | skylake / znver2 | 999.00 / 80.09 | `dev` |
+| `fir_interpolate_cq15_fallback` | `sse4.2` | 137.49 / 207.95 | 137.61 / 164.43 | 0.999 / 1.265 | — / — | — / — | skylake / znver2 | 999.00 / 80.09 | `dev` |
+| `dot_cq15_fallback` | `sse2` | 2.20 / 2.53 | 1.78 / 2.03 | 1.232 / 1.244 | — / — | — / — | skylake / znver2 | 82.20 / 82.20 | `dev` |
+| `dot_cq15_fallback` | `sse4.2` | 2.03 / 1.72 | 2.04 / 1.49 | 0.995 / 1.153 | — / — | — / — | skylake / znver2 | 82.20 / 82.20 | `dev` |
+| `mul_real_q15_fallback` | `avx2` | 0.28 / 0.39 | 0.30 / 0.31 | 0.924 / 1.250 | — / — | — / — | znver3 / alderlake | 91.62 / 85.59 | `dev` |
+| `deinterleave_cq15_fallback` | `avx2` | 0.23 / 0.23 | 0.20 / 0.26 | 1.135 / 0.860 | — / — | — / — | znver3 / alderlake | 999.00 / 999.00 | `dev` |
+| `mag_sq_fallback` | `avx512` | 0.37 / 0.26 | 0.31 / 0.27 | 1.210 / 0.942 | — / — | — / — | znver4 / sapphirerapids | 149.02 / 149.02 | `dev` |
+| `mul_fallback` | `avx512` | 0.77 / 0.78 | 0.53 / 0.79 | 1.466 / 0.977 | — / — | — / — | znver4 / sapphirerapids | 148.50 / 148.50 | `dev` |
+| `scramble_c32_b8` | `avx512` | 0.58 / 0.90 | 2.55 / 2.39 | 0.228 / 0.378 | 0.95 / 3.92 | 0.611 / 0.230 | znver4 / sapphirerapids | 147.72 / 147.72 | `release` |
+| `mul` | `avx512` | 0.58 / 0.39 | 0.71 / 0.53 | 0.816 / 0.733 | 0.77 / 0.78 | 0.746 / 0.497 | znver4 / sapphirerapids | 150.12 / 148.50 | `release` |
+| `channelize_fallback` | `sse2` | 59.64 / 62.71 | 166.47 / 182.49 | 0.358 / 0.344 | — / — | — / — | skylake / znver2 | 140.65 / 140.76 | `release` |
+| `channelize_fallback` | `sse4.2` | 60.03 / 62.59 | 166.73 / 182.23 | 0.360 / 0.343 | — / — | — / — | skylake / znver2 | 140.65 / 140.76 | `release` |
+| `channelize_fallback` | `avx2` | 37.13 / 34.35 | 147.96 / 133.26 | 0.251 / 0.258 | — / — | — / — | znver3 / alderlake | 140.65 / 140.76 | `release` |
+| `channelize_fallback` | `avx512` | 40.17 / 34.30 | 105.93 / 118.74 | 0.379 / 0.289 | — / — | — / — | znver4 / sapphirerapids | 140.65 / 140.76 | `release` |
+| `channelize_fallback` | `neon` | 97.98 / 80.80 | 221.93 / 165.45 | 0.441 / 0.488 | — / — | — / — | cortex-a72 / cortex-a76 | 140.65 / 140.76 | `release` |
+
+Above 1.10 on a model: `fft_cq15_1024` (1.320 on `cortex-a72`) and `fft_cq15_1024_full_scale` (1.227) at `neon` against Ne10; the 8-bit `convert_out` fallbacks against VOLK `generic`: `cu8` and `real_ru8` at `sse4.2` (1.66 / 1.62, above 1.50), `avx2` (1.37 / 1.22), `avx512` (1.81 / 1.04, above 1.50 on `znver4`), `neon` (1.46 / 1.53, above 1.50 on `cortex-a76`), `cs8` and `real_rs8` at `avx512` (1.31 on `znver4`) and `neon` (1.30 / 1.17); `stereo_matrix_fallback` at `sse2` (1.445 / 1.211), `sse4.2` (1.116) and `avx2` (1.211 on `alderlake`); `fir_decimate_cq15_fallback` at `sse2` (1.146 / 1.330), `sse4.2` (1.255 / 1.232), `avx2` (1.258 on `alderlake`); `fir_interpolate_real_q15_fallback` and `fir_interpolate_cq15_fallback` at `sse2` and `sse4.2` on `znver2` (1.231, 1.265); `dot_cq15_fallback` at `sse2` (1.232 / 1.244) and `sse4.2` (1.153 on `znver2`); `mul_real_q15_fallback` at `avx2` (1.250 on `alderlake`); `deinterleave_cq15_fallback` at `avx2` (1.135 on `znver3`); `mag_sq_fallback` at `avx512` (1.210 on `znver4`); `mul_fallback` at `avx512` (1.466 on `znver4`, D2951). Information: IO1-1 stays closed (`mul` at `avx512` `release`, 0.816 / 0.733); IO1-8 (`scramble_c32_b8` at `avx512`, 0.228 / 0.378) is a question of the `sapphirerapids` model, not of a ratio; `channelize_fallback` is `release` at 0.25 to 0.49 of liquid-dsp, its 4.5 to 7.6 % of D2811 / D2841 are against its own earlier code.
+
+### Outside the agreed groups (for the maintainer)
+
+The sweep of the same records finds `dev` entries above 1.10 of their library that no group names: at `simd128` (instructions per sample, against KFR's wasm32 build) `fft_4096_fallback` 1.107, `fir_cq15_fallback` 1.190, `fir_interpolate_real_fallback` 1.184, `fir_interpolate_short_fallback` 1.385, `scale_fallback` 1.141, `stereo_pll_fallback` 1.314; at `neon` `fir_interpolate_real_fallback` 1.224 and `fir_interpolate_short_fallback` 1.133 on `cortex-a72` (rows of I13.1-7 that O1 left). D2953 changes no `simd128` status: VOLK's generic C with `-O3 -msimd128` is the stronger opponent of 17 entries (`add`, `add_real`, `mul_real`, `mag`, `mag_sq`, `dot`, `window`, `stereo_matrix`, the (de)interleaving and the conversions to `C32` / `CQ15`), and against it all 17 stay `release` (at most 0.816, `add`).
+
+### Group 5 preview: SIMD entries above 0.80 of their own fallback
+
+The report that group 5 adds to `cargo xtask check cycles`, computed from the same records for the kernel entries (blocks, protocol coders and the `halfband_ref_*` entries left out). Most of the element-wise rows (0.80 to 1.00) are bound by loads and stores, where the compiler vectorises the fallback as well; the control loops (`costas*`, `symbol_sync`, `agc` at `neon`) are O3.
+
+62 kernel entries, 221 entry-levels
+
+| SIMD entry | Levels above 0.80 of the own fallback (ours / own fallback, ref. / counter model; `simd128` instructions) |
+| --- | --- |
+| `add` | `avx2` 0.99 / 0.95; `avx512` 0.96 / 0.74; `neon` 0.93 / 0.91; `simd128` 0.92 |
+| `add_cq15` | `avx2` 0.99 / 0.96; `avx512` 0.97 / 0.75; `neon` 0.92 / 0.92; `simd128` 1.00 |
+| `add_real` | `sse2` 0.87 / 0.78; `sse4.2` 0.87 / 0.78; `avx2` 0.99 / 0.95 |
+| `add_real_q15` | `sse2` 0.88 / 0.79; `sse4.2` 0.88 / 0.79; `avx2` 0.99 / 0.96; `simd128` 1.00 |
+| `agc` | `avx2` 0.74 / 0.80; `avx512` 0.71 / 0.83; `neon` 1.00 / 1.00; `simd128` 1.01 |
+| `am_mod` | `sse2` 1.00 / 1.00; `sse4.2` 1.00 / 1.00; `avx2` 1.00 / 1.00; `avx512` 1.00 / 1.00; `neon` 1.00 / 1.00; `simd128` 1.00 |
+| `am_mod_cq15` | `sse2` 1.00 / 1.00 |
+| `biquad_cq15` | `sse2` 1.00 / 1.00 |
+| `biquad_real` | `sse2` 0.86 / 0.80; `sse4.2` 0.83 / 0.80; `avx2` 0.90 / 0.86; `avx512` 0.96 / 0.90; `neon` 0.93 / 0.73 |
+| `biquad_real_q15` | `sse2` 1.00 / 1.00; `sse4.2` 0.85 / 0.75; `avx2` 0.74 / 0.84; `avx512` 0.75 / 0.81; `neon` 0.94 / 0.46 |
+| `convert_cq15_cs8` | `sse2` 0.87 / 0.73; `sse4.2` 0.86 / 0.88; `avx2` 0.99 / 0.99; `neon` 0.97 / 0.92 |
+| `convert_cq15_cu8` | `sse4.2` 0.73 / 0.87; `avx2` 0.99 / 0.95; `neon` 0.93 / 0.93 |
+| `convert_cs16` | `avx2` 0.99 / 0.93; `avx512` 0.92 / 0.72; `neon` 0.87 / 0.84 |
+| `convert_cs8` | `avx2` 1.00 / 0.92; `avx512` 0.93 / 0.72; `neon` 0.85 / 0.82 |
+| `convert_cu8` | `sse4.2` 0.96 / 0.74; `avx2` 0.94 / 0.72; `avx512` 0.87 / 0.56 |
+| `convert_real_rs16` | `avx2` 1.01 / 0.94; `avx512` 0.94 / 0.73; `neon` 0.87 / 0.84 |
+| `costas` | `sse2` 1.00 / 1.00; `sse4.2` 1.00 / 1.00; `avx2` 1.00 / 1.00; `avx512` 1.00 / 1.00; `neon` 1.00 / 1.00; `simd128` 1.00 |
+| `costas_qam1024` | `sse2` 1.00 / 1.00; `sse4.2` 1.00 / 1.00; `avx2` 1.00 / 1.00; `avx512` 1.00 / 1.00; `neon` 1.00 / 1.00; `simd128` 1.00 |
+| `costas_qam16` | `sse2` 1.00 / 1.00; `sse4.2` 1.00 / 1.00; `avx2` 1.00 / 1.00; `avx512` 1.00 / 1.00; `neon` 1.00 / 1.00; `simd128` 1.00 |
+| `costas_qam256` | `sse2` 1.00 / 1.00; `sse4.2` 1.00 / 1.00; `avx2` 1.00 / 1.00; `avx512` 1.00 / 1.00; `neon` 1.00 / 1.00; `simd128` 1.00 |
+| `costas_qam64` | `sse2` 1.00 / 1.00; `sse4.2` 1.00 / 1.00; `avx2` 1.00 / 1.00; `avx512` 1.00 / 1.00; `neon` 1.00 / 1.00; `simd128` 1.00 |
+| `deinterleave` | `sse2` 1.00 / 0.94; `sse4.2` 1.00 / 0.94; `avx2` 0.99 / 0.98; `neon` 0.92 / 0.88 |
+| `deinterleave_cq15` | `sse4.2` 0.99 / 0.63; `avx2` 0.73 / 0.86; `neon` 0.92 / 0.88 |
+| `dot_complex` | `neon` 0.86 / 0.39; `simd128` 1.00 |
+| `dot_cq15` | `neon` 1.00 / 1.00 |
+| `equalize` | `sse2` 1.00 / 1.00; `sse4.2` 1.00 / 1.00; `avx2` 1.00 / 1.00; `avx512` 1.00 / 1.00; `neon` 1.00 / 1.00; `simd128` 1.00 |
+| `equalize_qam1024` | `sse2` 1.00 / 1.00; `sse4.2` 1.00 / 1.00; `avx2` 1.00 / 1.00; `avx512` 1.00 / 1.00; `neon` 1.00 / 1.00; `simd128` 1.00 |
+| `equalize_qam16` | `sse2` 1.00 / 1.00; `sse4.2` 1.00 / 1.00; `avx2` 1.00 / 1.00; `avx512` 1.00 / 1.00; `neon` 1.00 / 1.00; `simd128` 1.00 |
+| `equalize_qam256` | `sse2` 1.00 / 1.00; `sse4.2` 1.00 / 1.00; `avx2` 1.00 / 1.00; `avx512` 1.00 / 1.00; `neon` 1.00 / 1.00; `simd128` 1.00 |
+| `equalize_qam64` | `sse2` 1.00 / 1.00; `sse4.2` 1.00 / 1.00; `avx2` 1.00 / 1.00; `avx512` 1.00 / 1.00; `neon` 1.00 / 1.00; `simd128` 1.00 |
+| `fir_cq15` | `sse2` 1.00 / 1.00; `avx2` 1.00 / 1.00; `avx512` 1.00 / 1.00; `neon` 0.99 / 0.94; `simd128` 0.90 |
+| `fir_decimate_cq15` | `sse2` 1.00 / 1.00; `avx2` 1.00 / 1.00; `neon` 1.00 / 1.00; `simd128` 0.90 |
+| `fir_interpolate_cq15` | `sse2` 1.00 / 1.00; `avx2` 1.00 / 1.00; `avx512` 1.00 / 1.00; `simd128` 1.00 |
+| `fir_interpolate_real_q15` | `sse2` 1.00 / 1.00; `avx2` 1.00 / 1.00; `avx512` 1.00 / 1.00; `neon` 1.00 / 1.00; `simd128` 1.00 |
+| `fm_mod` | `sse2` 0.89 / 0.77 |
+| `interleave` | `sse2` 1.00 / 0.84; `sse4.2` 1.00 / 0.84; `avx2` 1.00 / 0.99; `avx512` 0.76 / 0.97; `neon` 1.00 / 0.93 |
+| `interleave_cq15` | `sse2` 0.99 / 0.84; `sse4.2` 0.99 / 0.84; `avx2` 1.01 / 1.00; `avx512` 0.78 / 1.00; `neon` 1.00 / 0.93 |
+| `mag` | `sse2` 0.96 / 0.99; `sse4.2` 0.96 / 0.99; `avx2` 0.84 / 0.97; `avx512` 1.00 / 1.00; `neon` 1.00 / 1.00; `simd128` 0.83 |
+| `mag_q15` | `avx512` 0.75 / 0.84; `neon` 1.00 / 0.93 |
+| `mag_sq` | `sse2` 0.98 / 0.87; `sse4.2` 0.99 / 0.59; `avx2` 0.78 / 0.82; `neon` 0.85 / 0.80 |
+| `mag_sq_q15` | `avx2` 0.69 / 0.80; `avx512` 0.92 / 0.71 |
+| `mul` | `sse2` 1.00 / 1.00; `sse4.2` 1.00 / 0.96; `avx2` 0.88 / 1.00; `neon` 0.69 / 0.90; `simd128` 1.10 |
+| `mul_cq15` | `sse2` 1.00 / 1.00; `avx512` 0.86 / 0.55; `neon` 0.82 / 0.83; `simd128` 1.00 |
+| `mul_real` | `sse2` 0.87 / 0.78; `sse4.2` 0.87 / 0.78; `avx2` 0.99 / 0.95 |
+| `mul_real_q15` | `sse2` 1.00 / 1.00 |
+| `power_db` | `avx2` 0.67 / 0.91; `simd128` 1.02 |
+| `power_db_q15` | `neon` 0.96 / 0.97; `simd128` 1.03 |
+| `resample_cq15` | `sse2` 1.00 / 1.00; `avx2` 1.00 / 1.00; `simd128` 0.91 |
+| `resample_real_q15` | `sse2` 1.00 / 1.00; `neon` 0.86 / 0.73 |
+| `scale` | `sse4.2` 0.98 / 0.87; `avx2` 1.00 / 0.93; `avx512` 0.98 / 0.95; `neon` 0.91 / 0.90; `simd128` 0.92 |
+| `scale_cq15` | `sse2` 1.00 / 1.00 |
+| `scramble_c32_b1` | `neon` 0.93 / 0.92 |
+| `scramble_c32_b2` | `neon` 0.77 / 0.84 |
+| `scramble_cq15_b8` | `neon` 0.82 / 0.80; `simd128` 1.11 |
+| `stereo_matrix` | `sse4.2` 0.85 / 0.74; `neon` 1.00 / 1.00; `simd128` 1.07 |
+| `stereo_matrix_cq15` | `neon` 1.00 / 1.00; `simd128` 1.00 |
+| `symbol_sync` | `sse2` 1.00 / 1.00; `sse4.2` 1.00 / 1.00; `avx2` 1.00 / 1.00; `avx512` 1.00 / 1.00; `neon` 1.00 / 1.00; `simd128` 1.00 |
+| `window` | `sse2` 0.85 / 0.86; `sse4.2` 0.85 / 0.86; `avx2` 0.85 / 0.73; `avx512` 0.73 / 0.92; `neon` 0.96 / 0.95 |
+| `deemphasis` | `simd128` 0.90 |
+| `halfband_decimate_cq15` | `simd128` 0.90 |
+| `scramble_c32_b8` | `simd128` 0.97 |
+| `scramble_cq15_b2` | `simd128` 0.92 |
 
 ## Status
 
-- 2026-11-25: planned; group 0 inventory above; the maintainer's decisions recorded (D2950 to D2953). Full CI measurement of every entry on every level and the `simd128` counts on 05ff2d25 (CI run 45641571494).
+- 2026-11-25: planned; group 0 inventory above; the maintainer's decisions recorded (D2950 to D2953).
+- 2026-11-25: full CI measurement of every entry on every level on 05ff2d25 (CI run 45641571494, 1836 records, 10 of them more than 1 % from the committed numbers, none of them a status) and the `simd128` counts of its job `count_wasm32` (unchanged); records merged, `cargo xtask check cycles` passes; target list above. No status changes; next: group 1 and group 2 (`oscillate`).

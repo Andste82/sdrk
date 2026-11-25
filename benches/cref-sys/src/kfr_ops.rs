@@ -4,8 +4,10 @@
 //! offset-binary bytes, the 16-bit and float (de)interleaves, the magnitudes, the conjugate
 //! product and its argument, the scale, the complex dot product and the stereo matrix. The
 //! references where VOLK's machine of the level runs a `generic` protokernel (`sse2`, D2785) or a
-//! protokernel of a lower level (`avx512`, D2900), and where no other SIMD library has the
-//! operation (D2901).
+//! protokernel of a lower level (`avx512`, D2900), where no other SIMD library has the
+//! operation (D2901), and at `simd128`, where VOLK's wasm32 build has only its `generic`
+//! protokernels (D2850): there also the int16 conversion, the real product, the real and the
+//! complex-by-real dot products, the magnitude and the float deinterleave.
 //!
 //! Every function writes nothing without the library; the callers check [`AVAILABLE`].
 
@@ -51,6 +53,12 @@ mod ffi {
         pub fn sdrk_kfr_dot_complex(a: *const f32, b: *const f32, n: usize, out: *mut f32);
         pub fn sdrk_kfr_stereo_matrix_f32(input: *const f32, output: *mut f32, n: usize);
         pub fn sdrk_kfr_stereo_matrix_i16(input: *const i16, output: *mut i16, n: usize);
+        pub fn sdrk_kfr_i16_to_f32(input: *const i16, output: *mut f32, n: usize, scale: f32);
+        pub fn sdrk_kfr_mul_f32(a: *const f32, b: *const f32, output: *mut f32, n: usize);
+        pub fn sdrk_kfr_dot_f32(a: *const f32, b: *const f32, n: usize) -> f32;
+        pub fn sdrk_kfr_dot_complex_real(a: *const f32, b: *const f32, n: usize, out: *mut f32);
+        pub fn sdrk_kfr_mag(c: *const f32, output: *mut f32, n: usize);
+        pub fn sdrk_kfr_deinterleave_f32(c: *const f32, re: *mut f32, im: *mut f32, n: usize);
     }
 }
 
@@ -366,5 +374,100 @@ pub fn stereo_matrix_i16(input: &[i16], output: &mut [i16]) {
     // SAFETY: both buffers hold `len` values; the output is borrowed exclusively.
     unsafe {
         ffi::sdrk_kfr_stereo_matrix_i16(input.as_ptr(), output.as_mut_ptr(), input.len() / 2);
+    }
+}
+
+/// `output[i] = input[i] * scale` from `i16` values.
+///
+/// # Panics
+/// If the lengths differ.
+pub fn i16_to_f32(input: &[i16], output: &mut [f32], scale: f32) {
+    assert_eq!(input.len(), output.len(), "KFR i16_to_f32: length mismatch");
+    #[cfg(has_kfrops)]
+    // SAFETY: both buffers hold `len` values; the output is borrowed exclusively.
+    unsafe {
+        ffi::sdrk_kfr_i16_to_f32(input.as_ptr(), output.as_mut_ptr(), input.len(), scale);
+    }
+    #[cfg(not(has_kfrops))]
+    let _ = scale;
+}
+
+/// `output[i] = a[i] * b[i]` on floats.
+///
+/// # Panics
+/// If the lengths differ.
+pub fn mul_f32(a: &[f32], b: &[f32], output: &mut [f32]) {
+    assert!(
+        a.len() == b.len() && a.len() == output.len(),
+        "KFR mul_f32: length mismatch"
+    );
+    #[cfg(has_kfrops)]
+    // SAFETY: the three buffers hold `len` floats; the output is borrowed exclusively.
+    unsafe {
+        ffi::sdrk_kfr_mul_f32(a.as_ptr(), b.as_ptr(), output.as_mut_ptr(), a.len());
+    }
+}
+
+/// `sum a[i] b[i]` of floats; zero without the library.
+///
+/// # Panics
+/// If the lengths differ.
+#[must_use]
+pub fn dot_f32(a: &[f32], b: &[f32]) -> f32 {
+    assert_eq!(a.len(), b.len(), "KFR dot_f32: length mismatch");
+    #[cfg(has_kfrops)]
+    // SAFETY: both inputs hold `len` floats.
+    unsafe {
+        ffi::sdrk_kfr_dot_f32(a.as_ptr(), b.as_ptr(), a.len())
+    }
+    #[cfg(not(has_kfrops))]
+    0.0
+}
+
+/// `sum a[i] b[i]` of the interleaved complex `a` and the real `b`, `[re, im]`; zero without
+/// the library.
+///
+/// # Panics
+/// If `a` is not twice as long as `b`.
+#[must_use]
+pub fn dot_complex_real(a: &[f32], b: &[f32]) -> [f32; 2] {
+    assert_eq!(a.len(), 2 * b.len(), "KFR dot_complex_real: length mismatch");
+    #[cfg_attr(not(has_kfrops), allow(unused_mut))]
+    let mut out = [0.0f32; 2];
+    #[cfg(has_kfrops)]
+    // SAFETY: `a` holds `2 n` floats, `b` `n`; the result is two floats.
+    unsafe {
+        ffi::sdrk_kfr_dot_complex_real(a.as_ptr(), b.as_ptr(), b.len(), out.as_mut_ptr());
+    }
+    out
+}
+
+/// `output[i] = |c[i]|` of the interleaved complex `c`.
+///
+/// # Panics
+/// If `c` is not twice as long as `output`.
+pub fn mag(c: &[f32], output: &mut [f32]) {
+    assert_eq!(c.len(), 2 * output.len(), "KFR mag: length mismatch");
+    #[cfg(has_kfrops)]
+    // SAFETY: `c` holds `2 n` floats, the output `n`; the output is borrowed exclusively.
+    unsafe {
+        ffi::sdrk_kfr_mag(c.as_ptr(), output.as_mut_ptr(), output.len());
+    }
+}
+
+/// The real and imaginary parts of the interleaved complex `c` into `re` and `im`.
+///
+/// # Panics
+/// If `c` is not twice as long as `re` and `im`.
+pub fn deinterleave_f32(c: &[f32], re: &mut [f32], im: &mut [f32]) {
+    assert!(
+        c.len() == 2 * re.len() && re.len() == im.len(),
+        "KFR deinterleave_f32: length mismatch"
+    );
+    #[cfg(has_kfrops)]
+    // SAFETY: `c` holds `2 n` floats, `re` and `im` `n` each; both outputs are borrowed
+    // exclusively.
+    unsafe {
+        ffi::sdrk_kfr_deinterleave_f32(c.as_ptr(), re.as_mut_ptr(), im.as_mut_ptr(), re.len());
     }
 }

@@ -40,6 +40,12 @@ use super::{
     describe_kfr_ops, describe_sleef, describe_volk_generic, dot_scale_supports, noise_c32, snr_db,
 };
 
+/// Whether KFR's element-wise expressions run for `entry`: the SIMD entries on wasm32, where
+/// they are the SIMD references of `simd128` (D2850).
+pub(crate) fn kfr_supports(entry: BiquadEntry) -> bool {
+    entry == BiquadEntry::Simd && cfg!(target_arch = "wasm32") && cref_sys::kfr_ops::AVAILABLE
+}
+
 /// The operation of an arithmetic entry.
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
 pub(crate) enum Op {
@@ -155,6 +161,11 @@ impl Kernel for RealF32K {
                     Op::Add => add_f32(&self.a, &self.b, &mut self.out),
                     Op::Mul => cmsis_dsp::mult_f32(&self.a, &self.b, &mut self.out),
                 },
+                // KFR's `a + b` and `a * b` (D2850).
+                Impl::Kfr => match self.op {
+                    Op::Add => cref_sys::kfr_ops::add_f32(&self.a, &self.b, &mut self.out),
+                    Op::Mul => cref_sys::kfr_ops::mul_f32(&self.a, &self.b, &mut self.out),
+                },
                 other => unreachable!("{}_real has no {other:?}", op_name(self.op)),
             }
             black_box(&self.out);
@@ -176,11 +187,16 @@ impl Kernel for RealF32K {
     }
 
     fn supports(&self, which: Impl) -> bool {
+        if which == Impl::Kfr {
+            return kfr_supports(self.entry);
+        }
         dot_scale_supports(self.entry, which, volk_sys::FULL)
     }
 
     fn describe(&self, which: Impl) -> &'static str {
         match (which, self.op) {
+            (Impl::Kfr, Op::Add) => describe_kfr_ops("a + b"),
+            (Impl::Kfr, Op::Mul) => describe_kfr_ops("a * b"),
             (Impl::Volk, Op::Add) => "volk_32f_x2_add_32f",
             (Impl::Volk, Op::Mul) => "volk_32f_x2_multiply_32f",
             (Impl::Cmsis, Op::Add) => describe_cmsis("arm_add_f32"),
@@ -732,6 +748,14 @@ impl Kernel for SplitC32K {
                         n,
                     );
                 },
+                // KFR's `real(c)`, `imag(c)` of `complex<float>` (D2850).
+                (Impl::Kfr, true) => {
+                    cref_sys::kfr_ops::deinterleave_f32(
+                        floats(&self.packed),
+                        &mut self.re,
+                        &mut self.im,
+                    );
+                }
                 (Impl::VolkGeneric, false) => {
                     volk_generic::interleave_32fc(&self.re, &self.im, pairs_mut(&mut self.packed));
                 }
@@ -779,14 +803,15 @@ impl Kernel for SplitC32K {
 
     fn supports(&self, which: Impl) -> bool {
         if which == Impl::Kfr && self.deinterleave {
-            return false;
+            return kfr_supports(self.entry);
         }
         split_supports(self.entry, which, volk_sys::FULL)
     }
 
     fn describe(&self, which: Impl) -> &'static str {
         match (which, self.deinterleave) {
-            (Impl::Kfr, _) => describe_kfr_ops("make_complex(re, im) on float"),
+            (Impl::Kfr, false) => describe_kfr_ops("make_complex(re, im) on float"),
+            (Impl::Kfr, true) => describe_kfr_ops("real(c), imag(c) of complex<float>"),
             (Impl::Volk, false) => "volk_32f_x2_interleave_32fc",
             (Impl::Volk, true) => "volk_32fc_deinterleave_32f_x2",
             (Impl::VolkGeneric, false) => {

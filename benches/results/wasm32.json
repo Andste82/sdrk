@@ -1,28 +1,37 @@
 {
-  "host_cpu": "Intel(R) Xeon(R) 6975P-C",
+  "host_cpu": "AMD EPYC 7763 64-Core Processor",
   "levels": {
     "simd128": {
       "counter": "wasmtime fuel",
       "judged_against": "references",
       "kernels": {
         "add": {
-          "compared_with": "volk_32fc_x2_add_32fc",
+          "compared_with": "KFR 7.2.0 a + b on the 2 n floats (benches/refs/kfr-ops.cpp, sse41 over the SSE headers of Emscripten, SIMD level simd128, -ffp-contract=off)",
           "comparison_kind": "library",
           "goal": true,
           "informational": [
             {
               "compared_with": "volk_32fc_x2_add_32fc",
               "comparison_kind": "library",
-              "label": "misaligned by one sample",
+              "label": "information: volk",
               "other_instr_per_sample": 8.79,
-              "other_snr_db": null,
+              "other_snr_db": 150.98,
               "ours_instr_per_sample": 7.17,
               "ratio": 0.82
+            },
+            {
+              "compared_with": "KFR 7.2.0 a + b on the 2 n floats (benches/refs/kfr-ops.cpp, sse41 over the SSE headers of Emscripten, SIMD level simd128, -ffp-contract=off)",
+              "comparison_kind": "library",
+              "label": "misaligned by one sample",
+              "other_instr_per_sample": 15.03,
+              "other_snr_db": null,
+              "ours_instr_per_sample": 7.17,
+              "ratio": 0.48
             }
           ],
-          "other_instr_per_sample": 8.79,
+          "other_instr_per_sample": 15.03,
           "ours_instr_per_sample": 7.17,
-          "ratio": 0.82,
+          "ratio": 0.48,
           "snr_db": {
             "other": 150.98,
             "ours": 150.98
@@ -31,23 +40,32 @@
           "verdict": "pass"
         },
         "add_cq15": {
-          "compared_with": "volk_16i_x2_add_saturated_16i on the 2 n values",
+          "compared_with": "KFR 7.2.0 satadd(a, b) on the 2 n int16_t values (benches/refs/kfr-ops.cpp, sse41 over the SSE headers of Emscripten, SIMD level simd128, -ffp-contract=off)",
           "comparison_kind": "library",
           "goal": true,
           "informational": [
             {
               "compared_with": "volk_16i_x2_add_saturated_16i on the 2 n values",
               "comparison_kind": "library",
-              "label": "misaligned by one sample",
+              "label": "information: volk",
               "other_instr_per_sample": 10.78,
-              "other_snr_db": null,
+              "other_snr_db": 999.0,
               "ours_instr_per_sample": 2.33,
               "ratio": 0.22
+            },
+            {
+              "compared_with": "KFR 7.2.0 satadd(a, b) on the 2 n int16_t values (benches/refs/kfr-ops.cpp, sse41 over the SSE headers of Emscripten, SIMD level simd128, -ffp-contract=off)",
+              "comparison_kind": "library",
+              "label": "misaligned by one sample",
+              "other_instr_per_sample": 7.53,
+              "other_snr_db": null,
+              "ours_instr_per_sample": 2.33,
+              "ratio": 0.31
             }
           ],
-          "other_instr_per_sample": 10.78,
+          "other_instr_per_sample": 7.53,
           "ours_instr_per_sample": 2.33,
-          "ratio": 0.22,
+          "ratio": 0.31,
           "snr_db": {
             "other": 999.0,
             "ours": 999.0
@@ -106,23 +124,32 @@
           "verdict": "pass"
         },
         "add_real": {
-          "compared_with": "volk_32f_x2_add_32f",
+          "compared_with": "KFR 7.2.0 a + b (benches/refs/kfr-ops.cpp, sse41 over the SSE headers of Emscripten, SIMD level simd128, -ffp-contract=off)",
           "comparison_kind": "library",
           "goal": true,
           "informational": [
             {
               "compared_with": "volk_32f_x2_add_32f",
               "comparison_kind": "library",
-              "label": "misaligned by one sample",
+              "label": "information: volk",
               "other_instr_per_sample": 6.04,
-              "other_snr_db": null,
+              "other_snr_db": 150.97,
               "ours_instr_per_sample": 3.61,
               "ratio": 0.6
+            },
+            {
+              "compared_with": "KFR 7.2.0 a + b (benches/refs/kfr-ops.cpp, sse41 over the SSE headers of Emscripten, SIMD level simd128, -ffp-contract=off)",
+              "comparison_kind": "library",
+              "label": "misaligned by one sample",
+              "other_instr_per_sample": 7.53,
+              "other_snr_db": null,
+              "ours_instr_per_sample": 3.61,
+              "ratio": 0.48
             }
           ],
-          "other_instr_per_sample": 6.04,
+          "other_instr_per_sample": 7.53,
           "ours_instr_per_sample": 3.61,
-          "ratio": 0.6,
+          "ratio": 0.48,
           "snr_db": {
             "other": 150.97,
             "ours": 150.97
@@ -156,23 +183,32 @@
           "verdict": "pass"
         },
         "add_real_q15": {
-          "compared_with": "volk_16i_x2_add_saturated_16i",
+          "compared_with": "KFR 7.2.0 satadd(a, b) on int16_t (benches/refs/kfr-ops.cpp, sse41 over the SSE headers of Emscripten, SIMD level simd128, -ffp-contract=off)",
           "comparison_kind": "library",
           "goal": true,
           "informational": [
             {
               "compared_with": "volk_16i_x2_add_saturated_16i",
               "comparison_kind": "library",
-              "label": "misaligned by one sample",
+              "label": "information: volk",
               "other_instr_per_sample": 5.41,
-              "other_snr_db": null,
+              "other_snr_db": 999.0,
               "ours_instr_per_sample": 1.19,
               "ratio": 0.22
+            },
+            {
+              "compared_with": "KFR 7.2.0 satadd(a, b) on int16_t (benches/refs/kfr-ops.cpp, sse41 over the SSE headers of Emscripten, SIMD level simd128, -ffp-contract=off)",
+              "comparison_kind": "library",
+              "label": "misaligned by one sample",
+              "other_instr_per_sample": 3.78,
+              "other_snr_db": null,
+              "ours_instr_per_sample": 1.19,
+              "ratio": 0.31
             }
           ],
-          "other_instr_per_sample": 5.41,
+          "other_instr_per_sample": 3.78,
           "ours_instr_per_sample": 1.19,
-          "ratio": 0.22,
+          "ratio": 0.31,
           "snr_db": {
             "other": 999.0,
             "ours": 999.0
@@ -950,41 +986,50 @@
           "verdict": "pass"
         },
         "convert_cq15_cs8": {
-          "compared_with": "volk_8i_convert_16i",
+          "compared_with": "KFR 7.2.0 cast<i16>(in) << 8 (benches/refs/kfr-ops.cpp, sse41 over the SSE headers of Emscripten, SIMD level simd128, -ffp-contract=off)",
           "comparison_kind": "library",
           "goal": true,
           "informational": [
             {
               "compared_with": "volk_8i_convert_16i",
               "comparison_kind": "library",
-              "label": "n = 64",
-              "other_instr_per_sample": 6.44,
-              "other_snr_db": null,
-              "ours_instr_per_sample": 6.48,
-              "ratio": 1.01
-            },
-            {
-              "compared_with": "volk_8i_convert_16i",
-              "comparison_kind": "library",
-              "label": "n = 100",
-              "other_instr_per_sample": 5.83,
-              "other_snr_db": null,
-              "ours_instr_per_sample": 6.57,
-              "ratio": 1.13
-            },
-            {
-              "compared_with": "volk_8i_convert_16i",
-              "comparison_kind": "library",
-              "label": "misaligned by one sample",
+              "label": "information: volk",
               "other_instr_per_sample": 4.78,
-              "other_snr_db": null,
+              "other_snr_db": 999.0,
               "ours_instr_per_sample": 2.84,
               "ratio": 0.59
+            },
+            {
+              "compared_with": "KFR 7.2.0 cast<i16>(in) << 8 (benches/refs/kfr-ops.cpp, sse41 over the SSE headers of Emscripten, SIMD level simd128, -ffp-contract=off)",
+              "comparison_kind": "library",
+              "label": "n = 64",
+              "other_instr_per_sample": 7.67,
+              "other_snr_db": null,
+              "ours_instr_per_sample": 6.48,
+              "ratio": 0.85
+            },
+            {
+              "compared_with": "KFR 7.2.0 cast<i16>(in) << 8 (benches/refs/kfr-ops.cpp, sse41 over the SSE headers of Emscripten, SIMD level simd128, -ffp-contract=off)",
+              "comparison_kind": "library",
+              "label": "n = 100",
+              "other_instr_per_sample": 7.07,
+              "other_snr_db": null,
+              "ours_instr_per_sample": 6.57,
+              "ratio": 0.93
+            },
+            {
+              "compared_with": "KFR 7.2.0 cast<i16>(in) << 8 (benches/refs/kfr-ops.cpp, sse41 over the SSE headers of Emscripten, SIMD level simd128, -ffp-contract=off)",
+              "comparison_kind": "library",
+              "label": "misaligned by one sample",
+              "other_instr_per_sample": 6.03,
+              "other_snr_db": null,
+              "ours_instr_per_sample": 2.84,
+              "ratio": 0.47
             }
           ],
-          "other_instr_per_sample": 4.78,
+          "other_instr_per_sample": 6.03,
           "ours_instr_per_sample": 2.84,
-          "ratio": 0.59,
+          "ratio": 0.47,
           "snr_db": {
             "other": 999.0,
             "ours": 999.0
@@ -1018,10 +1063,19 @@
           "verdict": "pass"
         },
         "convert_cq15_cu8": {
-          "compared_with": "volk_8i_convert_16i on the bytes with the sign bit flipped (the CU8 conversion without its offset)",
+          "compared_with": "KFR 7.2.0 cast<i16>(in) << 8 on the bytes with the sign bit flipped (the CU8 conversion without its offset) (benches/refs/kfr-ops.cpp, sse41 over the SSE headers of Emscripten, SIMD level simd128, -ffp-contract=off)",
           "comparison_kind": "library",
           "goal": true,
           "informational": [
+            {
+              "compared_with": "volk_8i_convert_16i on the bytes with the sign bit flipped (the CU8 conversion without its offset)",
+              "comparison_kind": "library",
+              "label": "information: volk",
+              "other_instr_per_sample": 4.78,
+              "other_snr_db": 999.0,
+              "ours_instr_per_sample": 3.37,
+              "ratio": 0.71
+            },
             {
               "compared_with": "sdrk fallback",
               "comparison_kind": "own_fallback",
@@ -1032,36 +1086,36 @@
               "ratio": 0.63
             },
             {
-              "compared_with": "volk_8i_convert_16i on the bytes with the sign bit flipped (the CU8 conversion without its offset)",
+              "compared_with": "KFR 7.2.0 cast<i16>(in) << 8 on the bytes with the sign bit flipped (the CU8 conversion without its offset) (benches/refs/kfr-ops.cpp, sse41 over the SSE headers of Emscripten, SIMD level simd128, -ffp-contract=off)",
               "comparison_kind": "library",
               "label": "n = 64",
-              "other_instr_per_sample": 6.44,
+              "other_instr_per_sample": 7.67,
               "other_snr_db": null,
               "ours_instr_per_sample": 7.02,
-              "ratio": 1.09
+              "ratio": 0.91
             },
             {
-              "compared_with": "volk_8i_convert_16i on the bytes with the sign bit flipped (the CU8 conversion without its offset)",
+              "compared_with": "KFR 7.2.0 cast<i16>(in) << 8 on the bytes with the sign bit flipped (the CU8 conversion without its offset) (benches/refs/kfr-ops.cpp, sse41 over the SSE headers of Emscripten, SIMD level simd128, -ffp-contract=off)",
               "comparison_kind": "library",
               "label": "n = 100",
-              "other_instr_per_sample": 5.83,
+              "other_instr_per_sample": 7.07,
               "other_snr_db": null,
               "ours_instr_per_sample": 6.19,
-              "ratio": 1.06
+              "ratio": 0.88
             },
             {
-              "compared_with": "volk_8i_convert_16i on the bytes with the sign bit flipped (the CU8 conversion without its offset)",
+              "compared_with": "KFR 7.2.0 cast<i16>(in) << 8 on the bytes with the sign bit flipped (the CU8 conversion without its offset) (benches/refs/kfr-ops.cpp, sse41 over the SSE headers of Emscripten, SIMD level simd128, -ffp-contract=off)",
               "comparison_kind": "library",
               "label": "misaligned by one sample",
-              "other_instr_per_sample": 4.78,
+              "other_instr_per_sample": 6.03,
               "other_snr_db": null,
               "ours_instr_per_sample": 3.37,
-              "ratio": 0.71
+              "ratio": 0.56
             }
           ],
-          "other_instr_per_sample": 4.78,
+          "other_instr_per_sample": 6.03,
           "ours_instr_per_sample": 3.37,
-          "ratio": 0.71,
+          "ratio": 0.56,
           "snr_db": {
             "other": 999.0,
             "ours": 999.0
@@ -1095,41 +1149,50 @@
           "verdict": "pass"
         },
         "convert_cs16": {
-          "compared_with": "volk_16i_s32f_convert_32f",
+          "compared_with": "KFR 7.2.0 cast<float>(in) * (1 / 32768) (benches/refs/kfr-ops.cpp, sse41 over the SSE headers of Emscripten, SIMD level simd128, -ffp-contract=off)",
           "comparison_kind": "library",
           "goal": true,
           "informational": [
             {
               "compared_with": "volk_16i_s32f_convert_32f",
               "comparison_kind": "library",
-              "label": "n = 64",
-              "other_instr_per_sample": 11.67,
-              "other_snr_db": null,
-              "ours_instr_per_sample": 8.06,
-              "ratio": 0.69
-            },
-            {
-              "compared_with": "volk_16i_s32f_convert_32f",
-              "comparison_kind": "library",
-              "label": "n = 100",
-              "other_instr_per_sample": 11.07,
-              "other_snr_db": null,
-              "ours_instr_per_sample": 7.18,
-              "ratio": 0.65
-            },
-            {
-              "compared_with": "volk_16i_s32f_convert_32f",
-              "comparison_kind": "library",
-              "label": "misaligned by one sample",
+              "label": "information: volk",
               "other_instr_per_sample": 10.03,
-              "other_snr_db": null,
+              "other_snr_db": 999.0,
               "ours_instr_per_sample": 4.34,
               "ratio": 0.43
+            },
+            {
+              "compared_with": "KFR 7.2.0 cast<float>(in) * (1 / 32768) (benches/refs/kfr-ops.cpp, sse41 over the SSE headers of Emscripten, SIMD level simd128, -ffp-contract=off)",
+              "comparison_kind": "library",
+              "label": "n = 64",
+              "other_instr_per_sample": 15.2,
+              "other_snr_db": null,
+              "ours_instr_per_sample": 8.06,
+              "ratio": 0.53
+            },
+            {
+              "compared_with": "KFR 7.2.0 cast<float>(in) * (1 / 32768) (benches/refs/kfr-ops.cpp, sse41 over the SSE headers of Emscripten, SIMD level simd128, -ffp-contract=off)",
+              "comparison_kind": "library",
+              "label": "n = 100",
+              "other_instr_per_sample": 14.59,
+              "other_snr_db": null,
+              "ours_instr_per_sample": 7.18,
+              "ratio": 0.49
+            },
+            {
+              "compared_with": "KFR 7.2.0 cast<float>(in) * (1 / 32768) (benches/refs/kfr-ops.cpp, sse41 over the SSE headers of Emscripten, SIMD level simd128, -ffp-contract=off)",
+              "comparison_kind": "library",
+              "label": "misaligned by one sample",
+              "other_instr_per_sample": 13.53,
+              "other_snr_db": null,
+              "ours_instr_per_sample": 4.34,
+              "ratio": 0.32
             }
           ],
-          "other_instr_per_sample": 10.03,
+          "other_instr_per_sample": 13.53,
           "ours_instr_per_sample": 4.34,
-          "ratio": 0.43,
+          "ratio": 0.32,
           "snr_db": {
             "other": 999.0,
             "ours": 999.0
@@ -1163,41 +1226,50 @@
           "verdict": "pass"
         },
         "convert_cs8": {
-          "compared_with": "volk_8i_s32f_convert_32f",
+          "compared_with": "KFR 7.2.0 in * (1 / 128) (benches/refs/kfr-ops.cpp, sse41 over the SSE headers of Emscripten, SIMD level simd128, -ffp-contract=off)",
           "comparison_kind": "library",
           "goal": true,
           "informational": [
             {
               "compared_with": "volk_8i_s32f_convert_32f",
               "comparison_kind": "library",
-              "label": "n = 64",
-              "other_instr_per_sample": 12.78,
-              "other_snr_db": null,
-              "ours_instr_per_sample": 8.53,
-              "ratio": 0.67
-            },
-            {
-              "compared_with": "volk_8i_s32f_convert_32f",
-              "comparison_kind": "library",
-              "label": "n = 100",
-              "other_instr_per_sample": 12.14,
-              "other_snr_db": null,
-              "ours_instr_per_sample": 8.17,
-              "ratio": 0.67
-            },
-            {
-              "compared_with": "volk_8i_s32f_convert_32f",
-              "comparison_kind": "library",
-              "label": "misaligned by one sample",
+              "label": "information: volk",
               "other_instr_per_sample": 11.03,
-              "other_snr_db": null,
+              "other_snr_db": 999.0,
               "ours_instr_per_sample": 4.22,
               "ratio": 0.38
+            },
+            {
+              "compared_with": "KFR 7.2.0 in * (1 / 128) (benches/refs/kfr-ops.cpp, sse41 over the SSE headers of Emscripten, SIMD level simd128, -ffp-contract=off)",
+              "comparison_kind": "library",
+              "label": "n = 64",
+              "other_instr_per_sample": 15.24,
+              "other_snr_db": null,
+              "ours_instr_per_sample": 8.53,
+              "ratio": 0.56
+            },
+            {
+              "compared_with": "KFR 7.2.0 in * (1 / 128) (benches/refs/kfr-ops.cpp, sse41 over the SSE headers of Emscripten, SIMD level simd128, -ffp-contract=off)",
+              "comparison_kind": "library",
+              "label": "n = 100",
+              "other_instr_per_sample": 14.61,
+              "other_snr_db": null,
+              "ours_instr_per_sample": 8.17,
+              "ratio": 0.56
+            },
+            {
+              "compared_with": "KFR 7.2.0 in * (1 / 128) (benches/refs/kfr-ops.cpp, sse41 over the SSE headers of Emscripten, SIMD level simd128, -ffp-contract=off)",
+              "comparison_kind": "library",
+              "label": "misaligned by one sample",
+              "other_instr_per_sample": 13.53,
+              "other_snr_db": null,
+              "ours_instr_per_sample": 4.22,
+              "ratio": 0.31
             }
           ],
-          "other_instr_per_sample": 11.03,
+          "other_instr_per_sample": 13.53,
           "ours_instr_per_sample": 4.22,
-          "ratio": 0.38,
+          "ratio": 0.31,
           "snr_db": {
             "other": 999.0,
             "ours": 999.0
@@ -1231,10 +1303,19 @@
           "verdict": "pass"
         },
         "convert_cu8": {
-          "compared_with": "volk_8i_s32f_convert_32f on the bytes with the sign bit flipped (the CU8 conversion without its offset)",
+          "compared_with": "KFR 7.2.0 in * (1 / 128) on the bytes with the sign bit flipped (the CU8 conversion without its offset) (benches/refs/kfr-ops.cpp, sse41 over the SSE headers of Emscripten, SIMD level simd128, -ffp-contract=off)",
           "comparison_kind": "library",
           "goal": true,
           "informational": [
+            {
+              "compared_with": "volk_8i_s32f_convert_32f on the bytes with the sign bit flipped (the CU8 conversion without its offset)",
+              "comparison_kind": "library",
+              "label": "information: volk",
+              "other_instr_per_sample": 11.03,
+              "other_snr_db": 999.0,
+              "ours_instr_per_sample": 3.96,
+              "ratio": 0.36
+            },
             {
               "compared_with": "sdrk fallback",
               "comparison_kind": "own_fallback",
@@ -1245,36 +1326,36 @@
               "ratio": 0.33
             },
             {
-              "compared_with": "volk_8i_s32f_convert_32f on the bytes with the sign bit flipped (the CU8 conversion without its offset)",
+              "compared_with": "KFR 7.2.0 in * (1 / 128) on the bytes with the sign bit flipped (the CU8 conversion without its offset) (benches/refs/kfr-ops.cpp, sse41 over the SSE headers of Emscripten, SIMD level simd128, -ffp-contract=off)",
               "comparison_kind": "library",
               "label": "n = 64",
-              "other_instr_per_sample": 12.8,
+              "other_instr_per_sample": 15.24,
               "other_snr_db": null,
               "ours_instr_per_sample": 8.27,
-              "ratio": 0.65
+              "ratio": 0.54
             },
             {
-              "compared_with": "volk_8i_s32f_convert_32f on the bytes with the sign bit flipped (the CU8 conversion without its offset)",
+              "compared_with": "KFR 7.2.0 in * (1 / 128) on the bytes with the sign bit flipped (the CU8 conversion without its offset) (benches/refs/kfr-ops.cpp, sse41 over the SSE headers of Emscripten, SIMD level simd128, -ffp-contract=off)",
               "comparison_kind": "library",
               "label": "n = 100",
-              "other_instr_per_sample": 12.15,
+              "other_instr_per_sample": 14.61,
               "other_snr_db": null,
               "ours_instr_per_sample": 7.95,
-              "ratio": 0.65
+              "ratio": 0.54
             },
             {
-              "compared_with": "volk_8i_s32f_convert_32f on the bytes with the sign bit flipped (the CU8 conversion without its offset)",
+              "compared_with": "KFR 7.2.0 in * (1 / 128) on the bytes with the sign bit flipped (the CU8 conversion without its offset) (benches/refs/kfr-ops.cpp, sse41 over the SSE headers of Emscripten, SIMD level simd128, -ffp-contract=off)",
               "comparison_kind": "library",
               "label": "misaligned by one sample",
-              "other_instr_per_sample": 11.03,
+              "other_instr_per_sample": 13.53,
               "other_snr_db": null,
               "ours_instr_per_sample": 3.96,
-              "ratio": 0.36
+              "ratio": 0.29
             }
           ],
-          "other_instr_per_sample": 11.03,
+          "other_instr_per_sample": 13.53,
           "ours_instr_per_sample": 3.96,
-          "ratio": 0.36,
+          "ratio": 0.29,
           "snr_db": {
             "other": 999.0,
             "ours": 999.0
@@ -1549,8 +1630,8 @@
               "label": "n = 64",
               "other_instr_per_sample": 16.2,
               "other_snr_db": null,
-              "ours_instr_per_sample": 7.88,
-              "ratio": 0.49
+              "ours_instr_per_sample": 7.83,
+              "ratio": 0.48
             },
             {
               "compared_with": "volk_32f_s32f_convert_16i",
@@ -1558,7 +1639,7 @@
               "label": "n = 100",
               "other_instr_per_sample": 15.59,
               "other_snr_db": null,
-              "ours_instr_per_sample": 7.63,
+              "ours_instr_per_sample": 7.6,
               "ratio": 0.49
             },
             {
@@ -1626,8 +1707,8 @@
               "label": "n = 64",
               "other_instr_per_sample": 16.28,
               "other_snr_db": null,
-              "ours_instr_per_sample": 9.41,
-              "ratio": 0.58
+              "ours_instr_per_sample": 9.56,
+              "ratio": 0.59
             },
             {
               "compared_with": "volk_32f_s32f_convert_8i",
@@ -1635,7 +1716,7 @@
               "label": "n = 100",
               "other_instr_per_sample": 15.64,
               "other_snr_db": null,
-              "ours_instr_per_sample": 8.71,
+              "ours_instr_per_sample": 8.81,
               "ratio": 0.56
             },
             {
@@ -1644,12 +1725,12 @@
               "label": "misaligned by one sample",
               "other_instr_per_sample": 14.53,
               "other_snr_db": null,
-              "ours_instr_per_sample": 4.62,
+              "ours_instr_per_sample": 4.63,
               "ratio": 0.32
             }
           ],
           "other_instr_per_sample": 14.53,
-          "ours_instr_per_sample": 4.62,
+          "ours_instr_per_sample": 4.63,
           "ratio": 0.32,
           "snr_db": {
             "other": 47.24,
@@ -1703,8 +1784,8 @@
               "label": "n = 64",
               "other_instr_per_sample": 16.34,
               "other_snr_db": null,
-              "ours_instr_per_sample": 12.39,
-              "ratio": 0.76
+              "ours_instr_per_sample": 12.59,
+              "ratio": 0.77
             },
             {
               "compared_with": "volk_32f_s32f_x2_convert_8u",
@@ -1712,7 +1793,7 @@
               "label": "n = 100",
               "other_instr_per_sample": 15.68,
               "other_snr_db": null,
-              "ours_instr_per_sample": 13.26,
+              "ours_instr_per_sample": 13.39,
               "ratio": 0.85
             },
             {
@@ -1721,12 +1802,12 @@
               "label": "misaligned by one sample",
               "other_instr_per_sample": 14.53,
               "other_snr_db": null,
-              "ours_instr_per_sample": 7.62,
+              "ours_instr_per_sample": 7.63,
               "ratio": 0.52
             }
           ],
           "other_instr_per_sample": 14.53,
-          "ours_instr_per_sample": 7.62,
+          "ours_instr_per_sample": 7.63,
           "ratio": 0.52,
           "snr_db": {
             "other": 47.25,
@@ -1770,41 +1851,50 @@
           "verdict": "pass"
         },
         "convert_real_rs16": {
-          "compared_with": "volk_16i_s32f_convert_32f",
+          "compared_with": "KFR 7.2.0 cast<float>(in) * (1 / 32768) (benches/refs/kfr-ops.cpp, sse41 over the SSE headers of Emscripten, SIMD level simd128, -ffp-contract=off)",
           "comparison_kind": "library",
           "goal": true,
           "informational": [
             {
               "compared_with": "volk_16i_s32f_convert_32f",
               "comparison_kind": "library",
-              "label": "n = 64",
-              "other_instr_per_sample": 6.67,
-              "other_snr_db": null,
-              "ours_instr_per_sample": 6.44,
-              "ratio": 0.96
-            },
-            {
-              "compared_with": "volk_16i_s32f_convert_32f",
-              "comparison_kind": "library",
-              "label": "n = 100",
-              "other_instr_per_sample": 6.07,
-              "other_snr_db": null,
-              "ours_instr_per_sample": 6.4,
-              "ratio": 1.05
-            },
-            {
-              "compared_with": "volk_16i_s32f_convert_32f",
-              "comparison_kind": "library",
-              "label": "misaligned by one sample",
+              "label": "information: volk",
               "other_instr_per_sample": 5.03,
-              "other_snr_db": null,
+              "other_snr_db": 999.0,
               "ours_instr_per_sample": 2.2,
               "ratio": 0.44
+            },
+            {
+              "compared_with": "KFR 7.2.0 cast<float>(in) * (1 / 32768) (benches/refs/kfr-ops.cpp, sse41 over the SSE headers of Emscripten, SIMD level simd128, -ffp-contract=off)",
+              "comparison_kind": "library",
+              "label": "n = 64",
+              "other_instr_per_sample": 8.45,
+              "other_snr_db": null,
+              "ours_instr_per_sample": 6.44,
+              "ratio": 0.76
+            },
+            {
+              "compared_with": "KFR 7.2.0 cast<float>(in) * (1 / 32768) (benches/refs/kfr-ops.cpp, sse41 over the SSE headers of Emscripten, SIMD level simd128, -ffp-contract=off)",
+              "comparison_kind": "library",
+              "label": "n = 100",
+              "other_instr_per_sample": 7.84,
+              "other_snr_db": null,
+              "ours_instr_per_sample": 6.4,
+              "ratio": 0.82
+            },
+            {
+              "compared_with": "KFR 7.2.0 cast<float>(in) * (1 / 32768) (benches/refs/kfr-ops.cpp, sse41 over the SSE headers of Emscripten, SIMD level simd128, -ffp-contract=off)",
+              "comparison_kind": "library",
+              "label": "misaligned by one sample",
+              "other_instr_per_sample": 6.78,
+              "other_snr_db": null,
+              "ours_instr_per_sample": 2.2,
+              "ratio": 0.32
             }
           ],
-          "other_instr_per_sample": 5.03,
+          "other_instr_per_sample": 6.78,
           "ours_instr_per_sample": 2.2,
-          "ratio": 0.44,
+          "ratio": 0.32,
           "snr_db": {
             "other": 999.0,
             "ours": 999.0
@@ -2456,23 +2546,32 @@
           "verdict": "info"
         },
         "deinterleave": {
-          "compared_with": "volk_32fc_deinterleave_32f_x2",
+          "compared_with": "KFR 7.2.0 real(c), imag(c) of complex<float> (benches/refs/kfr-ops.cpp, sse41 over the SSE headers of Emscripten, SIMD level simd128, -ffp-contract=off)",
           "comparison_kind": "library",
           "goal": true,
           "informational": [
             {
               "compared_with": "volk_32fc_deinterleave_32f_x2",
               "comparison_kind": "library",
-              "label": "misaligned by one sample",
+              "label": "information: volk",
               "other_instr_per_sample": 7.8,
-              "other_snr_db": null,
+              "other_snr_db": 999.0,
               "ours_instr_per_sample": 5.9,
               "ratio": 0.76
+            },
+            {
+              "compared_with": "KFR 7.2.0 real(c), imag(c) of complex<float> (benches/refs/kfr-ops.cpp, sse41 over the SSE headers of Emscripten, SIMD level simd128, -ffp-contract=off)",
+              "comparison_kind": "library",
+              "label": "misaligned by one sample",
+              "other_instr_per_sample": 14.04,
+              "other_snr_db": null,
+              "ours_instr_per_sample": 5.9,
+              "ratio": 0.42
             }
           ],
-          "other_instr_per_sample": 7.8,
+          "other_instr_per_sample": 14.04,
           "ours_instr_per_sample": 5.9,
-          "ratio": 0.76,
+          "ratio": 0.42,
           "snr_db": {
             "other": 999.0,
             "ours": 999.0
@@ -2481,23 +2580,32 @@
           "verdict": "pass"
         },
         "deinterleave_cq15": {
-          "compared_with": "volk_16ic_deinterleave_16i_x2",
+          "compared_with": "KFR 7.2.0 real(c), imag(c) of complex<int16_t> (benches/refs/kfr-ops.cpp, sse41 over the SSE headers of Emscripten, SIMD level simd128, -ffp-contract=off)",
           "comparison_kind": "library",
           "goal": true,
           "informational": [
             {
               "compared_with": "volk_16ic_deinterleave_16i_x2",
               "comparison_kind": "library",
-              "label": "misaligned by one sample",
+              "label": "information: volk",
               "other_instr_per_sample": 3.92,
-              "other_snr_db": null,
+              "other_snr_db": 999.0,
               "ours_instr_per_sample": 2.97,
               "ratio": 0.76
+            },
+            {
+              "compared_with": "KFR 7.2.0 real(c), imag(c) of complex<int16_t> (benches/refs/kfr-ops.cpp, sse41 over the SSE headers of Emscripten, SIMD level simd128, -ffp-contract=off)",
+              "comparison_kind": "library",
+              "label": "misaligned by one sample",
+              "other_instr_per_sample": 7.04,
+              "other_snr_db": null,
+              "ours_instr_per_sample": 2.97,
+              "ratio": 0.42
             }
           ],
-          "other_instr_per_sample": 3.92,
+          "other_instr_per_sample": 7.04,
           "ours_instr_per_sample": 2.97,
-          "ratio": 0.76,
+          "ratio": 0.42,
           "snr_db": {
             "other": 999.0,
             "ours": 999.0
@@ -2556,84 +2664,102 @@
           "verdict": "pass"
         },
         "dot": {
-          "compared_with": "volk_32fc_32f_dot_prod_32fc",
+          "compared_with": "KFR 7.2.0 dotproduct(x, t) of complex<float> and float (benches/refs/kfr-ops.cpp, sse41 over the SSE headers of Emscripten, SIMD level simd128, -ffp-contract=off)",
           "comparison_kind": "library",
           "goal": true,
           "informational": [
             {
               "compared_with": "volk_32fc_32f_dot_prod_32fc",
               "comparison_kind": "library",
-              "label": "n = 64",
-              "other_instr_per_sample": 32.41,
-              "other_snr_db": null,
-              "ours_instr_per_sample": 12.0,
-              "ratio": 0.37
-            },
-            {
-              "compared_with": "volk_32fc_32f_dot_prod_32fc",
-              "comparison_kind": "library",
-              "label": "n = 100",
-              "other_instr_per_sample": 31.36,
-              "other_snr_db": null,
-              "ours_instr_per_sample": 10.25,
-              "ratio": 0.33
-            },
-            {
-              "compared_with": "volk_32fc_32f_dot_prod_32fc",
-              "comparison_kind": "library",
-              "label": "misaligned by one sample",
-              "other_instr_per_sample": 29.55,
-              "other_snr_db": null,
+              "label": "information: volk",
+              "other_instr_per_sample": 29.54,
+              "other_snr_db": 122.6,
               "ours_instr_per_sample": 7.2,
               "ratio": 0.24
+            },
+            {
+              "compared_with": "KFR 7.2.0 dotproduct(x, t) of complex<float> and float (benches/refs/kfr-ops.cpp, sse41 over the SSE headers of Emscripten, SIMD level simd128, -ffp-contract=off)",
+              "comparison_kind": "library",
+              "label": "n = 64",
+              "other_instr_per_sample": 39.13,
+              "other_snr_db": null,
+              "ours_instr_per_sample": 11.94,
+              "ratio": 0.31
+            },
+            {
+              "compared_with": "KFR 7.2.0 dotproduct(x, t) of complex<float> and float (benches/refs/kfr-ops.cpp, sse41 over the SSE headers of Emscripten, SIMD level simd128, -ffp-contract=off)",
+              "comparison_kind": "library",
+              "label": "n = 100",
+              "other_instr_per_sample": 37.64,
+              "other_snr_db": null,
+              "ours_instr_per_sample": 10.21,
+              "ratio": 0.27
+            },
+            {
+              "compared_with": "KFR 7.2.0 dotproduct(x, t) of complex<float> and float (benches/refs/kfr-ops.cpp, sse41 over the SSE headers of Emscripten, SIMD level simd128, -ffp-contract=off)",
+              "comparison_kind": "library",
+              "label": "misaligned by one sample",
+              "other_instr_per_sample": 35.07,
+              "other_snr_db": null,
+              "ours_instr_per_sample": 7.2,
+              "ratio": 0.21
             }
           ],
-          "other_instr_per_sample": 29.55,
+          "other_instr_per_sample": 35.07,
           "ours_instr_per_sample": 7.2,
-          "ratio": 0.24,
+          "ratio": 0.21,
           "snr_db": {
-            "other": 122.6,
+            "other": 125.02,
             "ours": 132.79
           },
           "status": "release",
           "verdict": "pass"
         },
         "dot_complex": {
-          "compared_with": "volk_32fc_x2_dot_prod_32fc",
+          "compared_with": "KFR 7.2.0 dotproduct(a, b) on complex<float> (benches/refs/kfr-ops.cpp, sse41 over the SSE headers of Emscripten, SIMD level simd128, -ffp-contract=off)",
           "comparison_kind": "library",
           "goal": true,
           "informational": [
             {
               "compared_with": "volk_32fc_x2_dot_prod_32fc",
               "comparison_kind": "library",
-              "label": "n = 64",
-              "other_instr_per_sample": 43.73,
-              "other_snr_db": null,
-              "ours_instr_per_sample": 17.73,
-              "ratio": 0.41
-            },
-            {
-              "compared_with": "volk_32fc_x2_dot_prod_32fc",
-              "comparison_kind": "library",
-              "label": "n = 100",
-              "other_instr_per_sample": 42.57,
-              "other_snr_db": null,
-              "ours_instr_per_sample": 18.01,
-              "ratio": 0.42
-            },
-            {
-              "compared_with": "volk_32fc_x2_dot_prod_32fc",
-              "comparison_kind": "library",
-              "label": "misaligned by one sample",
+              "label": "information: volk",
               "other_instr_per_sample": 40.55,
-              "other_snr_db": null,
+              "other_snr_db": 121.6,
               "ours_instr_per_sample": 13.2,
               "ratio": 0.33
+            },
+            {
+              "compared_with": "KFR 7.2.0 dotproduct(a, b) on complex<float> (benches/refs/kfr-ops.cpp, sse41 over the SSE headers of Emscripten, SIMD level simd128, -ffp-contract=off)",
+              "comparison_kind": "library",
+              "label": "n = 64",
+              "other_instr_per_sample": 40.13,
+              "other_snr_db": null,
+              "ours_instr_per_sample": 17.73,
+              "ratio": 0.44
+            },
+            {
+              "compared_with": "KFR 7.2.0 dotproduct(a, b) on complex<float> (benches/refs/kfr-ops.cpp, sse41 over the SSE headers of Emscripten, SIMD level simd128, -ffp-contract=off)",
+              "comparison_kind": "library",
+              "label": "n = 100",
+              "other_instr_per_sample": 38.64,
+              "other_snr_db": null,
+              "ours_instr_per_sample": 18.01,
+              "ratio": 0.47
+            },
+            {
+              "compared_with": "KFR 7.2.0 dotproduct(a, b) on complex<float> (benches/refs/kfr-ops.cpp, sse41 over the SSE headers of Emscripten, SIMD level simd128, -ffp-contract=off)",
+              "comparison_kind": "library",
+              "label": "misaligned by one sample",
+              "other_instr_per_sample": 36.07,
+              "other_snr_db": null,
+              "ours_instr_per_sample": 13.2,
+              "ratio": 0.37
             }
           ],
-          "other_instr_per_sample": 40.55,
+          "other_instr_per_sample": 36.07,
           "ours_instr_per_sample": 13.2,
-          "ratio": 0.33,
+          "ratio": 0.37,
           "snr_db": {
             "other": 121.6,
             "ours": 127.83
@@ -2759,43 +2885,52 @@
           "verdict": "pass"
         },
         "dot_real": {
-          "compared_with": "sdrk fallback",
+          "compared_with": "KFR 7.2.0 dotproduct(x, t) (benches/refs/kfr-ops.cpp, sse41 over the SSE headers of Emscripten, SIMD level simd128, -ffp-contract=off)",
           "comparison_kind": "library",
           "goal": true,
           "informational": [
             {
               "compared_with": "sdrk fallback",
-              "comparison_kind": "library",
-              "label": "n = 64",
-              "other_instr_per_sample": 9.02,
-              "other_snr_db": null,
-              "ours_instr_per_sample": 7.41,
-              "ratio": 0.82
-            },
-            {
-              "compared_with": "sdrk fallback",
-              "comparison_kind": "library",
-              "label": "n = 100",
-              "other_instr_per_sample": 8.32,
-              "other_snr_db": null,
-              "ours_instr_per_sample": 5.94,
-              "ratio": 0.71
-            },
-            {
-              "compared_with": "sdrk fallback",
-              "comparison_kind": "library",
-              "label": "misaligned by one sample",
+              "comparison_kind": "own_fallback",
+              "label": "information: fallback",
               "other_instr_per_sample": 6.17,
-              "other_snr_db": null,
+              "other_snr_db": 123.11,
               "ours_instr_per_sample": 3.35,
               "ratio": 0.54
+            },
+            {
+              "compared_with": "KFR 7.2.0 dotproduct(x, t) (benches/refs/kfr-ops.cpp, sse41 over the SSE headers of Emscripten, SIMD level simd128, -ffp-contract=off)",
+              "comparison_kind": "library",
+              "label": "n = 64",
+              "other_instr_per_sample": 10.78,
+              "other_snr_db": null,
+              "ours_instr_per_sample": 7.47,
+              "ratio": 0.69
+            },
+            {
+              "compared_with": "KFR 7.2.0 dotproduct(x, t) (benches/refs/kfr-ops.cpp, sse41 over the SSE headers of Emscripten, SIMD level simd128, -ffp-contract=off)",
+              "comparison_kind": "library",
+              "label": "n = 100",
+              "other_instr_per_sample": 9.33,
+              "other_snr_db": null,
+              "ours_instr_per_sample": 5.98,
+              "ratio": 0.64
+            },
+            {
+              "compared_with": "KFR 7.2.0 dotproduct(x, t) (benches/refs/kfr-ops.cpp, sse41 over the SSE headers of Emscripten, SIMD level simd128, -ffp-contract=off)",
+              "comparison_kind": "library",
+              "label": "misaligned by one sample",
+              "other_instr_per_sample": 6.81,
+              "other_snr_db": null,
+              "ours_instr_per_sample": 3.35,
+              "ratio": 0.49
             }
           ],
-          "other_instr_per_sample": 6.17,
+          "other_instr_per_sample": 6.81,
           "ours_instr_per_sample": 3.35,
-          "ratio": 0.54,
+          "ratio": 0.49,
           "snr_db": {
-            "other": 123.11,
+            "other": 125.0,
             "ours": 129.78
           },
           "status": "release",
@@ -3157,7 +3292,7 @@
           "comparison_kind": "library",
           "goal": false,
           "other_instr_per_sample": 209.86,
-          "ours_instr_per_sample": 220.38,
+          "ours_instr_per_sample": 220.39,
           "ratio": 1.05,
           "snr_db": {
             "other": 138.73,
@@ -3213,7 +3348,7 @@
           "comparison_kind": "library",
           "goal": false,
           "other_instr_per_sample": 117.59,
-          "ours_instr_per_sample": 121.56,
+          "ours_instr_per_sample": 121.59,
           "ratio": 1.03,
           "snr_db": {
             "other": 140.0,
@@ -4501,23 +4636,32 @@
           "verdict": "info"
         },
         "interleave": {
-          "compared_with": "volk_32f_x2_interleave_32fc",
+          "compared_with": "KFR 7.2.0 make_complex(re, im) on float (benches/refs/kfr-ops.cpp, sse41 over the SSE headers of Emscripten, SIMD level simd128, -ffp-contract=off)",
           "comparison_kind": "library",
           "goal": true,
           "informational": [
             {
               "compared_with": "volk_32f_x2_interleave_32fc",
               "comparison_kind": "library",
-              "label": "misaligned by one sample",
+              "label": "information: volk",
               "other_instr_per_sample": 7.79,
-              "other_snr_db": null,
+              "other_snr_db": 999.0,
               "ours_instr_per_sample": 5.9,
               "ratio": 0.76
+            },
+            {
+              "compared_with": "KFR 7.2.0 make_complex(re, im) on float (benches/refs/kfr-ops.cpp, sse41 over the SSE headers of Emscripten, SIMD level simd128, -ffp-contract=off)",
+              "comparison_kind": "library",
+              "label": "misaligned by one sample",
+              "other_instr_per_sample": 15.03,
+              "other_snr_db": null,
+              "ours_instr_per_sample": 5.9,
+              "ratio": 0.39
             }
           ],
-          "other_instr_per_sample": 7.79,
+          "other_instr_per_sample": 15.03,
           "ours_instr_per_sample": 5.9,
-          "ratio": 0.76,
+          "ratio": 0.39,
           "snr_db": {
             "other": 999.0,
             "ours": 999.0
@@ -4526,7 +4670,7 @@
           "verdict": "pass"
         },
         "interleave_cq15": {
-          "compared_with": "KFR 7.2.0 make_complex(re, im) on int16_t (benches/refs/kfr-ops.cpp, sse41, -ffp-contract=off)",
+          "compared_with": "KFR 7.2.0 make_complex(re, im) on int16_t (benches/refs/kfr-ops.cpp, sse41 over the SSE headers of Emscripten, SIMD level simd128, -ffp-contract=off)",
           "comparison_kind": "library",
           "goal": true,
           "informational": [
@@ -4540,7 +4684,7 @@
               "ratio": 0.76
             },
             {
-              "compared_with": "KFR 7.2.0 make_complex(re, im) on int16_t (benches/refs/kfr-ops.cpp, sse41, -ffp-contract=off)",
+              "compared_with": "KFR 7.2.0 make_complex(re, im) on int16_t (benches/refs/kfr-ops.cpp, sse41 over the SSE headers of Emscripten, SIMD level simd128, -ffp-contract=off)",
               "comparison_kind": "library",
               "label": "misaligned by one sample",
               "other_instr_per_sample": 15.03,
@@ -4623,23 +4767,32 @@
           "verdict": "info"
         },
         "mag": {
-          "compared_with": "volk_32fc_magnitude_32f",
+          "compared_with": "KFR 7.2.0 cabs(x) (benches/refs/kfr-ops.cpp, sse41 over the SSE headers of Emscripten, SIMD level simd128, -ffp-contract=off)",
           "comparison_kind": "library",
           "goal": true,
           "informational": [
             {
               "compared_with": "volk_32fc_magnitude_32f",
               "comparison_kind": "library",
-              "label": "misaligned by one sample",
+              "label": "information: volk",
               "other_instr_per_sample": 8.53,
-              "other_snr_db": null,
+              "other_snr_db": 150.54,
               "ours_instr_per_sample": 6.86,
               "ratio": 0.8
+            },
+            {
+              "compared_with": "KFR 7.2.0 cabs(x) (benches/refs/kfr-ops.cpp, sse41 over the SSE headers of Emscripten, SIMD level simd128, -ffp-contract=off)",
+              "comparison_kind": "library",
+              "label": "misaligned by one sample",
+              "other_instr_per_sample": 10.28,
+              "other_snr_db": null,
+              "ours_instr_per_sample": 6.86,
+              "ratio": 0.67
             }
           ],
-          "other_instr_per_sample": 8.53,
+          "other_instr_per_sample": 10.28,
           "ours_instr_per_sample": 6.86,
-          "ratio": 0.8,
+          "ratio": 0.67,
           "snr_db": {
             "other": 150.54,
             "ours": 150.54
@@ -4723,23 +4876,32 @@
           "verdict": "pass"
         },
         "mag_sq": {
-          "compared_with": "volk_32fc_magnitude_squared_32f",
+          "compared_with": "KFR 7.2.0 cabssqr(c) (benches/refs/kfr-ops.cpp, sse41 over the SSE headers of Emscripten, SIMD level simd128, -ffp-contract=off)",
           "comparison_kind": "library",
           "goal": true,
           "informational": [
             {
               "compared_with": "volk_32fc_magnitude_squared_32f",
               "comparison_kind": "library",
-              "label": "misaligned by one sample",
+              "label": "information: volk",
               "other_instr_per_sample": 8.28,
-              "other_snr_db": null,
+              "other_snr_db": 149.02,
               "ours_instr_per_sample": 4.96,
               "ratio": 0.6
+            },
+            {
+              "compared_with": "KFR 7.2.0 cabssqr(c) (benches/refs/kfr-ops.cpp, sse41 over the SSE headers of Emscripten, SIMD level simd128, -ffp-contract=off)",
+              "comparison_kind": "library",
+              "label": "misaligned by one sample",
+              "other_instr_per_sample": 10.03,
+              "other_snr_db": null,
+              "ours_instr_per_sample": 4.96,
+              "ratio": 0.49
             }
           ],
-          "other_instr_per_sample": 8.28,
+          "other_instr_per_sample": 10.03,
           "ours_instr_per_sample": 4.96,
-          "ratio": 0.6,
+          "ratio": 0.49,
           "snr_db": {
             "other": 149.02,
             "ours": 149.02
@@ -4848,23 +5010,32 @@
           "verdict": "info"
         },
         "mul": {
-          "compared_with": "volk_32fc_x2_multiply_32fc",
+          "compared_with": "KFR 7.2.0 a * b on complex<float> (benches/refs/kfr-ops.cpp, sse41 over the SSE headers of Emscripten, SIMD level simd128, -ffp-contract=off)",
           "comparison_kind": "library",
           "goal": true,
           "informational": [
             {
               "compared_with": "volk_32fc_x2_multiply_32fc",
               "comparison_kind": "library",
-              "label": "misaligned by one sample",
+              "label": "information: volk",
               "other_instr_per_sample": 56.03,
-              "other_snr_db": null,
+              "other_snr_db": 148.5,
               "ours_instr_per_sample": 16.79,
               "ratio": 0.3
+            },
+            {
+              "compared_with": "KFR 7.2.0 a * b on complex<float> (benches/refs/kfr-ops.cpp, sse41 over the SSE headers of Emscripten, SIMD level simd128, -ffp-contract=off)",
+              "comparison_kind": "library",
+              "label": "misaligned by one sample",
+              "other_instr_per_sample": 31.53,
+              "other_snr_db": null,
+              "ours_instr_per_sample": 16.79,
+              "ratio": 0.53
             }
           ],
-          "other_instr_per_sample": 56.03,
+          "other_instr_per_sample": 31.53,
           "ours_instr_per_sample": 16.79,
-          "ratio": 0.3,
+          "ratio": 0.53,
           "snr_db": {
             "other": 148.5,
             "ours": 148.5
@@ -4947,23 +5118,32 @@
           "verdict": "pass"
         },
         "mul_real": {
-          "compared_with": "volk_32f_x2_multiply_32f",
+          "compared_with": "KFR 7.2.0 a * b (benches/refs/kfr-ops.cpp, sse41 over the SSE headers of Emscripten, SIMD level simd128, -ffp-contract=off)",
           "comparison_kind": "library",
           "goal": true,
           "informational": [
             {
               "compared_with": "volk_32f_x2_multiply_32f",
               "comparison_kind": "library",
-              "label": "misaligned by one sample",
+              "label": "information: volk",
               "other_instr_per_sample": 6.04,
-              "other_snr_db": null,
+              "other_snr_db": 151.79,
               "ours_instr_per_sample": 3.61,
               "ratio": 0.6
+            },
+            {
+              "compared_with": "KFR 7.2.0 a * b (benches/refs/kfr-ops.cpp, sse41 over the SSE headers of Emscripten, SIMD level simd128, -ffp-contract=off)",
+              "comparison_kind": "library",
+              "label": "misaligned by one sample",
+              "other_instr_per_sample": 7.53,
+              "other_snr_db": null,
+              "ours_instr_per_sample": 3.61,
+              "ratio": 0.48
             }
           ],
-          "other_instr_per_sample": 6.04,
+          "other_instr_per_sample": 7.53,
           "ours_instr_per_sample": 3.61,
-          "ratio": 0.6,
+          "ratio": 0.48,
           "snr_db": {
             "other": 151.79,
             "ours": 151.79
@@ -5205,25 +5385,34 @@
           "verdict": "waived"
         },
         "power_db": {
-          "compared_with": "volk_32f_log2_32f + volk_32f_s32f_multiply_32f + volk_32f_s32f_add_32f",
+          "compared_with": "KFR 7.2.0 10 * log10(x) + offset (benches/refs/kfr-ops.cpp, sse41 over the SSE headers of Emscripten, SIMD level simd128, -ffp-contract=off)",
           "comparison_kind": "library",
           "goal": true,
           "informational": [
             {
               "compared_with": "volk_32f_log2_32f + volk_32f_s32f_multiply_32f + volk_32f_s32f_add_32f",
               "comparison_kind": "library",
-              "label": "misaligned by one sample",
+              "label": "information: volk",
               "other_instr_per_sample": 98.8,
-              "other_snr_db": null,
+              "other_snr_db": 143.03,
               "ours_instr_per_sample": 28.78,
               "ratio": 0.29
+            },
+            {
+              "compared_with": "KFR 7.2.0 10 * log10(x) + offset (benches/refs/kfr-ops.cpp, sse41 over the SSE headers of Emscripten, SIMD level simd128, -ffp-contract=off)",
+              "comparison_kind": "library",
+              "label": "misaligned by one sample",
+              "other_instr_per_sample": 53.05,
+              "other_snr_db": null,
+              "ours_instr_per_sample": 28.78,
+              "ratio": 0.54
             }
           ],
-          "other_instr_per_sample": 98.8,
+          "other_instr_per_sample": 53.05,
           "ours_instr_per_sample": 28.78,
-          "ratio": 0.29,
+          "ratio": 0.54,
           "snr_db": {
-            "other": 143.03,
+            "other": 145.34,
             "ours": 151.93
           },
           "status": "release",
@@ -6683,23 +6872,32 @@
           "verdict": "pass"
         },
         "scale": {
-          "compared_with": "sdrk fallback",
+          "compared_with": "KFR 7.2.0 x * scale on the 2 n floats (benches/refs/kfr-ops.cpp, sse41 over the SSE headers of Emscripten, SIMD level simd128, -ffp-contract=off)",
           "comparison_kind": "library",
           "goal": true,
           "informational": [
             {
               "compared_with": "sdrk fallback",
-              "comparison_kind": "library",
-              "label": "misaligned by one sample",
+              "comparison_kind": "own_fallback",
+              "label": "information: fallback",
               "other_instr_per_sample": 6.16,
-              "other_snr_db": null,
+              "other_snr_db": 151.5,
               "ours_instr_per_sample": 5.65,
               "ratio": 0.92
+            },
+            {
+              "compared_with": "KFR 7.2.0 x * scale on the 2 n floats (benches/refs/kfr-ops.cpp, sse41 over the SSE headers of Emscripten, SIMD level simd128, -ffp-contract=off)",
+              "comparison_kind": "library",
+              "label": "misaligned by one sample",
+              "other_instr_per_sample": 13.03,
+              "other_snr_db": null,
+              "ours_instr_per_sample": 5.65,
+              "ratio": 0.43
             }
           ],
-          "other_instr_per_sample": 6.16,
+          "other_instr_per_sample": 13.03,
           "ours_instr_per_sample": 5.65,
-          "ratio": 0.92,
+          "ratio": 0.43,
           "snr_db": {
             "other": 151.5,
             "ours": 151.5
@@ -7244,23 +7442,32 @@
           "verdict": "info"
         },
         "stereo_matrix": {
-          "compared_with": "VOLK 3.3.0 composition: volk_32fc_deinterleave_32f_x2, volk_32f_x2_add_32f (d + d), volk_32f_x2_add_32f (s + d2), volk_32f_x2_subtract_32f (s - d2), volk_32f_x2_interleave_32fc (five passes over memory)",
+          "compared_with": "KFR 7.2.0 make_complex(s + (d + d), s - (d + d)) of real(x), imag(x) on complex<float>, one pass (benches/refs/kfr-ops.cpp, sse41 over the SSE headers of Emscripten, SIMD level simd128, -ffp-contract=off)",
           "comparison_kind": "library",
           "goal": true,
           "informational": [
             {
               "compared_with": "VOLK 3.3.0 composition: volk_32fc_deinterleave_32f_x2, volk_32f_x2_add_32f (d + d), volk_32f_x2_add_32f (s + d2), volk_32f_x2_subtract_32f (s - d2), volk_32f_x2_interleave_32fc (five passes over memory)",
               "comparison_kind": "library",
-              "label": "misaligned by one sample",
+              "label": "information: volk",
               "other_instr_per_sample": 33.63,
-              "other_snr_db": null,
+              "other_snr_db": 151.28,
               "ours_instr_per_sample": 11.53,
               "ratio": 0.34
+            },
+            {
+              "compared_with": "KFR 7.2.0 make_complex(s + (d + d), s - (d + d)) of real(x), imag(x) on complex<float>, one pass (benches/refs/kfr-ops.cpp, sse41 over the SSE headers of Emscripten, SIMD level simd128, -ffp-contract=off)",
+              "comparison_kind": "library",
+              "label": "misaligned by one sample",
+              "other_instr_per_sample": 117.18,
+              "other_snr_db": null,
+              "ours_instr_per_sample": 11.53,
+              "ratio": 0.1
             }
           ],
-          "other_instr_per_sample": 33.63,
+          "other_instr_per_sample": 117.18,
           "ours_instr_per_sample": 11.53,
-          "ratio": 0.34,
+          "ratio": 0.1,
           "snr_db": {
             "other": 151.28,
             "ours": 151.28
@@ -7282,7 +7489,7 @@
               "ratio": 0.99
             },
             {
-              "compared_with": "KFR 7.2.0 make_complex(satadd(s, d2), satsub(s, d2)), d2 = satadd(d, d) on complex<int16_t> (two saturations), one pass (benches/refs/kfr-ops.cpp, sse41, -ffp-contract=off)",
+              "compared_with": "KFR 7.2.0 make_complex(satadd(s, d2), satsub(s, d2)), d2 = satadd(d, d) on complex<int16_t> (two saturations), one pass (benches/refs/kfr-ops.cpp, sse41 over the SSE headers of Emscripten, SIMD level simd128, -ffp-contract=off)",
               "comparison_kind": "library",
               "label": "information: kfr",
               "other_instr_per_sample": 126.69,
@@ -7371,13 +7578,13 @@
               "label": "misaligned by one sample",
               "other_instr_per_sample": 143.86,
               "other_snr_db": null,
-              "ours_instr_per_sample": 190.06,
-              "ratio": 1.32
+              "ours_instr_per_sample": 189.06,
+              "ratio": 1.31
             }
           ],
           "other_instr_per_sample": 143.86,
-          "ours_instr_per_sample": 190.06,
-          "ratio": 1.32,
+          "ours_instr_per_sample": 189.06,
+          "ratio": 1.31,
           "snr_db": {
             "other": 23.44,
             "ours": 57.02
@@ -7797,23 +8004,32 @@
           "verdict": "info"
         },
         "window": {
-          "compared_with": "volk_32fc_32f_multiply_32fc",
+          "compared_with": "KFR 7.2.0 x * w on complex<float> times float (benches/refs/kfr-ops.cpp, sse41 over the SSE headers of Emscripten, SIMD level simd128, -ffp-contract=off)",
           "comparison_kind": "library",
           "goal": true,
           "informational": [
             {
               "compared_with": "volk_32fc_32f_multiply_32fc",
               "comparison_kind": "library",
-              "label": "misaligned by one sample",
+              "label": "information: volk",
               "other_instr_per_sample": 10.79,
-              "other_snr_db": null,
+              "other_snr_db": 151.95,
               "ours_instr_per_sample": 7.73,
               "ratio": 0.72
+            },
+            {
+              "compared_with": "KFR 7.2.0 x * w on complex<float> times float (benches/refs/kfr-ops.cpp, sse41 over the SSE headers of Emscripten, SIMD level simd128, -ffp-contract=off)",
+              "comparison_kind": "library",
+              "label": "misaligned by one sample",
+              "other_instr_per_sample": 30.53,
+              "other_snr_db": null,
+              "ours_instr_per_sample": 7.73,
+              "ratio": 0.25
             }
           ],
-          "other_instr_per_sample": 10.79,
+          "other_instr_per_sample": 30.53,
           "ours_instr_per_sample": 7.73,
-          "ratio": 0.72,
+          "ratio": 0.25,
           "snr_db": {
             "other": 151.95,
             "ours": 151.95

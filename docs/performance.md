@@ -2227,15 +2227,15 @@ Instructions per sample (wasmtime fuel, differential) of our kernel divided by t
 
 | Entry | ours (instructions/sample) | comparison (instructions/sample) | ratio (ours/comparison) | SNR (dB, ours / comparison) | status | comparison |
 | --- | ---: | ---: | ---: | ---: | --- | --- |
-| `convert_cq15_cs8` | 2.84 | 4.78 | 0.59 | exact / exact | release | volk_8i_convert_16i |
+| `convert_cq15_cs8` | 2.84 | 6.03 | 0.47 | exact / exact | release | KFR 7.2.0 cast<i16>(in) << 8 (benches/refs/kfr-ops.cpp, sse41 over the SSE headers of Emscripten, SIMD level simd128, -ffp-contract=off) |
 | `convert_cq15_cs8_fallback` | 4.81 | 22.27 | 0.22 | exact / exact | release | CMSIS-DSP 1.18.0 arm_q7_to_q15, generic C (-O3 -ffp-contract=off, LOOPUNROLL, simd128) |
-| `convert_cq15_cu8` | 3.37 | 4.78 | 0.71 | exact / exact | release | volk_8i_convert_16i on the bytes with the sign bit flipped (the CU8 conversion without its offset) |
+| `convert_cq15_cu8` | 3.37 | 6.03 | 0.56 | exact / exact | release | KFR 7.2.0 cast<i16>(in) << 8 on the bytes with the sign bit flipped (the CU8 conversion without its offset) (benches/refs/kfr-ops.cpp, sse41 over the SSE headers of Emscripten, SIMD level simd128, -ffp-contract=off) |
 | `convert_cq15_cu8_fallback` | 5.31 | 22.27 | 0.24 | exact / exact | release | CMSIS-DSP 1.18.0 arm_q7_to_q15 on the bytes with the sign bit flipped (the CU8 conversion without its offset), generic C (-O3 -ffp-contract=off, LOOPUNROLL, simd128) |
-| `convert_cs16` | 4.34 | 10.03 | 0.43 | exact / exact | release | volk_16i_s32f_convert_32f |
+| `convert_cs16` | 4.34 | 13.53 | 0.32 | exact / exact | release | KFR 7.2.0 cast<float>(in) * (1 / 32768) (benches/refs/kfr-ops.cpp, sse41 over the SSE headers of Emscripten, SIMD level simd128, -ffp-contract=off) |
 | `convert_cs16_fallback` | 10.07 | 12.28 | 0.82 | exact / exact | release | CMSIS-DSP 1.18.0 arm_q15_to_float, generic C (-O3 -ffp-contract=off, LOOPUNROLL, simd128) |
-| `convert_cs8` | 4.22 | 11.03 | 0.38 | exact / exact | release | volk_8i_s32f_convert_32f |
+| `convert_cs8` | 4.22 | 13.53 | 0.31 | exact / exact | release | KFR 7.2.0 in * (1 / 128) (benches/refs/kfr-ops.cpp, sse41 over the SSE headers of Emscripten, SIMD level simd128, -ffp-contract=off) |
 | `convert_cs8_fallback` | 11.06 | 12.03 | 0.92 | exact / exact | release | CMSIS-DSP 1.18.0 arm_q7_to_float, generic C (-O3 -ffp-contract=off, LOOPUNROLL, simd128) |
-| `convert_cu8` | 3.96 | 11.03 | 0.36 | exact / exact | release | volk_8i_s32f_convert_32f on the bytes with the sign bit flipped (the CU8 conversion without its offset) |
+| `convert_cu8` | 3.96 | 13.53 | 0.29 | exact / exact | release | KFR 7.2.0 in * (1 / 128) on the bytes with the sign bit flipped (the CU8 conversion without its offset) (benches/refs/kfr-ops.cpp, sse41 over the SSE headers of Emscripten, SIMD level simd128, -ffp-contract=off) |
 | `convert_cu8_fallback` | 12.06 | 12.03 | 1.00 | exact / exact | release | CMSIS-DSP 1.18.0 arm_q7_to_float on the bytes with the sign bit flipped (the CU8 conversion without its offset), generic C (-O3 -ffp-contract=off, LOOPUNROLL, simd128) |
 | `convert_out_cs16` | 5.67 | 29.03 | 0.20 | 95.5 / 95.5 | info | volk_32f_s32f_convert_16i |
 | `convert_out_cs16_fallback` | 17.57 | 26.53 | 0.66 | 95.5 / 95.5 | release | VOLK 3.3.0 volk_32f_s32f_convert_16i_generic, benches/refs/volk-generic.c (-O3 -ffp-contract=off, simd128) |
@@ -2245,11 +2245,11 @@ Instructions per sample (wasmtime fuel, differential) of our kernel divided by t
 | `convert_out_cu8_fallback` | 26.57 | 27.03 | 0.98 | 47.3 / 47.3 | release | VOLK 3.3.0 volk_32f_s32f_x2_convert_8u_generic, benches/refs/volk-generic.c (-O3 -ffp-contract=off, simd128) |
 | `convert_out_real_rs16` | 2.88 | 14.53 | 0.20 | 95.5 / 95.5 | info | volk_32f_s32f_convert_16i |
 | `convert_out_real_rs16_fallback` | 8.82 | 13.28 | 0.66 | 95.5 / 95.5 | release | VOLK 3.3.0 volk_32f_s32f_convert_16i_generic, benches/refs/volk-generic.c (-O3 -ffp-contract=off, simd128) |
-| `convert_out_real_rs8` | 4.62 | 14.53 | 0.32 | 47.2 / 47.2 | info | volk_32f_s32f_convert_8i |
+| `convert_out_real_rs8` | 4.63 | 14.53 | 0.32 | 47.2 / 47.2 | info | volk_32f_s32f_convert_8i |
 | `convert_out_real_rs8_fallback` | 8.82 | 13.03 | 0.68 | 47.2 / 47.2 | release | VOLK 3.3.0 volk_32f_s32f_convert_8i_generic, benches/refs/volk-generic.c (-O3 -ffp-contract=off, simd128) |
-| `convert_out_real_ru8` | 7.62 | 14.53 | 0.52 | 47.2 / 47.2 | info | volk_32f_s32f_x2_convert_8u |
+| `convert_out_real_ru8` | 7.63 | 14.53 | 0.52 | 47.2 / 47.2 | info | volk_32f_s32f_x2_convert_8u |
 | `convert_out_real_ru8_fallback` | 13.31 | 13.53 | 0.98 | 47.2 / 47.2 | release | VOLK 3.3.0 volk_32f_s32f_x2_convert_8u_generic, benches/refs/volk-generic.c (-O3 -ffp-contract=off, simd128) |
-| `convert_real_rs16` | 2.20 | 5.03 | 0.44 | exact / exact | release | volk_16i_s32f_convert_32f |
+| `convert_real_rs16` | 2.20 | 6.78 | 0.32 | exact / exact | release | KFR 7.2.0 cast<float>(in) * (1 / 32768) (benches/refs/kfr-ops.cpp, sse41 over the SSE headers of Emscripten, SIMD level simd128, -ffp-contract=off) |
 | `convert_real_rs16_fallback` | 5.06 | 6.15 | 0.82 | exact / exact | release | CMSIS-DSP 1.18.0 arm_q15_to_float, generic C (-O3 -ffp-contract=off, LOOPUNROLL, simd128) |
 | `rotate` | 15.97 | 79.23 | 0.20 | 143.0 / 107.8 | info | volk_32fc_s32fc_x2_rotator2_32fc |
 | `rotate_cq15` | 28.29 | 39.16 | 0.72 | 91.2 / 91.2 | info | own (information): sdrk fallback |
@@ -2293,11 +2293,11 @@ Instructions per sample (wasmtime fuel, differential) of our kernel divided by t
 | `resample_real_fallback` | 687.96 | 1048.73 | 0.66 | 136.5 / 136.7 | release | liquid-dsp 1.8.3 rresamp_rrrf_create(3, 2, 32, h) and rresamp_rrrf_execute_block (firpfb of 3 branches of 64 taps, portable dot product, benches/refs/liquid-rresamp.c, -O3 -ffp-contract=off; 4095 of the 4096 outputs) |
 | `resample_real_q15` | 598.51 | 875.80 | 0.68 | exact / exact | info | own (information): sdrk fallback |
 | `resample_real_q15_fallback` | 875.80 | 590.11 | 1.48 | exact / 78.0 | info | CMSIS-DSP 1.18.0 arm_fir_interpolate_q15 by 3, the same outputs per sample (no rational resampler), generic C (-O3 -ffp-contract=off, LOOPUNROLL, simd128) |
-| `mag` | 6.86 | 8.53 | 0.80 | 150.5 / 150.5 | release | volk_32fc_magnitude_32f |
+| `mag` | 6.86 | 10.28 | 0.67 | 150.5 / 150.5 | release | KFR 7.2.0 cabs(x) (benches/refs/kfr-ops.cpp, sse41 over the SSE headers of Emscripten, SIMD level simd128, -ffp-contract=off) |
 | `mag_fallback` | 8.28 | 10.91 | 0.76 | 150.5 / 150.5 | release | CMSIS-DSP 1.18.0 arm_cmplx_mag_f32, generic C (-O3 -ffp-contract=off, LOOPUNROLL, simd128) |
 | `mag_q15` | 9.03 | 18.28 | 0.49 | 96.2 / 96.2 | info | volk_16ic_magnitude_16i |
 | `mag_q15_fallback` | 12.90 | 208.59 | 0.06 | 96.2 / 84.3 | release | CMSIS-DSP 1.18.0 arm_cmplx_mag_q15 (Q2.14, arm_sqrt_q31), generic C (-O3 -ffp-contract=off, LOOPUNROLL, simd128) |
-| `mag_sq` | 4.96 | 8.28 | 0.60 | 149.0 / 149.0 | release | volk_32fc_magnitude_squared_32f |
+| `mag_sq` | 4.96 | 10.03 | 0.49 | 149.0 / 149.0 | release | KFR 7.2.0 cabssqr(c) (benches/refs/kfr-ops.cpp, sse41 over the SSE headers of Emscripten, SIMD level simd128, -ffp-contract=off) |
 | `mag_sq_fallback` | 8.03 | 9.35 | 0.86 | 149.0 / 149.0 | release | CMSIS-DSP 1.18.0 arm_cmplx_mag_squared_f32, generic C (-O3 -ffp-contract=off, LOOPUNROLL, simd128) |
 | `mag_sq_q15` | 3.02 | 7.53 | 0.40 | 92.8 / 92.8 | info | own (information): sdrk fallback |
 | `mag_sq_q15_fallback` | 7.53 | 7.85 | 0.96 | 92.8 / 74.8 | release | CMSIS-DSP 1.18.0 arm_cmplx_mag_squared_q15 (Q3.13, truncating), generic C (-O3 -ffp-contract=off, LOOPUNROLL, simd128) |
@@ -2311,11 +2311,11 @@ Instructions per sample (wasmtime fuel, differential) of our kernel divided by t
 | `fm_mod_fallback` | 61.27 | 125.97 | 0.49 | 133.2 / 96.7 | release | GNU Radio frequency_modulator_fc (f32 phase folded with fmodf, gr::fxpt sincos; gr-fm-mod.c, generic compiler flags) |
 | `squelch` | 63.60 | 98.71 | 0.64 | exact / exact | release | GNU Radio pwr_squelch_cc (squelch_base_cc_impl.cc of gr-analog, generic compiler flags) |
 | `squelch_cq15` | 67.05 | 67.05 | 1.00 | exact / exact | info | own (information): sdrk fallback |
-| `window` | 7.73 | 10.79 | 0.72 | 151.9 / 151.9 | release | volk_32fc_32f_multiply_32fc |
+| `window` | 7.73 | 30.53 | 0.25 | 151.9 / 151.9 | release | KFR 7.2.0 x * w on complex<float> times float (benches/refs/kfr-ops.cpp, sse41 over the SSE headers of Emscripten, SIMD level simd128, -ffp-contract=off) |
 | `window_cq15` | 3.95 | 9.91 | 0.40 | 89.0 / 89.0 | info | own (information): sdrk fallback |
 | `window_cq15_fallback` | 9.91 | 14.93 | 0.66 | 89.0 / 83.1 | release | CMSIS-DSP 1.18.0 arm_cmplx_mult_real_q15 (truncating), generic C (-O3 -ffp-contract=off, LOOPUNROLL, simd128) |
 | `window_fallback` | 10.79 | 26.79 | 0.40 | 151.9 / 151.9 | release | CMSIS-DSP 1.18.0 arm_cmplx_mult_real_f32, generic C (-O3 -ffp-contract=off, LOOPUNROLL, simd128) |
-| `power_db` | 28.78 | 98.80 | 0.29 | 151.9 / 143.0 | release | volk_32f_log2_32f + volk_32f_s32f_multiply_32f + volk_32f_s32f_add_32f |
+| `power_db` | 28.78 | 53.05 | 0.54 | 151.9 / 145.3 | release | KFR 7.2.0 10 * log10(x) + offset (benches/refs/kfr-ops.cpp, sse41 over the SSE headers of Emscripten, SIMD level simd128, -ffp-contract=off) |
 | `power_db_fallback` | 28.28 | 77.68 | 0.36 | 151.9 / 143.2 | release | CMSIS-DSP 1.18.0 arm_vlog_f32 + arm_scale_f32 (+ offset loop), generic C (-O3 -ffp-contract=off, LOOPUNROLL, simd128) |
 | `power_db_q15` | 29.03 | 28.28 | 1.03 | 149.9 / 149.9 | info | own (information): sdrk fallback |
 | `power_db_q15_fallback` | 28.28 | 86.83 | 0.33 | 149.9 / 144.0 | info | CMSIS-DSP 1.18.0 arm_q15_to_float + arm_vlog_f32 + arm_scale_f32 (+ offset loop), generic C (-O3 -ffp-contract=off, LOOPUNROLL, simd128) |
@@ -2339,42 +2339,42 @@ Instructions per sample (wasmtime fuel, differential) of our kernel divided by t
 | `biquad_real_fallback` | 50.79 | 57.94 | 0.88 | 136.7 / 136.7 | release | CMSIS-DSP 1.18.0 arm_biquad_cascade_df2T_f32, generic C (-O3 -ffp-contract=off, LOOPUNROLL, simd128) |
 | `biquad_real_q15` | 41.21 | 96.08 | 0.43 | 71.5 / 71.5 | info | own (information): sdrk fallback |
 | `biquad_real_q15_fallback` | 96.08 | 136.07 | 0.71 | 71.5 / 56.6 | release | CMSIS-DSP 1.18.0 arm_biquad_cascade_df1_q15 (postShift 1, truncating), generic C (-O3 -ffp-contract=off, LOOPUNROLL, simd128) |
-| `dot` | 7.20 | 29.55 | 0.24 | 132.8 / 122.6 | release | volk_32fc_32f_dot_prod_32fc |
-| `dot_complex` | 13.20 | 40.55 | 0.33 | 127.8 / 121.6 | release | volk_32fc_x2_dot_prod_32fc |
+| `dot` | 7.20 | 35.07 | 0.21 | 132.8 / 125.0 | release | KFR 7.2.0 dotproduct(x, t) of complex<float> and float (benches/refs/kfr-ops.cpp, sse41 over the SSE headers of Emscripten, SIMD level simd128, -ffp-contract=off) |
+| `dot_complex` | 13.20 | 36.07 | 0.37 | 127.8 / 121.6 | release | KFR 7.2.0 dotproduct(a, b) on complex<float> (benches/refs/kfr-ops.cpp, sse41 over the SSE headers of Emscripten, SIMD level simd128, -ffp-contract=off) |
 | `dot_complex_fallback` | 13.20 | 35.29 | 0.37 | 127.8 / 117.1 | release | CMSIS-DSP 1.18.0 arm_cmplx_dot_prod_f32, generic C (-O3 -ffp-contract=off, LOOPUNROLL, simd128) |
 | `dot_cq15` | 6.74 | 17.56 | 0.38 | 82.2 / 82.2 | info | own (information): sdrk fallback |
 | `dot_cq15_fallback` | 17.56 | 25.58 | 0.69 | 82.2 / 82.2 | release | CMSIS-DSP 1.18.0 arm_dot_prod_q15 twice, on the planar re and im, generic C (-O3 -ffp-contract=off, LOOPUNROLL, simd128) |
 | `dot_fallback` | 16.55 | 25.57 | 0.65 | 122.6 / 122.6 | release | CMSIS-DSP 1.18.0 arm_dot_prod_f32 twice, on the planar re and im, generic C (-O3 -ffp-contract=off, LOOPUNROLL, simd128) |
-| `dot_real` | 3.35 | 6.17 | 0.54 | 129.8 / 123.1 | release | sdrk fallback |
+| `dot_real` | 3.35 | 6.81 | 0.49 | 129.8 / 125.0 | release | KFR 7.2.0 dotproduct(x, t) (benches/refs/kfr-ops.cpp, sse41 over the SSE headers of Emscripten, SIMD level simd128, -ffp-contract=off) |
 | `dot_real_fallback` | 6.17 | 12.79 | 0.48 | 123.1 / 123.1 | release | CMSIS-DSP 1.18.0 arm_dot_prod_f32, generic C (-O3 -ffp-contract=off, LOOPUNROLL, simd128) |
 | `dot_real_q15` | 3.23 | 11.55 | 0.28 | 88.8 / 88.8 | info | own (information): sdrk fallback |
 | `dot_real_q15_fallback` | 11.55 | 12.79 | 0.90 | 88.8 / 88.8 | release | CMSIS-DSP 1.18.0 arm_dot_prod_q15, generic C (-O3 -ffp-contract=off, LOOPUNROLL, simd128) |
-| `scale` | 5.65 | 6.16 | 0.92 | 151.5 / 151.5 | release | sdrk fallback |
+| `scale` | 5.65 | 13.03 | 0.43 | 151.5 / 151.5 | release | KFR 7.2.0 x * scale on the 2 n floats (benches/refs/kfr-ops.cpp, sse41 over the SSE headers of Emscripten, SIMD level simd128, -ffp-contract=off) |
 | `scale_cq15` | 2.81 | 8.15 | 0.34 | 93.7 / 93.7 | info | own (information): sdrk fallback |
 | `scale_cq15_fallback` | 8.15 | 8.28 | 0.98 | 93.7 / 87.6 | release | CMSIS-DSP 1.18.0 arm_scale_q15 (shift 0, truncating) on the 2 n values, generic C (-O3 -ffp-contract=off, LOOPUNROLL, simd128) |
 | `scale_fallback` | 6.16 | 5.40 | 1.14 | 151.5 / 151.5 | dev | CMSIS-DSP 1.18.0 arm_scale_f32 on the 2 n floats, generic C (-O3 -ffp-contract=off, LOOPUNROLL, simd128) |
-| `add` | 7.17 | 8.79 | 0.82 | 151.0 / 151.0 | release | volk_32fc_x2_add_32fc |
-| `add_cq15` | 2.33 | 10.78 | 0.22 | exact / exact | release | volk_16i_x2_add_saturated_16i on the 2 n values |
+| `add` | 7.17 | 15.03 | 0.48 | 151.0 / 151.0 | release | KFR 7.2.0 a + b on the 2 n floats (benches/refs/kfr-ops.cpp, sse41 over the SSE headers of Emscripten, SIMD level simd128, -ffp-contract=off) |
+| `add_cq15` | 2.33 | 7.53 | 0.31 | exact / exact | release | KFR 7.2.0 satadd(a, b) on the 2 n int16_t values (benches/refs/kfr-ops.cpp, sse41 over the SSE headers of Emscripten, SIMD level simd128, -ffp-contract=off) |
 | `add_cq15_fallback` | 2.33 | 3.62 | 0.64 | exact / exact | release | CMSIS-DSP 1.18.0 arm_add_q15 on the 2 n values, generic C (-O3 -ffp-contract=off, LOOPUNROLL, simd128) |
 | `add_fallback` | 7.79 | 31.54 | 0.25 | 151.0 / 151.0 | release | CMSIS-DSP 1.18.0 arm_add_f32 on the 2 n floats, generic C (-O3 -ffp-contract=off, LOOPUNROLL, simd128) |
-| `add_real` | 3.61 | 6.04 | 0.60 | 151.0 / 151.0 | release | volk_32f_x2_add_32f |
+| `add_real` | 3.61 | 7.53 | 0.48 | 151.0 / 151.0 | release | KFR 7.2.0 a + b (benches/refs/kfr-ops.cpp, sse41 over the SSE headers of Emscripten, SIMD level simd128, -ffp-contract=off) |
 | `add_real_fallback` | 6.04 | 15.79 | 0.38 | 151.0 / 151.0 | release | CMSIS-DSP 1.18.0 arm_add_f32, generic C (-O3 -ffp-contract=off, LOOPUNROLL, simd128) |
-| `add_real_q15` | 1.19 | 5.41 | 0.22 | exact / exact | release | volk_16i_x2_add_saturated_16i |
+| `add_real_q15` | 1.19 | 3.78 | 0.31 | exact / exact | release | KFR 7.2.0 satadd(a, b) on int16_t (benches/refs/kfr-ops.cpp, sse41 over the SSE headers of Emscripten, SIMD level simd128, -ffp-contract=off) |
 | `add_real_q15_fallback` | 1.19 | 1.83 | 0.65 | exact / exact | release | CMSIS-DSP 1.18.0 arm_add_q15, generic C (-O3 -ffp-contract=off, LOOPUNROLL, simd128) |
-| `mul` | 16.79 | 56.03 | 0.30 | 148.5 / 148.5 | release | volk_32fc_x2_multiply_32fc |
+| `mul` | 16.79 | 31.53 | 0.53 | 148.5 / 148.5 | release | KFR 7.2.0 a * b on complex<float> (benches/refs/kfr-ops.cpp, sse41 over the SSE headers of Emscripten, SIMD level simd128, -ffp-contract=off) |
 | `mul_cq15` | 15.17 | 15.17 | 1.00 | 94.4 / 94.4 | info | own (information): sdrk fallback |
 | `mul_cq15_fallback` | 15.17 | 20.37 | 0.74 | 94.4 / 19.6 | release | CMSIS-DSP 1.18.0 arm_cmplx_mult_cmplx_q15 (Q3.13, truncating, scaled by 4), generic C (-O3 -ffp-contract=off, LOOPUNROLL, simd128) |
 | `mul_fallback` | 15.29 | 18.62 | 0.82 | 148.5 / 148.5 | release | CMSIS-DSP 1.18.0 arm_cmplx_mult_cmplx_f32, generic C (-O3 -ffp-contract=off, LOOPUNROLL, simd128) |
-| `mul_real` | 3.61 | 6.04 | 0.60 | 151.8 / 151.8 | release | volk_32f_x2_multiply_32f |
+| `mul_real` | 3.61 | 7.53 | 0.48 | 151.8 / 151.8 | release | KFR 7.2.0 a * b (benches/refs/kfr-ops.cpp, sse41 over the SSE headers of Emscripten, SIMD level simd128, -ffp-contract=off) |
 | `mul_real_fallback` | 6.04 | 15.79 | 0.38 | 151.8 / 151.8 | release | CMSIS-DSP 1.18.0 arm_mult_f32, generic C (-O3 -ffp-contract=off, LOOPUNROLL, simd128) |
 | `mul_real_q15` | 1.83 | 3.77 | 0.49 | 91.6 / 91.6 | info | own (information): sdrk fallback |
 | `mul_real_q15_fallback` | 3.77 | 3.93 | 0.96 | 91.6 / 85.6 | release | CMSIS-DSP 1.18.0 arm_mult_q15 (truncating), generic C (-O3 -ffp-contract=off, LOOPUNROLL, simd128) |
-| `interleave` | 5.90 | 7.79 | 0.76 | exact / exact | release | volk_32f_x2_interleave_32fc |
-| `interleave_cq15` | 2.97 | 15.03 | 0.20 | exact / exact | release | KFR 7.2.0 make_complex(re, im) on int16_t (benches/refs/kfr-ops.cpp, sse41, -ffp-contract=off) |
+| `interleave` | 5.90 | 15.03 | 0.39 | exact / exact | release | KFR 7.2.0 make_complex(re, im) on float (benches/refs/kfr-ops.cpp, sse41 over the SSE headers of Emscripten, SIMD level simd128, -ffp-contract=off) |
+| `interleave_cq15` | 2.97 | 15.03 | 0.20 | exact / exact | release | KFR 7.2.0 make_complex(re, im) on int16_t (benches/refs/kfr-ops.cpp, sse41 over the SSE headers of Emscripten, SIMD level simd128, -ffp-contract=off) |
 | `interleave_cq15_fallback` | 3.92 | 3.92 | 1.00 | exact / exact | release | VOLK 3.3.0 volk_32f_x2_interleave_32fc_generic on int16 (VOLK has no 16-bit interleave), benches/refs/volk-generic.c (-O3 -ffp-contract=off, simd128) |
 | `interleave_fallback` | 7.79 | 7.79 | 1.00 | exact / exact | release | VOLK 3.3.0 volk_32f_x2_interleave_32fc_generic, benches/refs/volk-generic.c (-O3 -ffp-contract=off, simd128) |
-| `deinterleave` | 5.90 | 7.80 | 0.76 | exact / exact | release | volk_32fc_deinterleave_32f_x2 |
-| `deinterleave_cq15` | 2.97 | 3.92 | 0.76 | exact / exact | release | volk_16ic_deinterleave_16i_x2 |
+| `deinterleave` | 5.90 | 14.04 | 0.42 | exact / exact | release | KFR 7.2.0 real(c), imag(c) of complex<float> (benches/refs/kfr-ops.cpp, sse41 over the SSE headers of Emscripten, SIMD level simd128, -ffp-contract=off) |
+| `deinterleave_cq15` | 2.97 | 7.04 | 0.42 | exact / exact | release | KFR 7.2.0 real(c), imag(c) of complex<int16_t> (benches/refs/kfr-ops.cpp, sse41 over the SSE headers of Emscripten, SIMD level simd128, -ffp-contract=off) |
 | `deinterleave_cq15_fallback` | 3.92 | 3.92 | 1.00 | exact / exact | release | VOLK 3.3.0 volk_16ic_deinterleave_16i_x2_generic, benches/refs/volk-generic.c (-O3 -ffp-contract=off, simd128) |
 | `deinterleave_fallback` | 7.79 | 7.80 | 1.00 | exact / exact | release | VOLK 3.3.0 volk_32fc_deinterleave_32f_x2_generic, benches/refs/volk-generic.c (-O3 -ffp-contract=off, simd128) |
 | `oscillate` | 22.04 | 28.28 | 0.78 | 133.2 / 133.2 | info | own (information): sdrk fallback |
@@ -2382,11 +2382,11 @@ Instructions per sample (wasmtime fuel, differential) of our kernel divided by t
 | `oscillate_cq15_fallback` | 33.66 | 105.01 | 0.32 | 97.8 / 75.5 | release | CMSIS-DSP 1.18.0 arm_cos_q15 + arm_sin_q15 per sample (512-entry table, linear interpolation), generic C (-O3 -ffp-contract=off, LOOPUNROLL, simd128) |
 | `oscillate_fallback` | 28.28 | 175.01 | 0.16 | 133.2 / 140.8 | release waived | CMSIS-DSP 1.18.0 arm_sin_cos_f32 of the angle in degrees per sample (512-entry sine table, cubic Hermite interpolation), generic C (-O3 -ffp-contract=off, LOOPUNROLL, simd128) |
 | `fft_1024` | 58.57 | 91.17 | 0.64 | 138.2 / 138.9 | release | rustfft (FftPlanner, forward, in place) |
-| `fft_1024_fallback` | 220.38 | 209.86 | 1.05 | 138.0 / 138.7 | release | CMSIS-DSP 1.18.0 arm_cfft_f32 (forward, in place, bit reversal), generic C (-O3 -ffp-contract=off, LOOPUNROLL, simd128) |
+| `fft_1024_fallback` | 220.39 | 209.86 | 1.05 | 138.0 / 138.7 | release | CMSIS-DSP 1.18.0 arm_cfft_f32 (forward, in place, bit reversal), generic C (-O3 -ffp-contract=off, LOOPUNROLL, simd128) |
 | `fft_4096` | 67.64 | 105.57 | 0.64 | 137.4 / 137.7 | release | rustfft (FftPlanner, forward, in place) |
 | `fft_4096_fallback` | 244.93 | 221.28 | 1.11 | 137.4 / 137.7 | dev | CMSIS-DSP 1.18.0 arm_cfft_f32 (forward, in place, bit reversal), generic C (-O3 -ffp-contract=off, LOOPUNROLL, simd128) |
 | `fft_64` | 36.39 | 63.23 | 0.58 | 142.5 / 141.6 | release | rustfft (FftPlanner, forward, in place) |
-| `fft_64_fallback` | 121.56 | 117.59 | 1.03 | 141.0 / 140.0 | release | CMSIS-DSP 1.18.0 arm_cfft_f32 (forward, in place, bit reversal), generic C (-O3 -ffp-contract=off, LOOPUNROLL, simd128) |
+| `fft_64_fallback` | 121.59 | 117.59 | 1.03 | 141.0 / 140.0 | release | CMSIS-DSP 1.18.0 arm_cfft_f32 (forward, in place, bit reversal), generic C (-O3 -ffp-contract=off, LOOPUNROLL, simd128) |
 | `fft_cq15_1024` | 48.91 | 460.87 | 0.11 | 63.5 / 43.7 | info | KissFFT FIXED_POINT=16 (kiss_fft, 1/N scaling, out of place) |
 | `fft_cq15_1024_default` | 43.58 | 460.87 | 0.09 | 46.7 / 43.5 | info | KissFFT FIXED_POINT=16 (kiss_fft, 1/N scaling, out of place) |
 | `fft_cq15_1024_default_fallback` | 405.94 | 378.19 | 1.07 | 46.1 / 41.6 | release | CMSIS-DSP 1.18.0 arm_cfft_q15 (forward, in place, bit reversal, 1/N scaling with truncating shifts), generic C (-O3 -ffp-contract=off, LOOPUNROLL, simd128) |
@@ -2506,11 +2506,11 @@ Instructions per sample (wasmtime fuel, differential) of our kernel divided by t
 | `snr_estimate_block_svr` | 46.15 | 215.08 | 0.21 | 50.1 / 0.4 | info | GNU Radio mpsk_snr_est_cc(SNR_EST_SVR, 4096, 0.001): \|x\|^4 and \|x_n\|^2 \|x_(n-1)\|^2 averaged in double, two cabsf per symbol (reference does different work: no decisions, a PSK constellation; generic compiler flags) |
 | `stereo_encode` | 37.54 | 37.54 | 1.00 | exact / exact | info | own (information): sdrk fallback |
 | `stereo_encode_rds` | 53.05 | 53.05 | 1.00 | exact / exact | info | own (information): sdrk fallback |
-| `stereo_matrix` | 11.53 | 33.63 | 0.34 | 151.3 / 151.3 | release | VOLK 3.3.0 composition: volk_32fc_deinterleave_32f_x2, volk_32f_x2_add_32f (d + d), volk_32f_x2_add_32f (s + d2), volk_32f_x2_subtract_32f (s - d2), volk_32f_x2_interleave_32fc (five passes over memory) |
+| `stereo_matrix` | 11.53 | 117.18 | 0.10 | 151.3 / 151.3 | release | KFR 7.2.0 make_complex(s + (d + d), s - (d + d)) of real(x), imag(x) on complex<float>, one pass (benches/refs/kfr-ops.cpp, sse41 over the SSE headers of Emscripten, SIMD level simd128, -ffp-contract=off) |
 | `stereo_matrix_cq15` | 5.40 | 5.40 | 1.00 | exact / exact | info | own (information): sdrk fallback |
 | `stereo_matrix_cq15_fallback` | 5.40 | 5.47 | 0.99 | exact / 12.2 | release | CMSIS-DSP 1.18.0 arm_add_q15 (d + d, saturating), arm_add_q15 (s + d2), arm_sub_q15 (s - d2) on planar data, generic C (-O3 -ffp-contract=off, LOOPUNROLL, simd128) |
 | `stereo_matrix_fallback` | 10.78 | 47.34 | 0.23 | 151.3 / 151.3 | release | CMSIS-DSP 1.18.0 arm_add_f32 (d + d), arm_add_f32 (s + d2), arm_sub_f32 (s - d2) on planar data, generic C (-O3 -ffp-contract=off, LOOPUNROLL, simd128) |
-| `stereo_pll_fallback` | 190.06 | 143.86 | 1.32 | 57.0 / 23.4 | dev | liquid-dsp 1.8.3 nco_crcf (LIQUID_VCO_INTERP): sincos at theta and 2 theta from the 1024-entry table, nco_crcf_adjust_frequency and nco_crcf_adjust_phase (double modulo in _constrain), nco_crcf_step; no lock detector, no integrator limit (-O3 -ffp-contract=off, simd128) |
+| `stereo_pll_fallback` | 189.06 | 143.86 | 1.31 | 57.0 / 23.4 | dev | liquid-dsp 1.8.3 nco_crcf (LIQUID_VCO_INTERP): sincos at theta and 2 theta from the 1024-entry table, nco_crcf_adjust_frequency and nco_crcf_adjust_phase (double modulo in _constrain), nco_crcf_step; no lock detector, no integrator limit (-O3 -ffp-contract=off, simd128) |
 | `stereo_pll_q15_fallback` | 183.05 | 228.04 | 0.80 | 53.6 / 53.7 | info | CMSIS-DSP 1.18.0 arm_cos_q15 and arm_sin_q15 (twice) per sample in the loop of the kernel (the oscillator only: CMSIS-DSP has no PLL), generic C (-O3 -ffp-contract=off, LOOPUNROLL, simd128) |
 | `symbol_demap_qam16_block` | 14.80 | 4080.03 | 0.00 | 149.2 / 141.1 | info | GNU Radio constellation_soft_decoder_cf with calc_soft_dec (constellation.cc of gr-digital; the exact log-likelihood ratio over all points, npwr 1, not max-log; no vector allocation per symbol, so faster than GNU Radio's object code) |
 | `symbol_demap_qam16_block_liquid` | 14.80 | 1310.23 | 0.01 | 149.2 / exact | info | liquid-dsp 1.8.3 modemcf_demodulate_soft of its own QAM modem (modem_common.proto.c; soft bytes with liquid's scale and labelling; the hard symbol and the soft bits per symbol) |

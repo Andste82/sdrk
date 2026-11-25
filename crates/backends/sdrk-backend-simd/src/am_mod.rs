@@ -8,12 +8,15 @@
 //! - NEON (O2, D2970): `fcmeq` of `x` with itself for the mask, `fmax` / `fmin` with -1 and 1
 //!   instead of the compare-and-select pairs that LLVM makes of the clamp of the fallback, and
 //!   `st2` of the values with a zero vector for the pairs, two vectors per iteration.
-//! - Every other level: the loop of the fallback compiled at the level of the dispatch, which
-//!   LLVM vectorizes as it does the fallback at the level of the build (`maxps`, `minps`,
+//! - SIMD128 (O2, D2970): the instructions of the compiled fallback (`f32x4.eq`, `f32x4.pmax` /
+//!   `pmin`, `v128.and`, the products and the sum, two shuffles with zero), in blocks of four
+//!   vectors written out in a function of its own, so that the addresses fold into the offsets
+//!   of the loads and stores (the compiled loop adds every address).
+//! - x86: the loop of the fallback compiled at the level of the dispatch, which LLVM
+//!   vectorizes as it does the fallback at the level of the build (`maxps`, `minps`,
 //!   `cmpordps`, `andps`, the products and the sum, then `unpcklps` / `unpckhps` with zero or,
-//!   from AVX2 on, `vpmovzxdq`; SIMD128 `f32x4.pmax` / `pmin`, `f32x4.eq`, `v128.and` and two
-//!   shuffles). A hand-written loop of the same instructions, unrolled, gains less than 10 %
-//!   on x86 in `llvm-mca` and loses on `skylake` (D2970), so these levels keep the compiled
+//!   from AVX2 on, `vpmovzxdq`). A hand-written loop of the same instructions, unrolled, gains
+//!   less than 10 % in `llvm-mca` and loses on `skylake` (D2970), so x86 keeps the compiled
 //!   loop: the build with run-time detection runs it at the level of the CPU; with a level fixed
 //!   at compile time it is the code of the fallback.
 //!
@@ -86,6 +89,10 @@ fn am_c32_level<S: SimdToken>(
     #[cfg(target_arch = "aarch64")]
     if let Some(t) = simd.level().as_neon() {
         return neon::am_c32(t, carrier, depth, input, out);
+    }
+    #[cfg(all(target_arch = "wasm32", target_feature = "simd128"))]
+    if let Some(t) = simd.level().as_wasm_simd128() {
+        return wasm::am_c32(t, carrier, depth, input, out);
     }
     let _ = (simd, carrier, depth, input, out);
     0
@@ -327,11 +334,67 @@ mod neon {
 #[cfg(all(target_arch = "wasm32", target_feature = "simd128"))]
 mod wasm {
     use core::arch::wasm32::{
-        i16x8_add_sat, i16x8_q15mulr_sat, i16x8_splat, u32x4_extend_high_u16x8,
-        u32x4_extend_low_u16x8,
+        f32x4_add, f32x4_eq, f32x4_mul, f32x4_pmax, f32x4_pmin, f32x4_splat, i16x8_add_sat,
+        i16x8_q15mulr_sat, i16x8_splat, i32x4_shuffle, u32x4_extend_high_u16x8,
+        u32x4_extend_low_u16x8, v128, v128_and,
     };
-    use fearless_simd::i16x8;
     use fearless_simd::prelude::*;
+    use fearless_simd::{WasmSimd128, f32x4, i16x8};
+
+    /// `C32` of one vector of four samples into four pairs (see [`am_c32`]).
+    #[inline(always)]
+    fn unit(t: WasmSimd128, dv: v128, cv: v128, i: &[f32; 4], o: &mut [f32; 8]) {
+        let (lo, hi, zero) = (f32x4_splat(-1.0), f32x4_splat(1.0), f32x4_splat(0.0));
+        let x: v128 = f32x4::from_slice(t, i).into();
+        let c = v128_and(f32x4_pmin(f32x4_pmax(x, lo), hi), f32x4_eq(x, x));
+        let re = f32x4_mul(cv, f32x4_add(hi, f32x4_mul(dv, c)));
+        let (o0, o1) = o.split_at_mut(4);
+        f32x4::simd_from(t, i32x4_shuffle::<0, 4, 1, 5>(re, zero)).store_slice(o0);
+        f32x4::simd_from(t, i32x4_shuffle::<2, 6, 3, 7>(re, zero)).store_slice(o1);
+    }
+
+    /// Four units written out in a function of its own: in a loop LLVM computes every address
+    /// with an `i32.add`, here the addresses are constant offsets from the parameters and fold
+    /// into the `offset` immediates of the loads and stores (as the blocks of `convert`).
+    #[inline(never)]
+    fn block(t: WasmSimd128, dv: v128, cv: v128, i: &[[f32; 4]; 4], o: &mut [[f32; 8]; 4]) {
+        unit(t, dv, cv, &i[0], &mut o[0]);
+        unit(t, dv, cv, &i[1], &mut o[1]);
+        unit(t, dv, cv, &i[2], &mut o[2]);
+        unit(t, dv, cv, &i[3], &mut o[3]);
+    }
+
+    fearless_simd::kernel!(
+        /// `C32` on whole blocks of sixteen samples ([`block`]), then whole vectors: `f32x4.eq`
+        /// of `x` with itself (the mask of the fallback), `f32x4.pmax` / `f32x4.pmin` with -1 and
+        /// 1 (the clamp on every value that is not NaN; the mask takes NaN to `+0`),
+        /// `v128.and`, `depth x'`, `1 + t`, `carrier u`, and two `i32x4.shuffle` with zero for
+        /// the pairs `(re, 0)`. The operations of the fallback in its order, so the same bits.
+        /// Returns the number of samples done.
+        pub(super) fn am_c32(
+            t: WasmSimd128,
+            carrier: f32,
+            depth: f32,
+            input: &[f32],
+            out: &mut [[f32; 2]],
+        ) -> usize {
+            let (dv, cv) = (f32x4_splat(depth), f32x4_splat(carrier));
+            let (ib, _) = input.as_chunks::<4>();
+            let (ob, _) = out.as_flattened_mut().as_chunks_mut::<8>();
+            let n = ib.len().min(ob.len());
+            let (ib, _) = ib.split_at(n);
+            let (ob, _) = ob.split_at_mut(n);
+            let (ib, ir) = ib.as_chunks::<4>();
+            let (ob, or) = ob.as_chunks_mut::<4>();
+            for (i, o) in ib.iter().zip(ob) {
+                block(t, dv, cv, i, o);
+            }
+            for (i, o) in ir.iter().zip(or) {
+                unit(t, dv, cv, i, o);
+            }
+            4 * n
+        }
+    );
 
     fearless_simd::kernel!(
         pub(super) fn am(

@@ -9,8 +9,8 @@
 //! fallback on every lane, so NaN, infinities, `-0` and denormals give the same bits. On x86
 //! the unzip is `shufps` and the zip `unpcklps`/`unpckhps`, which work within 128-bit lanes
 //! and cancel each other (the arithmetic acts on every lane alike), so no cross-lane
-//! permutation is needed at AVX2 and AVX-512 (SSE2 included); the other targets use the
-//! generic unzip and zip of the token.
+//! permutation is needed at AVX2 and AVX-512 (SSE2 included); SIMD128 uses the generic unzip
+//! and zip of the token, and NEON runs the fallback (below).
 //!
 //! `CQ15`: `s + 2 d` and `s - 2 d` are exact in 32 bits and the result is `sat16` of them.
 //!
@@ -18,15 +18,16 @@
 //!   with the constants `(1, 2)` and `(1, -2)` gives the exact 32-bit `l` and `r`, `packssdw`
 //!   is `sat16`, and the unpacks interleave. Both packs and unpacks work within 128-bit lanes
 //!   and cancel each other: the output of two input vectors is in order at every width.
-//! - SIMD128: no branch (D156). The version with `i32x4.dot_i16x8_s`, `i16x8.narrow_i32x4_s`
+//! - SIMD128: no branch (D158). The version with `i32x4.dot_i16x8_s`, `i16x8.narrow_i32x4_s`
 //!   and a shuffle took 5.90 instructions per sample against 5.40 for the compiled fallback,
 //!   so `CQ15` runs the fallback there, bit for bit the same result.
-//! - NEON: `ld2`, the saturating chains `qadd(qadd(s, d), d)` and
-//!   `qsub(qsub(s, d), d)`, `st2` (`C32`: `ld2`, the three float operations, `st2`). The chain equals `sat16(s + 2 d)`: if `s + d`
-//!   is in range the second step is the exact saturating sum; if it clamps, `d` has the sign
-//!   of the clamp and the second step pushes the same way, so the result is the same limit
-//!   that `s + 2 d` is beyond. Likewise for the difference. The exhaustive sweep over all
-//!   2^32 pairs (`tests/stereo_matrix_sweep.rs`, ignored, nightly) proves it.
+//! - NEON (`C32` and `CQ15`): the fallback (O2, D2972). LLVM compiles its loop to `ld2`, the
+//!   operations and `st2`, the instructions of the path of its own that NEON had until O2
+//!   (`C32`: the three float operations; `CQ15`: the saturating chains
+//!   `qadd(qadd(s, d), d)` and `qsub(qsub(s, d), d)`), which took 1.00 of the fallback's
+//!   cycles on both core models. An interleaved form without `ld2` / `st2` (`trn1` / `trn2`,
+//!   a product by `(2, -2)` and a sum) takes more in `llvm-mca` (2.38 / 1.75 against
+//!   2.00 / 1.38 cycles per sample on `cortex-a72` / `cortex-a76`).
 //!
 //! The rest of a block (fewer than one step) and every level without a path run the fallback.
 
@@ -58,9 +59,11 @@ fn matrix_f32<S: SimdToken>(simd: S, input: &[f32], out: &mut [f32], done: &mut 
             return;
         }
     }
+    // NEON: the fallback (`finish`), which LLVM compiles to the `ld2`, the three float
+    // operations and the `st2` that a path of its own had (O2, D2972).
     #[cfg(target_arch = "aarch64")]
-    if let Some(t) = simd.level().as_neon() {
-        *done = neon::matrix_f32(t, input, out);
+    if simd.level().as_neon().is_some() {
+        *done = 0;
         return;
     }
     let l = S::f32s::LEN;
@@ -104,11 +107,8 @@ fn matrix_q15<S: SimdToken>(simd: S, input: &[i16], out: &mut [i16], done: &mut 
             return;
         }
     }
-    #[cfg(target_arch = "aarch64")]
-    if let Some(t) = level.as_neon() {
-        *done = neon::matrix(t, input, out);
-        return;
-    }
+    // NEON: the fallback (`finish`), compiled to `ld2`, `sqadd` / `sqsub` and `st2` as the
+    // path of its own was (O2, D2972); SIMD128: the fallback (D158).
     let _ = (level, input, out, done);
 }
 
@@ -150,7 +150,7 @@ where
 
 /// `$body` with `$i` and `$o` every block of `$step` values of `$input` and `$out`; evaluates
 /// to the number of values done.
-#[cfg(any(target_arch = "x86_64", target_arch = "aarch64"))]
+#[cfg(target_arch = "x86_64")]
 macro_rules! blocks {
     ($input:expr, $out:expr, $step:expr, |$i:ident, $o:ident| $body:block) => {
         blocks!(i16, $input, $out, $step, |$i, $o| $body)
@@ -326,77 +326,5 @@ mod x86 {
         _mm512_packs_epi32,
         _mm512_unpacklo_epi16,
         _mm512_unpackhi_epi16
-    );
-}
-
-/// NEON: `ld2` and `st2` deinterleave and interleave in the load and the store, so a block is
-/// one load, the arithmetic and one store per vector of pairs.
-#[cfg(target_arch = "aarch64")]
-#[allow(unsafe_code)]
-mod neon {
-    use core::arch::aarch64::{
-        float32x4x2_t, int16x8x2_t, vaddq_f32, vld2q_f32, vld2q_s16, vqaddq_s16, vqsubq_s16,
-        vst2q_f32, vst2q_s16, vsubq_f32,
-    };
-
-    fearless_simd::kernel!(
-        pub(super) fn matrix_f32(t: Neon, input: &[f32], out: &mut [f32]) -> usize {
-            let _ = t;
-            // Four pairs (8 floats) per `ld2`/`st2`; two per iteration, then one that may remain.
-            let pair = |i: &[f32], o: &mut [f32]| {
-                // SAFETY: `i` and `o` are chunks of exactly 8 floats, which `vld2q_f32` reads
-                // and `vst2q_f32` writes.
-                unsafe {
-                    let float32x4x2_t(s, d) = vld2q_f32(i.as_ptr());
-                    let d2 = vaddq_f32(d, d);
-                    vst2q_f32(
-                        o.as_mut_ptr(),
-                        float32x4x2_t(vaddq_f32(s, d2), vsubq_f32(s, d2)),
-                    );
-                }
-            };
-            let n = blocks!(f32, input, out, 16, |i, o| {
-                let ((i0, i1), (o0, o1)) = (i.split_at(8), o.split_at_mut(8));
-                pair(i0, o0);
-                pair(i1, o1);
-            });
-            let rest = (input.get(n..), out.get_mut(n..));
-            let (Some(ri), Some(ro)) = rest else {
-                return n;
-            };
-            n + blocks!(f32, ri, ro, 8, |i, o| {
-                pair(i, o);
-            })
-        }
-    );
-
-    fearless_simd::kernel!(
-        pub(super) fn matrix(t: Neon, input: &[i16], out: &mut [i16]) -> usize {
-            let _ = t;
-            // Eight pairs (16 values) per `ld2`/`st2`; two per iteration, then one that may
-            // remain.
-            let pair = |i: &[i16], o: &mut [i16]| {
-                // SAFETY: `i` and `o` are chunks of exactly 16 values, which `vld2q_s16` reads
-                // and `vst2q_s16` writes.
-                unsafe {
-                    let int16x8x2_t(s, d) = vld2q_s16(i.as_ptr());
-                    let l = vqaddq_s16(vqaddq_s16(s, d), d);
-                    let r = vqsubq_s16(vqsubq_s16(s, d), d);
-                    vst2q_s16(o.as_mut_ptr(), int16x8x2_t(l, r));
-                }
-            };
-            let n = blocks!(i16, input, out, 32, |i, o| {
-                let ((i0, i1), (o0, o1)) = (i.split_at(16), o.split_at_mut(16));
-                pair(i0, o0);
-                pair(i1, o1);
-            });
-            let rest = (input.get(n..), out.get_mut(n..));
-            let (Some(ri), Some(ro)) = rest else {
-                return n;
-            };
-            n + blocks!(i16, ri, ro, 16, |i, o| {
-                pair(i, o);
-            })
-        }
     );
 }

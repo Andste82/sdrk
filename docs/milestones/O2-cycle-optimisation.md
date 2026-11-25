@@ -479,7 +479,43 @@ The report that group 5 adds to `cargo xtask check cycles`, computed from the sa
 | `scramble_c32_b8` | `simd128` 0.97 |
 | `scramble_cq15_b2` | `simd128` 0.92 |
 
+## Group 1: same-work references (done)
+
+The maintainer's rule: where the judged library does less work, a library or a composition of library calls that does the same work is the judged comparison, and the other is information. Both cases have one (D2954, D2955); the code of ours is unchanged. CI run 45659904269 on e84d0603 (`measure_only`, the three entries at `sse2`, `sse4.2`, `avx2`, `avx2-runtime`, `avx512` and `neon`); the information ratios against the old comparison are those of CI run 45641571494.
+
+`am_mod_fallback` against the CMSIS-DSP composition `arm_clip_f32` + `arm_scale_f32` + `arm_offset_f32` + the carrier product (D2954):
+
+| Level | Ours (cycles per sample, ref. / counter) | CMSIS-DSP composition (cycles per sample, ref. / counter) | Ours / composition (ref. / counter) | Ours / liquid-dsp `ampmodem`, information (ref. / counter) | Models (ref. / counter) | SNR in dB (ours / composition) | Status |
+| --- | --- | --- | --- | --- | --- | --- | --- |
+| `sse2` | 1.09 / 1.16 | 2.94 / 3.20 | 0.371 / 0.361 | 1.842 / 1.613 | skylake / znver2 | 150.8 / 150.8 | `release` (was `dev`) |
+| `sse4.2` | 1.09 / 1.16 | 2.51 / 2.76 | 0.434 / 0.418 | 1.842 / 1.613 | skylake / znver2 | 150.8 / 150.8 | `release` (was `dev`) |
+| `avx2` | 0.65 / 0.47 | 1.74 / 1.58 | 0.372 / 0.297 | 1.225 / 0.867 | znver3 / alderlake | 150.8 / 150.8 | `release` (was `dev`) |
+| `avx512` | 0.38 / 0.30 | 1.47 / 1.25 | 0.261 / 0.243 | 0.726 / 0.560 | znver4 / sapphirerapids | 150.8 / 150.8 | `release` |
+| `neon` | 2.91 / 1.52 | 5.41 / 5.19 | 0.538 / 0.294 | 2.273 / 1.478 | cortex-a72 / cortex-a76 | 150.8 / 150.8 | `release` (was `dev`) |
+
+The composition does the clamp and the carrier product of the contract, its values are ours bit for bit; it has no NaN rule (the generic `arm_clip_f32` copies a NaN). Ours does more than the composition: the NaN rule (a comparison and a mask per vector), a NaN input gives the carrier instead of NaN. More than liquid-dsp: the clamp (the envelope stays within `carrier (1 +- depth)` beyond full scale, where liquid's `1 + m x` overmodulates and turns negative below `x = -1 / m`) and the carrier product. The accuracy gap at `neon` of group 2 (150.80 against liquid's 152.07 dB, GCC's `fmla`) is gone with the comparison: the composition is compiled without contraction like the other CMSIS-DSP references, 150.8 dB on both sides. `simd128` stays `release`; its count against the composition comes with the next `count_wasm32` run. The `fmaxnm` form of the clamp on AArch64 was looked at again (local `llvm-mca`: 2.78 against 2.89 cycles per sample on `cortex-a72`, 1.53 against 1.52 on `cortex-a76`) and not taken.
+
+`convert_out_cu8` and `convert_out_real_ru8` against KFR's expression of the `CU8` contract (D2955: NaN as 0 by a `select`, the `f64` formula, clamped):
+
+| Entry | Level | Ours (cycles per sample, ref. / counter) | KFR (cycles per sample, ref. / counter) | Ours / KFR (ref. / counter) | Ours / VOLK, information (ref. / counter) | Models (ref. / counter) | Status |
+| --- | --- | --- | --- | --- | --- | --- | --- |
+| `convert_out_cu8` | `sse2` | 1.59 / 1.55 | 26.54 / 25.65 | 0.060 / 0.061 | 1.252 / 1.225 | skylake / znver2 | `release` (was `dev`) |
+| `convert_out_cu8` | `sse4.2` | 1.57 / 1.52 | 18.28 / 18.27 | 0.086 / 0.083 | 1.177 / 1.094 | skylake / znver2 | `release` (was `dev`) |
+| `convert_out_cu8` | `avx2` | 0.53 / 0.67 | 13.08 / 11.34 | 0.041 / 0.059 | 0.985 / 1.114 | znver3 / alderlake | `release` (was `dev`) |
+| `convert_out_cu8` | `avx2-runtime` | 0.53 / 0.66 | 13.08 / 11.34 (the `avx2` record) | 0.040 / 0.059 | 0.98 / 1.10 | znver3 / alderlake | `release` (was `dev`) |
+| `convert_out_cu8` | `avx512` | 0.53 / 0.49 | 9.63 / 7.90 | 0.055 / 0.062 | information | znver4 / sapphirerapids | `release` |
+| `convert_out_cu8` | `neon` | 2.91 / 2.09 | 29.59 / 21.19 | 0.098 / 0.099 | 1.094 / 0.974 | cortex-a72 / cortex-a76 | `release` |
+| `convert_out_real_ru8` | `sse2` | 0.81 / 0.79 | 13.28 / 12.83 | 0.061 / 0.062 | 1.260 / 1.233 | skylake / znver2 | `release` (was `dev`) |
+| `convert_out_real_ru8` | `sse4.2` | 0.80 / 0.77 | 9.15 / 9.14 | 0.087 / 0.085 | 1.190 / 1.105 | skylake / znver2 | `release` (was `dev`) |
+| `convert_out_real_ru8` | `avx2` | 0.27 / 0.34 | 6.55 / 5.68 | 0.042 / 0.061 | 0.992 / 1.132 | znver3 / alderlake | `release` (was `dev`) |
+| `convert_out_real_ru8` | `avx2-runtime` | 0.27 / 0.34 | 6.55 / 5.68 (the `avx2` record) | 0.042 / 0.060 | 0.997 / 1.13 | znver3 / alderlake | `release` (was `dev`) |
+| `convert_out_real_ru8` | `avx512` | 0.27 / 0.25 | 4.83 / 3.96 | 0.057 / 0.064 | information | znver4 / sapphirerapids | `release` |
+| `convert_out_real_ru8` | `neon` | 1.47 / 1.06 | 14.82 / 10.61 | 0.099 / 0.100 | 1.102 / 0.985 | cortex-a72 / cortex-a76 | `release` (was `dev`) |
+
+SNR 47.27 dB (`cu8`) and 47.25 dB (`ru8`) on both sides at every level. KFR's expression gives the bytes of the contract bit for bit at `sse4.2`, `avx2` and `avx512`; at `sse2` and on AArch64 its `round` rounds ties away from zero (an input on a multiple of `1 / 128`). KFR is a weak opponent here: its cast to `uint8_t` stores byte by byte, so its cost is that cast and not the work of the contract. What ours does more than VOLK, and what it costs: the NaN rule and the exact rounding, 31 against 22 vector operations per 32 floats (IO1-2), up to 1.260 / 1.233 of VOLK at `sse2`. What it gains: a NaN gives 128 (the zero of the format) instead of 255 (positive full scale); of the 4,278,190,082 non-NaN `f32` inputs VOLK's `f32` formula gives another byte for 243,270,367 (all negative inputs of magnitude at most `2^-25`, 128 instead of 127, and 735 inputs within `2^-24` of a multiple of `1 / 128`); on the measured workload the SNR is the same. The maintainer may take the VOLK ratios as the reason for a contract change of `CU8` (option (b) of the former IO1-2); without it the entries are `release` against the same-work comparison.
+
 ## Status
 
 - 2026-11-25: planned; group 0 inventory above; the maintainer's decisions recorded (D2950 to D2953).
 - 2026-11-25: full CI measurement of every entry on every level on 05ff2d25 (CI run 45641571494, 1836 records, 10 of them more than 1 % from the committed numbers, none of them a status) and the `simd128` counts of its job `count_wasm32` (unchanged); records merged, `cargo xtask check cycles` passes; target list above. No status changes; next: group 1 and group 2 (`oscillate`).
+- 2026-11-25: group 1 done (D2954, D2955; CI run 45659904269 on e84d0603): `am_mod_fallback` judged against the CMSIS-DSP composition of the same work, `release` at every level (0.243 to 0.538); `convert_out_cu8` and `convert_out_real_ru8` judged against KFR's expression of the `CU8` contract, `release` at every x86-64 level and `neon` (0.040 to 0.100); liquid-dsp and VOLK information; IO1-2 and IO1-3 closed. The leftover job `test_m55_qemu` of CI run 45641571494 (the base commit, its measurement collected) was cancelled because the concurrency group held this run behind it.

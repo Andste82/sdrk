@@ -26,8 +26,7 @@
       "status": "release"
     },
     "simd128": {
-      "status": "info",
-      "waiver": "VOLK's wasm32 build holds only its portable `generic` protokernels (D12), compiled with `-msimd128`: no SIMD reference of the level (D32), so the comparison is information and the entry is judged by its efficiency, as `channelize` and `xcorr_fft` at this level (the maintainer's decision D2623; the maintainer's measurement order of 2026-11-24, D2768)"
+      "status": "release"
     }
   },
   "convert_cs16": {
@@ -50,8 +49,7 @@
       "status": "release"
     },
     "simd128": {
-      "status": "info",
-      "waiver": "VOLK's wasm32 build holds only its portable `generic` protokernels (D12), compiled with `-msimd128`: no SIMD reference of the level (D32), so the comparison is information and the entry is judged by its efficiency, as `channelize` and `xcorr_fft` at this level (the maintainer's decision D2623; the maintainer's measurement order of 2026-11-24, D2768)"
+      "status": "release"
     }
   },
   "convert_cu8": {
@@ -74,8 +72,7 @@
       "status": "release"
     },
     "simd128": {
-      "status": "info",
-      "waiver": "VOLK's wasm32 build holds only its portable `generic` protokernels (D12), compiled with `-msimd128`: no SIMD reference of the level (D32), so the comparison is information and the entry is judged by its efficiency, as `channelize` and `xcorr_fft` at this level (the maintainer's decision D2623; the maintainer's measurement order of 2026-11-24, D2768)"
+      "status": "release"
     }
   },
   "convert_real_rs16": {
@@ -98,8 +95,7 @@
       "status": "release"
     },
     "simd128": {
-      "status": "info",
-      "waiver": "VOLK's wasm32 build holds only its portable `generic` protokernels (D12), compiled with `-msimd128`: no SIMD reference of the level (D32), so the comparison is information and the entry is judged by its efficiency, as `channelize` and `xcorr_fft` at this level (the maintainer's decision D2623; the maintainer's measurement order of 2026-11-24, D2768)"
+      "status": "release"
     }
   },
   "convert_cq15_cs8": {
@@ -119,8 +115,7 @@
       "status": "release"
     },
     "simd128": {
-      "status": "info",
-      "waiver": "VOLK's wasm32 build holds only its portable `generic` protokernels (D12), compiled with `-msimd128`: no SIMD reference of the level (D32), so the comparison is information and the entry is judged by its efficiency, as `channelize` and `xcorr_fft` at this level (the maintainer's decision D2623; the maintainer's measurement order of 2026-11-24, D2768)"
+      "status": "release"
     },
     "avx2-runtime": {
       "status": "release"
@@ -143,8 +138,7 @@
       "status": "release"
     },
     "simd128": {
-      "status": "info",
-      "waiver": "VOLK's wasm32 build holds only its portable `generic` protokernels (D12), compiled with `-msimd128`: no SIMD reference of the level (D32), so the comparison is information and the entry is judged by its efficiency, as `channelize` and `xcorr_fft` at this level (the maintainer's decision D2623; the maintainer's measurement order of 2026-11-24, D2768)"
+      "status": "release"
     },
     "avx2-runtime": {
       "status": "release"
@@ -758,8 +752,7 @@
       "status": "release"
     },
     "simd128": {
-      "status": "info",
-      "waiver": "VOLK's wasm32 build holds only its portable `generic` protokernels (D12), compiled with `-msimd128`: no SIMD reference of the level (D32), so the comparison is information and the entry is judged by its efficiency, as `channelize` and `xcorr_fft` at this level (the maintainer's decision D2623; the maintainer's measurement order of 2026-11-24, D2768)"
+      "status": "release"
     }
   },
   "mag_sq_q15": {
@@ -812,8 +805,7 @@
       "status": "release"
     },
     "simd128": {
-      "status": "info",
-      "waiver": "decision D12: VOLK for wasm32 is its portable `generic` code; it is a fair reference only for `mag_sq` and the conversions, so this comparison is information"
+      "status": "release"
     }
   },
   "window_cq15": {
@@ -866,8 +858,7 @@
       "status": "release"
     },
     "simd128": {
-      "status": "info",
-      "waiver": "decision D12: VOLK for wasm32 is its portable `generic` code; it is a fair reference only for `mag_sq` and the conversions, so this comparison is information"
+      "status": "release"
     }
   },
   "power_db_q15": {
@@ -1476,8 +1467,7 @@
       "cycle_waiver": "a tie with its own fallback in simulated cycles, accepted by the maintainer (decision D333): 8.58 / 8.56 cycles per sample of the fallback on `cortex-a72` (8.576 / 8.562, 1.002; 1.77 / 1.77 on `cortex-a76`, 1.769 / 1.774), both loops bound by the throughput of the vector square root on that model; kept with open item I30-4"
     },
     "simd128": {
-      "status": "info",
-      "waiver": "VOLK's wasm32 build holds only its portable `generic` protokernels (D12), compiled with `-msimd128`: no SIMD reference of the level (D32), so the comparison is information and the entry is judged by its efficiency, as `channelize` and `xcorr_fft` at this level (the maintainer's decision D2623; the maintainer's measurement order of 2026-11-24, D2768)"
+      "status": "release"
     }
   },
   "mag_q15": {
@@ -2211,8 +2201,7 @@
       "status": "release"
     },
     "simd128": {
-      "status": "info",
-      "waiver": "decision D12: VOLK for wasm32 is its portable `generic` code; it is a fair reference only for `mag_sq` and the conversions, so this comparison is information"
+      "status": "release"
     }
   },
   "dot_cq15": {
@@ -2262,8 +2251,7 @@
       "status": "release"
     },
     "simd128": {
-      "status": "info",
-      "waiver": "VOLK's wasm32 build (`benches/refs/volk-wasm.c`, the `generic` protokernels, D12) has no `volk_32f_x2_dot_prod_32f`; the comparison is our own fallback, which is not a fair gate for a SIMD branch (D32), so the entry is information only"
+      "status": "release"
     },
     "avx2-runtime": {
       "status": "release"
@@ -2316,8 +2304,7 @@
       "status": "release"
     },
     "simd128": {
-      "status": "info",
-      "waiver": "VOLK's wasm32 build (`benches/refs/volk-wasm.c`, the `generic` protokernels, D12) has no `volk_32f_s32f_multiply_32f`; the comparison is our own fallback, which is not a fair gate for a SIMD branch (D32), so the entry is information only"
+      "status": "release"
     },
     "avx2-runtime": {
       "status": "release"
@@ -3393,8 +3380,7 @@
       "status": "release"
     },
     "simd128": {
-      "status": "info",
-      "waiver": "VOLK's wasm32 build holds only its portable `generic` protokernels (D12), compiled with `-msimd128`: no SIMD reference of the level (D32), so the comparison is information and the entry is judged by its efficiency, as `channelize` and `xcorr_fft` at this level (the maintainer's decision D2623; the maintainer's measurement order of 2026-11-24, D2768)"
+      "status": "release"
     }
   },
   "stereo_matrix_cq15": {
@@ -3592,8 +3578,7 @@
       "status": "release"
     },
     "simd128": {
-      "status": "info",
-      "waiver": "VOLK's wasm32 build holds only its portable `generic` protokernels (D12), compiled with `-msimd128`: no SIMD reference of the level (D32), so the comparison is information and the entry is judged by its efficiency, as `channelize` and `xcorr_fft` at this level (the maintainer's decision D2623; the maintainer's measurement order of 2026-11-24, D2768)"
+      "status": "release"
     },
     "avx2-runtime": {
       "status": "release"
@@ -3616,8 +3601,7 @@
       "status": "release"
     },
     "simd128": {
-      "status": "info",
-      "waiver": "VOLK's wasm32 build holds only its portable `generic` protokernels (D12), compiled with `-msimd128`: no SIMD reference of the level (D32), so the comparison is information and the entry is judged by its efficiency, as `channelize` and `xcorr_fft` at this level (the maintainer's decision D2623; the maintainer's measurement order of 2026-11-24, D2768)"
+      "status": "release"
     },
     "avx2-runtime": {
       "status": "release"
@@ -3640,8 +3624,7 @@
       "status": "release"
     },
     "simd128": {
-      "status": "info",
-      "waiver": "VOLK's wasm32 build holds only its portable `generic` protokernels (D12), compiled with `-msimd128`: no SIMD reference of the level (D32), so the comparison is information and the entry is judged by its efficiency, as `channelize` and `xcorr_fft` at this level (the maintainer's decision D2623; the maintainer's measurement order of 2026-11-24, D2768)"
+      "status": "release"
     },
     "avx2-runtime": {
       "status": "release"
@@ -3664,8 +3647,7 @@
       "status": "release"
     },
     "simd128": {
-      "status": "info",
-      "waiver": "VOLK's wasm32 build holds only its portable `generic` protokernels (D12), compiled with `-msimd128`: no SIMD reference of the level (D32), so the comparison is information and the entry is judged by its efficiency, as `channelize` and `xcorr_fft` at this level (the maintainer's decision D2623; the maintainer's measurement order of 2026-11-24, D2768)"
+      "status": "release"
     },
     "avx2-runtime": {
       "status": "release"
@@ -3692,8 +3674,7 @@
       "status": "release"
     },
     "simd128": {
-      "status": "info",
-      "waiver": "VOLK's wasm32 build holds only its portable `generic` protokernels (D12), compiled with `-msimd128`: no SIMD reference of the level (D32), so the comparison is information and the entry is judged by its efficiency, as `channelize` and `xcorr_fft` at this level (the maintainer's decision D2623; the maintainer's measurement order of 2026-11-24, D2768)"
+      "status": "release"
     }
   },
   "mul_real": {
@@ -3713,8 +3694,7 @@
       "status": "release"
     },
     "simd128": {
-      "status": "info",
-      "waiver": "VOLK's wasm32 build holds only its portable `generic` protokernels (D12), compiled with `-msimd128`: no SIMD reference of the level (D32), so the comparison is information and the entry is judged by its efficiency, as `channelize` and `xcorr_fft` at this level (the maintainer's decision D2623; the maintainer's measurement order of 2026-11-24, D2768)"
+      "status": "release"
     },
     "avx2-runtime": {
       "status": "release"
@@ -3740,8 +3720,7 @@
       "status": "release"
     },
     "simd128": {
-      "status": "info",
-      "waiver": "VOLK's wasm32 build holds only its portable `generic` protokernels (D12), compiled with `-msimd128`: no SIMD reference of the level (D32), so the comparison is information and the entry is judged by its efficiency, as `channelize` and `xcorr_fft` at this level (the maintainer's decision D2623; the maintainer's measurement order of 2026-11-24, D2768)"
+      "status": "release"
     }
   },
   "deinterleave": {
@@ -3764,8 +3743,7 @@
       "status": "release"
     },
     "simd128": {
-      "status": "info",
-      "waiver": "VOLK's wasm32 build holds only its portable `generic` protokernels (D12), compiled with `-msimd128`: no SIMD reference of the level (D32), so the comparison is information and the entry is judged by its efficiency, as `channelize` and `xcorr_fft` at this level (the maintainer's decision D2623; the maintainer's measurement order of 2026-11-24, D2768)"
+      "status": "release"
     }
   },
   "deinterleave_cq15": {
@@ -3788,8 +3766,7 @@
       "status": "release"
     },
     "simd128": {
-      "status": "info",
-      "waiver": "VOLK's wasm32 build holds only its portable `generic` protokernels (D12), compiled with `-msimd128`: no SIMD reference of the level (D32), so the comparison is information and the entry is judged by its efficiency, as `channelize` and `xcorr_fft` at this level (the maintainer's decision D2623; the maintainer's measurement order of 2026-11-24, D2768)"
+      "status": "release"
     }
   },
   "add_fallback": {
@@ -4931,8 +4908,7 @@
       "status": "release"
     },
     "simd128": {
-      "status": "info",
-      "waiver": "decision D12: VOLK for wasm32 is its portable `generic` code; it is a fair reference only for `mag_sq` and the conversions, so this comparison is information"
+      "status": "release"
     },
     "avx2-runtime": {
       "status": "release"

@@ -85,13 +85,15 @@ fn every_platform_counts_mag_against_volk() {
     for (platform, levels) in PLATFORMS {
         let result = bench_file(&format!("results/{platform}.json"));
         for level in levels {
-            for (kernel, volk) in [
-                ("mag", "volk_32fc_magnitude_32f"),
-                ("mag_q15", "volk_16ic_magnitude_16i"),
+            // `mag` is judged against KFR's `cabs` at `simd128`, VOLK's generic build is
+            // information (D2850); `mag_q15` stays information against VOLK (D2768).
+            for (kernel, volk, want) in [
+                ("mag", "volk_32fc_magnitude_32f", "release"),
+                ("mag_q15", "volk_16ic_magnitude_16i", "info"),
             ] {
                 let entry = &result["levels"][*level]["kernels"][kernel];
                 let status = entry["status"].as_str();
-                assert_eq!(status, Some("info"), "{platform}/{level}/{kernel}: {entry}");
+                assert_eq!(status, Some(want), "{platform}/{level}/{kernel}: {entry}");
                 assert!(
                     entry.to_string().contains(volk),
                     "{platform}/{level}/{kernel} is not compared with {volk}"
@@ -175,8 +177,9 @@ fn the_limits_file_judges_mag_at_every_level() {
         assert_eq!(limits["mag"][level]["status"].as_str(), Some("release"));
         assert_eq!(limits["mag_q15"][level]["status"].as_str(), Some("release"));
     }
-    // VOLK's wasm32 build has only its `generic` protokernels: information (D2768).
-    assert_eq!(limits["mag"]["simd128"]["status"].as_str(), Some("info"));
+    // VOLK's wasm32 build has only its `generic` protokernels (D2768): `mag` is judged
+    // against KFR's `cabs` there (D2850), `mag_q15` is information.
+    assert_eq!(limits["mag"]["simd128"]["status"].as_str(), Some("release"));
     assert_eq!(
         limits["mag_q15"]["simd128"]["status"].as_str(),
         Some("info")

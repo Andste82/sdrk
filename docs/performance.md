@@ -2394,7 +2394,7 @@ Instructions per sample (wasmtime fuel, differential) of our kernel divided by t
 | `fft_cq15_1024_full_scale` | 46.17 | 460.87 | 0.10 | 58.9 / 55.1 | info | KissFFT FIXED_POINT=16 (kiss_fft, 1/N scaling, out of place) |
 | `rfft_1024` | 41.91 | 59.40 | 0.71 | 137.8 / 138.5 | release | realfft on rustfft (RealFftPlanner, forward, out of place) |
 | `rfft_1024_fallback` | 105.24 | 98.59 | 1.07 | 137.9 / 138.3 | release | CMSIS-DSP 1.18.0 arm_rfft_fast_f32 (forward, packed output), generic C (-O3 -ffp-contract=off, LOOPUNROLL, simd128) |
-| `am_mod` | 10.54 | 10.54 | 1.00 | 150.8 / 150.8 | info | own (information): sdrk fallback |
+| `am_mod` | 7.92 | 10.54 | 0.75 | 150.8 / 150.8 | info | own (information): sdrk fallback |
 | `am_mod_cq15` | 3.92 | 8.80 | 0.45 | 92.7 / 92.7 | info | own (information): sdrk fallback |
 | `am_mod_cq15_fallback` | 8.80 | 31.69 | 0.28 | 92.7 / 89.7 | release | CMSIS-DSP 1.18.0 arm_scale_q15 by round(c m 32768) (truncating), arm_offset_q15 by c in place and a plain loop to (re, 0) (a composition: CMSIS-DSP has no AM modulator), generic C (-O3 -ffp-contract=off, LOOPUNROLL, simd128) |
 | `am_mod_fallback` | 10.54 | 49.82 | 0.21 | 150.8 / 150.8 | release | CMSIS-DSP 1.18.0 arm_clip_f32 to [-1, 1], arm_scale_f32 by depth and arm_offset_f32 by 1 in place, and a plain loop to (carrier u, 0) (a composition: CMSIS-DSP has no AM modulator; a NaN passes the clip), generic C (-O3 -ffp-contract=off, LOOPUNROLL, simd128) |

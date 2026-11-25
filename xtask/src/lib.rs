@@ -13,6 +13,7 @@ pub mod count_embedded;
 pub mod cycle_gate;
 pub mod cycle_results;
 pub mod emu;
+pub mod gap_report;
 pub mod layers;
 pub mod mca;
 pub mod measure;

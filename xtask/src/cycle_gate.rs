@@ -43,6 +43,10 @@
 //! and fails as soon as one of them does not ("3 dB better must not mean that we may be
 //! slow"). A trade on an entry within its limit is a remark.
 //!
+//! **The report of the gaps (O2 group 5, D2978, issue #203).** After the gates, a report that
+//! never fails: every SIMD entry and level above 0.80 of its own fallback on a model, and every
+//! kernel entry and level without a foreign reference ([`crate::gap_report`]).
+//!
 //! The instruction judgement of `simd128` stays in `cargo xtask count`.
 #![allow(clippy::print_stdout, clippy::print_stderr)]
 
@@ -1410,6 +1414,18 @@ pub fn check(root: &Path, o: &Options) -> anyhow::Result<Vec<Finding>> {
     for w in &gate.warnings {
         println!("  warn: {w}");
     }
+    // The report of O2 group 5 (D2978, issue #203): never a finding.
+    let counts_path = root.join("benches/results/wasm32.json");
+    let counts = if counts_path.exists() {
+        crate::gap_report::counts(&read("benches/results/wasm32.json")?)?
+    } else {
+        crate::gap_report::Counts::new()
+    };
+    let kernel = |e: &str| crate::bench::is_kernel_entry(e);
+    crate::gap_report::print(
+        &crate::gap_report::simd_shares(&pairs(&results), &counts, &kernel),
+        &crate::gap_report::without_library(&results, &counts, &kernel),
+    );
     let mut findings = fallbacks.findings;
     findings.extend(plan_findings);
     findings.extend(kind_findings);

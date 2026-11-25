@@ -436,6 +436,11 @@ pub struct KernelSpec {
     /// Another kernel of the table whose `ours` is reported next to the comparisons as
     /// information ([`Reference::OwnKernel`]).
     pub own: Option<&'static str>,
+    /// A kernel of the library (or its fallback entry): not a block, a composite, a protocol
+    /// coder (the constructors `proto` and `not_a_kernel`) or a workload of an own-kernel
+    /// comparison ([`Family::Workload`]). The report of `cargo xtask check cycles` on the kernel
+    /// entry-levels without a foreign reference lists only these (issue #203).
+    pub kernel: bool,
 }
 
 const fn spec(name: &'static str, family: Family, small_n: bool) -> KernelSpec {
@@ -446,6 +451,7 @@ const fn spec(name: &'static str, family: Family, small_n: bool) -> KernelSpec {
         small_n,
         misaligned: true,
         own: None,
+        kernel: !matches!(family, Family::Workload),
     }
 }
 
@@ -458,6 +464,7 @@ const fn spec_own(name: &'static str, family: Family, own: &'static str) -> Kern
         small_n: false,
         misaligned: true,
         own: Some(own),
+        kernel: !matches!(family, Family::Workload),
     }
 }
 
@@ -506,7 +513,13 @@ const fn proto(name: &'static str, family: Family) -> KernelSpec {
         small_n: false,
         misaligned: false,
         own: None,
+        kernel: false,
     }
+}
+
+/// `s` as a block or a composite (`correlate_block`), not a kernel of the library.
+const fn not_a_kernel(s: KernelSpec) -> KernelSpec {
+    KernelSpec { kernel: false, ..s }
 }
 
 /// An entry of `xcorr_fft` (M50), or the block `correlate_block` (`CorrelateBlock` with the
@@ -526,6 +539,7 @@ const fn xcorr(name: &'static str, family: Family, samples: u64) -> KernelSpec {
         small_n: false,
         misaligned: true,
         own: None,
+        kernel: true,
     }
 }
 
@@ -537,7 +551,15 @@ const fn fft(name: &'static str, family: Family, samples: u64) -> KernelSpec {
         small_n: false,
         misaligned: false,
         own: None,
+        kernel: true,
     }
+}
+
+/// Whether `entry` is a kernel entry of [`KERNELS`] ([`KernelSpec::kernel`]); `false` for a name
+/// the table does not have.
+#[must_use]
+pub fn is_kernel_entry(entry: &str) -> bool {
+    KERNELS.iter().any(|s| s.name == entry && s.kernel)
 }
 
 /// The kernels of the benchmark table, in report order.
@@ -971,7 +993,7 @@ pub static KERNELS: [KernelSpec; 306] = [
         10 * 386,
     ),
     xcorr("xcorr_fft_n4096_fallback", Family::FallbackVsLiquid, 3074),
-    xcorr("correlate_block", Family::Own, 10 * 386),
+    not_a_kernel(xcorr("correlate_block", Family::Own, 10 * 386)),
 ];
 
 /// The CPU Intel SDE emulates.
@@ -3019,6 +3041,34 @@ pub fn profiles(
 mod tests {
     use super::*;
     use crate::count::{Limits, Status};
+
+    #[test]
+    fn the_kernel_entries_leave_out_blocks_protocol_coders_and_workloads() {
+        for s in &KERNELS {
+            // `dc_block` is a kernel; every other `_block` is a block of `sdrk-blocks`.
+            let block = !s.name.starts_with("dc_block")
+                && (s.name.ends_with("_block") || s.name.contains("_block_"));
+            let other = block
+                || s.name.starts_with("channel_bank_")
+                || s.name.starts_with("crc")
+                || s.name.starts_with("frame_decode")
+                || s.name.starts_with("halfband_ref_");
+            assert_eq!(is_kernel_entry(s.name), !other, "{}", s.name);
+        }
+        for k in [
+            "dc_block",
+            "dc_block_real_q15",
+            "fir_cq15",
+            "fir_cq15_fallback",
+            "fft_1024",
+            "xcorr_fft_n512",
+            "qam_soft_bits_qam16_liquid",
+            "gauss_noise_q15_fallback",
+        ] {
+            assert!(is_kernel_entry(k), "{k}");
+        }
+        assert!(!is_kernel_entry("no_such_entry"));
+    }
 
     #[test]
     fn qemu_option_variables_are_recognised() {

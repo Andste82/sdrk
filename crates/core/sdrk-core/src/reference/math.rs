@@ -22,6 +22,21 @@ fn q15_product(a: Q15, b: Q15) -> Q15 {
     Q15(sat16(round_shift(i64::from(a.0) * i64::from(b.0), 15)))
 }
 
+/// The sum `x + y` in the written order (D2951): where both operands are NaN the result is the
+/// NaN of `x` with the quiet bit set, as the addition instructions of x86 and Arm return it
+/// for the first source. An addition commutes, so the compiler may swap the operands of a
+/// plain `x + y`, and two NaNs of other payloads (an input NaN and the default NaN of
+/// `0 · inf`, negative on x86) then give the other one; the explicit choice keeps the
+/// `Reference` independent of that. With one NaN operand the sum is that NaN in either order.
+fn sum_in_order(x: f32, y: f32) -> f32 {
+    const QUIET: u32 = 0x0040_0000;
+    if x.is_nan() && y.is_nan() {
+        f32::from_bits(x.to_bits() | QUIET)
+    } else {
+        x + y
+    }
+}
+
 impl Add<C32> for Reference {
     fn add(&self, a: &[C32], b: &[C32], out: &mut [C32]) -> Result<()> {
         check3(a, b, out)?;
@@ -71,7 +86,7 @@ impl Mul<C32> for Reference {
         for ((o, x), y) in out.iter_mut().zip(a).zip(b) {
             let (rr, ii) = (x.re * y.re, x.im * y.im);
             let (ri, ir) = (x.re * y.im, x.im * y.re);
-            *o = C32::new(rr - ii, ri + ir);
+            *o = C32::new(rr - ii, sum_in_order(ri, ir));
         }
         Ok(())
     }

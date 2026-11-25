@@ -128,7 +128,10 @@ mod spectrum;
 mod squelch;
 mod stereo;
 mod symbol_sync;
+mod target;
 mod xcorr;
+
+pub use target::{FallbackAt, Native, Target};
 
 #[cfg(test)]
 mod tests {

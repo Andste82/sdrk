@@ -186,7 +186,7 @@ fn clamp_nan0(v: f32, lo: f32, hi: f32) -> f32 {
 ///   `sse4.2` 0.75 / 0.76 instead of 0.95 / 0.93, `avx2` 0.46 / 0.47 instead of 0.53 / 0.51
 ///   (`znver3` / `alderlake`), `avx512` 0.27 / 0.35 instead of 0.36 / 0.42 (`znver4` /
 ///   `sapphirerapids`); `U8` at `sse2` 1.94 / 2.03 instead of 2.71 / 2.86, `sse4.2` 1.54 / 1.70
-///   instead of 2.34 / 2.20, `avx2` 0.65 / 0.74 instead of 0.83 / 0.90, `avx512` 0.48 / 0.63
+///   instead of 2.34 / 2.20, `avx2` 0.62 / 0.68 instead of 0.83 / 0.90, `avx512` 0.48 / 0.63
 ///   instead of 0.60 / 0.66.
 /// - [`ByteForm::Clamp`] elsewhere (wasm32, 32-bit Arm, RISC-V): [`clamp_nan0`], unchanged.
 #[derive(Clone, Copy, PartialEq, Eq)]
@@ -204,6 +204,15 @@ const BYTE_FORM: ByteForm = if cfg!(target_arch = "aarch64") {
 } else {
     ByteForm::Clamp
 };
+
+/// Whether the `U8` form of [`ByteForm::Select`] is [`u8_bound`]: with SSE4.1, but not at AVX2
+/// without AVX-512, where [`u8_fix`] compiles to the shorter loop (CI run 45717818987:
+/// `convert_out_real_ru8_fallback` 0.68 / 0.74 cycles per value on `znver3` / `alderlake` with
+/// [`u8_bound`], 0.62 / 0.68 with [`u8_fix`] in `llvm-mca` of the compiled loops).
+const U8_BOUND: bool = cfg!(all(
+    target_feature = "sse4.1",
+    any(not(target_feature = "avx2"), target_feature = "avx512f")
+));
 
 /// `0.5 - 2^-25`: `rint(y - C)` of `y = x * 128` in `f32` is the `U8` value minus 128 for every
 /// `y` but the negative ones above `-2^-25`, which give 0 instead of -1 (the module
@@ -258,13 +267,14 @@ fn i8_byte<const F: u8>(x: f32) -> u8 {
 /// that the negative `y` above `-2^-25` give 0 instead of -1, and bound `r` by -1 where
 /// `y < -2^-47` (where the formula gives at most 127, see above) and by 127 elsewhere: on
 /// AArch64 ([`u8_convert`]) the rounding by [`ROUND_MAGIC_F32`] and `as i32`, on x86 with
-/// SSE4.1 ([`u8_bound`]) the bits of the rounded sum and the minimum with the bound, on x86
-/// without SSE4.1 ([`u8_fix`], no `pminsd`) the correction of the zero where `y < -2^-47`.
+/// SSE4.1 ([`u8_bound`], see [`U8_BOUND`]) the bits of the rounded sum and the minimum with
+/// the bound, on x86 without SSE4.1 (no `pminsd`) and at AVX2 ([`u8_fix`]) the correction of
+/// the zero where `y < -2^-47`.
 #[inline]
 fn u8_direct(x: f32) -> u8 {
     match BYTE_FORM {
         ByteForm::Convert => u8_convert(x),
-        ByteForm::Select if cfg!(target_feature = "sse4.1") => u8_bound(x),
+        ByteForm::Select if U8_BOUND => u8_bound(x),
         ByteForm::Select => u8_fix(x),
         ByteForm::Clamp => u8_byte(x),
     }

@@ -89,7 +89,7 @@ impl FbMac for CQ15 {
             im: acc.1.finish(),
         }
     }
-    #[cfg(target_arch = "aarch64")]
+    #[cfg(any(target_arch = "x86_64", target_arch = "aarch64"))]
     #[inline]
     fn decimate_outputs(
         taps: &[Q15],
@@ -99,7 +99,18 @@ impl FbMac for CQ15 {
         s: usize,
         out: &mut [CQ15],
     ) -> Result<()> {
-        a64::decimate(taps, hist, input, seen, s, out)
+        if let Some(done) = exact::decimate(taps, hist, input, seen, s, out) {
+            return done;
+        }
+        #[cfg(target_arch = "aarch64")]
+        {
+            a64::decimate(taps, hist, input, seen, s, out)
+        }
+        #[cfg(not(target_arch = "aarch64"))]
+        {
+            let count = out.len();
+            progression(taps, 1, hist, input, 0, seen, s, count, out.iter_mut())
+        }
     }
 }
 
@@ -562,6 +573,227 @@ mod a64 {
     }
 }
 
+/// `fir_decimate` `CQ15` on x86-64 and AArch64: every output as one exact dot product over its
+/// window, in vector lanes of 32-bit pair sums.
+///
+/// The taps are reversed once per call (`r[k] = h[N - 1 - k]` against the samples of the
+/// window, oldest first) and padded with zero taps in front to a multiple of [`PAD`], so that
+/// the lanes need no remainder; a zero tap gives a zero product whatever its sample. A lane sums
+/// the products of one component of two samples: a product of two `Q15` values lies in
+/// `[-2^30 + 2^15, 2^30]`, so a pair sum lies in `[-2^31 + 2^16, 2^31]`. That does not fit
+/// `i32` (only `2^31` itself is out), but its `i32` sum with wrap-around plus
+/// `K = 2^31 - 2^16`, read as `u32`, is the pair sum plus `K` exactly (`0 ..= 2^32 - 2^16`).
+/// These offset pair sums are added in `u64`, and the offsets are taken off once per output.
+/// Fewer than `2^32` pairs per lane cannot overflow it, so each component is the exact `i64`
+/// sum of its products, the sum of [`super::FbMac::mac_exact`] in every order: the bits of the
+/// grouped engine and of [`super::single`].
+///
+/// The forms are those the compiler turns into vector code on each target:
+///
+/// - x86-64: blocks of four samples with each tap twice (`[r0, r0, r1, r1, r2, r2, r3, r3]`
+///   against `[re0, im0, re1, im1, re2, im2, re3, im3]`); lane `i < 4` is the pair sum
+///   `t[i] x[i] + t[i + 4] x[i + 4]` (`pmaddwd` of the samples widened in place at SSE2,
+///   `vpmovzxwd` + `vpmaddwd` from AVX2);
+/// - AArch64: pairs of consecutive samples with their two taps (`ld4`, `ld2`, `smull`,
+///   `smlal`, `uaddw` on sixteen samples per step).
+///
+/// The offset passes through [`core::hint::black_box`]: with the constant visible the
+/// compiler proves the `u32` sums equal to `i64` sums and returns to scalar `i64` products
+/// (x86-64). The outputs whose windows reach into the history are computed in a stack copy of
+/// the zero padding, the history and the start of the input, as the others.
+#[cfg(any(target_arch = "x86_64", target_arch = "aarch64"))]
+mod exact {
+    use crate::error::{Error, Result};
+    use crate::num::Acc64;
+    use crate::types::{CQ15, Q15};
+
+    /// Longest filter of the stack buffers (the prepared taps, the copy of the first windows);
+    /// longer filters take the other forms.
+    pub(super) const MAX_TAPS: usize = 256;
+
+    /// The padded length is a multiple of this: one block of the x86-64 lanes, eight pairs (one
+    /// vector step of the compiled loop) on AArch64.
+    #[cfg(target_arch = "x86_64")]
+    const PAD: usize = 4;
+    /// See the x86-64 constant.
+    #[cfg(target_arch = "aarch64")]
+    const PAD: usize = 16;
+
+    /// The longest padded filter.
+    const MAX_PADDED: usize = MAX_TAPS + PAD - 1;
+
+    /// Offset of the pair sums, `2^31 - 2^16`.
+    const K: i32 = 0x7FFF_0000;
+
+    /// A prepared unit of taps: a block of four samples (x86-64) or a pair (AArch64).
+    #[cfg(target_arch = "x86_64")]
+    type Unit = [i16; 8];
+    /// See the x86-64 type.
+    #[cfg(target_arch = "aarch64")]
+    type Unit = [i16; 2];
+
+    /// Samples per [`Unit`].
+    const PER_UNIT: usize = if cfg!(target_arch = "x86_64") { 4 } else { 2 };
+
+    /// Copies of each tap in a [`Unit`]: one per component on x86-64, one on AArch64.
+    const REPEAT: usize = if cfg!(target_arch = "x86_64") { 2 } else { 1 };
+
+    /// The sums of the offset pair sums of the window `x` (`PER_UNIT` samples per unit of `td`)
+    /// per component, `(re, im)`, `k` the offset `K`: each holds `P / 2` offsets.
+    #[cfg(target_arch = "x86_64")]
+    #[inline(never)]
+    fn lanes(td: &[Unit], x: &[CQ15], k: i32) -> (u64, u64) {
+        let x: &[i16] = bytemuck::cast_slice(x);
+        let (x, _) = x.as_chunks::<8>();
+        let mut acc = [0u64; 4];
+        for (t, v) in td.iter().zip(x) {
+            for (i, a) in acc.iter_mut().enumerate() {
+                let (Some(&t0), Some(&t1), Some(&x0), Some(&x1)) =
+                    (t.get(i), t.get(i + 4), v.get(i), v.get(i + 4))
+                else {
+                    continue;
+                };
+                let p = (i32::from(t0) * i32::from(x0)).wrapping_add(i32::from(t1) * i32::from(x1));
+                *a += u64::from(p.wrapping_add(k).cast_unsigned());
+            }
+        }
+        let [r0, i0, r1, i1] = acc;
+        (r0 + r1, i0 + i1)
+    }
+
+    /// See the x86-64 form.
+    #[cfg(target_arch = "aarch64")]
+    #[inline(never)]
+    fn lanes(td: &[Unit], x: &[CQ15], k: i32) -> (u64, u64) {
+        let (x, _) = x.as_chunks::<2>();
+        let (mut re, mut im) = (0u64, 0u64);
+        for (&[t0, t1], &[x0, x1]) in td.iter().zip(x) {
+            let (t0, t1) = (i32::from(t0), i32::from(t1));
+            let pr = (t0 * i32::from(x0.re.0)).wrapping_add(t1 * i32::from(x1.re.0));
+            let pi = (t0 * i32::from(x0.im.0)).wrapping_add(t1 * i32::from(x1.im.0));
+            re += u64::from(pr.wrapping_add(k).cast_unsigned());
+            im += u64::from(pi.wrapping_add(k).cast_unsigned());
+        }
+        (re, im)
+    }
+
+    /// The prepared taps of one call.
+    struct Taps<'a> {
+        /// The padded reversed taps in units.
+        td: &'a [Unit],
+        /// The offsets in the sum of a component, wrapped.
+        off: u64,
+        /// [`K`], through [`core::hint::black_box`].
+        k: i32,
+    }
+
+    impl Taps<'_> {
+        /// The output of the window `w` (`P` samples, oldest first).
+        #[inline]
+        fn output(&self, w: &[CQ15]) -> CQ15 {
+            let (re, im) = lanes(self.td, w, self.k);
+            CQ15 {
+                re: Acc64(re.wrapping_sub(self.off).cast_signed()).finish(),
+                im: Acc64(im.wrapping_sub(self.off).cast_signed()).finish(),
+            }
+        }
+    }
+
+    /// [`super::FbMac::decimate_outputs`] of `CQ15` for filters of at most [`MAX_TAPS`] taps
+    /// with a history of `N - 1` samples; `None` for the others.
+    pub(super) fn decimate(
+        taps: &[Q15],
+        hist: &[CQ15],
+        input: &[CQ15],
+        seen: usize,
+        s: usize,
+        out: &mut [CQ15],
+    ) -> Option<Result<()>> {
+        let len = taps.len();
+        if len == 0 || len > MAX_TAPS || hist.len() + 1 != len || s == 0 {
+            return None;
+        }
+        Some(run(taps, hist, input, seen, s, out))
+    }
+
+    fn run(
+        taps: &[Q15],
+        hist: &[CQ15],
+        input: &[CQ15],
+        seen: usize,
+        s: usize,
+        out: &mut [CQ15],
+    ) -> Result<()> {
+        let internal = || Error::Internal("decimation window");
+        let len = taps.len();
+        let padded = len.next_multiple_of(PAD);
+        let pad = padded - len;
+        // The padded reversed taps `r`: `pad` zeros, then `r[pad + k] = taps[N - 1 - k]`, so
+        // `r[k] = taps[P - 1 - k]` from `k = pad` on.
+        let mut units = [Unit::default(); MAX_PADDED / PER_UNIT];
+        let td = units.get_mut(..padded / PER_UNIT).ok_or_else(internal)?;
+        for (u, unit) in td.iter_mut().enumerate() {
+            for (j, slot) in unit.chunks_exact_mut(REPEAT).enumerate() {
+                let k = u * PER_UNIT + j;
+                if k >= pad {
+                    slot.fill(taps.get(padded - 1 - k).ok_or_else(internal)?.0);
+                }
+            }
+        }
+        let k = core::hint::black_box(K);
+        let prepared = Taps {
+            td,
+            off: ((padded / 2) as u64).wrapping_mul(u64::from(k.cast_unsigned())),
+            k,
+        };
+        // Output `t` ends after `e = seen + t s` samples of the input. Its window is
+        // `input[e - P..e]` when `e >= P`, else it reaches into the history.
+        let n_head = if seen < padded {
+            (padded - seen).div_ceil(s).min(out.len())
+        } else {
+            0
+        };
+        let (oh, ob) = out.split_at_mut(n_head);
+        if n_head > 0 {
+            head(&prepared, padded, hist, input, seen, s, oh)?;
+        }
+        let first = seen + n_head * s;
+        for (t, y) in ob.iter_mut().enumerate() {
+            let e = first + t * s;
+            *y = prepared.output(input.get(e - padded..e).ok_or_else(internal)?);
+        }
+        Ok(())
+    }
+
+    /// The outputs whose windows reach into the history (`e < P`): in the stack copy
+    /// `zeros(P - N) ++ history ++ input[..P - 1]` the window of `e` is `copy[e - 1..e - 1 + P]`.
+    #[inline(never)]
+    fn head(
+        prepared: &Taps<'_>,
+        padded: usize,
+        hist: &[CQ15],
+        input: &[CQ15],
+        seen: usize,
+        s: usize,
+        out: &mut [CQ15],
+    ) -> Result<()> {
+        let internal = || Error::Internal("decimation head");
+        let mut copy = [CQ15::default(); 2 * MAX_PADDED];
+        let take = input.len().min(padded - 1);
+        let copy = copy.get_mut(..padded - 1 + take).ok_or_else(internal)?;
+        let (ch, ci) = copy.split_at_mut(padded - 1);
+        ch.get_mut(padded - 1 - hist.len()..)
+            .ok_or_else(internal)?
+            .copy_from_slice(hist);
+        ci.copy_from_slice(input.get(..take).ok_or_else(internal)?);
+        for (t, y) in out.iter_mut().enumerate() {
+            let e = seen + t * s;
+            *y = prepared.output(copy.get(e - 1..e - 1 + padded).ok_or_else(internal)?);
+        }
+        Ok(())
+    }
+}
+
 /// Greatest common divisor.
 fn gcd(mut a: usize, mut b: usize) -> usize {
     while b != 0 {
@@ -902,9 +1134,10 @@ mod tests {
         all::<CQ15>(true);
     }
 
-    /// `CQ15` decimation of longer filters: the first outputs of a call grouped in the stack
-    /// copy of the AArch64 form (up to 256 taps) and beyond it (257, 300), every factor where
-    /// the groups of 7, 4 and 2 and the single outputs occur at the start and the end of a call.
+    /// `CQ15` decimation of longer filters: the first outputs of a call in the stack copy of
+    /// the exact form of x86-64 and AArch64 (up to 256 taps, padded) and beyond it (257, 300:
+    /// the grouped forms, on AArch64 the groups of 7, 4 and 2 and the single outputs at the
+    /// start and the end of a call), every factor.
     #[test]
     fn cq15_decimation_of_long_filters_equals_the_definition_bit_for_bit() {
         for n_taps in [127, 255, 256, 257, 300] {

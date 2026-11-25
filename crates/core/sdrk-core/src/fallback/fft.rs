@@ -178,7 +178,7 @@ fn quad_c32<const INV: bool>(x: [&mut C32; 4], w: C32, wa: C32, wb: C32) {
 /// orders the operands, which is why a transform that may meet one keeps the scalar stages.
 #[cfg(any(target_arch = "x86", target_arch = "x86_64"))]
 mod two {
-    use super::{C32, FftScale, Result, check_twiddles, stage_c32, tw_error};
+    use super::{C32, Error, FftScale, Result, check_twiddles, stage_c32, tw_error};
 
     /// Two samples `[re0, im0, re1, im1]`.
     type Lanes = [f32; 4];
@@ -225,7 +225,7 @@ mod two {
         stride: usize,
         inverse: bool,
     ) -> Result<FftScale> {
-        bit_reverse_select(data, log2n);
+        bit_reverse_select(data, log2n)?;
         if inverse {
             stages::<true>(data, tw, n, log2n, stride)?;
             let g = 1.0 / n as f32;
@@ -244,12 +244,15 @@ mod two {
     /// [`super::bit_reverse_quarter`] without a branch on `i < j`, whose outcome follows no
     /// pattern the predictor learns (about one misprediction every four samples at 64 points):
     /// the partner of `i` is `j` or `i` itself, chosen by a conditional move, and a swap of a
-    /// sample with itself changes nothing. The same permutation. `data.len()` is `2^log2n`.
-    pub(super) fn bit_reverse_select<T>(data: &mut [T], log2n: u32) {
+    /// sample with itself changes nothing. The same permutation. `data.len()` must be
+    /// `2^log2n` with `log2n >= 2` (the sizes from [`MIN_N`] on): an error otherwise. It does
+    /// not call `bit_reverse_quarter`, so that the scalar path stays its only caller and keeps
+    /// it inline (with a second caller `channelize_fallback` measured 4.5 to 7.6 % more cycles
+    /// on every x86 level, D2811).
+    pub(super) fn bit_reverse_select<T>(data: &mut [T], log2n: u32) -> Result<()> {
         let n = data.len();
         if log2n < 2 || n != 1 << log2n {
-            super::bit_reverse_quarter(data, log2n);
-            return;
+            return Err(Error::Internal("fft size"));
         }
         let half = n / 2;
         let mut j = 0usize;
@@ -263,6 +266,14 @@ mod two {
             let t = (!u).trailing_zeros();
             j ^= half - (half >> (t + 1));
         }
+        Ok(())
+    }
+
+    /// The scalar stage of half block length 1 of an odd `log2 N`, out of line as the call of
+    /// `stage_c32` was before it became `#[inline(always)]`.
+    #[inline(never)]
+    fn first_stage<const INV: bool>(data: &mut [C32], tw: &[C32], step: usize) -> Result<()> {
+        stage_c32::<INV>(data, tw, 1, step)
     }
 
     /// The stages of the transform after the bit reversal, as [`super::stages_c32`] groups them
@@ -277,7 +288,7 @@ mod two {
         let mut s;
         if log2n % 2 == 1 {
             // The scalar stage, which the compiler vectorizes well (pairs of neighbours).
-            stage_c32::<INV>(data, tw, 1, (n >> 1) * stride)?;
+            first_stage::<INV>(data, tw, (n >> 1) * stride)?;
             s = 2;
         } else {
             let (step, step2) = ((n >> 1) * stride, (n >> 2) * stride);
@@ -425,6 +436,14 @@ mod two {
 }
 
 /// One radix-2 stage of `C32` data: `half` is the half block length, `step` the twiddle step.
+/// Inline in the scalar stages, as before the lanes of `two` called it as well (with the second
+/// caller the compiler kept it out of line, and `channelize_fallback` measured 4.5 to 7.6 %
+/// more cycles on every x86 level, D2811); the lanes call it through `two::first_stage`.
+#[allow(
+    clippy::inline_always,
+    reason = "inline in the stage loops of the scalar transform"
+)]
+#[inline(always)]
 fn stage_c32<const INV: bool>(
     data: &mut [C32],
     tw: &[C32],
@@ -1746,8 +1765,15 @@ mod tests {
             #[cfg(any(target_arch = "x86", target_arch = "x86_64"))]
             {
                 let mut select: std::vec::Vec<usize> = (0..n).collect();
-                two::bit_reverse_select(&mut select, log2n);
-                assert_eq!(select, want, "log2n={log2n}");
+                let done = two::bit_reverse_select(&mut select, log2n);
+                if log2n < 2 {
+                    // Below the sizes of the lanes: refused, the data untouched.
+                    assert!(done.is_err(), "log2n={log2n}");
+                    assert!(select.iter().enumerate().all(|(i, &j)| i == j));
+                } else {
+                    assert!(done.is_ok(), "log2n={log2n}");
+                    assert_eq!(select, want, "log2n={log2n}");
+                }
             }
             assert!(
                 got.iter()

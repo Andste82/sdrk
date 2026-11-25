@@ -4647,32 +4647,32 @@
           "comparison_kind": "own_fallback",
           "counter_model": {
             "comparison": {
-              "coverage": 0.9906245762816325,
-              "cycles_per_sample": 27.634231247683854,
-              "efficiency": 0.9790286905704607
+              "coverage": 0.9924027938075733,
+              "cycles_per_sample": 14.643672569750999,
+              "efficiency": 0.829776744940276
             },
             "cpu": "cortex-a76",
             "ours": {
-              "coverage": 0.9804444158102468,
-              "cycles_per_sample": 23.879152147935077,
-              "efficiency": 0.8563133509049445
+              "coverage": 0.9923958974560916,
+              "cycles_per_sample": 14.643774331470574,
+              "efficiency": 0.829776744940276
             },
-            "ratio": 0.8641149425836296
+            "ratio": 1.0000069491938646
           },
           "cycle_mode": "whole-loop",
           "reference_model": {
             "comparison": {
-              "coverage": 0.9906245762816325,
-              "cycles_per_sample": 29.565771037777687,
-              "efficiency": 0.9804469946943415
+              "coverage": 0.9924027938075733,
+              "cycles_per_sample": 14.981621276604155,
+              "efficiency": 0.816118146138249
             },
             "cpu": "cortex-a72",
             "ours": {
-              "coverage": 0.9804444158102468,
-              "cycles_per_sample": 26.403943366470244,
-              "efficiency": 0.7562993515325256
+              "coverage": 0.9923958974560916,
+              "cycles_per_sample": 14.98172538679481,
+              "efficiency": 0.816118146138249
             },
-            "ratio": 0.8930578313933564
+            "ratio": 1.0000069491938646
           },
           "samples": 65536,
           "snr_db": {
@@ -4691,11 +4691,11 @@
             },
             "cpu": "cortex-a76",
             "ours": {
-              "coverage": 0.9906245762816325,
-              "cycles_per_sample": 27.634231247683854,
-              "efficiency": 0.9790286905704607
+              "coverage": 0.9924027938075733,
+              "cycles_per_sample": 14.643672569750999,
+              "efficiency": 0.829776744940276
             },
-            "ratio": 1.6347643210068505
+            "ratio": 0.8662789722996931
           },
           "cycle_mode": "whole-loop",
           "reference_model": {
@@ -4706,11 +4706,11 @@
             },
             "cpu": "cortex-a72",
             "ours": {
-              "coverage": 0.9906245762816325,
-              "cycles_per_sample": 29.565771037777687,
-              "efficiency": 0.9804469946943415
+              "coverage": 0.9924027938075733,
+              "cycles_per_sample": 14.981621276604155,
+              "efficiency": 0.816118146138249
             },
-            "ratio": 1.8027339115037992
+            "ratio": 0.9134846065787297
           },
           "samples": 65536,
           "snr_db": {
@@ -10623,10 +10623,10 @@
             "cpu": "cortex-a76",
             "ours": {
               "coverage": 0.9995119570522206,
-              "cycles_per_sample": 56.435668029785155,
-              "efficiency": 0.47211727034004414
+              "cycles_per_sample": 52.433714904785155,
+              "efficiency": 0.5081511693081942
             },
-            "ratio": 0.9861828520651338
+            "ratio": 0.9162508802390797
           },
           "cycle_mode": "whole-loop",
           "reference_model": {
@@ -10638,10 +10638,10 @@
             "cpu": "cortex-a72",
             "ours": {
               "coverage": 0.9995119570522206,
-              "cycles_per_sample": 84.50686798095704,
-              "efficiency": 0.3001960856857449
+              "cycles_per_sample": 78.50393829345704,
+              "efficiency": 0.3231510613724162
             },
-            "ratio": 0.9721615415167434
+            "ratio": 0.9031042267913689
           },
           "samples": 65536,
           "snr_db": {

@@ -241,12 +241,67 @@ impl StereoPll<Q15> for Fallback {
     }
 }
 
+/// Pairs per block of the `C32` matrix in [`matrix_blocks`], 0 for the plain loop: 8 in an
+/// AVX2 build without AVX-512 (`znver3` / `alderlake` 0.63 / 0.86 to 0.44 / 0.64 cycles per
+/// sample in the loop), 4 from SSE3 below AVX2 (`skylake` / `znver2` at `sse4.2` 1.52 / 1.46 to
+/// 1.19 / 1.34), the plain loop at SSE2 (2.02 / 1.61 with blocks of 4), with AVX-512
+/// (`sapphirerapids` 0.54 to 0.64 with blocks of 8) and on the other targets (`llvm-mca` of
+/// the compiled loops).
+const MATRIX_BLOCK: usize = if cfg!(all(
+    target_arch = "x86_64",
+    target_feature = "avx2",
+    not(target_feature = "avx512f")
+)) {
+    8
+} else if cfg!(all(
+    target_arch = "x86_64",
+    target_feature = "sse3",
+    not(target_feature = "avx2")
+)) {
+    4
+} else {
+    0
+};
+
+/// One `C32` pair of the matrix: `d2 = d + d`, `l = s + d2`, `r = s - d2`.
+#[inline]
+fn matrix_c32(i: C32) -> C32 {
+    let d2 = i.im + i.im;
+    C32::new(i.re + d2, i.re - d2)
+}
+
+/// The `C32` matrix in blocks of `P` pairs. The block is one set of vector lanes: the compiler
+/// takes `s` and `2 d` with the duplicating shuffles (`movsldup`, `movshdup`), forms `l` and
+/// `r` on all lanes and blends them, without the deinterleave and the interleave of the plain
+/// loop. [`core::hint::black_box`] keeps it from vectorizing the loop once more across blocks,
+/// which brings the shuffles back; it emits no instruction. The values are those of
+/// [`matrix_c32`], pair by pair.
+#[inline]
+fn matrix_blocks<const P: usize>(input: &[C32], output: &mut [C32]) {
+    let (ic, ir) = input.as_chunks::<P>();
+    let (oc, or) = output.as_chunks_mut::<P>();
+    for (o, i) in oc.iter_mut().zip(ic) {
+        for (o, i) in o.iter_mut().zip(i) {
+            *o = matrix_c32(*i);
+        }
+        core::hint::black_box(());
+    }
+    for (o, i) in or.iter_mut().zip(ir) {
+        *o = matrix_c32(*i);
+    }
+}
+
 impl StereoMatrix<C32> for Fallback {
     fn stereo_matrix(&self, input: &[C32], output: &mut [C32]) -> Result<()> {
         check_len(input.len(), output.len())?;
-        for (o, i) in output.iter_mut().zip(input) {
-            let d2 = i.im + i.im;
-            *o = C32::new(i.re + d2, i.re - d2);
+        match MATRIX_BLOCK {
+            8 => matrix_blocks::<8>(input, output),
+            4 => matrix_blocks::<4>(input, output),
+            _ => {
+                for (o, i) in output.iter_mut().zip(input) {
+                    *o = matrix_c32(*i);
+                }
+            }
         }
         Ok(())
     }
@@ -368,6 +423,48 @@ impl StereoEncodeRds for Fallback {
 mod tests {
     use super::*;
     use crate::Fallback;
+
+    /// The block forms of the `C32` matrix give the pairs of the plain form bit for bit, for
+    /// every length (whole blocks and the rest), with signed zeros, infinities and a NaN in one
+    /// component.
+    #[test]
+    fn c32_matrix_blocks_equal_the_pairs() {
+        let mut seed = 7u32;
+        let mut next = || {
+            seed = seed.wrapping_mul(1_664_525).wrapping_add(1_013_904_223);
+            (seed >> 8) as f32 / 8_388_608.0 - 1.0
+        };
+        let specials = [
+            0.0,
+            -0.0,
+            f32::INFINITY,
+            f32::NEG_INFINITY,
+            f32::NAN,
+            1e-45,
+            f32::MAX,
+        ];
+        let mut input: std::vec::Vec<C32> = (0..300).map(|_| C32::new(next(), next())).collect();
+        for (k, &v) in specials.iter().enumerate() {
+            input[3 * k] = C32::new(v, next());
+            input[3 * k + 1] = C32::new(next(), v);
+        }
+        let bits = |v: &[C32]| -> std::vec::Vec<(u32, u32)> {
+            v.iter().map(|c| (c.re.to_bits(), c.im.to_bits())).collect()
+        };
+        for n in [0, 1, 3, 4, 7, 8, 9, 15, 16, 17, 64, 299, 300] {
+            let x = &input[..n];
+            let want: std::vec::Vec<C32> = x.iter().map(|&i| matrix_c32(i)).collect();
+            let mut got4 = std::vec![C32::default(); n];
+            let mut got8 = std::vec![C32::default(); n];
+            let mut got = std::vec![C32::default(); n];
+            matrix_blocks::<4>(x, &mut got4);
+            matrix_blocks::<8>(x, &mut got8);
+            Fallback.stereo_matrix(x, &mut got).unwrap();
+            assert_eq!(bits(&got4), bits(&want), "n {n}");
+            assert_eq!(bits(&got8), bits(&want), "n {n}");
+            assert_eq!(bits(&got), bits(&want), "n {n}");
+        }
+    }
 
     /// `flush_clamp` is the clamp of the flushed value bit for bit: around the flush threshold
     /// and the limits, the signed zeros, the infinities and NaN, for limits from 0 to infinity

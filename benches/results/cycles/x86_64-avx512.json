@@ -1765,11 +1765,11 @@
             },
             "cpu": "sapphirerapids",
             "ours": {
-              "coverage": 0.9920054221414378,
-              "cycles_per_sample": 0.6089466404695688,
-              "efficiency": 0.8359519137697256
+              "coverage": 0.9931144965264407,
+              "cycles_per_sample": 0.6085111950094373,
+              "efficiency": 0.8361814729527735
             },
-            "ratio": 0.08213169587814736
+            "ratio": 0.08207296515902317
           },
           "cycle_mode": "whole-loop",
           "reference_model": {
@@ -1780,11 +1780,11 @@
             },
             "cpu": "znver4",
             "ours": {
-              "coverage": 0.9920054221414378,
-              "cycles_per_sample": 0.643228276033579,
-              "efficiency": 0.7909779614325071
+              "coverage": 0.9931144965264407,
+              "cycles_per_sample": 0.6427717544133438,
+              "efficiency": 0.7912294691671784
             },
-            "ratio": 0.10368673461789975
+            "ratio": 0.1036131445133469
           },
           "samples": 65536,
           "snr_db": {
@@ -1841,11 +1841,11 @@
             },
             "cpu": "sapphirerapids",
             "ours": {
-              "coverage": 0.9926535972748539,
-              "cycles_per_sample": 0.8445675706116866,
-              "efficiency": 0.7512081620648032
+              "coverage": 0.9922184384486186,
+              "cycles_per_sample": 0.7093172028956614,
+              "efficiency": 0.7174040110935547
             },
-            "ratio": 0.6629371884322119
+            "ratio": 0.5567733933398363
           },
           "cycle_mode": "whole-loop",
           "reference_model": {
@@ -1856,11 +1856,11 @@
             },
             "cpu": "znver4",
             "ours": {
-              "coverage": 0.9926535972748539,
-              "cycles_per_sample": 0.7293780805089375,
-              "efficiency": 0.8695417598888584
+              "coverage": 0.9922184384486186,
+              "cycles_per_sample": 0.5527017616843538,
+              "efficiency": 0.9202893711741791
             },
-            "ratio": 1.309635527025692
+            "ratio": 0.9924041896713505
           },
           "samples": 65536,
           "snr_db": {
@@ -1917,11 +1917,11 @@
             },
             "cpu": "sapphirerapids",
             "ours": {
-              "coverage": 0.9912306957490845,
-              "cycles_per_sample": 1.3266336541426809,
-              "efficiency": 0.6273764258555133
+              "coverage": 0.9911717841608888,
+              "cycles_per_sample": 1.2285128125988614,
+              "efficiency": 0.7717192658140796
             },
-            "ratio": 1.0411889807325472
+            "ratio": 0.964180276274759
           },
           "cycle_mode": "whole-loop",
           "reference_model": {
@@ -1932,11 +1932,11 @@
             },
             "cpu": "znver4",
             "ours": {
-              "coverage": 0.9912306957490845,
-              "cycles_per_sample": 1.2194436725817228,
-              "efficiency": 0.6825232678386763
+              "coverage": 0.9911717841608888,
+              "cycles_per_sample": 0.9297781060211849,
+              "efficiency": 0.63291608715809
             },
-            "ratio": 1.8052563418837855
+            "ratio": 1.3764373543272066
           },
           "samples": 65536,
           "snr_db": {
@@ -1993,11 +1993,11 @@
             },
             "cpu": "sapphirerapids",
             "ours": {
-              "coverage": 0.9927905643871979,
-              "cycles_per_sample": 0.3108211674595204,
-              "efficiency": 0.8304158804378354
+              "coverage": 0.990377364182076,
+              "cycles_per_sample": 0.3103545932881316,
+              "efficiency": 0.8320227485742427
             },
-            "ratio": 0.08379390119390459
+            "ratio": 0.08366811802946784
           },
           "cycle_mode": "whole-loop",
           "reference_model": {
@@ -2008,11 +2008,11 @@
             },
             "cpu": "znver4",
             "ours": {
-              "coverage": 0.9927905643871979,
-              "cycles_per_sample": 0.32847038098429376,
-              "efficiency": 0.7851974410708873
+              "coverage": 0.990377364182076,
+              "cycles_per_sample": 0.32794204381009523,
+              "efficiency": 0.7870257267960837
             },
-            "ratio": 0.10583384040331639
+            "ratio": 0.10566360906615378
           },
           "samples": 65536,
           "snr_db": {
@@ -2069,11 +2069,11 @@
             },
             "cpu": "sapphirerapids",
             "ours": {
-              "coverage": 0.9930945535642314,
-              "cycles_per_sample": 0.4284948368155079,
-              "efficiency": 0.748596524947002
+              "coverage": 0.9932050856159212,
+              "cycles_per_sample": 0.3607655802146561,
+              "efficiency": 0.7149500393484844
             },
-            "ratio": 0.6701091125539145
+            "ratio": 0.5641895351512247
           },
           "cycle_mode": "whole-loop",
           "reference_model": {
@@ -2084,11 +2084,11 @@
             },
             "cpu": "znver4",
             "ours": {
-              "coverage": 0.9930945535642314,
-              "cycles_per_sample": 0.371647200382117,
-              "efficiency": 0.8624413347400869
+              "coverage": 0.9932050856159212,
+              "cycles_per_sample": 0.2833560441225238,
+              "efficiency": 0.9093984766729705
             },
-            "ratio": 1.3164635246002534
+            "ratio": 1.003715072194237
           },
           "samples": 65536,
           "snr_db": {
@@ -2145,11 +2145,11 @@
             },
             "cpu": "sapphirerapids",
             "ours": {
-              "coverage": 0.9933180916772979,
-              "cycles_per_sample": 0.6690456973257288,
-              "efficiency": 0.6274200066125417
+              "coverage": 0.9926271518329957,
+              "cycles_per_sample": 0.6198323812075108,
+              "efficiency": 0.7702426278165875
             },
-            "ratio": 1.0463547835107725
+            "ratio": 0.9693875614831048
           },
           "cycle_mode": "whole-loop",
           "reference_model": {
@@ -2160,11 +2160,11 @@
             },
             "cpu": "znver4",
             "ours": {
-              "coverage": 0.9933180916772979,
-              "cycles_per_sample": 0.6147178398124563,
-              "efficiency": 0.6823906663574644
+              "coverage": 0.9926271518329957,
+              "cycles_per_sample": 0.4720078744230012,
+              "efficiency": 0.63076770761142
             },
-            "ratio": 1.797200882969299
+            "ratio": 1.3799712872173755
           },
           "samples": 65536,
           "snr_db": {
@@ -6851,32 +6851,32 @@
           "comparison_kind": "library",
           "counter_model": {
             "comparison": {
-              "coverage": 0.9922747705310759,
-              "cycles_per_sample": 0.525937991672092,
+              "coverage": 0.9920678171359371,
+              "cycles_per_sample": 0.5260477066040039,
               "efficiency": 0.718562874251497
             },
             "cpu": "sapphirerapids",
             "ours": {
-              "coverage": 0.9919810434757481,
-              "cycles_per_sample": 0.38566341897097256,
-              "efficiency": 0.9912508535363527
+              "coverage": 0.9919898209999711,
+              "cycles_per_sample": 0.38565139254527303,
+              "efficiency": 0.9912729941447692
             },
-            "ratio": 0.7332868609564589
+            "ratio": 0.7331110614185837
           },
           "cycle_mode": "whole-loop",
           "reference_model": {
             "comparison": {
-              "coverage": 0.9922747705310759,
-              "cycles_per_sample": 0.7054497612847221,
+              "coverage": 0.9920678171359371,
+              "cycles_per_sample": 0.705596923828125,
               "efficiency": 0.5357142857142857
             },
             "cpu": "znver4",
             "ours": {
-              "coverage": 0.9919810434757481,
-              "cycles_per_sample": 0.575917082168483,
-              "efficiency": 0.6634501974325225
+              "coverage": 0.9919898209999711,
+              "cycles_per_sample": 0.5759156779033033,
+              "efficiency": 0.6632322744550876
             },
-            "ratio": 0.8163828436480833
+            "ratio": 0.816210584902705
           },
           "samples": 65536,
           "snr_db": {
@@ -6965,32 +6965,32 @@
           "comparison_kind": "library",
           "counter_model": {
             "comparison": {
-              "coverage": 0.9920277716107938,
-              "cycles_per_sample": 0.793828582763672,
+              "coverage": 0.9918776296804528,
+              "cycles_per_sample": 0.7939487457275392,
               "efficiency": 0.9523809523809524
             },
             "cpu": "sapphirerapids",
             "ours": {
-              "coverage": 0.9924695050022636,
-              "cycles_per_sample": 0.7752127356278269,
-              "efficiency": 0.8123476848090982
+              "coverage": 0.9931552865939595,
+              "cycles_per_sample": 0.5412043889363607,
+              "efficiency": 0.9302325581395349
             },
-            "ratio": 0.9765492859037211
+            "ratio": 0.6816616209153717
           },
           "cycle_mode": "whole-loop",
           "reference_model": {
             "comparison": {
-              "coverage": 0.9920277716107938,
-              "cycles_per_sample": 0.5266989644368489,
+              "coverage": 0.9918776296804528,
+              "cycles_per_sample": 0.5267786916097005,
               "efficiency": 0.9569377990430623
             },
             "cpu": "znver4",
             "ours": {
-              "coverage": 0.9924695050022636,
-              "cycles_per_sample": 0.7720640242727179,
-              "efficiency": 0.8156606851549756
+              "coverage": 0.9931552865939595,
+              "cycles_per_sample": 0.5261010106404622,
+              "efficiency": 0.9569377990430623
             },
-            "ratio": 1.4658544565361267
+            "ratio": 0.998713537620196
           },
           "samples": 65536,
           "snr_db": {

@@ -2765,10 +2765,10 @@
       "status": "release"
     },
     "avx512": {
-      "status": "dev"
+      "status": "release"
     },
     "neon": {
-      "status": "dev"
+      "status": "release"
     },
     "simd128": {
       "status": "release"
@@ -2785,10 +2785,10 @@
       "status": "release"
     },
     "avx512": {
-      "status": "dev"
+      "status": "release"
     },
     "neon": {
-      "status": "dev"
+      "status": "release"
     },
     "simd128": {
       "status": "release"
@@ -2799,19 +2799,16 @@
       "status": "release"
     },
     "sse4.2": {
-      "status": "dev",
-      "waiver": "1.658 / 1.621 (4.70 / 4.41 against 2.83 / 2.72 cycles per sample on skylake / znver2, CI run 45490280535) of VOLK's `volk_32f_s32f_x2_convert_8u_generic`, which GCC vectorizes for the level, above the dev limit of 1.50; the fallback's offset-binary conversion is the open item I13.1-14, awaiting the maintainer's decision"
+      "status": "dev"
     },
     "avx2": {
       "status": "dev"
     },
     "avx512": {
-      "status": "dev",
-      "waiver": "1.805 / 1.041 (1.22 / 1.33 against 0.68 / 1.27 cycles per sample on znver4 / sapphirerapids, CI run 45490280535) of VOLK's `volk_32f_s32f_x2_convert_8u_generic`, which GCC vectorizes for the level, above the dev limit of 1.50; the fallback's offset-binary conversion is the open item I13.1-14, awaiting the maintainer's decision"
+      "status": "dev"
     },
     "neon": {
-      "status": "dev",
-      "waiver": "1.456 / 1.532 (7.14 / 4.35 against 4.90 / 2.84 cycles per sample on cortex-a72 / cortex-a76, CI run 45490280535) of VOLK's `volk_32f_s32f_x2_convert_8u_generic`, which GCC vectorizes for the level, above the dev limit of 1.50; the fallback's offset-binary conversion is the open item I13.1-14, awaiting the maintainer's decision"
+      "status": "release"
     },
     "simd128": {
       "status": "release"
@@ -2822,19 +2819,16 @@
       "status": "release"
     },
     "sse4.2": {
-      "status": "dev",
-      "waiver": "1.661 / 1.623 (2.36 / 2.21 against 1.42 / 1.36 cycles per sample on skylake / znver2, CI run 45490280535) of VOLK's `volk_32f_s32f_x2_convert_8u_generic`, which GCC vectorizes for the level, above the dev limit of 1.50; the fallback's offset-binary conversion is the open item I13.1-14, awaiting the maintainer's decision"
+      "status": "dev"
     },
     "avx2": {
       "status": "dev"
     },
     "avx512": {
-      "status": "dev",
-      "waiver": "1.797 / 1.046 (0.61 / 0.67 against 0.34 / 0.64 cycles per sample on znver4 / sapphirerapids, CI run 45490280535) of VOLK's `volk_32f_s32f_x2_convert_8u_generic`, which GCC vectorizes for the level, above the dev limit of 1.50; the fallback's offset-binary conversion is the open item I13.1-14, awaiting the maintainer's decision"
+      "status": "dev"
     },
     "neon": {
-      "status": "dev",
-      "waiver": "1.457 / 1.533 (3.58 / 2.18 against 2.46 / 1.42 cycles per sample on cortex-a72 / cortex-a76, CI run 45490280535) of VOLK's `volk_32f_s32f_x2_convert_8u_generic`, which GCC vectorizes for the level, above the dev limit of 1.50; the fallback's offset-binary conversion is the open item I13.1-14, awaiting the maintainer's decision"
+      "status": "release"
     },
     "simd128": {
       "status": "release"
@@ -3667,7 +3661,8 @@
       "status": "release"
     },
     "avx512": {
-      "status": "release"
+      "status": "release",
+      "cycle_waiver": "the SIMD `mul` keeps the split `zmm` form of the maintainer's decision D945, while the fallback runs groups of four samples in 256-bit vectors again since D2974 (D2838, D2951): 0.53 / 0.54 cycles per sample of the fallback against 0.58 / 0.39 of the SIMD form on `znver4` / `sapphirerapids` (1.09 / 0.72 SIMD / fallback, CI run 45717818987), a trade between the models; `release` against KFR (0.816 / 0.733); kept with open item IO2-15"
     },
     "neon": {
       "status": "release"
@@ -3859,7 +3854,7 @@
       "status": "release"
     },
     "avx512": {
-      "status": "dev"
+      "status": "release"
     },
     "neon": {
       "status": "release"

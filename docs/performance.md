@@ -1730,7 +1730,7 @@ Reference model `znver4`, counter-model `sapphirerapids`, mode `whole-loop`; exe
 | `mul` | 0.58 | 0.71 | 0.82 | 0.39 | 0.53 | 0.73 | 150.1 / 148.5 | release | KFR 7.2.0 a * b on complex<float> (benches/refs/kfr-ops.cpp, avx512, -ffp-contract=off) |
 | `mul_cq15` | 0.70 | 0.81 | 0.86 | 0.59 | 1.08 | 0.55 | 94.4 / 94.4 | info | own (information): sdrk fallback |
 | `mul_cq15_fallback` | 0.81 | 1.06 | 0.77 | 1.08 | 1.66 | 0.65 | 94.4 / 19.6 | release | CMSIS-DSP 1.18.0 arm_cmplx_mult_cmplx_q15 (Q3.13, truncating, scaled by 4), generic C (-O3 -ffp-contract=off, LOOPUNROLL, avx512) |
-| `mul_fallback` | 0.53 | 0.53 | 1.00 | 0.54 | 0.79 | 0.68 | 148.5 / 148.5 | release | CMSIS-DSP 1.18.0 arm_cmplx_mult_cmplx_f32, generic C (-O3 -ffp-contract=off, LOOPUNROLL, avx512) |
+| `mul_fallback` | 0.77 | 0.53 | 1.47 | 0.78 | 0.79 | 0.98 | 148.5 / 148.5 | dev | CMSIS-DSP 1.18.0 arm_cmplx_mult_cmplx_f32, generic C (-O3 -ffp-contract=off, LOOPUNROLL, avx512) |
 | `mul_real` | 0.10 | 0.12 | 0.84 | 0.07 | 0.09 | 0.71 | 151.8 / 151.8 | release | volk_32f_x2_multiply_32f |
 | `mul_real_fallback` | 0.19 | 0.20 | 0.96 | 0.14 | 0.18 | 0.76 | 151.8 / 151.8 | release | CMSIS-DSP 1.18.0 arm_mult_f32, generic C (-O3 -ffp-contract=off, LOOPUNROLL, avx512) |
 | `mul_real_q15` | 0.07 | 0.24 | 0.29 | 0.05 | 0.26 | 0.21 | 91.6 / 91.6 | info | own (information): sdrk fallback |

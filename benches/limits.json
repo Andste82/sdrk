@@ -3667,8 +3667,7 @@
       "status": "release"
     },
     "avx512": {
-      "status": "release",
-      "cycle_waiver": "the SIMD `mul` keeps the split `zmm` form of the maintainer's decision D945 (open item IO1-1), while the fallback runs groups of four samples in 256-bit vectors since D2838: 0.53 / 0.54 cycles per sample of the fallback against 0.58 / 0.39 of the SIMD form on `znver4` / `sapphirerapids` (1.09 / 0.72 SIMD / fallback, CI run 45565079423); `release` against KFR (D2900); kept with open item IO1-1"
+      "status": "release"
     },
     "neon": {
       "status": "release"
@@ -3860,7 +3859,7 @@
       "status": "release"
     },
     "avx512": {
-      "status": "release"
+      "status": "dev"
     },
     "neon": {
       "status": "release"

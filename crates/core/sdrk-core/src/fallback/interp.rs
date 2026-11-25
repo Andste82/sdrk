@@ -6,12 +6,11 @@
 //! registers, two loads and one product per output for each tap ([`sums_contiguous`]). The
 //! engine's groups of 16 or 8 outputs load every sample of the group again for each tap; that
 //! only pays where the compiler turns them into wide vector products (`CQ15` in an AVX2 build,
-//! which keeps the engine).
+//! which keeps the engine). The `Q15` and `CQ15` kernels are those of
+//! [`FallbackAt`](super::target::FallbackAt), whose target decides these forms (D2840).
 
 use crate::Fallback;
 use crate::error::{Error, Result};
-#[cfg(target_feature = "avx2")]
-use crate::kernels::decim::Resample;
 use crate::kernels::decim::ResampleReal;
 use crate::kernels::filter::update_history;
 use crate::kernels::interp::{
@@ -22,7 +21,8 @@ use crate::num::sat16;
 use crate::timing::Progress;
 use crate::types::{C32, CQ15, Q15};
 
-use super::decim::{FbMac, Out, branch_len, polyphase, single};
+use super::decim::{FbMac, Out, branch_len, polyphase, polyphase_at, single};
+use super::target::{FallbackAt, Native, Target};
 
 macro_rules! interpolate_impl {
     ($tr:ident, $method:ident, $inner:ident, $resample:ident, $state:ident, $t:ty, $tap:ty) => {
@@ -249,21 +249,6 @@ interpolate_impl!(
     f32,
     f32
 );
-// In an AVX2 build the compiler turns the 8 outputs of the engine's `CQ15` group into vector
-// products, which simulated faster on `znver3` than the ring (79.42 against 82.77 cycles per
-// sample); the SIMD backend runs this fallback at `avx2` and `avx512`.
-#[cfg(target_feature = "avx2")]
-interpolate_impl!(
-    FirInterpolate,
-    fir_interpolate,
-    Resample,
-    resample,
-    FirInterpState,
-    CQ15,
-    Q15
-);
-
-#[cfg(not(target_feature = "avx2"))]
 impl FirInterpolate<CQ15> for Fallback {
     fn fir_interpolate<Taps, Hist>(
         &self,
@@ -275,8 +260,30 @@ impl FirInterpolate<CQ15> for Fallback {
         Taps: AsRef<[Q15]>,
         Hist: AsRef<[CQ15]> + AsMut<[CQ15]>,
     {
+        FallbackAt(Native).fir_interpolate(state, input, output)
+    }
+}
+
+impl<B: Target> FirInterpolate<CQ15> for FallbackAt<B> {
+    fn fir_interpolate<Taps, Hist>(
+        &self,
+        state: &mut FirInterpState<CQ15, Taps, Hist>,
+        input: &[CQ15],
+        output: &mut [CQ15],
+    ) -> Result<Progress>
+    where
+        Taps: AsRef<[Q15]>,
+        Hist: AsRef<[CQ15]> + AsMut<[CQ15]>,
+    {
         let p = state.inner_mut().parts_mut();
-        interpolate::<CQ15, CQ15_GROUP>(p.taps, p.hist, p.up, p.q, input, output)
+        // With AVX2 the compiler turns the 8 outputs of the engine's `CQ15` group into vector
+        // products, which simulated faster on `znver3` than the ring (79.42 against 82.77 cycles
+        // per sample); the SIMD backend runs this fallback at `avx2` and `avx512`.
+        if B::AVX2 {
+            polyphase_at(self.0, p.taps, p.hist, p.up, p.down, p.q, input, output)
+        } else {
+            interpolate::<B, CQ15, CQ15_GROUP>(self.0, p.taps, p.hist, p.up, p.q, input, output)
+        }
     }
 }
 
@@ -291,14 +298,34 @@ impl FirInterpolateReal<Q15> for Fallback {
         Taps: AsRef<[Q15]>,
         Hist: AsRef<[Q15]> + AsMut<[Q15]>,
     {
+        FallbackAt(Native).fir_interpolate_real(state, input, output)
+    }
+}
+
+impl<B: Target> FirInterpolateReal<Q15> for FallbackAt<B> {
+    fn fir_interpolate_real<Taps, Hist>(
+        &self,
+        state: &mut FirInterpRealState<Q15, Taps, Hist>,
+        input: &[Q15],
+        output: &mut [Q15],
+    ) -> Result<Progress>
+    where
+        Taps: AsRef<[Q15]>,
+        Hist: AsRef<[Q15]> + AsMut<[Q15]>,
+    {
         let p = state.inner_mut().parts_mut();
-        interpolate::<Q15, Q15_GROUP>(p.taps, p.hist, p.up, p.q, input, output)
+        let target = self.0;
+        if B::AVX2 {
+            interpolate::<B, Q15, AVX2_Q15_GROUP>(target, p.taps, p.hist, p.up, p.q, input, output)
+        } else {
+            interpolate::<B, Q15, Q15_GROUP>(target, p.taps, p.hist, p.up, p.q, input, output)
+        }
     }
 }
 
 /// Outputs of one branch that [`groups`] computes together for `Q15` (one `i64` sum each): 8 on
-/// AArch64, wasm32 and x86-64 from AVX2 (8 sums and 8 samples in registers or locals), 4
-/// elsewhere: 32-bit Arm has 13 registers for `i64` sums of two each, and x86-64 below AVX2
+/// AArch64, wasm32 and x86-64 from AVX2 (8 sums and 8 samples in registers or locals; with a
+/// [`Target`] of AVX2 [`AVX2_Q15_GROUP`]), 4 elsewhere: 32-bit Arm has 13 registers for `i64` sums of two each, and x86-64 below AVX2
 /// spills from its 16 registers (`fir_interpolate_real_q15_fallback` at `sse2`, `skylake` /
 /// `znver2`: 74.97 / 112.89 cycles per sample with 8, 70.71 / 101.24 with 4, 72.04 / 106.40
 /// with 6; `cargo measure`).
@@ -314,10 +341,11 @@ const Q15_GROUP: usize = 8;
     all(target_arch = "x86_64", target_feature = "avx2")
 )))]
 const Q15_GROUP: usize = 4;
-/// The same for `CQ15` (two sums each): 4, 8 on wasm32, 2 on 32-bit Arm (not used in an AVX2
-/// build).
+/// [`Q15_GROUP`] of x86-64 from AVX2.
+const AVX2_Q15_GROUP: usize = 8;
+/// The same for `CQ15` (two sums each): 4, 8 on wasm32, 2 on 32-bit Arm (not used with AVX2,
+/// which runs the engine).
 #[cfg(not(any(target_arch = "arm", target_arch = "wasm32")))]
-#[cfg_attr(target_feature = "avx2", allow(dead_code))]
 const CQ15_GROUP: usize = 4;
 #[cfg(target_arch = "wasm32")]
 const CQ15_GROUP: usize = 8;
@@ -332,8 +360,9 @@ const TAP_COPY: usize = 128;
 const MAX_GROUP: usize = 8;
 
 /// `resample` with `up = l` and `down = 1` (the plan of `fallback::decim::polyphase`), each
-/// branch evaluated by [`branch`].
-fn interpolate<T: Ring, const G: usize>(
+/// branch evaluated by [`branch`], its groups compiled for the target `B`.
+fn interpolate<B: Target, T: Ring, const G: usize>(
+    target: B,
     taps: &[T::Tap],
     hist: &mut [T],
     l: usize,
@@ -361,7 +390,7 @@ fn interpolate<T: Ring, const G: usize>(
             .unwrap_or_default()
             .iter_mut()
             .step_by(l);
-        branch::<T, G>(taps, l, hist, input, phase, seen, count, dst)?;
+        branch::<B, T, G>(target, taps, l, hist, input, phase, seen, count, dst)?;
     }
     update_history(hist, input.get(..consumed).ok_or_else(internal)?)?;
     Ok(Progress { consumed, produced })
@@ -417,7 +446,8 @@ fn plan(l: usize, q: &mut i64, inputs: usize, room: usize) -> Result<(usize, usi
 /// first copied into a contiguous buffer, so that the group reads its taps without the stride
 /// and without a bounds check per tap.
 #[allow(clippy::too_many_arguments)]
-fn branch<'a, T: Ring + 'a, const G: usize>(
+fn branch<'a, B: Target, T: Ring + 'a, const G: usize>(
+    target: B,
     taps: &[T::Tap],
     l: usize,
     hist: &[T],
@@ -471,7 +501,7 @@ fn branch<'a, T: Ring + 'a, const G: usize>(
             let head = input.get(..at + G - 1).ok_or_else(internal)?;
             from_input.copy_from_slice(head);
             let stitched = window.get(..len + G - 1).ok_or_else(internal)?;
-            groups::<T, G, _>(hs, len, stitched, len, 1, &mut dst)?;
+            groups::<B, T, G, _>(target, hs, len, stitched, len, 1, &mut dst)?;
             t += G;
         }
         hs
@@ -482,7 +512,7 @@ fn branch<'a, T: Ring + 'a, const G: usize>(
         let at = seen + t;
         if at >= len && t + G <= count {
             let n = (count - t) / G;
-            groups::<T, G, _>(hs, len, input, at, n, &mut dst)?;
+            groups::<B, T, G, _>(target, hs, len, input, at, n, &mut dst)?;
             t += n * G;
         } else {
             *dst.next().ok_or_else(internal)? = single_exact(hs, len, hist, input, at)?;
@@ -602,9 +632,52 @@ enum BranchTaps<'a> {
 
 /// `n` groups of `G` outputs of a branch of `len >= 1` taps, written to `dst` in order: group
 /// `g` holds the outputs whose windows end after `at + g G, at + g G + 1, ...` samples of `x`.
-/// One function for all groups of a call, so that the outputs go to `dst` from registers.
+/// One function for all groups of a call, so that the outputs go to `dst` from registers: the
+/// function of the build for [`Native`], the same loop through [`Target::hot`] otherwise.
+#[allow(
+    clippy::inline_always,
+    reason = "the choice of the out-of-line function must vanish"
+)]
+#[inline(always)]
+fn groups<'a, B: Target, T: Ring + 'a, const G: usize, D: Iterator<Item = &'a mut T>>(
+    target: B,
+    hs: BranchTaps<'_>,
+    len: usize,
+    x: &[T],
+    at: usize,
+    n: usize,
+    dst: &mut D,
+) -> Result<()> {
+    if B::NATIVE {
+        groups_native::<T, G, D>(hs, len, x, at, n, dst)
+    } else {
+        target.hot(
+            #[inline(always)]
+            move || groups_loop::<T, G, D>(hs, len, x, at, n, dst),
+        )
+    }
+}
+
+/// [`groups`] in the build.
 #[inline(never)]
-fn groups<'a, T: Ring + 'a, const G: usize, D: Iterator<Item = &'a mut T>>(
+fn groups_native<'a, T: Ring + 'a, const G: usize, D: Iterator<Item = &'a mut T>>(
+    hs: BranchTaps<'_>,
+    len: usize,
+    x: &[T],
+    at: usize,
+    n: usize,
+    dst: &mut D,
+) -> Result<()> {
+    groups_loop::<T, G, D>(hs, len, x, at, n, dst)
+}
+
+/// The loop of [`groups`].
+#[allow(
+    clippy::inline_always,
+    reason = "the loop is compiled in the function of its target"
+)]
+#[inline(always)]
+fn groups_loop<'a, T: Ring + 'a, const G: usize, D: Iterator<Item = &'a mut T>>(
     hs: BranchTaps<'_>,
     len: usize,
     x: &[T],

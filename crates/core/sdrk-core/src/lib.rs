@@ -37,7 +37,7 @@ mod types;
 pub mod window;
 
 pub use error::{Error, Result};
-pub use fallback::Fallback;
+pub use fallback::{Fallback, FallbackAt, Native, Target};
 #[cfg(feature = "reference")]
 pub use reference::{REFERENCE_IN_PLACE_MAX, Reference};
 pub use timing::*;

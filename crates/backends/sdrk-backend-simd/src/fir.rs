@@ -117,7 +117,8 @@ enum Q15Kernel {
 /// only at that level ([`crate::level::compiled_for`]): in a build that detects a higher level
 /// at run time the fallback would be the code of the lower level (`fir` `CQ15` at `avx2`
 /// detected in an SSE2 build: 530 instead of 214 instructions per sample), and the SIMD branch
-/// stays. An entry is removed when its kernel gets a grouped SIMD branch.
+/// stays, except for the rows of [`runtime_avx2`]. An entry is removed when its kernel gets a
+/// grouped SIMD branch.
 fn runs_fallback(kernel: Q15Kernel) -> bool {
     use Q15Kernel::{Fir, FirDecimate, FirInterpolate, FirInterpolateReal, Resample};
     match crate::level::compiled_for() {
@@ -130,6 +131,77 @@ fn runs_fallback(kernel: Q15Kernel) -> bool {
         Some("neon") => matches!(kernel, FirDecimate | FirInterpolateReal),
         Some("simd128") => matches!(kernel, FirInterpolate | FirInterpolateReal),
         _ => false,
+    }
+}
+
+/// The fallback of `kernel` with its loops compiled for AVX2, where a build that detects the level
+/// at run time detects exactly AVX2 and the row `avx2` of [`runs_fallback`] has `kernel`
+/// (decision D2840): `fir`, `fir_interpolate` and `fir_interpolate_real`. The fallback of the
+/// build would be the code of its baseline (SSE2); [`sdrk_core::FallbackAt`] compiles the same
+/// loops with the features of `x86-64-v3` and takes the forms of a build for that level, so the
+/// run-time build runs the code of the build fixed at `avx2`, bit for bit the same outputs.
+/// `None` in a build compiled for the detected level (there [`runs_fallback`] decides) and at
+/// every other level.
+#[cfg(all(feature = "std", target_arch = "x86_64"))]
+fn runtime_avx2(kernel: Q15Kernel) -> Option<sdrk_core::FallbackAt<runtime::Avx2Loops>> {
+    use Q15Kernel::{Fir, FirInterpolate, FirInterpolateReal};
+    if !matches!(kernel, Fir | FirInterpolate | FirInterpolateReal)
+        || crate::level::compiled_for().is_some()
+    {
+        return None;
+    }
+    match crate::level::current() {
+        fearless_simd::Level::Avx2(t) => Some(sdrk_core::FallbackAt(runtime::Avx2Loops::new(t))),
+        _ => None,
+    }
+}
+
+/// The target of [`runtime_avx2`].
+#[cfg(all(feature = "std", target_arch = "x86_64"))]
+#[allow(unsafe_code)]
+mod runtime {
+    use fearless_simd::Avx2;
+    use sdrk_core::Target;
+
+    /// The loops of the fallback compiled with AVX2 (the features of `fearless_simd`'s `Avx2`,
+    /// those of `x86-64-v3`). Made only from the token, which proves the features.
+    #[derive(Clone, Copy)]
+    pub(crate) struct Avx2Loops(Avx2);
+
+    impl Avx2Loops {
+        pub(super) fn new(token: Avx2) -> Self {
+            Self(token)
+        }
+
+        /// Runs `f`, a whole kernel, compiled with AVX2: the code around the loops too.
+        #[inline(always)]
+        pub(super) fn run<R>(self, f: impl FnOnce() -> R) -> R {
+            self.hot(f)
+        }
+    }
+
+    impl Target for Avx2Loops {
+        const NATIVE: bool = false;
+        const AVX2: bool = true;
+        #[allow(
+            clippy::inline_always,
+            reason = "only the call of the AVX2 function remains"
+        )]
+        #[inline(always)]
+        fn hot<R>(self, f: impl FnOnce() -> R) -> R {
+            let Self(_token) = self;
+            // SAFETY: `Avx2Loops` holds an `Avx2` token, which `fearless_simd` makes only when
+            // the CPU has these features (its run-time detection, or a build that enables them).
+            unsafe { with_avx2(f) }
+        }
+    }
+
+    /// `f` in a function of its own compiled with the target features of `fearless_simd`'s
+    /// `Avx2` (`f` is an `#[inline(always)]` closure, so its body is compiled here).
+    #[inline(never)]
+    #[target_feature(enable = "avx2,bmi1,bmi2,cmpxchg16b,f16c,fma,fxsr,lzcnt,movbe,popcnt,xsave")]
+    fn with_avx2<R>(f: impl FnOnce() -> R) -> R {
+        f()
     }
 }
 
@@ -2385,6 +2457,13 @@ impl Fir<CQ15> for Simd {
         Taps: AsRef<[Q15]>,
         Hist: AsRef<[CQ15]> + AsMut<[CQ15]>,
     {
+        #[cfg(all(feature = "std", target_arch = "x86_64"))]
+        if let Some(fb) = runtime_avx2(Q15Kernel::Fir) {
+            return fb.0.run(
+                #[inline(always)]
+                || fb.fir(state, input, output),
+            );
+        }
         if state.taps().len() > PREP_TAPS || runs_fallback(Q15Kernel::Fir) {
             return Fallback.fir(state, input, output);
         }
@@ -3130,6 +3209,13 @@ macro_rules! interpolate_q15_impl {
                 Tp: AsRef<[Q15]>,
                 Hist: AsRef<[$t]> + AsMut<[$t]>,
             {
+                #[cfg(all(feature = "std", target_arch = "x86_64"))]
+                if let Some(fb) = runtime_avx2(Q15Kernel::$kernel) {
+                    return fb.0.run(
+                        #[inline(always)]
+                        || fb.$method(state, input, output),
+                    );
+                }
                 if runs_fallback(Q15Kernel::$kernel) {
                     return Fallback.$method(state, input, output);
                 }
@@ -3155,3 +3241,110 @@ interpolate_q15_impl!(
     Q15,
     FirInterpolateReal
 );
+
+#[cfg(all(test, feature = "std", target_arch = "x86_64"))]
+#[allow(clippy::indexing_slicing, clippy::unwrap_used)]
+mod tests {
+    //! The route of [`runtime_avx2`]: taken in a run-time build that detects exactly AVX2, for
+    //! its three kernels, and the outputs of the fallback bit for bit (the kernel tests in
+    //! `tests/` check the outputs against the definition at every level).
+
+    extern crate std;
+
+    use std::vec;
+    use std::vec::Vec;
+
+    use sdrk_core::kernels::filter::{Fir, FirState};
+    use sdrk_core::kernels::interp::{
+        FirInterpRealState, FirInterpState, FirInterpolate, FirInterpolateReal,
+    };
+    use sdrk_core::{CQ15, Fallback, Q15};
+
+    use super::{Q15Kernel, runtime_avx2};
+
+    fn noise(s: &mut u32, n: usize) -> Vec<Q15> {
+        (0..n)
+            .map(|_| {
+                *s = s.wrapping_mul(1_664_525).wrapping_add(1_013_904_223);
+                Q15((*s >> 12) as i16)
+            })
+            .collect()
+    }
+
+    fn cq15(v: &[Q15]) -> Vec<CQ15> {
+        v.chunks_exact(2)
+            .map(|p| CQ15 { re: p[0], im: p[1] })
+            .collect()
+    }
+
+    #[test]
+    fn the_route_is_taken_where_avx2_is_detected_at_run_time() {
+        let detected = matches!(crate::level::current(), fearless_simd::Level::Avx2(_));
+        let expected = detected && crate::level::compiled_for().is_none();
+        for k in [
+            Q15Kernel::Fir,
+            Q15Kernel::FirInterpolate,
+            Q15Kernel::FirInterpolateReal,
+        ] {
+            assert_eq!(runtime_avx2(k).is_some(), expected);
+        }
+        for k in [
+            Q15Kernel::FirDecimate,
+            Q15Kernel::Resample,
+            Q15Kernel::ResampleReal,
+        ] {
+            assert!(runtime_avx2(k).is_none());
+        }
+    }
+
+    #[test]
+    fn the_route_gives_the_bits_of_the_fallback() {
+        let Some(fb) = runtime_avx2(Q15Kernel::Fir) else {
+            return;
+        };
+        let mut s = 7;
+        for (n, l) in [(1usize, 2usize), (31, 2), (64, 4), (127, 3), (300, 8)] {
+            let taps = noise(&mut s, n);
+            let mut a =
+                FirState::<CQ15, _, _>::new(taps.clone(), vec![CQ15::default(); n - 1]).unwrap();
+            let mut b =
+                FirState::<CQ15, _, _>::new(taps.clone(), vec![CQ15::default(); n - 1]).unwrap();
+            let h = n.div_ceil(l);
+            let mut ia =
+                FirInterpState::<CQ15, _, _>::new(taps.clone(), vec![CQ15::default(); h], l)
+                    .unwrap();
+            let mut ib =
+                FirInterpState::<CQ15, _, _>::new(taps.clone(), vec![CQ15::default(); h], l)
+                    .unwrap();
+            let mut ra =
+                FirInterpRealState::<Q15, _, _>::new(taps.clone(), vec![Q15(0); h], l).unwrap();
+            let mut rb = FirInterpRealState::<Q15, _, _>::new(taps, vec![Q15(0); h], l).unwrap();
+            for len in [0usize, 1, 9, 100, 333] {
+                let x = cq15(&noise(&mut s, 2 * len));
+                let (mut ya, mut yb) = (vec![CQ15::default(); len], vec![CQ15::default(); len]);
+                Fallback.fir(&mut a, &x, &mut ya).unwrap();
+                fb.0.run(|| fb.fir(&mut b, &x, &mut yb)).unwrap();
+                assert_eq!(ya, yb, "fir {n} taps, {len} samples");
+                let room = len * l - len % 2;
+                let (mut ya, mut yb) = (vec![CQ15::default(); room], vec![CQ15::default(); room]);
+                let pa = Fallback.fir_interpolate(&mut ia, &x, &mut ya).unwrap();
+                let pb =
+                    fb.0.run(|| fb.fir_interpolate(&mut ib, &x, &mut yb))
+                        .unwrap();
+                assert_eq!((pa.consumed, pa.produced), (pb.consumed, pb.produced));
+                assert_eq!(ya, yb, "fir_interpolate {n} taps, L {l}, {len} samples");
+                let x = noise(&mut s, len);
+                let (mut ya, mut yb) = (vec![Q15(0); room], vec![Q15(0); room]);
+                let pa = Fallback.fir_interpolate_real(&mut ra, &x, &mut ya).unwrap();
+                let pb =
+                    fb.0.run(|| fb.fir_interpolate_real(&mut rb, &x, &mut yb))
+                        .unwrap();
+                assert_eq!((pa.consumed, pa.produced), (pb.consumed, pb.produced));
+                assert_eq!(
+                    ya, yb,
+                    "fir_interpolate_real {n} taps, L {l}, {len} samples"
+                );
+            }
+        }
+    }
+}

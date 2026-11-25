@@ -143,8 +143,8 @@ impl BandPulseDetectBlockK {
             lanes.extend_from_within(..PERIOD * LANES);
         }
         let cfg = config();
-        let bytes =
-            BandPulseDetectBlock::<ArenaStorage<'static>>::storage_bytes(&cfg, LANES).expect("bytes");
+        let bytes = BandPulseDetectBlock::<ArenaStorage<'static>>::storage_bytes(&cfg, LANES)
+            .expect("bytes");
         let block = BandPulseDetectBlock::new(
             &cfg,
             Rate::hz(STEP_HZ).expect("rate"),

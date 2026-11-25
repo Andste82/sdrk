@@ -4377,8 +4377,8 @@ mod tests {
                 )
             );
             let power_db = match level {
-                "sse2" => (Reference::Kfr, vec![Reference::Volk]),
-                "simd128" => (Reference::Volk, Vec::new()),
+                // KFR at `sse2` (D2785) and at `simd128` (D2850).
+                "sse2" | "simd128" => (Reference::Kfr, vec![Reference::Volk]),
                 _ => (Reference::Sleef, vec![Reference::Volk]),
             };
             assert_eq!(

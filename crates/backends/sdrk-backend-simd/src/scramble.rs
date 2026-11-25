@@ -1596,7 +1596,9 @@ mod x86 {
     /// written by a `vmovaps` of `zero` (a register the loop keeps) before the gather, in an
     /// `asm!` block: the zero idiom the compiler emits for it (`vxorps`) waits for the gather of
     /// the step before in the `sapphirerapids` model, which serialised the loop (2.66 cycles
-    /// per sample, about 30 cycles per gather; with the copy 0.90, D2820).
+    /// per sample, about 30 cycles per gather; with the copy 0.90, D2820). The wait exists only
+    /// in the simulator: real cores break a zero idiom's dependency at rename, so on hardware
+    /// the copy gains nothing (open item IO1-8).
     #[target_feature(enable = "avx512f")]
     #[inline]
     fn gather16(t: &'static [f32; ENTRIES], e: __m512i, zero: __m512) -> __m512 {

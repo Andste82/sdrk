@@ -27,8 +27,8 @@
             "other": 150.98,
             "ours": 150.98
           },
-          "status": "info",
-          "verdict": "info"
+          "status": "release",
+          "verdict": "pass"
         },
         "add_cq15": {
           "compared_with": "volk_16i_x2_add_saturated_16i on the 2 n values",
@@ -52,8 +52,8 @@
             "other": 999.0,
             "ours": 999.0
           },
-          "status": "info",
-          "verdict": "info"
+          "status": "release",
+          "verdict": "pass"
         },
         "add_cq15_fallback": {
           "compared_with": "CMSIS-DSP 1.18.0 arm_add_q15 on the 2 n values, generic C (-O3 -ffp-contract=off, LOOPUNROLL, simd128)",
@@ -127,8 +127,8 @@
             "other": 150.97,
             "ours": 150.97
           },
-          "status": "info",
-          "verdict": "info"
+          "status": "release",
+          "verdict": "pass"
         },
         "add_real_fallback": {
           "compared_with": "CMSIS-DSP 1.18.0 arm_add_f32, generic C (-O3 -ffp-contract=off, LOOPUNROLL, simd128)",
@@ -177,8 +177,8 @@
             "other": 999.0,
             "ours": 999.0
           },
-          "status": "info",
-          "verdict": "info"
+          "status": "release",
+          "verdict": "pass"
         },
         "add_real_q15_fallback": {
           "compared_with": "CMSIS-DSP 1.18.0 arm_add_q15, generic C (-O3 -ffp-contract=off, LOOPUNROLL, simd128)",
@@ -989,8 +989,8 @@
             "other": 999.0,
             "ours": 999.0
           },
-          "status": "info",
-          "verdict": "info"
+          "status": "release",
+          "verdict": "pass"
         },
         "convert_cq15_cs8_fallback": {
           "compared_with": "CMSIS-DSP 1.18.0 arm_q7_to_q15, generic C (-O3 -ffp-contract=off, LOOPUNROLL, simd128)",
@@ -1066,8 +1066,8 @@
             "other": 999.0,
             "ours": 999.0
           },
-          "status": "info",
-          "verdict": "info"
+          "status": "release",
+          "verdict": "pass"
         },
         "convert_cq15_cu8_fallback": {
           "compared_with": "CMSIS-DSP 1.18.0 arm_q7_to_q15 on the bytes with the sign bit flipped (the CU8 conversion without its offset), generic C (-O3 -ffp-contract=off, LOOPUNROLL, simd128)",
@@ -1134,8 +1134,8 @@
             "other": 999.0,
             "ours": 999.0
           },
-          "status": "info",
-          "verdict": "info"
+          "status": "release",
+          "verdict": "pass"
         },
         "convert_cs16_fallback": {
           "compared_with": "CMSIS-DSP 1.18.0 arm_q15_to_float, generic C (-O3 -ffp-contract=off, LOOPUNROLL, simd128)",
@@ -1202,8 +1202,8 @@
             "other": 999.0,
             "ours": 999.0
           },
-          "status": "info",
-          "verdict": "info"
+          "status": "release",
+          "verdict": "pass"
         },
         "convert_cs8_fallback": {
           "compared_with": "CMSIS-DSP 1.18.0 arm_q7_to_float, generic C (-O3 -ffp-contract=off, LOOPUNROLL, simd128)",
@@ -1279,8 +1279,8 @@
             "other": 999.0,
             "ours": 999.0
           },
-          "status": "info",
-          "verdict": "info"
+          "status": "release",
+          "verdict": "pass"
         },
         "convert_cu8_fallback": {
           "compared_with": "CMSIS-DSP 1.18.0 arm_q7_to_float on the bytes with the sign bit flipped (the CU8 conversion without its offset), generic C (-O3 -ffp-contract=off, LOOPUNROLL, simd128)",
@@ -1809,8 +1809,8 @@
             "other": 999.0,
             "ours": 999.0
           },
-          "status": "info",
-          "verdict": "info"
+          "status": "release",
+          "verdict": "pass"
         },
         "convert_real_rs16_fallback": {
           "compared_with": "CMSIS-DSP 1.18.0 arm_q15_to_float, generic C (-O3 -ffp-contract=off, LOOPUNROLL, simd128)",
@@ -2477,8 +2477,8 @@
             "other": 999.0,
             "ours": 999.0
           },
-          "status": "info",
-          "verdict": "info"
+          "status": "release",
+          "verdict": "pass"
         },
         "deinterleave_cq15": {
           "compared_with": "volk_16ic_deinterleave_16i_x2",
@@ -2502,8 +2502,8 @@
             "other": 999.0,
             "ours": 999.0
           },
-          "status": "info",
-          "verdict": "info"
+          "status": "release",
+          "verdict": "pass"
         },
         "deinterleave_cq15_fallback": {
           "compared_with": "VOLK 3.3.0 volk_16ic_deinterleave_16i_x2_generic, benches/refs/volk-generic.c (-O3 -ffp-contract=off, simd128)",
@@ -2595,8 +2595,8 @@
             "other": 122.6,
             "ours": 132.79
           },
-          "status": "info",
-          "verdict": "info"
+          "status": "release",
+          "verdict": "pass"
         },
         "dot_complex": {
           "compared_with": "volk_32fc_x2_dot_prod_32fc",
@@ -2638,8 +2638,8 @@
             "other": 121.6,
             "ours": 127.83
           },
-          "status": "info",
-          "verdict": "info"
+          "status": "release",
+          "verdict": "pass"
         },
         "dot_complex_fallback": {
           "compared_with": "CMSIS-DSP 1.18.0 arm_cmplx_dot_prod_f32, generic C (-O3 -ffp-contract=off, LOOPUNROLL, simd128)",
@@ -2798,8 +2798,8 @@
             "other": 123.11,
             "ours": 129.78
           },
-          "status": "info",
-          "verdict": "info"
+          "status": "release",
+          "verdict": "pass"
         },
         "dot_real_fallback": {
           "compared_with": "CMSIS-DSP 1.18.0 arm_dot_prod_f32, generic C (-O3 -ffp-contract=off, LOOPUNROLL, simd128)",
@@ -4522,8 +4522,8 @@
             "other": 999.0,
             "ours": 999.0
           },
-          "status": "info",
-          "verdict": "info"
+          "status": "release",
+          "verdict": "pass"
         },
         "interleave_cq15": {
           "compared_with": "KFR 7.2.0 make_complex(re, im) on int16_t (benches/refs/kfr-ops.cpp, sse41, -ffp-contract=off)",
@@ -4644,8 +4644,8 @@
             "other": 150.54,
             "ours": 150.54
           },
-          "status": "info",
-          "verdict": "info"
+          "status": "release",
+          "verdict": "pass"
         },
         "mag_fallback": {
           "compared_with": "CMSIS-DSP 1.18.0 arm_cmplx_mag_f32, generic C (-O3 -ffp-contract=off, LOOPUNROLL, simd128)",
@@ -4744,8 +4744,8 @@
             "other": 149.02,
             "ours": 149.02
           },
-          "status": "info",
-          "verdict": "info"
+          "status": "release",
+          "verdict": "pass"
         },
         "mag_sq_fallback": {
           "compared_with": "CMSIS-DSP 1.18.0 arm_cmplx_mag_squared_f32, generic C (-O3 -ffp-contract=off, LOOPUNROLL, simd128)",
@@ -4869,8 +4869,8 @@
             "other": 148.5,
             "ours": 148.5
           },
-          "status": "info",
-          "verdict": "info"
+          "status": "release",
+          "verdict": "pass"
         },
         "mul_cq15": {
           "compared_with": "sdrk fallback",
@@ -4968,8 +4968,8 @@
             "other": 151.79,
             "ours": 151.79
           },
-          "status": "info",
-          "verdict": "info"
+          "status": "release",
+          "verdict": "pass"
         },
         "mul_real_fallback": {
           "compared_with": "CMSIS-DSP 1.18.0 arm_mult_f32, generic C (-O3 -ffp-contract=off, LOOPUNROLL, simd128)",
@@ -5226,8 +5226,8 @@
             "other": 143.03,
             "ours": 151.93
           },
-          "status": "info",
-          "verdict": "info"
+          "status": "release",
+          "verdict": "pass"
         },
         "power_db_fallback": {
           "compared_with": "CMSIS-DSP 1.18.0 arm_vlog_f32 + arm_scale_f32 (+ offset loop), generic C (-O3 -ffp-contract=off, LOOPUNROLL, simd128)",
@@ -6704,8 +6704,8 @@
             "other": 151.5,
             "ours": 151.5
           },
-          "status": "info",
-          "verdict": "info"
+          "status": "release",
+          "verdict": "pass"
         },
         "scale_cq15": {
           "compared_with": "sdrk fallback",
@@ -7265,8 +7265,8 @@
             "other": 151.28,
             "ours": 151.28
           },
-          "status": "info",
-          "verdict": "info"
+          "status": "release",
+          "verdict": "pass"
         },
         "stereo_matrix_cq15": {
           "compared_with": "sdrk fallback",
@@ -7818,8 +7818,8 @@
             "other": 151.95,
             "ours": 151.95
           },
-          "status": "info",
-          "verdict": "info"
+          "status": "release",
+          "verdict": "pass"
         },
         "window_cq15": {
           "compared_with": "sdrk fallback",

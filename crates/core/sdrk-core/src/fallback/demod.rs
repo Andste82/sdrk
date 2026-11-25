@@ -96,6 +96,12 @@ const SHORT_DC_C32: bool = cfg!(any(target_arch = "x86_64", target_arch = "aarch
 /// `deemphasis` `f32`: on x86-64 (12.03 / 16.05 to 9.54 / 11.57 at `avx2`); not on AArch64
 /// (`cortex-a72` 5 % slower) and wasm32 (27.53 to 42.03 instructions).
 const SHORT_DEEMPHASIS_F32: bool = cfg!(target_arch = "x86_64");
+/// The short form of `deemphasis` `f32` with the operands of the last sum selected apart: below
+/// AVX2 (`skylake` / `znver2` at `sse2` 15.08 / 12.08 to 11.06 / 7.57 cycles per sample in the
+/// loop, at `sse4.2` 15.08 / 11.08 to 13.04 / 11.04; `llvm-mca` of the compiled loops); from
+/// AVX2 the compiler unrolls it into a longer chain, so those builds keep the select of the
+/// two sums.
+const SPLIT_DEEMPHASIS_F32: bool = cfg!(all(target_arch = "x86_64", not(target_feature = "avx2")));
 /// `deemphasis` `Q15`: with AVX2 (7.04 / 7.05 to 5.53 / 5.53 at `avx2`, 7.07 / 7.08 to
 /// 5.77 / 5.52 at `avx512`); not below it (`znver2` 3 % slower at `sse2` and `sse4.2`), on
 /// AArch64 (8 % slower) and wasm32 (5 % more instructions).
@@ -134,17 +140,34 @@ fn deemphasis_f32_plain(alpha: f32, last: &mut f32, input: &[f32], output: &mut 
     *last = y;
 }
 
-/// `deemphasis` `f32` with the flush off the chain.
+/// `deemphasis` `f32` with the flush off the chain; `SPLIT` selects the operands of the last
+/// sum apart (see [`SPLIT_DEEMPHASIS_F32`]). Both forms give the same bits.
 #[inline]
-fn deemphasis_f32_short(alpha: f32, last: &mut f32, input: &[f32], output: &mut [f32]) {
+fn deemphasis_f32_short<const SPLIT: bool>(
+    alpha: f32,
+    last: &mut f32,
+    input: &[f32],
+    output: &mut [f32],
+) {
     // `u` is the value before the flush; the stored state is flushed already, and flushing it
     // again changes nothing. The output is `flush(u)`, and the next `u` is `y + alpha * (x - y)`
     // with `y = flush(u)`: with `y = u` or with `y = 0`.
     let mut u = *last;
     for (o, &x) in output.iter_mut().zip(input) {
-        let kept = u + alpha * (x - u);
-        let flushed = 0.0 + alpha * x;
-        u = if is_flushed(u) { flushed } else { kept };
+        u = if SPLIT {
+            // The two operands of the last addition selected apart: `u + alpha (x - u)`, or
+            // `0 + alpha x` where `u` is flushed. The select of `u` does not wait for the
+            // product, and the compiler takes the other one as a branch, so the chain is the
+            // subtraction, the product and the sum.
+            let flushed = is_flushed(u);
+            let a = if flushed { 0.0 } else { u };
+            let b = if flushed { alpha * x } else { alpha * (x - u) };
+            a + b
+        } else {
+            let kept = u + alpha * (x - u);
+            let flushed = 0.0 + alpha * x;
+            if is_flushed(u) { flushed } else { kept }
+        };
         *o = flush_denormal(u);
     }
     *last = flush_denormal(u);
@@ -160,7 +183,7 @@ impl Deemphasis<f32> for Fallback {
         check_len(input.len(), output.len())?;
         let (alpha, last) = state.parts_mut();
         if SHORT_DEEMPHASIS_F32 {
-            deemphasis_f32_short(alpha, last, input, output);
+            deemphasis_f32_short::<SPLIT_DEEMPHASIS_F32>(alpha, last, input, output);
         } else {
             deemphasis_f32_plain(alpha, last, input, output);
         }
@@ -599,7 +622,11 @@ mod tests {
                 y = flush_denormal(y);
                 want.push(y);
             }
-            let forms: [DeemphasisF32; 2] = [deemphasis_f32_plain, deemphasis_f32_short];
+            let forms: [DeemphasisF32; 3] = [
+                deemphasis_f32_plain,
+                deemphasis_f32_short::<false>,
+                deemphasis_f32_short::<true>,
+            ];
             for (f, form) in forms.into_iter().enumerate() {
                 let (mut last, mut got) = (0.0f32, vec![0.0f32; x.len()]);
                 for (a, b) in blocks(x.len(), 7 + k as u32) {

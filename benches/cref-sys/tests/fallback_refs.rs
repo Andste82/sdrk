@@ -901,11 +901,22 @@ fn volk_nofma_complex_dot_product() {
 
 #[test]
 fn kfr_cu8_contract() {
-    require!(cref_sys::kfr_ops::AVAILABLE, "KFR's element-wise expressions");
+    require!(
+        cref_sys::kfr_ops::AVAILABLE,
+        "KFR's element-wise expressions"
+    );
     // The `CU8` contract: NaN as 0, `rint(x 128 + 127.5)` in `f64`, clamped (D2955). No input
     // is a multiple of `1 / 128` (a tie of the formula, where KFR's rounding differs by level).
     let mut x: Vec<f32> = signal(61, 5).iter().map(|v| v * 1.5 + 1e-5).collect();
-    x.extend([f32::NAN, -f32::NAN, f32::INFINITY, f32::NEG_INFINITY, -1e-30, 1e-30, 3.0]);
+    x.extend([
+        f32::NAN,
+        -f32::NAN,
+        f32::INFINITY,
+        f32::NEG_INFINITY,
+        -1e-30,
+        1e-30,
+        3.0,
+    ]);
     let mut out = vec![0u8; x.len()];
     cref_sys::kfr_ops::f32_to_u8(&x, &mut out, 128.0, 127.5);
     for (o, v) in out.iter().zip(&x) {

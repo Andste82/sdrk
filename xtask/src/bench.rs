@@ -3042,6 +3042,23 @@ mod tests {
     }
 
     #[test]
+    fn the_cu8_outputs_are_judged_against_the_same_work() {
+        // KFR's expression of the `CU8` contract (NaN rule, `f64` rounding) at every level but
+        // `simd128`, VOLK (less work) as information (D2955).
+        let plan = |l: &str| PLANS.iter().find(|p| p.level == l).unwrap();
+        let kernel = |k: &str| KERNELS.iter().find(|s| s.name == k).unwrap();
+        for level in ["sse2", "sse4.2", "avx2", "avx512", "neon"] {
+            for k in ["convert_out_cu8", "convert_out_real_ru8"] {
+                assert_eq!(
+                    comparisons(plan(level), kernel(k)),
+                    (Reference::Kfr, vec![Reference::Volk]),
+                    "{k} at {level}"
+                );
+            }
+        }
+    }
+
+    #[test]
     fn the_plan_covers_the_four_platforms_with_established_references() {
         for p in ["x86_64", "x86_64-avx512", "aarch64", "wasm32"] {
             assert!(PLANS.iter().any(|plan| plan.platform == p), "{p}");
@@ -3089,17 +3106,6 @@ mod tests {
             comparisons(plan("simd128"), kernel("convert_out_cu8")),
             (Reference::Volk, Vec::new())
         );
-        // The `CU8` outputs: KFR's expression of the contract (NaN rule, `f64` rounding) at
-        // every other level, VOLK (less work) as information (D2955).
-        for level in ["sse2", "sse4.2", "avx2", "avx512", "neon"] {
-            for k in ["convert_out_cu8", "convert_out_real_ru8"] {
-                assert_eq!(
-                    comparisons(plan(level), kernel(k)),
-                    (Reference::Kfr, vec![Reference::Volk]),
-                    "{k} at {level}"
-                );
-            }
-        }
         assert_eq!(
             comparisons(plan("sse2"), kernel("agc")),
             (Reference::GnuRadio, vec![Reference::Fallback])

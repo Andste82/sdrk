@@ -1411,11 +1411,55 @@ pub fn reference_level(
     })
 }
 
+/// The entries whose work KFR's element-wise expressions do (`benches/refs/kfr-ops.cpp`): at
+/// `simd128` KFR in its Emscripten configuration (`sse41` over Emscripten's SSE headers written
+/// with SIMD128, as for `biquad`) is their judged comparison, and VOLK's wasm32 build, which has
+/// only its `generic` protokernels (D12), or our fallback where VOLK's wasm32 build lacks the
+/// function, is information (the maintainer's decision of 2026-11-24 on item 9 of the
+/// optimisation round O1, D2850). The float-to-integer conversions (`convert_out_*`) are not in
+/// the list: Emscripten's SSE headers convert floats to integers one lane at a time, so KFR's
+/// conversion is no SIMD reference of the level; `mag_q15`, `rotate`, `quad_demod` and the FIR
+/// entries have no element-wise expression of KFR.
+pub const KFR_AT_SIMD128: [&str; 24] = [
+    "convert_cs8",
+    "convert_cs16",
+    "convert_cu8",
+    "convert_real_rs16",
+    "convert_cq15_cs8",
+    "convert_cq15_cu8",
+    "add",
+    "add_cq15",
+    "add_real",
+    "add_real_q15",
+    "mul",
+    "mul_real",
+    "scale",
+    "window",
+    "dot",
+    "dot_real",
+    "dot_complex",
+    "mag_sq",
+    "mag",
+    "interleave",
+    "deinterleave",
+    "deinterleave_cq15",
+    "stereo_matrix",
+    "power_db",
+];
+
 /// The judged comparison of a kernel on a level and the informational ones.
 #[must_use]
 pub fn comparisons(plan: &LevelPlan, spec: &KernelSpec) -> (Reference, Vec<Reference>) {
     if let Some(level) = plan.baseline {
         return (Reference::OwnLevel(level), Vec::new());
+    }
+    if plan.refs == "wasm32" && KFR_AT_SIMD128.contains(&spec.name) {
+        // What was judged before (VOLK's generic build, or our fallback where VOLK's wasm32
+        // build lacks the function) stays as information (D2850).
+        let (before, mut extras) = family_comparisons(plan, spec);
+        extras.insert(0, before);
+        extras.dedup();
+        return (Reference::Kfr, extras);
     }
     let (gate, mut extras) = family_comparisons(plan, spec);
     if let Some(own) = spec.own {
@@ -3015,9 +3059,19 @@ mod tests {
             Reference::Volk
         );
         assert_eq!(comparisons(plan("neon"), kernel("rotate")).1, Vec::new());
+        // At `simd128` KFR's element-wise expressions gate, VOLK's generic build is
+        // information (D2850).
         assert_eq!(
-            comparisons(plan("simd128"), kernel("mag_sq")).0,
-            Reference::Volk
+            comparisons(plan("simd128"), kernel("mag_sq")),
+            (Reference::Kfr, vec![Reference::Volk])
+        );
+        assert_eq!(
+            comparisons(plan("simd128"), kernel("convert_cu8")),
+            (Reference::Kfr, vec![Reference::Volk, Reference::Fallback])
+        );
+        assert_eq!(
+            comparisons(plan("simd128"), kernel("convert_out_cu8")),
+            (Reference::Volk, Vec::new())
         );
         assert_eq!(
             comparisons(plan("sse2"), kernel("agc")),
@@ -3062,14 +3116,15 @@ mod tests {
                 comparisons(plan("neon"), kernel(k)),
                 (Reference::Volk, Vec::new())
             );
+            // KFR gates there, our fallback is information (D2850).
             assert_eq!(
                 comparisons(plan("simd128"), kernel(k)),
-                (Reference::Fallback, Vec::new())
+                (Reference::Kfr, vec![Reference::Fallback])
             );
         }
         assert_eq!(
-            comparisons(plan("simd128"), kernel("dot")).0,
-            Reference::Volk
+            comparisons(plan("simd128"), kernel("dot")),
+            (Reference::Kfr, vec![Reference::Volk])
         );
     }
 
@@ -3246,11 +3301,11 @@ mod tests {
         let plan = |l: &str| PLANS.iter().find(|p| p.level == l).unwrap();
         let kernel = |k: &str| KERNELS.iter().find(|s| s.name == k).unwrap();
         for level in ["sse2", "sse4.2", "avx2", "avx512", "neon", "simd128"] {
-            // The VOLK composition gates `stereo_matrix` at every level (generic kernels on
-            // `simd128`).
-            // KFR at `avx512`, where VOLK's interleave is AVX (D2900).
+            // The VOLK composition gates `stereo_matrix` at every level but `avx512`, where
+            // VOLK's interleave is AVX (D2900), and `simd128`, where VOLK has only its generic
+            // kernels (D2850): there KFR's one expression gates, VOLK is information.
             let (gate, extras) = comparisons(plan(level), kernel("stereo_matrix"));
-            if level == "avx512" {
+            if matches!(level, "avx512" | "simd128") {
                 assert_eq!(gate, Reference::Kfr, "{level}");
                 assert_eq!(extras, vec![Reference::Volk], "{level}");
             } else {
@@ -3800,13 +3855,15 @@ mod tests {
             comparisons(plan("avx512"), kernel("dot_complex")),
             (Reference::Kfr, vec![Reference::Volk, Reference::VolkNoFma])
         );
-        for level in ["sse4.2", "simd128"] {
-            assert_eq!(
-                comparisons(plan(level), kernel("dot_complex")),
-                (Reference::Volk, Vec::new()),
-                "dot_complex at {level}"
-            );
-        }
+        assert_eq!(
+            comparisons(plan("sse4.2"), kernel("dot_complex")),
+            (Reference::Volk, Vec::new())
+        );
+        // At `simd128` KFR's `dotproduct` gates, VOLK's generic build is information (D2850).
+        assert_eq!(
+            comparisons(plan("simd128"), kernel("dot_complex")),
+            (Reference::Kfr, vec![Reference::Volk])
+        );
         assert_eq!(
             comparisons(plan("avx2-runtime"), kernel("dot_complex")).0,
             Reference::OwnLevel("avx2")
@@ -4100,11 +4157,10 @@ mod tests {
         ] {
             for level in ["sse2", "sse4.2", "avx2", "avx512", "neon", "simd128"] {
                 let limit = limits.get(name, level).unwrap();
-                // `scramble_c32_b8` at `avx512` is `dev` in cycles (open item I13.1-8, D2746).
+                // `scramble_c32_b8` at `avx512` is `release` again since D2820 (it was `dev` in
+                // cycles by D2746).
                 let want = if info.contains(&level) {
                     Status::Info
-                } else if (name, level) == ("scramble_c32_b8", "avx512") {
-                    Status::Dev
                 } else {
                     Status::Release
                 };
@@ -4397,6 +4453,11 @@ mod tests {
             "deinterleave_cq15",
         ] {
             for level in levels {
+                // KFR gates at `avx512` (D2900) and at `simd128` (D2850), VOLK is information.
+                if level == "simd128" {
+                    assert_eq!(comparisons(plan(level), kernel(k)).0, Reference::Kfr, "{k}");
+                    continue;
+                }
                 let want = if level == "avx512" && KFR_AT_AVX512.contains(&k) {
                     (Reference::Kfr, vec![Reference::Volk])
                 } else {
@@ -4422,6 +4483,11 @@ mod tests {
             .filter(|l| !matches!(*l, "sse2" | "avx512"))
         {
             let (gate, extras) = comparisons(plan(level), kernel("mul"));
+            if level == "simd128" {
+                assert_eq!(gate, Reference::Kfr, "mul at {level}");
+                assert_eq!(extras, vec![Reference::Volk], "mul at {level}");
+                continue;
+            }
             assert_eq!(gate, Reference::Volk, "mul at {level}");
             if matches!(level, "avx2" | "avx512" | "neon") {
                 assert_eq!(

@@ -1478,6 +1478,14 @@ fn i8s(x: &[u8]) -> &[i8] {
     unsafe { std::slice::from_raw_parts(x.as_ptr().cast(), x.len()) }
 }
 
+/// The little-endian bytes `x` as `i16` values (the buffers keep the alignment of an `i16`).
+fn i16s(x: &[u8]) -> &[i16] {
+    assert!(x.len() % 2 == 0 && x.as_ptr().align_offset(2) == 0);
+    // SAFETY: the length is even and the start 2-byte aligned (checked); every bit pattern is
+    // an `i16`; wasm32 and the measured hosts are little-endian. The slice borrows `x`.
+    unsafe { std::slice::from_raw_parts(x.as_ptr().cast(), x.len() / 2) }
+}
+
 /// `x` as `2 x.len()` interleaved `i16` values.
 fn i16s_mut(x: &mut [CQ15]) -> &mut [i16] {
     // SAFETY: `CQ15` is `repr(C)` of two `repr(transparent)` `i16`; the slice borrows `x`
@@ -1604,11 +1612,20 @@ impl Kernel for ConvertIn {
                         &self.raw
                     };
                     let values = values as usize;
-                    cref_sys::kfr_ops::i8_to_f32(
-                        i8s(&input[..values]),
-                        floats(&mut self.out, values),
-                        1.0 / 128.0,
-                    );
+                    if matches!(self.format, InFormat::Cs16 | InFormat::Rs16) {
+                        // KFR's expression `in * (1 / 32768)` from the int16 values (D2850).
+                        cref_sys::kfr_ops::i16_to_f32(
+                            i16s(&self.raw[..2 * values]),
+                            floats(&mut self.out, values),
+                            1.0 / 32768.0,
+                        );
+                    } else {
+                        cref_sys::kfr_ops::i8_to_f32(
+                            i8s(&input[..values]),
+                            floats(&mut self.out, values),
+                            1.0 / 128.0,
+                        );
+                    }
                 }
                 Impl::Cmsis => {
                     let out = self.out.as_mut_ptr().cast::<f32>();
@@ -1662,7 +1679,8 @@ impl Kernel for ConvertIn {
     fn supports(&self, which: Impl) -> bool {
         if which == Impl::Kfr {
             return self.entry == BiquadEntry::Simd
-                && matches!(self.format, InFormat::Cs8 | InFormat::Cu8)
+                && (matches!(self.format, InFormat::Cs8 | InFormat::Cu8)
+                    || cfg!(target_arch = "wasm32"))
                 && cref_sys::kfr_ops::AVAILABLE;
         }
         convert_supports(self.entry, which, volk_sys::AVAILABLE)
@@ -1677,6 +1695,9 @@ impl Kernel for ConvertIn {
             (Impl::Kfr, InFormat::Cu8) => describe_kfr_ops(
                 "in * (1 / 128) on the bytes with the sign bit flipped (the CU8 conversion without its offset)",
             ),
+            (Impl::Kfr, InFormat::Cs16 | InFormat::Rs16) => {
+                describe_kfr_ops("cast<float>(in) * (1 / 32768)")
+            }
             (Impl::Kfr, _) => describe_kfr_ops("in * (1 / 128)"),
             (Impl::Volk, InFormat::Cs8) => "volk_8i_s32f_convert_32f",
             (Impl::Volk, InFormat::Cu8) => {
@@ -4555,6 +4576,13 @@ impl Kernel for MagK {
                 Impl::Cmsis => {
                     cref_sys::cmsis_dsp::cmplx_mag_f32(c32_pairs_ref(&self.input), &mut self.out);
                 }
+                // KFR's `cabs(x)` (D2850).
+                Impl::Kfr => {
+                    cref_sys::kfr_ops::mag(
+                        c32_pairs_ref(&self.input).as_flattened(),
+                        &mut self.out,
+                    );
+                }
                 other => unreachable!("mag has no {other:?}"),
             }
             black_box(&self.out);
@@ -4572,11 +4600,15 @@ impl Kernel for MagK {
     }
 
     fn supports(&self, which: Impl) -> bool {
+        if which == Impl::Kfr {
+            return math_family::kfr_supports(self.entry);
+        }
         spectrum_supports(self.entry, which, volk_sys::AVAILABLE)
     }
 
     fn describe(&self, which: Impl) -> &'static str {
         match which {
+            Impl::Kfr => describe_kfr_ops("cabs(x)"),
             Impl::Volk => "volk_32fc_magnitude_32f",
             Impl::Cmsis => describe_cmsis("arm_cmplx_mag_f32"),
             Impl::Fallback => "sdrk fallback",
@@ -6096,9 +6128,20 @@ fn describe_kfr_iir1(section: &str) -> &'static str {
     )
 }
 
-/// The text of [`Kernel::describe`] for KFR's element-wise expressions (D2785).
+/// The text of [`Kernel::describe`] for KFR's element-wise expressions (D2785). On wasm32 it
+/// names the SIMD level of the build as well: KFR's `sse41` over Emscripten's SSE headers runs
+/// SIMD128 (D2850).
 pub(crate) fn describe_kfr_ops(expression: &str) -> &'static str {
     let arch = KfrBiquad::arch().unwrap_or("?");
+    if cfg!(target_arch = "wasm32") {
+        return Box::leak(
+            format!(
+                "KFR 7.2.0 {expression} (benches/refs/kfr-ops.cpp, {arch} over the SSE headers of Emscripten, SIMD level {}, -ffp-contract=off)",
+                cref_sys::BIQUAD_REF_LEVEL
+            )
+            .into_boxed_str(),
+        );
+    }
     Box::leak(
         format!("KFR 7.2.0 {expression} (benches/refs/kfr-ops.cpp, {arch}, -ffp-contract=off)")
             .into_boxed_str(),
@@ -6559,6 +6602,12 @@ impl DotC32K {
                 }
                 black_box(C32::new(r, i))
             }
+            // KFR's `dotproduct(x, t)` of complex<float> and float (D2850).
+            Impl::Kfr => {
+                let [r, i] =
+                    cref_sys::kfr_ops::dot_complex_real(c32_pairs_ref(x).as_flattened(), t);
+                black_box(C32::new(r, i))
+            }
             other => unreachable!("dot has no {other:?}"),
         }
     }
@@ -6588,11 +6637,15 @@ impl Kernel for DotC32K {
     }
 
     fn supports(&self, which: Impl) -> bool {
+        if which == Impl::Kfr {
+            return math_family::kfr_supports(self.entry);
+        }
         dot_scale_supports(self.entry, which, volk_sys::AVAILABLE)
     }
 
     fn describe(&self, which: Impl) -> &'static str {
         match which {
+            Impl::Kfr => describe_kfr_ops("dotproduct(x, t) of complex<float> and float"),
             Impl::Volk => "volk_32fc_32f_dot_prod_32fc",
             Impl::Cmsis => describe_cmsis("arm_dot_prod_f32 twice, on the planar re and im"),
             Impl::Fallback => "sdrk fallback",
@@ -6664,6 +6717,8 @@ impl DotF32K {
                 }
                 black_box(r)
             }
+            // KFR's `dotproduct(x, t)` (D2850).
+            Impl::Kfr => black_box(cref_sys::kfr_ops::dot_f32(x, t)),
             other => unreachable!("dot_real has no {other:?}"),
         }
     }
@@ -6693,11 +6748,15 @@ impl Kernel for DotF32K {
     }
 
     fn supports(&self, which: Impl) -> bool {
+        if which == Impl::Kfr {
+            return math_family::kfr_supports(self.entry);
+        }
         dot_scale_supports(self.entry, which, volk_sys::NATIVE)
     }
 
     fn describe(&self, which: Impl) -> &'static str {
         match which {
+            Impl::Kfr => describe_kfr_ops("dotproduct(x, t)"),
             Impl::Volk => "volk_32f_x2_dot_prod_32f",
             Impl::Cmsis => describe_cmsis("arm_dot_prod_f32"),
             Impl::Fallback => "sdrk fallback",

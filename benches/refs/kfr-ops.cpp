@@ -5,7 +5,10 @@
 // configuration of kfr-biquad.cpp), into a library of its
 // own (libkfrops-<level>.a). They are the SIMD references where VOLK's machine of the level runs
 // a `generic` protokernel (`sse2`, the maintainer's decision on I13.1-11, D2785) or a protokernel
-// of a lower level (`avx512`, D2900), and where no other SIMD library has the operation (D2901):
+// of a lower level (`avx512`, D2900), where no other SIMD library has the operation (D2901), and
+// at `simd128`, where VOLK's wasm32 build has only its `generic` protokernels (D12) and KFR runs
+// in its Emscripten configuration, `sse41` over Emscripten's SSE headers written with SIMD128
+// (the maintainer's decision of 2026-11-24 on item 9 of the optimisation round O1, D2850):
 //
 // - `sdrk_kfr_i8_to_f32`: `out = in * scale` from signed bytes, the work of
 //   `volk_8i_s32f_convert_32f` with `1 / scale`.
@@ -40,6 +43,15 @@
 //   `l = s + 2 d`, `r = s - 2 d` of interleaved `(s, d)` into interleaved `(l, r)` as one
 //   expression (`real`, `imag`, `+` / `-` and `make_complex`; on `int16_t` with `satadd` and
 //   `satsub`: `2 d` saturated, then the saturated sum and difference).
+// - `sdrk_kfr_i16_to_f32`: `out = in * scale` from `int16_t`, the work of
+//   `volk_16i_s32f_convert_32f` with `1 / scale`.
+// - `sdrk_kfr_mul_f32`: `out = a * b` on floats, the work of `volk_32f_x2_multiply_32f`.
+// - `sdrk_kfr_dot_f32`, `sdrk_kfr_dot_complex_real`: `dotproduct` of two real vectors and of a
+//   complex and a real vector, the work of `volk_32f_x2_dot_prod_32f` and
+//   `volk_32fc_32f_dot_prod_32fc`.
+// - `sdrk_kfr_mag`: `cabs`, the work of `volk_32fc_magnitude_32f`.
+// - `sdrk_kfr_deinterleave_f32`: `real` / `imag` of `complex<float>` (one expression per output),
+//   the work of `volk_32fc_deinterleave_32f_x2`.
 //
 // KFR's own sample conversion `kfr::convert` is not used: it has no 8-bit type, clamps every
 // sample and converts one sample at a time (a scalar loop), while these expressions convert
@@ -187,5 +199,39 @@ extern "C"
         const auto s  = kfr::real(x);
         const auto d2 = kfr::satadd(kfr::imag(x), kfr::imag(x));
         uv(reinterpret_cast<ci16*>(out), n) = kfr::make_complex(kfr::satadd(s, d2), kfr::satsub(s, d2));
+    }
+
+    void sdrk_kfr_i16_to_f32(const std::int16_t* in, float* out, std::size_t n, float scale)
+    {
+        uv(out, n) = kfr::cast<float>(uv(in, n)) * scale;
+    }
+
+    void sdrk_kfr_mul_f32(const float* a, const float* b, float* out, std::size_t n)
+    {
+        uv(out, n) = uv(a, n) * uv(b, n);
+    }
+
+    float sdrk_kfr_dot_f32(const float* a, const float* b, std::size_t n)
+    {
+        return kfr::dotproduct(uv(a, n), uv(b, n));
+    }
+
+    void sdrk_kfr_dot_complex_real(const float* a, const float* b, std::size_t n, float* out)
+    {
+        const c32 r = kfr::dotproduct(uv(reinterpret_cast<const c32*>(a), n), uv(b, n));
+        out[0]      = r.real();
+        out[1]      = r.imag();
+    }
+
+    void sdrk_kfr_mag(const float* c, float* out, std::size_t n)
+    {
+        uv(out, n) = kfr::cabs(uv(reinterpret_cast<const c32*>(c), n));
+    }
+
+    void sdrk_kfr_deinterleave_f32(const float* c, float* re, float* im, std::size_t n)
+    {
+        const auto x = uv(reinterpret_cast<const c32*>(c), n);
+        uv(re, n)    = kfr::real(x);
+        uv(im, n)    = kfr::imag(x);
     }
 }

@@ -2760,11 +2760,12 @@
         },
         "dot_real": {
           "compared_with": "sdrk fallback",
-          "comparison_kind": "own_fallback",
+          "comparison_kind": "library",
+          "goal": true,
           "informational": [
             {
               "compared_with": "sdrk fallback",
-              "comparison_kind": "own_fallback",
+              "comparison_kind": "library",
               "label": "n = 64",
               "other_instr_per_sample": 9.02,
               "other_snr_db": null,
@@ -2773,7 +2774,7 @@
             },
             {
               "compared_with": "sdrk fallback",
-              "comparison_kind": "own_fallback",
+              "comparison_kind": "library",
               "label": "n = 100",
               "other_instr_per_sample": 8.32,
               "other_snr_db": null,
@@ -2782,7 +2783,7 @@
             },
             {
               "compared_with": "sdrk fallback",
-              "comparison_kind": "own_fallback",
+              "comparison_kind": "library",
               "label": "misaligned by one sample",
               "other_instr_per_sample": 6.17,
               "other_snr_db": null,
@@ -6683,11 +6684,12 @@
         },
         "scale": {
           "compared_with": "sdrk fallback",
-          "comparison_kind": "own_fallback",
+          "comparison_kind": "library",
+          "goal": true,
           "informational": [
             {
               "compared_with": "sdrk fallback",
-              "comparison_kind": "own_fallback",
+              "comparison_kind": "library",
               "label": "misaligned by one sample",
               "other_instr_per_sample": 6.16,
               "other_snr_db": null,

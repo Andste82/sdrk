@@ -491,7 +491,7 @@
     },
     "neon": {
       "status": "info",
-      "waiver": "no established library has a SIMD `CQ15` FIR with real `Q15` taps on our levels (VOLK's `volk_16ic_x2_dot_prod_16ic` takes complex taps and saturates its 16-bit sums, GNU Radio has no 16-bit FIR); the comparison is our own fallback, reported as information, and the branch is judged by its efficiency (D32)"
+      "waiver": "no established library has a SIMD `CQ15` FIR with real `Q15` taps on our levels (VOLK's `volk_16ic_x2_dot_prod_16ic` takes complex taps and saturates its 16-bit sums, GNU Radio has no 16-bit FIR); the comparison is our own fallback, reported as information, and the branch is judged by its efficiency (D32); at this level the kernel runs the fallback (hotfix D65: its one-output-at-a-time SIMD branch took more simulated cycles than the grouped fallback on both core models of the level), so the entry compares the fallback with itself and reads 1.00 until a grouped SIMD branch replaces it"
     },
     "simd128": {
       "status": "info",
@@ -1979,12 +1979,10 @@
   },
   "fir_decimate_cq15_fallback": {
     "sse2": {
-      "status": "dev",
-      "waiver": "CMSIS-DSP sums in `q63_t` as we do (exact 64-bit sums, one saturation per output; it truncates with `>> 15` where we round, one add per output), so the gap is not the accuracy class but our code generation: CMSIS-DSP's tap loop per output is a reduction that the C compiler vectorizes (widening multiplies into 64-bit lanes), while our outputs, whose windows lie `M` samples apart (one slice per output, 16 `i64` accumulators per group), compile to scalar 64-bit multiply-adds; simulated in CI (D2745, whole-loop): 30.40 / 45.20 cycles per sample against 24.93 / 25.79 of the comparison on `skylake` / `znver2` (1.22 / 1.75); tracked in issue #134 (a vectorizable `Q15` form of the strided group) and open item I13.1-7; above the `dev` limit 1.50, awaiting the maintainer's decision (D2779)"
+      "status": "dev"
     },
     "sse4.2": {
-      "status": "dev",
-      "waiver": "CMSIS-DSP sums in `q63_t` as we do (exact 64-bit sums, one saturation per output; it truncates with `>> 15` where we round, one add per output), so the gap is not the accuracy class but our code generation: CMSIS-DSP's tap loop per output is a reduction that the C compiler vectorizes (widening multiplies into 64-bit lanes), while our outputs, whose windows lie `M` samples apart (one slice per output, 16 `i64` accumulators per group), compile to scalar 64-bit multiply-adds; simulated in CI (D2745, whole-loop): 30.40 / 45.20 cycles per sample against 27.95 / 22.79 of the comparison on `skylake` / `znver2` (1.09 / 1.98); tracked in issue #134 (a vectorizable `Q15` form of the strided group) and open item I13.1-7; above the `dev` limit 1.50, awaiting the maintainer's decision (D2779)"
+      "status": "dev"
     },
     "avx2": {
       "status": "dev"
@@ -1993,8 +1991,7 @@
       "status": "release"
     },
     "neon": {
-      "status": "dev",
-      "waiver": "CMSIS-DSP sums in `q63_t` as we do (exact 64-bit sums, one saturation per output; it truncates with `>> 15` where we round, one add per output), so the gap is not the accuracy class but our code generation: CMSIS-DSP's tap loop per output is a reduction that the C compiler vectorizes (widening multiplies into 64-bit lanes), while our outputs, whose windows lie `M` samples apart (one slice per output, 16 `i64` accumulators per group), compile to scalar 64-bit multiply-adds; simulated in CI (D2745, whole-loop): 29.57 / 27.63 cycles per sample against 16.40 / 16.90 of the comparison on `cortex-a72` / `cortex-a76` (1.80 / 1.63); tracked in issue #134 (a vectorizable `Q15` form of the strided group) and open item I13.1-7; above the `dev` limit 1.50, awaiting the maintainer's decision (D2779)"
+      "status": "release"
     },
     "simd128": {
       "status": "release"
@@ -2439,11 +2436,11 @@
   },
   "deemphasis_fallback": {
     "sse2": {
-      "status": "dev",
+      "status": "release",
       "accuracy_waiver": "GNU Radio's `fm_deemph` computes in double precision (double taps and accumulator, the input and output in float) and is another filter (the bilinear transform adds a zero at z = -1), so its SNR against its own f64 model (about 152 dB) is not the accuracy class of our `f32` fallback, the contract loop `y += alpha (x - y)` in `f32` (145.4 dB against the f64 golden)"
     },
     "sse4.2": {
-      "status": "dev",
+      "status": "release",
       "accuracy_waiver": "GNU Radio's `fm_deemph` computes in double precision (double taps and accumulator, the input and output in float) and is another filter (the bilinear transform adds a zero at z = -1), so its SNR against its own f64 model (about 152 dB) is not the accuracy class of our `f32` fallback, the contract loop `y += alpha (x - y)` in `f32` (145.4 dB against the f64 golden)"
     },
     "avx2": {
@@ -3438,8 +3435,7 @@
       "status": "dev"
     },
     "avx2": {
-      "status": "dev",
-      "waiver": "open item I24-3: simulated in CI (D2745, whole-loop): 0.63 / 0.86 cycles per sample against 0.60 / 0.53 of the comparison on `znver3` / `alderlake` (1.06 / 1.61), above the `dev` limit; awaiting the maintainer's decision (D2779)"
+      "status": "dev"
     },
     "avx512": {
       "status": "release"
@@ -3473,14 +3469,15 @@
   },
   "stereo_pll_fallback": {
     "sse2": {
-      "status": "dev"
+      "status": "release",
+      "accuracy_trade": "SNR 57.02 dB against 9.46 dB of liquid-dsp's `nco_crcf` (47.56 dB more accurate, the comparison below 100 dB) at 1.184 / 1.192 of its cycles (CI run 45523722662, `skylake` / `znver2`; D2760, D2833)"
     },
     "sse4.2": {
-      "status": "dev"
+      "status": "release",
+      "accuracy_trade": "SNR 57.02 dB against 9.46 dB of liquid-dsp's `nco_crcf` (47.56 dB more accurate, the comparison below 100 dB) at 1.177 / 1.185 of its cycles (CI run 45523722662, `skylake` / `znver2`; D2760, D2833)"
     },
     "avx2": {
-      "status": "release",
-      "accuracy_trade": "SNR 57.02 dB against 9.46 dB of liquid-dsp's `nco_crcf` (47.56 dB more accurate, the comparison below 100 dB) at 1.110 / 1.017 of its cycles (CI run 45395683515, `znver3` / `alderlake`; D2760, D2770)"
+      "status": "release"
     },
     "avx512": {
       "status": "release"
@@ -3688,7 +3685,8 @@
       "status": "release"
     },
     "avx512": {
-      "status": "release"
+      "status": "release",
+      "cycle_waiver": "the SIMD `mul` keeps the split `zmm` form of the maintainer's decision D945 (open item IO1-1), while the fallback runs groups of four samples in 256-bit vectors since D2838: 0.53 / 0.54 cycles per sample of the fallback against 0.58 / 0.39 of the SIMD form on `znver4` / `sapphirerapids` (1.09 / 0.72 SIMD / fallback, CI run 45530577689), the same trade between the two models as IO1-1; kept with open item IO1-1"
     },
     "neon": {
       "status": "release"
@@ -3885,7 +3883,7 @@
       "status": "release"
     },
     "avx512": {
-      "status": "dev"
+      "status": "release"
     },
     "neon": {
       "status": "release"

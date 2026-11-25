@@ -407,23 +407,32 @@
           "verdict": "pass"
         },
         "am_mod_fallback": {
-          "compared_with": "liquid-dsp 1.8.3 ampmodem_modulate_block (LIQUID_AMPMODEM_DSB with the carrier: x * mod_index + 1, no clamp, carrier 1; -O3)",
+          "compared_with": "CMSIS-DSP 1.18.0 arm_clip_f32 to [-1, 1], arm_scale_f32 by depth and arm_offset_f32 by 1 in place, and a plain loop to (carrier u, 0) (a composition: CMSIS-DSP has no AM modulator; a NaN passes the clip), generic C (-O3 -ffp-contract=off, LOOPUNROLL, simd128)",
           "comparison_kind": "library",
           "goal": true,
           "informational": [
             {
               "compared_with": "liquid-dsp 1.8.3 ampmodem_modulate_block (LIQUID_AMPMODEM_DSB with the carrier: x * mod_index + 1, no clamp, carrier 1; -O3)",
               "comparison_kind": "library",
-              "label": "misaligned by one sample",
+              "label": "information: liquid",
               "other_instr_per_sample": 46.02,
-              "other_snr_db": null,
+              "other_snr_db": 150.8,
               "ours_instr_per_sample": 10.54,
               "ratio": 0.23
+            },
+            {
+              "compared_with": "CMSIS-DSP 1.18.0 arm_clip_f32 to [-1, 1], arm_scale_f32 by depth and arm_offset_f32 by 1 in place, and a plain loop to (carrier u, 0) (a composition: CMSIS-DSP has no AM modulator; a NaN passes the clip), generic C (-O3 -ffp-contract=off, LOOPUNROLL, simd128)",
+              "comparison_kind": "library",
+              "label": "misaligned by one sample",
+              "other_instr_per_sample": 49.82,
+              "other_snr_db": null,
+              "ours_instr_per_sample": 10.54,
+              "ratio": 0.21
             }
           ],
-          "other_instr_per_sample": 46.02,
+          "other_instr_per_sample": 49.82,
           "ours_instr_per_sample": 10.54,
-          "ratio": 0.23,
+          "ratio": 0.21,
           "snr_db": {
             "other": 150.8,
             "ours": 150.8

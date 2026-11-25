@@ -2397,7 +2397,7 @@ Instructions per sample (wasmtime fuel, differential) of our kernel divided by t
 | `am_mod` | 10.54 | 10.54 | 1.00 | 150.8 / 150.8 | info | own (information): sdrk fallback |
 | `am_mod_cq15` | 3.92 | 8.80 | 0.45 | 92.7 / 92.7 | info | own (information): sdrk fallback |
 | `am_mod_cq15_fallback` | 8.80 | 31.69 | 0.28 | 92.7 / 89.7 | release | CMSIS-DSP 1.18.0 arm_scale_q15 by round(c m 32768) (truncating), arm_offset_q15 by c in place and a plain loop to (re, 0) (a composition: CMSIS-DSP has no AM modulator), generic C (-O3 -ffp-contract=off, LOOPUNROLL, simd128) |
-| `am_mod_fallback` | 10.54 | 46.02 | 0.23 | 150.8 / 150.8 | release | liquid-dsp 1.8.3 ampmodem_modulate_block (LIQUID_AMPMODEM_DSB with the carrier: x * mod_index + 1, no clamp, carrier 1; -O3) |
+| `am_mod_fallback` | 10.54 | 49.82 | 0.21 | 150.8 / 150.8 | release | CMSIS-DSP 1.18.0 arm_clip_f32 to [-1, 1], arm_scale_f32 by depth and arm_offset_f32 by 1 in place, and a plain loop to (carrier u, 0) (a composition: CMSIS-DSP has no AM modulator; a NaN passes the clip), generic C (-O3 -ffp-contract=off, LOOPUNROLL, simd128) |
 | `auto_notch` | 1700.29 | 1700.29 | 1.00 | exact / exact | info | own (information): sdrk fallback |
 | `band_pulse_detect_block` | 314.48 | 314.48 | 1.00 | exact / exact | info | own (information): sdrk fallback |
 | `bit_descramble_block` | 10.27 | 42.02 | 0.24 | exact / exact | release | GNU Radio descrambler_bb(0x21, 0, 22): gr::digital::lfsr, one __builtin_parityl per unpacked bit (generic compiler flags) |

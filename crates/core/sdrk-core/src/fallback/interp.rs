@@ -297,18 +297,21 @@ impl FirInterpolateReal<Q15> for Fallback {
 }
 
 /// Outputs of one branch that [`groups`] computes together for `Q15` (one `i64` sum each): 8 on
-/// AArch64, x86-64 and wasm32 (8 sums and 8 samples in registers or locals), 4 elsewhere (32-bit
-/// Arm has 13 registers for `i64` sums of two each).
+/// AArch64, wasm32 and x86-64 from AVX2 (8 sums and 8 samples in registers or locals), 4
+/// elsewhere: 32-bit Arm has 13 registers for `i64` sums of two each, and x86-64 below AVX2
+/// spills from its 16 registers (`fir_interpolate_real_q15_fallback` at `sse2`, `skylake` /
+/// `znver2`: 74.97 / 112.89 cycles per sample with 8, 70.71 / 101.24 with 4, 72.04 / 106.40
+/// with 6; `cargo measure`).
 #[cfg(any(
     target_arch = "aarch64",
-    target_arch = "x86_64",
-    target_arch = "wasm32"
+    target_arch = "wasm32",
+    all(target_arch = "x86_64", target_feature = "avx2")
 ))]
 const Q15_GROUP: usize = 8;
 #[cfg(not(any(
     target_arch = "aarch64",
-    target_arch = "x86_64",
-    target_arch = "wasm32"
+    target_arch = "wasm32",
+    all(target_arch = "x86_64", target_feature = "avx2")
 )))]
 const Q15_GROUP: usize = 4;
 /// The same for `CQ15` (two sums each): 4, 8 on wasm32, 2 on 32-bit Arm (not used in an AVX2

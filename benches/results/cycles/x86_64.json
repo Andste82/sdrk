@@ -2804,7 +2804,7 @@
             },
             "ours": {
               "branches_per_sample": 0.0203399658203125,
-              "mispredictions_per_sample": 0.0005645751953125
+              "mispredictions_per_sample": 0.0004730224609375
             }
           },
           "compared_with": "volk_32f_s32f_convert_16i",
@@ -2813,13 +2813,13 @@
             "counter_model": {
               "comparison": 0.5397040872012868,
               "cpu": "alderlake",
-              "ours": 0.5642822736669647,
+              "ours": 0.5624512189794647,
               "penalty": 20.0
             },
             "reference_model": {
               "comparison": 0.46436589858111216,
               "cpu": "znver3",
-              "ours": 0.45932359129559935,
+              "ours": 0.45813340574872435,
               "penalty": 13.0
             }
           },
@@ -2862,26 +2862,26 @@
           "branches": {
             "comparison": {
               "branches_per_sample": 4.0020294189453125,
-              "mispredictions_per_sample": 0.0004119873046875
+              "mispredictions_per_sample": 0.000396728515625
             },
             "ours": {
               "branches_per_sample": 0.0679473876953125,
-              "mispredictions_per_sample": 0.00048828125
+              "mispredictions_per_sample": 0.000518798828125
             }
           },
           "compared_with": "VOLK 3.3.0 volk_32f_s32f_convert_16i_generic, benches/refs/volk-generic.c (-O3 -ffp-contract=off, avx2)",
           "comparison_kind": "library",
           "cost": {
             "counter_model": {
-              "comparison": 7.4225106187300245,
+              "comparison": 7.4222054429487745,
               "cpu": "alderlake",
-              "ours": 0.7380679109365643,
+              "ours": 0.7386782624990643,
               "penalty": 20.0
             },
             "reference_model": {
-              "comparison": 4.577989827936346,
+              "comparison": 4.577791463678533,
               "cpu": "znver3",
-              "ours": 0.7744033554593701,
+              "ours": 0.7748000839749951,
               "penalty": 13.0
             }
           },
@@ -2924,7 +2924,7 @@
           "branches": {
             "comparison": {
               "branches_per_sample": 0.066009521484375,
-              "mispredictions_per_sample": 0.000579833984375
+              "mispredictions_per_sample": 0.0005645751953125
             },
             "ours": {
               "branches_per_sample": 0.020843505859375,
@@ -2935,13 +2935,13 @@
           "comparison_kind": "library",
           "cost": {
             "counter_model": {
-              "comparison": 0.530615017658464,
+              "comparison": 0.530309841877214,
               "cpu": "alderlake",
               "ours": 0.5665720439641582,
               "penalty": 20.0
             },
             "reference_model": {
-              "comparison": 0.5047779314785079,
+              "comparison": 0.5045795672206954,
               "cpu": "znver3",
               "ours": 0.44004684629753515,
               "penalty": 13.0
@@ -2986,26 +2986,26 @@
           "branches": {
             "comparison": {
               "branches_per_sample": 0.065521240234375,
-              "mispredictions_per_sample": 0.000396728515625
+              "mispredictions_per_sample": 0.00042724609375
             },
             "ours": {
-              "branches_per_sample": 0.255462646484375,
-              "mispredictions_per_sample": 0.0004425048828125
+              "branches_per_sample": 0.068206787109375,
+              "mispredictions_per_sample": 0.00048828125
             }
           },
           "compared_with": "VOLK 3.3.0 volk_32f_s32f_convert_8i_generic, benches/refs/volk-generic.c (-O3 -ffp-contract=off, avx2)",
           "comparison_kind": "library",
           "cost": {
             "counter_model": {
-              "comparison": 1.4362012021503752,
+              "comparison": 1.4368115537128752,
               "cpu": "alderlake",
-              "ours": 1.0335973484535024,
+              "ours": 0.9619356637435367,
               "penalty": 20.0
             },
             "reference_model": {
-              "comparison": 1.170512474907769,
+              "comparison": 1.170909203423394,
               "cpu": "znver3",
-              "ours": 1.0669897469950547,
+              "ours": 0.9305643048090276,
               "penalty": 13.0
             }
           },
@@ -3017,11 +3017,11 @@
             },
             "cpu": "alderlake",
             "ours": {
-              "coverage": 0.9917520298053479,
-              "cycles_per_sample": 1.0247472507972524,
-              "efficiency": 0.666219045365498
+              "coverage": 0.9926890174801681,
+              "cycles_per_sample": 0.9521700387435367,
+              "efficiency": 0.5792216346060711
             },
-            "ratio": 0.7174761546299102
+            "ratio": 0.6666612644435279
           },
           "cycle_mode": "whole-loop",
           "reference_model": {
@@ -3032,11 +3032,11 @@
             },
             "cpu": "znver3",
             "ours": {
-              "coverage": 0.9917520298053479,
-              "cycles_per_sample": 1.0612371835184922,
-              "efficiency": 0.5956889102813169
+              "coverage": 0.9926890174801681,
+              "cycles_per_sample": 0.9242166485590276,
+              "efficiency": 0.5624661547693335
             },
-            "ratio": 0.9106557055056262
+            "ratio": 0.7930773414319411
           },
           "samples": 65536,
           "snr_db": {
@@ -3048,7 +3048,7 @@
           "branches": {
             "comparison": {
               "branches_per_sample": 0.315521240234375,
-              "mispredictions_per_sample": 0.0003814697265625
+              "mispredictions_per_sample": 0.000396728515625
             },
             "ours": {
               "branches_per_sample": 0.020843505859375,
@@ -3059,13 +3059,13 @@
           "comparison_kind": "library",
           "cost": {
             "counter_model": {
-              "comparison": 11.348663277090685,
+              "comparison": 11.348968452871935,
               "cpu": "alderlake",
               "ours": 0.682783662669479,
               "penalty": 20.0
             },
             "reference_model": {
-              "comparison": 13.087855142737805,
+              "comparison": 13.088053506995617,
               "cpu": "znver3",
               "ours": 0.5391196820031781,
               "penalty": 13.0
@@ -3110,26 +3110,26 @@
           "branches": {
             "comparison": {
               "branches_per_sample": 0.065521240234375,
-              "mispredictions_per_sample": 0.0004425048828125
+              "mispredictions_per_sample": 0.00042724609375
             },
             "ours": {
               "branches_per_sample": 0.254974365234375,
-              "mispredictions_per_sample": 0.0004425048828125
+              "mispredictions_per_sample": 0.0005340576171875
             }
           },
           "compared_with": "VOLK 3.3.0 volk_32f_s32f_x2_convert_8u_generic, benches/refs/volk-generic.c (-O3 -ffp-contract=off, avx2)",
           "comparison_kind": "library",
           "cost": {
             "counter_model": {
-              "comparison": 1.497880573557384,
+              "comparison": 1.497575397776134,
               "cpu": "alderlake",
-              "ours": 1.8307421808657438,
+              "ours": 1.4767202377319337,
               "penalty": 20.0
             },
             "reference_model": {
-              "comparison": 1.2232225583204581,
+              "comparison": 1.2230241940626456,
               "cpu": "znver3",
-              "ours": 1.6752956887950066,
+              "ours": 1.3519674301147462,
               "penalty": 13.0
             }
           },
@@ -3141,11 +3141,11 @@
             },
             "cpu": "alderlake",
             "ours": {
-              "coverage": 0.9927865742814237,
-              "cycles_per_sample": 1.8218920832094938,
-              "efficiency": 0.580511402902557
+              "coverage": 0.9916174912997427,
+              "cycles_per_sample": 1.4660390853881837,
+              "efficiency": 0.6018916595012898
             },
-            "ratio": 1.223542508159155
+            "ratio": 0.9845594896242562
           },
           "cycle_mode": "whole-loop",
           "reference_model": {
@@ -3156,11 +3156,11 @@
             },
             "cpu": "znver3",
             "ours": {
-              "coverage": 0.9927865742814237,
-              "cycles_per_sample": 1.669543125318444,
-              "efficiency": 0.5731523378582202
+              "coverage": 0.9916174912997427,
+              "cycles_per_sample": 1.3450246810913087,
+              "efficiency": 0.6185567010309279
             },
-            "ratio": 1.3713217840185978
+            "ratio": 1.1047702914959874
           },
           "samples": 65536,
           "snr_db": {
@@ -3172,26 +3172,26 @@
           "branches": {
             "comparison": {
               "branches_per_sample": 0.0657501220703125,
-              "mispredictions_per_sample": 0.0005035400390625
+              "mispredictions_per_sample": 0.000518798828125
             },
             "ours": {
               "branches_per_sample": 0.0127716064453125,
-              "mispredictions_per_sample": 0.0004730224609375
+              "mispredictions_per_sample": 0.000518798828125
             }
           },
           "compared_with": "volk_32f_s32f_convert_16i",
           "comparison_kind": "library",
           "cost": {
             "counter_model": {
-              "comparison": 0.27778839582428083,
+              "comparison": 0.27809357160553083,
               "cpu": "alderlake",
-              "ours": 0.2922134756447343,
+              "ours": 0.2931290029884843,
               "penalty": 20.0
             },
             "reference_model": {
-              "comparison": 0.2417213663713886,
+              "comparison": 0.2419197306292011,
               "cpu": "znver3",
-              "ours": 0.23968602609051468,
+              "ours": 0.24028111886395218,
               "penalty": 13.0
             }
           },
@@ -3234,26 +3234,26 @@
           "branches": {
             "comparison": {
               "branches_per_sample": 2.0022735595703125,
-              "mispredictions_per_sample": 0.0003662109375
+              "mispredictions_per_sample": 0.000396728515625
             },
             "ours": {
               "branches_per_sample": 0.0371856689453125,
-              "mispredictions_per_sample": 0.000457763671875
+              "mispredictions_per_sample": 0.0005035400390625
             }
           },
           "compared_with": "VOLK 3.3.0 volk_32f_s32f_convert_16i_generic, benches/refs/volk-generic.c (-O3 -ffp-contract=off, avx2)",
           "comparison_kind": "library",
           "cost": {
             "counter_model": {
-              "comparison": 3.7166773223876954,
+              "comparison": 3.7172876739501954,
               "cpu": "alderlake",
-              "ours": 0.379541915920382,
+              "ours": 0.380457443264132,
               "penalty": 20.0
             },
             "reference_model": {
-              "comparison": 2.292445449829102,
+              "comparison": 2.292842178344727,
               "cpu": "znver3",
-              "ours": 0.39833079089734624,
+              "ours": 0.39892588367078374,
               "penalty": 13.0
             }
           },
@@ -3296,7 +3296,7 @@
           "branches": {
             "comparison": {
               "branches_per_sample": 0.034759521484375,
-              "mispredictions_per_sample": 0.00048828125
+              "mispredictions_per_sample": 0.000518798828125
             },
             "ours": {
               "branches_per_sample": 0.013275146484375,
@@ -3307,13 +3307,13 @@
           "comparison_kind": "library",
           "cost": {
             "counter_model": {
-              "comparison": 0.2722518202146132,
+              "comparison": 0.2728621717771132,
               "cpu": "alderlake",
               "ours": 0.2957534745704532,
               "penalty": 20.0
             },
             "reference_model": {
-              "comparison": 0.2599042833192177,
+              "comparison": 0.2603010118348427,
               "cpu": "znver3",
               "ours": 0.23002874997964465,
               "penalty": 13.0
@@ -3358,26 +3358,26 @@
           "branches": {
             "comparison": {
               "branches_per_sample": 0.034515380859375,
-              "mispredictions_per_sample": 0.0003662109375
+              "mispredictions_per_sample": 0.0003814697265625
             },
             "ours": {
-              "branches_per_sample": 0.130950927734375,
-              "mispredictions_per_sample": 0.000396728515625
+              "branches_per_sample": 0.037445068359375,
+              "mispredictions_per_sample": 0.00042724609375
             }
           },
           "compared_with": "VOLK 3.3.0 volk_32f_s32f_convert_8i_generic, benches/refs/volk-generic.c (-O3 -ffp-contract=off, avx2)",
           "comparison_kind": "library",
           "cost": {
             "counter_model": {
-              "comparison": 0.7241251580004777,
+              "comparison": 0.7244303337817277,
               "cpu": "alderlake",
-              "ours": 0.526039763717406,
+              "ours": 0.49074760533216377,
               "penalty": 20.0
             },
             "reference_model": {
-              "comparison": 0.5914150837186971,
+              "comparison": 0.5916134479765096,
               "cpu": "znver3",
-              "ours": 0.5424366358324646,
+              "ours": 0.4760471093009589,
               "penalty": 13.0
             }
           },
@@ -3389,11 +3389,11 @@
             },
             "cpu": "alderlake",
             "ours": {
-              "coverage": 0.9904300886928552,
-              "cycles_per_sample": 0.518105193404906,
-              "efficiency": 0.66588957347099
+              "coverage": 0.9919056383462962,
+              "cycles_per_sample": 0.48220268345716377,
+              "efficiency": 0.5793942673094739
             },
-            "ratio": 0.7228020570769094
+            "ratio": 0.6727149157496621
           },
           "cycle_mode": "whole-loop",
           "reference_model": {
@@ -3404,11 +3404,11 @@
             },
             "cpu": "znver3",
             "ours": {
-              "coverage": 0.9904300886928552,
-              "cycles_per_sample": 0.5372791651293396,
-              "efficiency": 0.5946867250709408
+              "coverage": 0.9919056383462962,
+              "cycles_per_sample": 0.4704929100822089,
+              "efficiency": 0.5599150423218976
             },
-            "ratio": 0.915835999316078
+            "ratio": 0.8019934001582583
           },
           "samples": 65536,
           "snr_db": {
@@ -3420,26 +3420,26 @@
           "branches": {
             "comparison": {
               "branches_per_sample": 0.159515380859375,
-              "mispredictions_per_sample": 0.0003204345703125
+              "mispredictions_per_sample": 0.0004425048828125
             },
             "ours": {
               "branches_per_sample": 0.013275146484375,
-              "mispredictions_per_sample": 0.0006103515625
+              "mispredictions_per_sample": 0.0005645751953125
             }
           },
           "compared_with": "KFR 7.2.0 clamp(round(double(select(x == x, x, 0)) * scale + bias), 0, 255) to uint8_t (the CU8 contract: NaN as 0, the f64 formula) (benches/refs/kfr-ops.cpp, avx2, -ffp-contract=off)",
           "comparison_kind": "library",
           "cost": {
             "counter_model": {
-              "comparison": 5.68406283585272,
+              "comparison": 5.68650424210272,
               "cpu": "alderlake",
-              "ours": 0.35658631411823033,
+              "ours": 0.35567078677448033,
               "penalty": 20.0
             },
             "reference_model": {
-              "comparison": 6.553847069204943,
+              "comparison": 6.555433983267443,
               "cpu": "znver3",
-              "ours": 0.2817017792898823,
+              "ours": 0.2811066865164448,
               "penalty": 13.0
             }
           },
@@ -3482,26 +3482,26 @@
           "branches": {
             "comparison": {
               "branches_per_sample": 0.034515380859375,
-              "mispredictions_per_sample": 0.0003814697265625
+              "mispredictions_per_sample": 0.0003509521484375
             },
             "ours": {
               "branches_per_sample": 0.130462646484375,
-              "mispredictions_per_sample": 0.0004425048828125
+              "mispredictions_per_sample": 0.0004730224609375
             }
           },
           "compared_with": "VOLK 3.3.0 volk_32f_s32f_x2_convert_8u_generic, benches/refs/volk-generic.c (-O3 -ffp-contract=off, avx2)",
           "comparison_kind": "library",
           "cost": {
             "counter_model": {
-              "comparison": 0.7556525352819642,
+              "comparison": 0.7550421837194642,
               "cpu": "alderlake",
-              "ours": 0.9258436090502563,
+              "ours": 0.7481049477030672,
               "penalty": 20.0
             },
             "reference_model": {
-              "comparison": 0.6165622563148613,
+              "comparison": 0.6161655277992363,
               "cpu": "znver3",
-              "ours": 0.8450632857309316,
+              "ours": 0.6844606035620504,
               "penalty": 13.0
             }
           },
@@ -3513,11 +3513,11 @@
             },
             "cpu": "alderlake",
             "ours": {
-              "coverage": 0.9907799859763692,
-              "cycles_per_sample": 0.9169935113940063,
-              "efficiency": 0.5806724664942394
+              "coverage": 0.9936480109508772,
+              "cycles_per_sample": 0.7386444984843172,
+              "efficiency": 0.6023411070861898
             },
-            "ratio": 1.2258892291403096
+            "ratio": 0.9874620960830375
           },
           "cycle_mode": "whole-loop",
           "reference_model": {
@@ -3528,11 +3528,11 @@
             },
             "cpu": "znver3",
             "ours": {
-              "coverage": 0.9907799859763692,
-              "cycles_per_sample": 0.8393107222543691,
-              "efficiency": 0.5741430131645391
+              "coverage": 0.9936480109508772,
+              "cycles_per_sample": 0.6783113115698629,
+              "efficiency": 0.6183905256428136
             },
-            "ratio": 1.372312622054659
+            "ratio": 1.109070991074102
           },
           "samples": 65536,
           "snr_db": {
@@ -11170,26 +11170,26 @@
           "branches": {
             "comparison": {
               "branches_per_sample": 0.253265380859375,
-              "mispredictions_per_sample": 0.000518798828125
+              "mispredictions_per_sample": 0.0005645751953125
             },
             "ours": {
               "branches_per_sample": 0.035736083984375,
-              "mispredictions_per_sample": 0.0004730224609375
+              "mispredictions_per_sample": 0.000396728515625
             }
           },
           "compared_with": "volk_32fc_x2_multiply_32fc",
           "comparison_kind": "library",
           "cost": {
             "counter_model": {
-              "comparison": 0.5533170249245383,
+              "comparison": 0.5542325522682883,
               "cpu": "alderlake",
-              "ours": 0.5216258772160891,
+              "ours": 0.5200999983098391,
               "penalty": 20.0
             },
             "reference_model": {
-              "comparison": 0.49299785267223006,
+              "comparison": 0.49359294544566756,
               "cpu": "znver3",
-              "ours": 0.4561549969209679,
+              "ours": 0.4551631756319054,
               "penalty": 13.0
             }
           },
@@ -11232,26 +11232,26 @@
           "branches": {
             "comparison": {
               "branches_per_sample": 0.1277923583984375,
-              "mispredictions_per_sample": 0.000274658203125
+              "mispredictions_per_sample": 0.000396728515625
             },
             "ours": {
               "branches_per_sample": 0.0189056396484375,
-              "mispredictions_per_sample": 0.0004425048828125
+              "mispredictions_per_sample": 0.0004119873046875
             }
           },
           "compared_with": "sdrk fallback",
           "comparison_kind": "own_fallback",
           "cost": {
             "counter_model": {
-              "comparison": 1.3779184670283877,
+              "comparison": 1.3803598732783877,
               "cpu": "alderlake",
-              "ours": 0.6425586066093448,
+              "ours": 0.6419482550468448,
               "penalty": 20.0
             },
             "reference_model": {
-              "comparison": 0.83267874882139,
+              "comparison": 0.83426566288389,
               "cpu": "znver3",
-              "ours": 0.5155457608860188,
+              "ours": 0.5151490323703938,
               "penalty": 13.0
             }
           },
@@ -11294,26 +11294,26 @@
           "branches": {
             "comparison": {
               "branches_per_sample": 0.129241943359375,
-              "mispredictions_per_sample": 0.0004730224609375
+              "mispredictions_per_sample": 0.000457763671875
             },
             "ours": {
               "branches_per_sample": 0.1277923583984375,
-              "mispredictions_per_sample": 0.000274658203125
+              "mispredictions_per_sample": 0.000396728515625
             }
           },
           "compared_with": "CMSIS-DSP 1.18.0 arm_cmplx_mult_cmplx_q15 (Q3.13, truncating, scaled by 4), generic C (-O3 -ffp-contract=off, LOOPUNROLL, avx2)",
           "comparison_kind": "library",
           "cost": {
             "counter_model": {
-              "comparison": 1.4156333605448406,
+              "comparison": 1.4153281847635906,
               "cpu": "alderlake",
-              "ours": 1.3779184670283877,
+              "ours": 1.3803598732783877,
               "penalty": 20.0
             },
             "reference_model": {
-              "comparison": 1.280198574066162,
+              "comparison": 1.2800002098083496,
               "cpu": "znver3",
-              "ours": 0.83267874882139,
+              "ours": 0.83426566288389,
               "penalty": 13.0
             }
           },
@@ -11360,7 +11360,7 @@
             },
             "ours": {
               "branches_per_sample": 0.065765380859375,
-              "mispredictions_per_sample": 0.0003814697265625
+              "mispredictions_per_sample": 0.000396728515625
             }
           },
           "compared_with": "CMSIS-DSP 1.18.0 arm_cmplx_mult_cmplx_f32, generic C (-O3 -ffp-contract=off, LOOPUNROLL, avx2)",
@@ -11369,13 +11369,13 @@
             "counter_model": {
               "comparison": 0.8003574371337892,
               "cpu": "alderlake",
-              "ours": 0.5218352684607873,
+              "ours": 0.5221404442420373,
               "penalty": 20.0
             },
             "reference_model": {
               "comparison": 0.530944341023763,
               "cpu": "znver3",
-              "ours": 0.5153794156588041,
+              "ours": 0.5155777799166166,
               "penalty": 13.0
             }
           },
@@ -11418,26 +11418,26 @@
           "branches": {
             "comparison": {
               "branches_per_sample": 0.128265380859375,
-              "mispredictions_per_sample": 0.0005340576171875
+              "mispredictions_per_sample": 0.0005035400390625
             },
             "ours": {
               "branches_per_sample": 0.0186614990234375,
-              "mispredictions_per_sample": 0.000457763671875
+              "mispredictions_per_sample": 0.0004425048828125
             }
           },
           "compared_with": "volk_32f_x2_multiply_32f",
           "comparison_kind": "library",
           "cost": {
             "counter_model": {
-              "comparison": 0.18979107833608969,
+              "comparison": 0.18918072677358969,
               "cpu": "alderlake",
-              "ours": 0.13967089117302645,
+              "ours": 0.13936571539177645,
               "penalty": 20.0
             },
             "reference_model": {
-              "comparison": 0.20929790316565894,
+              "comparison": 0.20890117465003394,
               "cpu": "znver3",
-              "ours": 0.19740700960424507,
+              "ours": 0.19720864534643257,
               "penalty": 13.0
             }
           },
@@ -11480,26 +11480,26 @@
           "branches": {
             "comparison": {
               "branches_per_sample": 0.129241943359375,
-              "mispredictions_per_sample": 0.000396728515625
+              "mispredictions_per_sample": 0.000457763671875
             },
             "ours": {
               "branches_per_sample": 0.0655364990234375,
-              "mispredictions_per_sample": 0.000396728515625
+              "mispredictions_per_sample": 0.0002899169921875
             }
           },
           "compared_with": "CMSIS-DSP 1.18.0 arm_mult_f32, generic C (-O3 -ffp-contract=off, LOOPUNROLL, avx2)",
           "comparison_kind": "library",
           "cost": {
             "counter_model": {
-              "comparison": 0.18705592325421289,
+              "comparison": 0.18827662637921289,
               "cpu": "alderlake",
-              "ours": 0.1450254979626886,
+              "ours": 0.1428892674939386,
               "penalty": 20.0
             },
             "reference_model": {
-              "comparison": 0.20635770724671817,
+              "comparison": 0.20715116427796817,
               "cpu": "znver3",
-              "ours": 0.199174909920528,
+              "ours": 0.1977863601158405,
               "penalty": 13.0
             }
           },
@@ -11542,26 +11542,26 @@
           "branches": {
             "comparison": {
               "branches_per_sample": 0.0655364990234375,
-              "mispredictions_per_sample": 0.0003509521484375
+              "mispredictions_per_sample": 0.0003814697265625
             },
             "ours": {
               "branches_per_sample": 0.0108489990234375,
-              "mispredictions_per_sample": 0.0004119873046875
+              "mispredictions_per_sample": 0.0003662109375
             }
           },
           "compared_with": "sdrk fallback",
           "comparison_kind": "own_fallback",
           "cost": {
             "counter_model": {
-              "comparison": 0.3953299519791562,
+              "comparison": 0.3959403035416562,
               "cpu": "alderlake",
-              "ours": 0.09338816951846811,
+              "ours": 0.09247264217471811,
               "penalty": 20.0
             },
             "reference_model": {
-              "comparison": 0.2797911660936143,
+              "comparison": 0.2801878946092393,
               "cpu": "znver3",
-              "ours": 0.10271007654079109,
+              "ours": 0.10211498376735359,
               "penalty": 13.0
             }
           },
@@ -11608,7 +11608,7 @@
             },
             "ours": {
               "branches_per_sample": 0.0655364990234375,
-              "mispredictions_per_sample": 0.0003509521484375
+              "mispredictions_per_sample": 0.0003814697265625
             }
           },
           "compared_with": "CMSIS-DSP 1.18.0 arm_mult_q15 (truncating), generic C (-O3 -ffp-contract=off, LOOPUNROLL, avx2)",
@@ -11617,13 +11617,13 @@
             "counter_model": {
               "comparison": 0.3197525611098332,
               "cpu": "alderlake",
-              "ours": 0.3953299519791562,
+              "ours": 0.3959403035416562,
               "penalty": 20.0
             },
             "reference_model": {
               "comparison": 0.3036832681409656,
               "cpu": "znver3",
-              "ours": 0.2797911660936143,
+              "ours": 0.2801878946092393,
               "penalty": 13.0
             }
           },
@@ -30082,7 +30082,7 @@
           "branches": {
             "comparison": {
               "branches_per_sample": 6.0020294189453125,
-              "mispredictions_per_sample": 0.0003662109375
+              "mispredictions_per_sample": 0.000335693359375
             },
             "ours": {
               "branches_per_sample": 0.2552032470703125,
@@ -30093,15 +30093,15 @@
           "comparison_kind": "library",
           "cost": {
             "counter_model": {
-              "comparison": 12.239460196061568,
+              "comparison": 12.238971914811568,
               "cpu": "znver2",
-              "ours": 2.0457763671875,
+              "ours": 2.0459228515624996,
               "penalty": 16.0
             },
             "reference_model": {
-              "comparison": 11.130598227761007,
+              "comparison": 11.129987876198507,
               "cpu": "skylake",
-              "ours": 2.0577935112847228,
+              "ours": 2.057940719039352,
               "penalty": 20.0
             }
           },
@@ -30113,11 +30113,11 @@
             },
             "cpu": "znver2",
             "ours": {
-              "coverage": 0.9936388140161725,
-              "cycles_per_sample": 2.0379638671875,
+              "coverage": 0.9935673985697344,
+              "cycles_per_sample": 2.0381103515624996,
               "efficiency": 0.8395061728395062
             },
-            "ratio": 0.16658740929971394
+            "ratio": 0.16659938323748927
           },
           "cycle_mode": "whole-loop",
           "reference_model": {
@@ -30128,11 +30128,11 @@
             },
             "cpu": "skylake",
             "ours": {
-              "coverage": 0.9936388140161725,
-              "cycles_per_sample": 2.0480278862847228,
+              "coverage": 0.9935673985697344,
+              "cycles_per_sample": 2.048175094039352,
               "efficiency": 0.9828009828009827
             },
-            "ratio": 0.18412095976648668
+            "ratio": 0.18413419397743122
           },
           "samples": 65536,
           "snr_db": {
@@ -30144,26 +30144,26 @@
           "branches": {
             "comparison": {
               "branches_per_sample": 0.128509521484375,
-              "mispredictions_per_sample": 0.000579833984375
+              "mispredictions_per_sample": 0.0005645751953125
             },
             "ours": {
               "branches_per_sample": 0.021331787109375,
-              "mispredictions_per_sample": 0.00054931640625
+              "mispredictions_per_sample": 0.000518798828125
             }
           },
           "compared_with": "volk_32f_s32f_convert_8i",
           "comparison_kind": "library",
           "cost": {
             "counter_model": {
-              "comparison": 0.9642950123754039,
+              "comparison": 0.9640508717504039,
               "cpu": "znver2",
-              "ours": 1.0388529967639333,
+              "ours": 1.0383647155139333,
               "penalty": 16.0
             },
             "reference_model": {
-              "comparison": 1.0313719650794717,
+              "comparison": 1.0310667892982217,
               "cpu": "skylake",
-              "ours": 1.0338595763205836,
+              "ours": 1.0332492247580836,
               "penalty": 20.0
             }
           },
@@ -30206,7 +30206,7 @@
           "branches": {
             "comparison": {
               "branches_per_sample": 6.002288818359375,
-              "mispredictions_per_sample": 0.0003204345703125
+              "mispredictions_per_sample": 0.0002899169921875
             },
             "ours": {
               "branches_per_sample": 0.505462646484375,
@@ -30217,15 +30217,15 @@
           "comparison_kind": "library",
           "cost": {
             "counter_model": {
-              "comparison": 14.219196983973186,
+              "comparison": 14.218708702723186,
               "cpu": "znver2",
-              "ours": 2.4903835296630863,
+              "ours": 2.169519449869792,
               "penalty": 16.0
             },
             "reference_model": {
-              "comparison": 11.729765535990397,
+              "comparison": 11.729155184427897,
               "cpu": "skylake",
-              "ours": 2.3263422012329102,
+              "ours": 2.156265421549479,
               "penalty": 20.0
             }
           },
@@ -30237,11 +30237,11 @@
             },
             "cpu": "znver2",
             "ours": {
-              "coverage": 0.9947406367396502,
-              "cycles_per_sample": 2.4830593109130863,
-              "efficiency": 0.8097165991902834
+              "coverage": 0.9943597918706556,
+              "cycles_per_sample": 2.162195231119792,
+              "efficiency": 0.8837209302325582
             },
-            "ratio": 0.17469024041138176
+            "ratio": 0.15211654553743384
           },
           "cycle_mode": "whole-loop",
           "reference_model": {
@@ -30252,11 +30252,11 @@
             },
             "cpu": "skylake",
             "ours": {
-              "coverage": 0.9947406367396502,
-              "cycles_per_sample": 2.3171869277954102,
-              "efficiency": 0.7592190889370932
+              "coverage": 0.9943597918706556,
+              "cycles_per_sample": 2.147110148111979,
+              "efficiency": 0.6323185011709603
             },
-            "ratio": 0.1976555826555671
+            "ratio": 0.1831480672793716
           },
           "samples": 65536,
           "snr_db": {
@@ -30268,7 +30268,7 @@
           "branches": {
             "comparison": {
               "branches_per_sample": 0.628021240234375,
-              "mispredictions_per_sample": 0.00042724609375
+              "mispredictions_per_sample": 0.0003662109375
             },
             "ours": {
               "branches_per_sample": 0.036712646484375,
@@ -30279,13 +30279,13 @@
           "comparison_kind": "library",
           "cost": {
             "counter_model": {
-              "comparison": 25.656330471038817,
+              "comparison": 25.655353908538817,
               "cpu": "znver2",
               "ours": 1.5639097936607982,
               "penalty": 16.0
             },
             "reference_model": {
-              "comparison": 26.544230023136848,
+              "comparison": 26.543009320011848,
               "cpu": "skylake",
               "ours": 1.5998350178179153,
               "penalty": 20.0
@@ -30334,7 +30334,7 @@
             },
             "ours": {
               "branches_per_sample": 0.504974365234375,
-              "mispredictions_per_sample": 0.000518798828125
+              "mispredictions_per_sample": 0.0004730224609375
             }
           },
           "compared_with": "VOLK 3.3.0 volk_32f_s32f_x2_convert_8u_generic, benches/refs/volk-generic.c (-O3 -ffp-contract=off, sse2)",
@@ -30343,13 +30343,13 @@
             "counter_model": {
               "comparison": 14.259354553222657,
               "cpu": "znver2",
-              "ours": 5.745476292201451,
+              "ours": 4.083174299760298,
               "penalty": 16.0
             },
             "reference_model": {
               "comparison": 12.300149426269531,
               "cpu": "skylake",
-              "ours": 5.444143167223249,
+              "ours": 3.909393719759854,
               "penalty": 20.0
             }
           },
@@ -30361,11 +30361,11 @@
             },
             "cpu": "znver2",
             "ours": {
-              "coverage": 0.9970062775805507,
-              "cycles_per_sample": 5.737175510951451,
-              "efficiency": 0.6118881118881119
+              "coverage": 0.996170890755002,
+              "cycles_per_sample": 4.075605940385298,
+              "efficiency": 0.6773399014778326
             },
-            "ratio": 0.4024962935633787
+            "ratio": 0.28592750594759564
           },
           "cycle_mode": "whole-loop",
           "reference_model": {
@@ -30376,11 +30376,11 @@
             },
             "cpu": "skylake",
             "ours": {
-              "coverage": 0.9970062775805507,
-              "cycles_per_sample": 5.433767190660749,
-              "efficiency": 0.46146746654360865
+              "coverage": 0.996170890755002,
+              "cycles_per_sample": 3.899933270541104,
+              "efficiency": 0.48906048906048905
             },
-            "ratio": 0.44200558619648356
+            "ratio": 0.3172370532060053
           },
           "samples": 65536,
           "snr_db": {
@@ -30396,7 +30396,7 @@
             },
             "ours": {
               "branches_per_sample": 0.0213165283203125,
-              "mispredictions_per_sample": 0.0005340576171875
+              "mispredictions_per_sample": 0.0005950927734375
             }
           },
           "compared_with": "volk_32f_s32f_convert_16i",
@@ -30405,13 +30405,13 @@
             "counter_model": {
               "comparison": 0.528746246912994,
               "cpu": "znver2",
-              "ours": 0.5375239790050005,
+              "ours": 0.5385005415050005,
               "penalty": 16.0
             },
             "reference_model": {
               "comparison": 0.532723763119776,
               "cpu": "skylake",
-              "ours": 0.5705890514433613,
+              "ours": 0.5718097545683613,
               "penalty": 20.0
             }
           },
@@ -30454,7 +30454,7 @@
           "branches": {
             "comparison": {
               "branches_per_sample": 3.0022735595703125,
-              "mispredictions_per_sample": 0.0002899169921875
+              "mispredictions_per_sample": 0.0002593994140625
             },
             "ours": {
               "branches_per_sample": 0.1306915283203125,
@@ -30465,15 +30465,15 @@
           "comparison_kind": "library",
           "cost": {
             "counter_model": {
-              "comparison": 6.123307352933017,
+              "comparison": 6.122819071683017,
               "cpu": "znver2",
-              "ours": 1.0321947644406912,
+              "ours": 1.0323842773085887,
               "penalty": 16.0
             },
             "reference_model": {
-              "comparison": 5.569134049849076,
+              "comparison": 5.568523698286576,
               "cpu": "skylake",
-              "ours": 1.03986058983081,
+              "ours": 1.0399336013799438,
               "penalty": 20.0
             }
           },
@@ -30485,11 +30485,11 @@
             },
             "cpu": "znver2",
             "ours": {
-              "coverage": 0.9919988569795685,
-              "cycles_per_sample": 1.0246264050656912,
-              "efficiency": 0.8401048209468953
+              "coverage": 0.9919285714285714,
+              "cycles_per_sample": 1.0248159179335887,
+              "efficiency": 0.8400810324309851
             },
-            "ratio": 0.16745904353960162
+            "ratio": 0.16749001643219902
           },
           "cycle_mode": "whole-loop",
           "reference_model": {
@@ -30500,11 +30500,11 @@
             },
             "cpu": "skylake",
             "ours": {
-              "coverage": 0.9919988569795685,
-              "cycles_per_sample": 1.03040014061206,
-              "efficiency": 0.9812384307637189
+              "coverage": 0.9919285714285714,
+              "cycles_per_sample": 1.0304731521611938,
+              "efficiency": 0.9813578551382337
             },
-            "ratio": 0.18521264836830664
+            "ratio": 0.18522577206835633
           },
           "samples": 65536,
           "snr_db": {
@@ -30516,26 +30516,26 @@
           "branches": {
             "comparison": {
               "branches_per_sample": 0.066009521484375,
-              "mispredictions_per_sample": 0.000518798828125
+              "mispredictions_per_sample": 0.00054931640625
             },
             "ours": {
               "branches_per_sample": 0.013763427734375,
-              "mispredictions_per_sample": 0.000518798828125
+              "mispredictions_per_sample": 0.00048828125
             }
           },
           "compared_with": "volk_32f_s32f_convert_8i",
           "comparison_kind": "library",
           "cost": {
             "counter_model": {
-              "comparison": 0.49128000599239385,
+              "comparison": 0.49176828724239385,
               "cpu": "znver2",
-              "ours": 0.5350208020865177,
+              "ours": 0.5345325208365177,
               "penalty": 16.0
             },
             "reference_model": {
-              "comparison": 0.5256483175326551,
+              "comparison": 0.5262586690951551,
               "cpu": "skylake",
-              "ours": 0.5334516089105996,
+              "ours": 0.5328412573480996,
               "penalty": 20.0
             }
           },
@@ -30578,7 +30578,7 @@
           "branches": {
             "comparison": {
               "branches_per_sample": 3.002532958984375,
-              "mispredictions_per_sample": 0.000274658203125
+              "mispredictions_per_sample": 0.0002593994140625
             },
             "ours": {
               "branches_per_sample": 0.255950927734375,
@@ -30589,15 +30589,15 @@
           "comparison_kind": "library",
           "cost": {
             "counter_model": {
-              "comparison": 7.113536837895711,
+              "comparison": 7.113292697270711,
               "cpu": "znver2",
-              "ours": 1.2546510613097384,
+              "ours": 1.0939986311252206,
               "penalty": 16.0
             },
             "reference_model": {
-              "comparison": 5.868909619649251,
+              "comparison": 5.868604443868001,
               "cpu": "skylake",
-              "ours": 1.174353473101328,
+              "ours": 1.089251229238541,
               "penalty": 20.0
             }
           },
@@ -30609,11 +30609,11 @@
             },
             "cpu": "znver2",
             "ours": {
-              "coverage": 0.9926755969010979,
-              "cycles_per_sample": 1.2473268425597384,
-              "efficiency": 0.810153737555776
+              "coverage": 0.9921931589537223,
+              "cycles_per_sample": 1.0866744123752206,
+              "efficiency": 0.8840492089478226
             },
-            "ratio": 0.17545391395439114
+            "ratio": 0.15285590940546856
           },
           "cycle_mode": "whole-loop",
           "reference_model": {
@@ -30624,11 +30624,11 @@
             },
             "cpu": "skylake",
             "ours": {
-              "coverage": 0.9926755969010979,
-              "cycles_per_sample": 1.165198199663828,
-              "efficiency": 0.7585967437751902
+              "coverage": 0.9921931589537223,
+              "cycles_per_sample": 1.080095955801041,
+              "efficiency": 0.6322537580859933
             },
-            "ratio": 0.19872342489908076
+            "ratio": 0.1842093195976058
           },
           "samples": 65536,
           "snr_db": {
@@ -30640,7 +30640,7 @@
           "branches": {
             "comparison": {
               "branches_per_sample": 0.315765380859375,
-              "mispredictions_per_sample": 0.0003204345703125
+              "mispredictions_per_sample": 0.0003509521484375
             },
             "ours": {
               "branches_per_sample": 0.021331787109375,
@@ -30651,13 +30651,13 @@
           "comparison_kind": "library",
           "cost": {
             "counter_model": {
-              "comparison": 12.83812520980835,
+              "comparison": 12.83861349105835,
               "cpu": "znver2",
               "ours": 0.7986033120184999,
               "penalty": 16.0
             },
             "reference_model": {
-              "comparison": 13.282787303823643,
+              "comparison": 13.283397655386143,
               "cpu": "skylake",
               "ours": 0.818008254059648,
               "penalty": 20.0
@@ -30706,7 +30706,7 @@
             },
             "ours": {
               "branches_per_sample": 0.255462646484375,
-              "mispredictions_per_sample": 0.000518798828125
+              "mispredictions_per_sample": 0.0004730224609375
             }
           },
           "compared_with": "VOLK 3.3.0 volk_32f_s32f_x2_convert_8u_generic, benches/refs/volk-generic.c (-O3 -ffp-contract=off, sse2)",
@@ -30715,13 +30715,13 @@
             "counter_model": {
               "comparison": 7.134424133300781,
               "cpu": "znver2",
-              "ours": 2.8850772966657363,
+              "ours": 2.052813859419389,
               "penalty": 16.0
             },
             "reference_model": {
               "comparison": 6.155209436035156,
               "cpu": "skylake",
-              "ours": 2.7350152724129813,
+              "ours": 1.9665488156405362,
               "penalty": 20.0
             }
           },
@@ -30733,11 +30733,11 @@
             },
             "cpu": "znver2",
             "ours": {
-              "coverage": 0.9941682938087695,
-              "cycles_per_sample": 2.8767765154157363,
-              "efficiency": 0.6118881118881119
+              "coverage": 0.9925458826121077,
+              "cycles_per_sample": 2.045245500044389,
+              "efficiency": 0.6773399014778326
             },
-            "ratio": 0.4035285611505296
+            "ratio": 0.28688880398248023
           },
           "cycle_mode": "whole-loop",
           "reference_model": {
@@ -30748,11 +30748,11 @@
             },
             "cpu": "skylake",
             "ours": {
-              "coverage": 0.9941682938087695,
-              "cycles_per_sample": 2.7246392958504813,
-              "efficiency": 0.46146746654360865
+              "coverage": 0.9925458826121077,
+              "cycles_per_sample": 1.9570883664217862,
+              "efficiency": 0.48906048906048905
             },
-            "ratio": 0.443139181827715
+            "ratio": 0.3183036150074971
           },
           "samples": 65536,
           "snr_db": {
@@ -38394,7 +38394,7 @@
             },
             "ours": {
               "branches_per_sample": 0.253021240234375,
-              "mispredictions_per_sample": 0.0003662109375
+              "mispredictions_per_sample": 0.0003204345703125
             }
           },
           "compared_with": "KFR 7.2.0 a * b on complex<float> (benches/refs/kfr-ops.cpp, sse2, -ffp-contract=off)",
@@ -38403,13 +38403,13 @@
             "counter_model": {
               "comparison": 2.8120151935924182,
               "cpu": "znver2",
-              "ours": 1.5965513397216797,
+              "ours": 1.5958189178466797,
               "penalty": 16.0
             },
             "reference_model": {
               "comparison": 2.690676824396307,
               "cpu": "skylake",
-              "ours": 1.5365946655273437,
+              "ours": 1.5356791381835937,
               "penalty": 20.0
             }
           },
@@ -38452,26 +38452,26 @@
           "branches": {
             "comparison": {
               "branches_per_sample": 0.253265380859375,
-              "mispredictions_per_sample": 0.0002593994140625
+              "mispredictions_per_sample": 0.0003509521484375
             },
             "ours": {
               "branches_per_sample": 0.253265380859375,
-              "mispredictions_per_sample": 0.000396728515625
+              "mispredictions_per_sample": 0.0003509521484375
             }
           },
           "compared_with": "sdrk fallback",
           "comparison_kind": "own_fallback",
           "cost": {
             "counter_model": {
-              "comparison": 3.9066609507021695,
+              "comparison": 3.9081257944521695,
               "cpu": "znver2",
-              "ours": 3.9084549762891685,
+              "ours": 3.9077225544141685,
               "penalty": 16.0
             },
             "reference_model": {
-              "comparison": 5.035758225814155,
+              "comparison": 5.037589280501655,
               "cpu": "skylake",
-              "ours": 5.0379850072446075,
+              "ours": 5.0370694799008575,
               "penalty": 20.0
             }
           },
@@ -38514,26 +38514,26 @@
           "branches": {
             "comparison": {
               "branches_per_sample": 0.253753662109375,
-              "mispredictions_per_sample": 0.00042724609375
+              "mispredictions_per_sample": 0.000396728515625
             },
             "ours": {
               "branches_per_sample": 0.253265380859375,
-              "mispredictions_per_sample": 0.0002593994140625
+              "mispredictions_per_sample": 0.0003509521484375
             }
           },
           "compared_with": "CMSIS-DSP 1.18.0 arm_cmplx_mult_cmplx_q15 (Q3.13, truncating, scaled by 4), generic C (-O3 -ffp-contract=off, LOOPUNROLL, sse2)",
           "comparison_kind": "library",
           "cost": {
             "counter_model": {
-              "comparison": 4.785504853491689,
+              "comparison": 4.785016572241689,
               "cpu": "znver2",
-              "ours": 3.9066609507021695,
+              "ours": 3.9081257944521695,
               "penalty": 16.0
             },
             "reference_model": {
-              "comparison": 5.294516828948376,
+              "comparison": 5.293906477385876,
               "cpu": "skylake",
-              "ours": 5.035758225814155,
+              "ours": 5.037589280501655,
               "penalty": 20.0
             }
           },
@@ -38576,26 +38576,26 @@
           "branches": {
             "comparison": {
               "branches_per_sample": 0.253753662109375,
-              "mispredictions_per_sample": 0.000335693359375
+              "mispredictions_per_sample": 0.000457763671875
             },
             "ours": {
               "branches_per_sample": 0.253265380859375,
-              "mispredictions_per_sample": 0.0003509521484375
+              "mispredictions_per_sample": 0.0003204345703125
             }
           },
           "compared_with": "CMSIS-DSP 1.18.0 arm_cmplx_mult_cmplx_f32, generic C (-O3 -ffp-contract=off, LOOPUNROLL, sse2)",
           "comparison_kind": "library",
           "cost": {
             "counter_model": {
-              "comparison": 2.0960822920365767,
+              "comparison": 2.0980354170365767,
               "cpu": "znver2",
-              "ours": 1.5951697875976565,
+              "ours": 1.5946815063476565,
               "penalty": 16.0
             },
             "reference_model": {
-              "comparison": 2.533616610440341,
+              "comparison": 2.536058016690341,
               "cpu": "skylake",
-              "ours": 1.535147592163086,
+              "ours": 1.534537240600586,
               "penalty": 20.0
             }
           },
@@ -38638,7 +38638,7 @@
           "branches": {
             "comparison": {
               "branches_per_sample": 0.253265380859375,
-              "mispredictions_per_sample": 0.0005645751953125
+              "mispredictions_per_sample": 0.0009918212890625
             },
             "ours": {
               "branches_per_sample": 0.034759521484375,
@@ -38649,13 +38649,13 @@
           "comparison_kind": "library",
           "cost": {
             "counter_model": {
-              "comparison": 0.40895855947128584,
+              "comparison": 0.41579449697128584,
               "cpu": "znver2",
               "ours": 0.28759934809758114,
               "penalty": 16.0
             },
             "reference_model": {
-              "comparison": 0.3692602708508612,
+              "comparison": 0.3778051927258612,
               "cpu": "skylake",
               "ours": 0.2643988800048828,
               "penalty": 20.0
@@ -38700,26 +38700,26 @@
           "branches": {
             "comparison": {
               "branches_per_sample": 0.253753662109375,
-              "mispredictions_per_sample": 0.000335693359375
+              "mispredictions_per_sample": 0.0003662109375
             },
             "ours": {
               "branches_per_sample": 0.128265380859375,
-              "mispredictions_per_sample": 0.0003204345703125
+              "mispredictions_per_sample": 0.0003509521484375
             }
           },
           "compared_with": "CMSIS-DSP 1.18.0 arm_mult_f32, generic C (-O3 -ffp-contract=off, LOOPUNROLL, sse2)",
           "comparison_kind": "library",
           "cost": {
             "counter_model": {
-              "comparison": 0.4677840756456818,
+              "comparison": 0.4682723568956818,
               "cpu": "znver2",
-              "ours": 0.3626724538391948,
+              "ours": 0.3631607350891948,
               "penalty": 16.0
             },
             "reference_model": {
-              "comparison": 0.3639959793662548,
+              "comparison": 0.3646063309287548,
               "cpu": "skylake",
-              "ours": 0.2998440842707033,
+              "ours": 0.3004544358332033,
               "penalty": 20.0
             }
           },
@@ -38762,26 +38762,26 @@
           "branches": {
             "comparison": {
               "branches_per_sample": 0.128265380859375,
-              "mispredictions_per_sample": 0.0003662109375
+              "mispredictions_per_sample": 0.0003814697265625
             },
             "ours": {
               "branches_per_sample": 0.128265380859375,
-              "mispredictions_per_sample": 0.000335693359375
+              "mispredictions_per_sample": 0.0003662109375
             }
           },
           "compared_with": "sdrk fallback",
           "comparison_kind": "own_fallback",
           "cost": {
             "counter_model": {
-              "comparison": 1.0221322526602907,
+              "comparison": 1.0223763932852907,
               "cpu": "znver2",
-              "ours": 1.0213800574993266,
+              "ours": 1.0218683387493266,
               "penalty": 16.0
             },
             "reference_model": {
-              "comparison": 0.9821422077047413,
+              "comparison": 0.9824473834859913,
               "cpu": "skylake",
-              "ours": 0.9812787075700431,
+              "ours": 0.9818890591325431,
               "penalty": 20.0
             }
           },
@@ -38828,7 +38828,7 @@
             },
             "ours": {
               "branches_per_sample": 0.128265380859375,
-              "mispredictions_per_sample": 0.0003662109375
+              "mispredictions_per_sample": 0.0003814697265625
             }
           },
           "compared_with": "CMSIS-DSP 1.18.0 arm_mult_q15 (truncating), generic C (-O3 -ffp-contract=off, LOOPUNROLL, sse2)",
@@ -38837,13 +38837,13 @@
             "counter_model": {
               "comparison": 1.40175205115116,
               "cpu": "znver2",
-              "ours": 1.0221322526602907,
+              "ours": 1.0223763932852907,
               "penalty": 16.0
             },
             "reference_model": {
               "comparison": 1.2185623261422822,
               "cpu": "skylake",
-              "ours": 0.9821422077047413,
+              "ours": 0.9824473834859913,
               "penalty": 20.0
             }
           },
@@ -49001,26 +49001,26 @@
           "branches": {
             "comparison": {
               "branches_per_sample": 0.2532501220703125,
-              "mispredictions_per_sample": 0.0005340576171875
+              "mispredictions_per_sample": 0.0005645751953125
             },
             "ours": {
               "branches_per_sample": 0.0366973876953125,
-              "mispredictions_per_sample": 0.0005340576171875
+              "mispredictions_per_sample": 0.00054931640625
             }
           },
           "compared_with": "volk_32f_s32f_convert_16i",
           "comparison_kind": "library",
           "cost": {
             "counter_model": {
-              "comparison": 1.0377935791015624,
+              "comparison": 1.0382818603515624,
               "cpu": "znver2",
-              "ours": 1.042464024286685,
+              "ours": 1.042708164911685,
               "penalty": 16.0
             },
             "reference_model": {
-              "comparison": 1.043699951171875,
+              "comparison": 1.044310302734375,
               "cpu": "skylake",
-              "ours": 1.1057845817438336,
+              "ours": 1.1060897575250836,
               "penalty": 20.0
             }
           },
@@ -49067,7 +49067,7 @@
             },
             "ours": {
               "branches_per_sample": 0.2552032470703125,
-              "mispredictions_per_sample": 0.0004425048828125
+              "mispredictions_per_sample": 0.000457763671875
             }
           },
           "compared_with": "VOLK 3.3.0 volk_32f_s32f_convert_16i_generic, benches/refs/volk-generic.c (-O3 -ffp-contract=off, sse4.2)",
@@ -49076,13 +49076,13 @@
             "counter_model": {
               "comparison": 7.220319642287033,
               "cpu": "znver2",
-              "ours": 2.0420655168805806,
+              "ours": 2.0423096575055806,
               "penalty": 16.0
             },
             "reference_model": {
               "comparison": 7.271993443415714,
               "cpu": "skylake",
-              "ours": 1.962083958217076,
+              "ours": 1.962389133998326,
               "penalty": 20.0
             }
           },
@@ -49125,26 +49125,26 @@
           "branches": {
             "comparison": {
               "branches_per_sample": 0.128509521484375,
-              "mispredictions_per_sample": 0.0005645751953125
+              "mispredictions_per_sample": 0.0005340576171875
             },
             "ours": {
               "branches_per_sample": 0.021331787109375,
-              "mispredictions_per_sample": 0.0005340576171875
+              "mispredictions_per_sample": 0.000457763671875
             }
           },
           "compared_with": "volk_32f_s32f_convert_8i",
           "comparison_kind": "library",
           "cost": {
             "counter_model": {
-              "comparison": 0.9641861724853515,
+              "comparison": 0.9636978912353515,
               "cpu": "znver2",
-              "ours": 1.0386088561389333,
+              "ours": 1.0373881530139333,
               "penalty": 16.0
             },
             "reference_model": {
-              "comparison": 1.0293248530796597,
+              "comparison": 1.0287145015171597,
               "cpu": "skylake",
-              "ours": 1.0335544005393336,
+              "ours": 1.0320285216330836,
               "penalty": 20.0
             }
           },
@@ -49187,10 +49187,10 @@
           "branches": {
             "comparison": {
               "branches_per_sample": 0.128265380859375,
-              "mispredictions_per_sample": 0.0003814697265625
+              "mispredictions_per_sample": 0.000396728515625
             },
             "ours": {
-              "branches_per_sample": 0.505462646484375,
+              "branches_per_sample": 0.255462646484375,
               "mispredictions_per_sample": 0.0004425048828125
             }
           },
@@ -49198,15 +49198,15 @@
           "comparison_kind": "library",
           "cost": {
             "counter_model": {
-              "comparison": 2.521331405639648,
+              "comparison": 2.521575546264648,
               "cpu": "znver2",
-              "ours": 1.8859295436314172,
+              "ours": 1.5444924661387567,
               "penalty": 16.0
             },
             "reference_model": {
-              "comparison": 2.7783884048461913,
+              "comparison": 2.7786935806274413,
               "cpu": "skylake",
-              "ours": 1.915366690499442,
+              "ours": 1.5097473675271738,
               "penalty": 20.0
             }
           },
@@ -49218,11 +49218,11 @@
             },
             "cpu": "znver2",
             "ours": {
-              "coverage": 0.9939593534688218,
-              "cycles_per_sample": 1.8788494655064172,
-              "efficiency": 0.9370816599732262
+              "coverage": 0.9927394965067389,
+              "cycles_per_sample": 1.5374123880137567,
+              "efficiency": 0.9500409500409499
             },
-            "ratio": 0.746989755069659
+            "ratio": 0.6112417861288916
           },
           "cycle_mode": "whole-loop",
           "reference_model": {
@@ -49233,11 +49233,11 @@
             },
             "cpu": "skylake",
             "ours": {
-              "coverage": 0.9939593534688218,
-              "cycles_per_sample": 1.906516592843192,
-              "efficiency": 0.9234828496042217
+              "coverage": 0.9927394965067389,
+              "cycles_per_sample": 1.5008972698709238,
+              "efficiency": 0.8389261744966443
             },
-            "ratio": 0.6880845955009584
+            "ratio": 0.5416917401634012
           },
           "samples": 65536,
           "snr_db": {
@@ -49253,7 +49253,7 @@
             },
             "ours": {
               "branches_per_sample": 0.036712646484375,
-              "mispredictions_per_sample": 0.0005950927734375
+              "mispredictions_per_sample": 0.00048828125
             }
           },
           "compared_with": "KFR 7.2.0 clamp(round(double(select(x == x, x, 0)) * scale + bias), 0, 255) to uint8_t (the CU8 contract: NaN as 0, the f64 formula) (benches/refs/kfr-ops.cpp, sse42, -ffp-contract=off)",
@@ -49262,13 +49262,13 @@
             "counter_model": {
               "comparison": 18.27769154506571,
               "cpu": "znver2",
-              "ours": 1.5331733397940468,
+              "ours": 1.5314643554190468,
               "penalty": 16.0
             },
             "reference_model": {
               "comparison": 18.291666629594914,
               "cpu": "skylake",
-              "ours": 1.5825972693750836,
+              "ours": 1.5804610389063336,
               "penalty": 20.0
             }
           },
@@ -49311,7 +49311,7 @@
           "branches": {
             "comparison": {
               "branches_per_sample": 0.128265380859375,
-              "mispredictions_per_sample": 0.000457763671875
+              "mispredictions_per_sample": 0.0004730224609375
             },
             "ours": {
               "branches_per_sample": 0.504974365234375,
@@ -49322,15 +49322,15 @@
           "comparison_kind": "library",
           "cost": {
             "counter_model": {
-              "comparison": 2.7256352010587364,
+              "comparison": 2.7258793416837364,
               "cpu": "znver2",
-              "ours": 4.414682150268554,
+              "ours": 3.3941661949157713,
               "penalty": 16.0
             },
             "reference_model": {
-              "comparison": 2.842059876976944,
+              "comparison": 2.842365052758194,
               "cpu": "skylake",
-              "ours": 4.707494149780273,
+              "ours": 3.2880400924682616,
               "penalty": 20.0
             }
           },
@@ -49342,11 +49342,11 @@
             },
             "cpu": "znver2",
             "ours": {
-              "coverage": 0.9966288348372387,
-              "cycles_per_sample": 4.407357931518554,
-              "efficiency": 0.7171314741035856
+              "coverage": 0.9957653837212659,
+              "cycles_per_sample": 3.3868419761657713,
+              "efficiency": 0.7412898443291327
             },
-            "ratio": 1.621358983649201
+            "ratio": 1.245936170735415
           },
           "cycle_mode": "whole-loop",
           "reference_model": {
@@ -49357,11 +49357,11 @@
             },
             "cpu": "skylake",
             "ours": {
-              "coverage": 0.9966288348372387,
-              "cycles_per_sample": 4.698338876342773,
-              "efficiency": 0.5339028296849974
+              "coverage": 0.9957653837212659,
+              "cycles_per_sample": 3.2788848190307616,
+              "efficiency": 0.6125574272588055
             },
-            "ratio": 1.6584882069352591
+            "ratio": 1.1574286034673062
           },
           "samples": 65536,
           "snr_db": {
@@ -49373,26 +49373,26 @@
           "branches": {
             "comparison": {
               "branches_per_sample": 0.1282501220703125,
-              "mispredictions_per_sample": 0.0004730224609375
+              "mispredictions_per_sample": 0.0005035400390625
             },
             "ours": {
               "branches_per_sample": 0.0213165283203125,
-              "mispredictions_per_sample": 0.0005645751953125
+              "mispredictions_per_sample": 0.00054931640625
             }
           },
           "compared_with": "volk_32f_s32f_convert_16i",
           "comparison_kind": "library",
           "cost": {
             "counter_model": {
-              "comparison": 0.5276440622625379,
+              "comparison": 0.5281323435125379,
               "cpu": "znver2",
-              "ours": 0.537611416215318,
+              "ours": 0.537367275590318,
               "penalty": 16.0
             },
             "reference_model": {
-              "comparison": 0.5313769931967135,
+              "comparison": 0.5319873447592135,
               "cpu": "skylake",
-              "ours": 0.570728591959206,
+              "ours": 0.570423416177956,
               "penalty": 20.0
             }
           },
@@ -49435,26 +49435,26 @@
           "branches": {
             "comparison": {
               "branches_per_sample": 2.0022735595703125,
-              "mispredictions_per_sample": 0.000335693359375
+              "mispredictions_per_sample": 0.0003204345703125
             },
             "ours": {
               "branches_per_sample": 0.1306915283203125,
-              "mispredictions_per_sample": 0.000457763671875
+              "mispredictions_per_sample": 0.0004730224609375
             }
           },
           "compared_with": "VOLK 3.3.0 volk_32f_s32f_convert_16i_generic, benches/refs/volk-generic.c (-O3 -ffp-contract=off, sse4.2)",
           "comparison_kind": "library",
           "cost": {
             "counter_model": {
-              "comparison": 3.6141666412353515,
+              "comparison": 3.6139225006103515,
               "cpu": "znver2",
-              "ours": 1.030394448027178,
+              "ours": 1.030638588652178,
               "penalty": 16.0
             },
             "reference_model": {
-              "comparison": 3.6405357360839843,
+              "comparison": 3.6402305603027343,
               "cpu": "skylake",
-              "ours": 0.9920226058822188,
+              "ours": 0.9923277816634688,
               "penalty": 20.0
             }
           },
@@ -49497,26 +49497,26 @@
           "branches": {
             "comparison": {
               "branches_per_sample": 0.066009521484375,
-              "mispredictions_per_sample": 0.0005340576171875
+              "mispredictions_per_sample": 0.0004730224609375
             },
             "ours": {
               "branches_per_sample": 0.013763427734375,
-              "mispredictions_per_sample": 0.000518798828125
+              "mispredictions_per_sample": 0.000396728515625
             }
           },
           "compared_with": "volk_32f_s32f_convert_8i",
           "comparison_kind": "library",
           "cost": {
             "counter_model": {
-              "comparison": 0.4915792453082158,
+              "comparison": 0.4906026828082158,
               "cpu": "znver2",
-              "ours": 0.5343668970568427,
+              "ours": 0.5324137720568427,
               "penalty": 16.0
             },
             "reference_model": {
-              "comparison": 0.5250679754797128,
+              "comparison": 0.5238472723547128,
               "cpu": "skylake",
-              "ours": 0.5330463698814655,
+              "ours": 0.5306049636314655,
               "penalty": 20.0
             }
           },
@@ -49559,10 +49559,10 @@
           "branches": {
             "comparison": {
               "branches_per_sample": 0.066009521484375,
-              "mispredictions_per_sample": 0.0003662109375
+              "mispredictions_per_sample": 0.0003509521484375
             },
             "ours": {
-              "branches_per_sample": 0.255950927734375,
+              "branches_per_sample": 0.130950927734375,
               "mispredictions_per_sample": 0.0004730224609375
             }
           },
@@ -49570,15 +49570,15 @@
           "comparison_kind": "library",
           "cost": {
             "counter_model": {
-              "comparison": 1.2661485443115232,
+              "comparison": 1.2659044036865232,
               "cpu": "znver2",
-              "ours": 0.9524718096497409,
+              "ours": 0.785064789944071,
               "penalty": 16.0
             },
             "reference_model": {
-              "comparison": 1.395650733947754,
+              "comparison": 1.395345558166504,
               "cpu": "skylake",
-              "ours": 0.9692119215089162,
+              "ours": 0.7704128871029107,
               "penalty": 20.0
             }
           },
@@ -49590,11 +49590,11 @@
             },
             "cpu": "znver2",
             "ours": {
-              "coverage": 0.9915731789277775,
-              "cycles_per_sample": 0.9449034502747409,
-              "efficiency": 0.9372255850494176
+              "coverage": 0.99403528599234,
+              "cycles_per_sample": 0.777496430569071,
+              "efficiency": 0.946225553839204
             },
-            "ratio": 0.7497513057189306
+            "ratio": 0.6169190765908157
           },
           "cycle_mode": "whole-loop",
           "reference_model": {
@@ -49605,11 +49605,11 @@
             },
             "cpu": "skylake",
             "ours": {
-              "coverage": 0.9915731789277775,
-              "cycles_per_sample": 0.9597514722901662,
-              "efficiency": 0.9220077398368144
+              "coverage": 0.99403528599234,
+              "cycles_per_sample": 0.7609524378841607,
+              "efficiency": 0.833432851236335
             },
-            "ratio": 0.6913009740748621
+            "ratio": 0.5481076890444394
           },
           "samples": 65536,
           "snr_db": {
@@ -49621,26 +49621,26 @@
           "branches": {
             "comparison": {
               "branches_per_sample": 0.315765380859375,
-              "mispredictions_per_sample": 0.000396728515625
+              "mispredictions_per_sample": 0.0003204345703125
             },
             "ours": {
               "branches_per_sample": 0.021331787109375,
-              "mispredictions_per_sample": 0.00054931640625
+              "mispredictions_per_sample": 0.0005645751953125
             }
           },
           "compared_with": "KFR 7.2.0 clamp(round(double(select(x == x, x, 0)) * scale + bias), 0, 255) to uint8_t (the CU8 contract: NaN as 0, the f64 formula) (benches/refs/kfr-ops.cpp, sse42, -ffp-contract=off)",
           "comparison_kind": "library",
           "cost": {
             "counter_model": {
-              "comparison": 9.149807874034433,
+              "comparison": 9.148587170909433,
               "cpu": "znver2",
-              "ours": 0.7817729131377154,
+              "ours": 0.7820170537627154,
               "penalty": 16.0
             },
             "reference_model": {
-              "comparison": 9.157655073754928,
+              "comparison": 9.156129194848678,
               "cpu": "skylake",
-              "ours": 0.8081291925264523,
+              "ours": 0.8084343683077023,
               "penalty": 20.0
             }
           },
@@ -49683,26 +49683,26 @@
           "branches": {
             "comparison": {
               "branches_per_sample": 0.066009521484375,
-              "mispredictions_per_sample": 0.00042724609375
+              "mispredictions_per_sample": 0.0004119873046875
             },
             "ours": {
               "branches_per_sample": 0.255462646484375,
-              "mispredictions_per_sample": 0.0004425048828125
+              "mispredictions_per_sample": 0.000518798828125
             }
           },
           "compared_with": "VOLK 3.3.0 volk_32f_s32f_x2_convert_8u_generic, benches/refs/volk-generic.c (-O3 -ffp-contract=off, sse4.2)",
           "comparison_kind": "library",
           "cost": {
             "counter_model": {
-              "comparison": 1.3686490426412443,
+              "comparison": 1.3684049020162443,
               "cpu": "znver2",
-              "ours": 2.2178448455810544,
+              "ours": 1.7085634117126467,
               "penalty": 16.0
             },
             "reference_model": {
-              "comparison": 1.4277668724990473,
+              "comparison": 1.4274616967177973,
               "cpu": "skylake",
-              "ours": 2.3655731536865234,
+              "ours": 1.6564419479370118,
               "penalty": 20.0
             }
           },
@@ -49714,11 +49714,11 @@
             },
             "cpu": "znver2",
             "ours": {
-              "coverage": 0.9934345039012192,
-              "cycles_per_sample": 2.2107647674560544,
-              "efficiency": 0.7171314741035856
+              "coverage": 0.9917585494078444,
+              "cycles_per_sample": 1.7002626304626467,
+              "efficiency": 0.7412898443291327
             },
-            "ratio": 1.6233980706381577
+            "ratio": 1.2485286153023907
           },
           "cycle_mode": "whole-loop",
           "reference_model": {
@@ -49729,11 +49729,11 @@
             },
             "cpu": "skylake",
             "ours": {
-              "coverage": 0.9934345039012192,
-              "cycles_per_sample": 2.3567230560302734,
-              "efficiency": 0.5339028296849974
+              "coverage": 0.9917585494078444,
+              "cycles_per_sample": 1.6460659713745118,
+              "efficiency": 0.6125574272588055
             },
-            "ratio": 1.6605739891452473
+            "ratio": 1.1598368885506025
           },
           "samples": 65536,
           "snr_db": {
@@ -57437,7 +57437,7 @@
             },
             "ours": {
               "branches_per_sample": 0.035003662109375,
-              "mispredictions_per_sample": 0.00042724609375
+              "mispredictions_per_sample": 0.0004425048828125
             }
           },
           "compared_with": "sdrk fallback",
@@ -57446,13 +57446,13 @@
             "counter_model": {
               "comparison": 2.8929549298967636,
               "cpu": "znver2",
-              "ours": 1.4917737521344456,
+              "ours": 1.4920178927594456,
               "penalty": 16.0
             },
             "reference_model": {
               "comparison": 3.0459284144810272,
               "cpu": "skylake",
-              "ours": 1.433564468294556,
+              "ours": 1.433869644075806,
               "penalty": 20.0
             }
           },
@@ -57495,7 +57495,7 @@
           "branches": {
             "comparison": {
               "branches_per_sample": 0.253753662109375,
-              "mispredictions_per_sample": 0.000579833984375
+              "mispredictions_per_sample": 0.0008392333984375
             },
             "ours": {
               "branches_per_sample": 0.253265380859375,
@@ -57506,13 +57506,13 @@
           "comparison_kind": "library",
           "cost": {
             "counter_model": {
-              "comparison": 3.537727864583333,
+              "comparison": 3.541878255208333,
               "cpu": "znver2",
               "ours": 2.8929549298967636,
               "penalty": 16.0
             },
             "reference_model": {
-              "comparison": 3.720479329427083,
+              "comparison": 3.725667317708333,
               "cpu": "skylake",
               "ours": 3.0459284144810272,
               "penalty": 20.0
@@ -57557,7 +57557,7 @@
           "branches": {
             "comparison": {
               "branches_per_sample": 0.253753662109375,
-              "mispredictions_per_sample": 0.0006256103515625
+              "mispredictions_per_sample": 0.0005950927734375
             },
             "ours": {
               "branches_per_sample": 0.128265380859375,
@@ -57568,13 +57568,13 @@
           "comparison_kind": "library",
           "cost": {
             "counter_model": {
-              "comparison": 1.3482454209100632,
+              "comparison": 1.3477571396600632,
               "cpu": "znver2",
               "ours": 1.2398925272623698,
               "penalty": 16.0
             },
             "reference_model": {
-              "comparison": 1.541565704345703,
+              "comparison": 1.540955352783203,
               "cpu": "skylake",
               "ours": 1.5242953491210935,
               "penalty": 20.0
@@ -57623,7 +57623,7 @@
             },
             "ours": {
               "branches_per_sample": 0.034759521484375,
-              "mispredictions_per_sample": 0.0004425048828125
+              "mispredictions_per_sample": 0.000457763671875
             }
           },
           "compared_with": "volk_32f_x2_multiply_32f",
@@ -57632,13 +57632,13 @@
             "counter_model": {
               "comparison": 0.40798199697128584,
               "cpu": "znver2",
-              "ours": 0.28735520747258114,
+              "ours": 0.28759934809758114,
               "penalty": 16.0
             },
             "reference_model": {
               "comparison": 0.3680395677258612,
               "cpu": "skylake",
-              "ours": 0.2640937042236328,
+              "ours": 0.2643988800048828,
               "penalty": 20.0
             }
           },
@@ -57681,7 +57681,7 @@
           "branches": {
             "comparison": {
               "branches_per_sample": 0.253753662109375,
-              "mispredictions_per_sample": 0.0003662109375
+              "mispredictions_per_sample": 0.0004119873046875
             },
             "ours": {
               "branches_per_sample": 0.128265380859375,
@@ -57692,13 +57692,13 @@
           "comparison_kind": "library",
           "cost": {
             "counter_model": {
-              "comparison": 0.4682723568956818,
+              "comparison": 0.4690047787706818,
               "cpu": "znver2",
               "ours": 0.3626724538391948,
               "penalty": 16.0
             },
             "reference_model": {
-              "comparison": 0.3646063309287548,
+              "comparison": 0.3655218582725048,
               "cpu": "skylake",
               "ours": 0.2998440842707033,
               "penalty": 20.0
@@ -57747,7 +57747,7 @@
             },
             "ours": {
               "branches_per_sample": 0.019134521484375,
-              "mispredictions_per_sample": 0.0004730224609375
+              "mispredictions_per_sample": 0.000457763671875
             }
           },
           "compared_with": "sdrk fallback",
@@ -57756,13 +57756,13 @@
             "counter_model": {
               "comparison": 0.5590739620433134,
               "cpu": "znver2",
-              "ours": 0.24385788567232417,
+              "ours": 0.24361374504732417,
               "penalty": 16.0
             },
             "reference_model": {
               "comparison": 0.6764645655014936,
               "cpu": "skylake",
-              "ours": 0.2072324495186543,
+              "ours": 0.2069272737374043,
               "penalty": 20.0
             }
           },
@@ -57805,7 +57805,7 @@
           "branches": {
             "comparison": {
               "branches_per_sample": 0.129241943359375,
-              "mispredictions_per_sample": 0.000396728515625
+              "mispredictions_per_sample": 0.0003814697265625
             },
             "ours": {
               "branches_per_sample": 0.128265380859375,
@@ -57816,13 +57816,13 @@
           "comparison_kind": "library",
           "cost": {
             "counter_model": {
-              "comparison": 0.7119620041620164,
+              "comparison": 0.7117178635370164,
               "cpu": "znver2",
               "ours": 0.5590739620433134,
               "penalty": 16.0
             },
             "reference_model": {
-              "comparison": 0.6516972133091518,
+              "comparison": 0.6513920375279018,
               "cpu": "skylake",
               "ours": 0.6764645655014936,
               "penalty": 20.0

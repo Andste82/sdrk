@@ -102,15 +102,17 @@ enum Q15Kernel {
 /// | `avx512`  | `znver4` / `sapphirerapids` | `fir`                  | 1.26 / 1.32     |
 /// |           |                             | `fir_interpolate`      | 1.15 / 1.09     |
 /// |           |                             | `fir_interpolate_real` | 1.33 / 1.17     |
-/// | `neon`    | `cortex-a72` / `cortex-a76` | `fir_interpolate_real` | 1.35 / 1.08     |
+/// | `neon`    | `cortex-a72` / `cortex-a76` | `fir_decimate`         | 1.76 / 1.63     |
+/// |           |                             | `fir_interpolate_real` | 1.35 / 1.08     |
 /// | `simd128` | instructions                | `fir_interpolate`      | 1.54            |
 /// |           |                             | `fir_interpolate_real` | 1.03            |
 ///
 /// The `neon` and `simd128` rows of `fir_interpolate` and `fir_interpolate_real` compare with
-/// the scalar ring loop of the fallback (`fallback/interp.rs`), the other rows with the grouped
-/// engine. Every other kernel and level keeps its SIMD branch: at `sse4.2` the progressions of
+/// the scalar ring loop of the fallback (`fallback/interp.rs`), the `neon` row of
+/// `fir_decimate` with its exact lanes (D2830, CI run 45523722662), the other rows with the
+/// grouped engine. Every other kernel and level keeps its SIMD branch: at `sse4.2` the progressions of
 /// the module `x86` (decision D340), faster than the fallback on both models, at `neon` the other
-/// five, faster on `cortex-a76` or both. The fallback is
+/// four, faster on `cortex-a76` or both. The fallback is
 /// outside the dispatched kernels and compiled for the level of the build, so the switch applies
 /// only at that level ([`crate::level::compiled_for`]): in a build that detects a higher level
 /// at run time the fallback would be the code of the lower level (`fir` `CQ15` at `avx2`
@@ -125,7 +127,7 @@ fn runs_fallback(kernel: Q15Kernel) -> bool {
             Fir | FirDecimate | FirInterpolate | FirInterpolateReal | Resample
         ),
         Some("avx512") => matches!(kernel, Fir | FirInterpolate | FirInterpolateReal),
-        Some("neon") => kernel == FirInterpolateReal,
+        Some("neon") => matches!(kernel, FirDecimate | FirInterpolateReal),
         Some("simd128") => matches!(kernel, FirInterpolate | FirInterpolateReal),
         _ => false,
     }

@@ -431,7 +431,11 @@ pub fn dot_f32(a: &[f32], b: &[f32]) -> f32 {
 /// If `a` is not twice as long as `b`.
 #[must_use]
 pub fn dot_complex_real(a: &[f32], b: &[f32]) -> [f32; 2] {
-    assert_eq!(a.len(), 2 * b.len(), "KFR dot_complex_real: length mismatch");
+    assert_eq!(
+        a.len(),
+        2 * b.len(),
+        "KFR dot_complex_real: length mismatch"
+    );
     #[cfg_attr(not(has_kfrops), allow(unused_mut))]
     let mut out = [0.0f32; 2];
     #[cfg(has_kfrops)]

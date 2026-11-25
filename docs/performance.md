@@ -1221,11 +1221,11 @@ Reference model `znver3`, counter-model `alderlake`, mode `whole-loop`; executio
 | `mul_real_fallback` | 0.19 | 0.20 | 0.96 | 0.14 | 0.18 | 0.77 | 151.8 / 151.8 | release | CMSIS-DSP 1.18.0 arm_mult_f32, generic C (-O3 -ffp-contract=off, LOOPUNROLL, avx2) |
 | `mul_real_q15` | 0.10 | 0.28 | 0.35 | 0.09 | 0.39 | 0.22 | 91.6 / 91.6 | info | own (information): sdrk fallback |
 | `mul_real_q15_fallback` | 0.28 | 0.30 | 0.92 | 0.39 | 0.31 | 1.25 | 91.6 / 85.6 | dev | CMSIS-DSP 1.18.0 arm_mult_q15 (truncating), generic C (-O3 -ffp-contract=off, LOOPUNROLL, avx2) |
-| `interleave` | 0.26 | 0.27 | 0.97 | 0.51 | 0.52 | 0.97 | exact / exact | release | volk_32f_x2_interleave_32fc |
-| `interleave_cq15` | 0.14 | 6.55 | 0.02 | 0.13 | 7.64 | 0.02 | exact / exact | release | KFR 7.2.0 make_complex(re, im) on int16_t (benches/refs/kfr-ops.cpp, avx2, -ffp-contract=off) |
+| `interleave` | 0.26 | 0.27 | 0.98 | 0.51 | 0.52 | 0.98 | exact / exact | release | volk_32f_x2_interleave_32fc |
+| `interleave_cq15` | 0.13 | 6.55 | 0.02 | 0.13 | 7.64 | 0.02 | exact / exact | release | KFR 7.2.0 make_complex(re, im) on int16_t (benches/refs/kfr-ops.cpp, avx2, -ffp-contract=off) |
 | `interleave_cq15_fallback` | 0.13 | 0.14 | 0.97 | 0.13 | 0.14 | 0.96 | exact / exact | release | VOLK 3.3.0 volk_32f_x2_interleave_32fc_generic on int16 (VOLK has no 16-bit interleave), benches/refs/volk-generic.c (-O3 -ffp-contract=off, avx2) |
 | `interleave_fallback` | 0.26 | 0.27 | 0.98 | 0.51 | 0.52 | 0.98 | exact / exact | release | VOLK 3.3.0 volk_32f_x2_interleave_32fc_generic, benches/refs/volk-generic.c (-O3 -ffp-contract=off, avx2) |
-| `deinterleave` | 0.26 | 0.39 | 0.66 | 0.26 | 0.40 | 0.65 | exact / exact | release | volk_32fc_deinterleave_32f_x2 |
+| `deinterleave` | 0.26 | 0.39 | 0.67 | 0.26 | 0.40 | 0.66 | exact / exact | release | volk_32fc_deinterleave_32f_x2 |
 | `deinterleave_cq15` | 0.17 | 0.27 | 0.63 | 0.20 | 0.26 | 0.74 | exact / exact | release | volk_16ic_deinterleave_16i_x2 |
 | `deinterleave_cq15_fallback` | 0.23 | 0.20 | 1.13 | 0.23 | 0.26 | 0.86 | exact / exact | dev | VOLK 3.3.0 volk_16ic_deinterleave_16i_x2_generic, benches/refs/volk-generic.c (-O3 -ffp-contract=off, avx2) |
 | `deinterleave_fallback` | 0.26 | 1.02 | 0.26 | 0.26 | 0.52 | 0.50 | exact / exact | release | VOLK 3.3.0 volk_32fc_deinterleave_32f_x2_generic, benches/refs/volk-generic.c (-O3 -ffp-contract=off, avx2) |
@@ -1469,9 +1469,9 @@ Judged like every level against the reference library: the comparison is the one
 | `mul_cq15` | 0.51 | 0.83 | 0.62 | 0.63 | 1.37 | 0.46 | 94.4 / 94.4 | 1.00 / 1.00 | info | own (information): sdrk fallback |
 | `mul_real` | 0.20 | 0.20 | 0.97 | 0.13 | 0.18 | 0.74 | 151.8 / 151.8 | 1.03 / 1.02 | release | volk_32f_x2_multiply_32f |
 | `mul_real_q15` | 0.10 | 0.28 | 0.37 | 0.09 | 0.39 | 0.23 | 91.6 / 91.6 | 1.05 / 1.05 | info | own (information): sdrk fallback |
-| `interleave` | 0.26 | 0.27 | 0.98 | 0.51 | 0.52 | 0.98 | exact / exact | 1.01 / 1.00 | release | volk_32f_x2_interleave_32fc |
-| `interleave_cq15` | 0.14 | 6.55 | 0.02 | 0.13 | 7.64 | 0.02 | exact / exact | 1.01 / 1.01 | release | KFR 7.2.0 make_complex(re, im) on int16_t (benches/refs/kfr-ops.cpp, avx2, -ffp-contract=off) |
-| `deinterleave` | 0.26 | 0.39 | 0.67 | 0.26 | 0.40 | 0.65 | exact / exact | 1.01 / 1.00 | release | volk_32fc_deinterleave_32f_x2 |
+| `interleave` | 0.27 | 0.27 | 0.99 | 0.39 | 0.52 | 0.75 | exact / exact | 1.02 / 0.76 | release | volk_32f_x2_interleave_32fc |
+| `interleave_cq15` | 0.14 | 6.55 | 0.02 | 0.14 | 7.64 | 0.02 | exact / exact | 1.03 / 1.02 | release | KFR 7.2.0 make_complex(re, im) on int16_t (benches/refs/kfr-ops.cpp, avx2, -ffp-contract=off) |
+| `deinterleave` | 0.27 | 0.39 | 0.68 | 0.26 | 0.40 | 0.67 | exact / exact | 1.01 / 1.01 | release | volk_32fc_deinterleave_32f_x2 |
 | `deinterleave_cq15` | 0.17 | 0.27 | 0.63 | 0.20 | 0.26 | 0.75 | exact / exact | 1.01 / 1.01 | release | volk_16ic_deinterleave_16i_x2 |
 | `oscillate` | 1.40 | 4.93 | 0.28 | 1.45 | 4.57 | 0.32 | 133.2 / 141.7 | 1.00 / 1.00 | release | SLEEF 3.9.0 Sleef_sincosf_u10 of the angle (int32_t) p * 2 pi / 2^32 of a uint32_t phase counter, interleaved (avx2, benches/refs/sleef-ops.c, -O3 -ffp-contract=off) |
 | `oscillate_cq15` | 1.90 | 4.51 | 0.42 | 1.50 | 4.80 | 0.31 | 97.8 / 97.8 | 1.00 / 1.00 | info | own (information): sdrk fallback |
@@ -2074,7 +2074,7 @@ Reference model `cortex-a72`, counter-model `cortex-a76`, mode `whole-loop`; exe
 | `fft_cq15_1024_full_scale` | 10.93 | 8.91 | 1.23 | 9.01 | 10.01 | 0.90 | 59.9 / 56.9 | dev | Ne10 ne10_fft_c2c_1d_int16_neon (1/N scaling, out of place) |
 | `rfft_1024` | 8.81 | 10.88 | 0.81 | 5.73 | 10.04 | 0.57 | 138.5 / 138.4 | release | realfft on rustfft (RealFftPlanner, forward, out of place) |
 | `rfft_1024_fallback` | 18.49 | 18.65 | 0.99 | 16.67 | 18.61 | 0.90 | 137.9 / 138.3 | release | CMSIS-DSP 1.18.0 arm_rfft_fast_f32 (forward, packed output), generic C (-O3 -ffp-contract=off, LOOPUNROLL, neon) |
-| `am_mod` | 2.91 | 2.91 | 1.00 | 1.52 | 1.52 | 1.00 | 150.8 / 150.8 | info | own (information): sdrk fallback |
+| `am_mod` | 2.53 | 2.91 | 0.87 | 1.40 | 1.52 | 0.92 | 150.8 / 150.8 | info | own (information): sdrk fallback |
 | `am_mod_cq15` | 0.90 | 1.72 | 0.52 | 0.77 | 1.33 | 0.58 | 92.7 / 92.7 | info | own (information): sdrk fallback |
 | `am_mod_cq15_fallback` | 1.72 | 4.30 | 0.40 | 1.33 | 4.49 | 0.30 | 92.7 / 89.7 | release | CMSIS-DSP 1.18.0 arm_scale_q15 by round(c m 32768) (truncating), arm_offset_q15 by c in place and a plain loop to (re, 0) (a composition: CMSIS-DSP has no AM modulator), generic C (-O3 -ffp-contract=off, LOOPUNROLL, neon) |
 | `am_mod_fallback` | 2.91 | 5.41 | 0.54 | 1.52 | 5.19 | 0.29 | 150.8 / 150.8 | release | CMSIS-DSP 1.18.0 arm_clip_f32 to [-1, 1], arm_scale_f32 by depth and arm_offset_f32 by 1 in place, and a plain loop to (carrier u, 0) (a composition: CMSIS-DSP has no AM modulator; a NaN passes the clip), generic C (-O3 -ffp-contract=off, LOOPUNROLL, neon) |

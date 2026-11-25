@@ -1536,7 +1536,19 @@ pub const KFR_AT_AVX512: [&str; 20] = [
 ///   `2 d` before the sum, ours the exact `s +- 2 d` once: other bits, D2907);
 /// - `power_db` at `sse4.2`, `avx2`, `avx512` and `neon`, `quad_demod` at `sse2` and `sse4.2`
 ///   and `oscillate` at every level but `simd128`: SLEEF's `_u10` functions of the level (D2903),
-///   VOLK (or our fallback for `oscillate`) as information.
+///   VOLK (or our fallback for `oscillate`) as information;
+///
+/// and the same-work comparisons of the optimisation round O2 (group 1, the maintainer's rule:
+/// where the library does less work, a library or a composition that does the same work is
+/// judged and the other is information):
+///
+/// - `am_mod_fallback`: the CMSIS-DSP composition `arm_clip_f32`, `arm_scale_f32`,
+///   `arm_offset_f32` and the carrier product (the clamp and the carrier product of the
+///   contract; a NaN passes its clip), liquid-dsp's `ampmodem` (no clamp, no carrier product, no
+///   NaN rule) as information (D2954);
+/// - `convert_out_cu8`, `convert_out_real_ru8` at every level but `simd128`: KFR's expression
+///   of the contract (`NaN` as 0 by a select, the `f64` formula `rint(x 128 + 127.5)`, clamped),
+///   VOLK's `volk_32f_s32f_x2_convert_8u` (NaN as 255, the `f32` formula) as information (D2955).
 fn audit_comparisons(plan: &LevelPlan, spec: &KernelSpec) -> Option<(Reference, Vec<Reference>)> {
     let wasm = plan.refs == "wasm32";
     Some(match spec.name {
@@ -1564,6 +1576,10 @@ fn audit_comparisons(plan: &LevelPlan, spec: &KernelSpec) -> Option<(Reference, 
             (Reference::Sleef, vec![Reference::Volk])
         }
         "oscillate" if !wasm => (Reference::Sleef, vec![Reference::Fallback]),
+        "am_mod_fallback" => (Reference::Cmsis, vec![Reference::Liquid]),
+        "convert_out_cu8" | "convert_out_real_ru8" if !wasm => {
+            (Reference::Kfr, vec![Reference::Volk])
+        }
         _ => return None,
     })
 }
@@ -3073,6 +3089,17 @@ mod tests {
             comparisons(plan("simd128"), kernel("convert_out_cu8")),
             (Reference::Volk, Vec::new())
         );
+        // The `CU8` outputs: KFR's expression of the contract (NaN rule, `f64` rounding) at
+        // every other level, VOLK (less work) as information (D2955).
+        for level in ["sse2", "sse4.2", "avx2", "avx512", "neon"] {
+            for k in ["convert_out_cu8", "convert_out_real_ru8"] {
+                assert_eq!(
+                    comparisons(plan(level), kernel(k)),
+                    (Reference::Kfr, vec![Reference::Volk]),
+                    "{k} at {level}"
+                );
+            }
+        }
         assert_eq!(
             comparisons(plan("sse2"), kernel("agc")),
             (Reference::GnuRadio, vec![Reference::Fallback])
@@ -3428,10 +3455,11 @@ mod tests {
                 (Reference::Fallback, vec![Reference::Cmsis]),
                 "am_mod_cq15 at {level}"
             );
-            // The fallbacks: liquid-dsp's `ampmodem` and the CMSIS-DSP composition.
+            // The fallbacks: the CMSIS-DSP compositions, liquid-dsp's `ampmodem` (less work) as
+            // information (D2954).
             assert_eq!(
                 comparisons(plan(level), kernel("am_mod_fallback")),
-                (Reference::Liquid, Vec::new()),
+                (Reference::Cmsis, vec![Reference::Liquid]),
                 "am_mod_fallback at {level}"
             );
             assert_eq!(

@@ -5,7 +5,7 @@
 //! | --- | --- | --- | --- |
 //! | `am_mod` | facade | our fallback (efficiency verdict) | |
 //! | `am_mod_cq15` | facade | our fallback (efficiency verdict) | the CMSIS-DSP composition |
-//! | `am_mod_fallback` | our fallback | liquid-dsp 1.8.3 `ampmodem_modulate_block` (DSB with the carrier, scalar C) | |
+//! | `am_mod_fallback` | our fallback | the CMSIS-DSP composition (generic C) | liquid-dsp 1.8.3 `ampmodem_modulate_block` (DSB with the carrier, scalar C) |
 //! | `am_mod_cq15_fallback` | our fallback | the CMSIS-DSP composition (generic C) | |
 //!
 //! No SIMD library has an AM modulator (VOLK, KFR and CMSIS-DSP have none; liquid-dsp's
@@ -13,9 +13,18 @@
 //! modulator computes `x mod_index + 1` per sample as a complex value: the carrier amplitude is
 //! 1, and it neither clamps the input nor multiplies by a carrier, so it does the per-sample work
 //! of ours without the clamp and the carrier product. It runs with `mod_index` = `depth`; its
-//! accuracy is that of its output times `carrier` against the `f64` model.
+//! accuracy is that of its output times `carrier` against the `f64` model. It is information
+//! (O2 group 1, the maintainer's rule: the judged comparison does the same work).
 //!
-//! CMSIS-DSP has no AM modulator and no real-to-complex copy: the composition is
+//! The `C32` fallback is judged against the CMSIS-DSP composition of the same work in the order
+//! of the contract: `arm_clip_f32` to `[-1, 1]` into a buffer, `arm_scale_f32` by `depth` and
+//! `arm_offset_f32` by 1 in place, and a plain loop that writes the pairs `(carrier u, 0)`
+//! (CMSIS-DSP has no real-to-complex copy; the carrier product is folded into that loop, one pass
+//! fewer than a fourth call). Its values are ours bit for bit except for NaN: the generic
+//! `arm_clip_f32` copies a NaN (both of its comparisons fail), where the contract counts it as 0,
+//! so the NaN rule (one comparison and one mask per vector) is the work ours does more.
+//!
+//! CMSIS-DSP has no AM modulator and no real-to-complex copy: the `CQ15` composition is
 //! `arm_scale_q15` by `round(c m 32768)` (truncating `>> 15`), `arm_offset_q15` by `c` in place
 //! (saturating) and a plain loop that writes the pairs `(re, 0)`, `c (1 + m x) = c + c m x` in
 //! another rounding than ours (one truncated product instead of two rounded ones).
@@ -71,12 +80,35 @@ fn am_supports(entry: BiquadEntry, which: Impl, reference: Impl, has: bool) -> b
 // ---------------------------------------------------------------------------------------------
 // C32
 
-/// `am_mod` of `n` `f32` samples into `C32`; the fallback entry against liquid-dsp's
-/// `ampmodem`.
+/// `am_mod` of `n` `f32` samples into `C32`; the fallback entry against the CMSIS-DSP
+/// composition, liquid-dsp's `ampmodem` as information.
 pub(crate) struct AmModC32K {
     input: Aligned<f32>,
+    /// The real part of CMSIS-DSP's composition.
+    tmp: Aligned<f32>,
     out: Aligned<C32>,
     entry: BiquadEntry,
+}
+
+/// The CMSIS-DSP composition of the `C32` `am_mod` in the order of the contract:
+/// `arm_clip_f32` to `[-1, 1]`, `arm_scale_f32` by `depth` and `arm_offset_f32` by 1 in place,
+/// then the pairs `(carrier u, 0)` in a plain loop; the raw functions without the length checks
+/// of the wrappers.
+#[inline(never)]
+fn cmsis_am_mod_f32(input: &[f32], tmp: &mut [f32], out: &mut [C32], carrier: f32, depth: f32) {
+    let n = out.len();
+    assert!(input.len() == n && tmp.len() == n);
+    let len = u32::try_from(n).expect("block");
+    // SAFETY: every buffer holds `n` values; the scale and the offset run in place, which
+    // CMSIS-DSP's element-wise functions allow.
+    unsafe {
+        cmsis_dsp::ffi::arm_clip_f32(input.as_ptr(), tmp.as_mut_ptr(), -1.0, 1.0, len);
+        cmsis_dsp::ffi::arm_scale_f32(tmp.as_ptr(), depth, tmp.as_mut_ptr(), len);
+        cmsis_dsp::ffi::arm_offset_f32(tmp.as_ptr(), 1.0, tmp.as_mut_ptr(), len);
+    }
+    for (o, &u) in out.iter_mut().zip(tmp.iter()) {
+        *o = C32::new(carrier * u, 0.0);
+    }
 }
 
 impl AmModC32K {
@@ -88,6 +120,7 @@ impl AmModC32K {
         }
         AmModC32K {
             input,
+            tmp: Aligned::skewed(layout.n, layout.skew(4)),
             out: Aligned::skewed(layout.n, layout.skew(8)),
             entry,
         }
@@ -118,6 +151,13 @@ impl Kernel for AmModC32K {
                     .as_mut()
                     .expect("liquid ampmodem")
                     .modulate_block(black_box(&self.input), pairs_mut(&mut self.out)),
+                Impl::Cmsis => cmsis_am_mod_f32(
+                    black_box(&self.input),
+                    &mut self.tmp,
+                    &mut self.out,
+                    black_box(CARRIER),
+                    black_box(DEPTH),
+                ),
                 other => unreachable!("am_mod has no {other:?}"),
             }
             black_box(&self.out);
@@ -142,12 +182,12 @@ impl Kernel for AmModC32K {
     }
 
     fn supports(&self, which: Impl) -> bool {
-        am_supports(
-            self.entry,
-            which,
-            Impl::Liquid,
-            self.entry == BiquadEntry::Fallback && LiquidAmpmodem::new(DEPTH).is_some(),
-        )
+        let fallback = self.entry == BiquadEntry::Fallback;
+        match which {
+            Impl::Liquid => fallback && LiquidAmpmodem::new(DEPTH).is_some(),
+            Impl::Cmsis => fallback && cmsis_dsp::AVAILABLE,
+            _ => am_supports(self.entry, which, Impl::Cmsis, false),
+        }
     }
 
     fn describe(&self, which: Impl) -> &'static str {
@@ -155,6 +195,9 @@ impl Kernel for AmModC32K {
             Impl::Liquid => {
                 "liquid-dsp 1.8.3 ampmodem_modulate_block (LIQUID_AMPMODEM_DSB with the carrier: x * mod_index + 1, no clamp, carrier 1; -O3)"
             }
+            Impl::Cmsis => describe_cmsis(
+                "arm_clip_f32 to [-1, 1], arm_scale_f32 by depth and arm_offset_f32 by 1 in place, and a plain loop to (carrier u, 0) (a composition: CMSIS-DSP has no AM modulator; a NaN passes the clip)",
+            ),
             Impl::Fallback => "sdrk fallback",
             _ => "sdrk",
         }

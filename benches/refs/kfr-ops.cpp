@@ -21,8 +21,14 @@
 //   of `volk_32fc_x2_add_32fc`.
 // - `sdrk_kfr_satadd_i16`: `out = satadd(a, b)` on `int16_t`, the work of
 //   `volk_16i_x2_add_saturated_16i`.
-// - `sdrk_kfr_f32_to_u8`: `out = clamp(round(in * scale + bias), 0, 255)` (round to the nearest
-//   integer, ties to even), the work of `volk_32f_s32f_x2_convert_8u`.
+// - `sdrk_kfr_f32_to_u8`: the `CU8` output of SDRk's contract, `out = clamp(round(x * scale +
+//   bias), 0, 255)` in `double` with `x` the input and a NaN as 0 (a `select` on `in == in`),
+//   the same work as SDRk's `convert_out` `CU8` (the NaN rule and the `f64` formula; O2 group 1,
+//   D2955) and more than `volk_32f_s32f_x2_convert_8u` (NaN as 255, the `f32` formula).
+//   KFR's `round` rounds ties to even from SSE4.1 (`roundpd`), ties away from zero at `sse2`
+//   (its portable form) and on AArch64 (`frinta`): there an input on an exact multiple of
+//   `1 / 128` (a tie of the formula) gives the byte above where the even one is below, the
+//   rounding of the library; the work per value is the same.
 // - `sdrk_kfr_deinterleave_i16`, `sdrk_kfr_interleave_i16`, `sdrk_kfr_interleave_f32`: `real` /
 //   `imag` of `complex<int16_t>` and `make_complex` of `int16_t` and `float`, the work of
 //   `volk_16ic_deinterleave_16i_x2` and `volk_32f_x2_interleave_32fc` (and of the 16-bit
@@ -117,8 +123,16 @@ extern "C"
     void sdrk_kfr_f32_to_u8(const float* in, std::uint8_t* out, std::size_t n, float scale,
                             float bias)
     {
-        uv(out, n) = kfr::cast<std::uint8_t>(
-            kfr::cast<std::int32_t>(kfr::round(kfr::clamp(uv(in, n) * scale + bias, 0.0f, 255.0f))));
+        const auto x = uv(in, n);
+        // `x == x` is false for NaN only; KFR's `==` of expressions is behind
+        // KFR_ENABLE_EXPR_CMP, so the comparison is built as the expression it would return.
+        const auto ordered =
+            kfr::expression_make_function<kfr::fn::equal, decltype(x), decltype(x)>{
+                kfr::fn::equal(), decltype(x)(x), decltype(x)(x)
+            };
+        const auto a = kfr::cast<double>(kfr::select(ordered, x, 0.0f));
+        uv(out, n)   = kfr::cast<std::uint8_t>(kfr::cast<std::int32_t>(
+            kfr::clamp(kfr::round(a * double(scale) + double(bias)), 0.0, 255.0)));
     }
 
     void sdrk_kfr_deinterleave_i16(const std::int16_t* c, std::int16_t* re, std::int16_t* im,

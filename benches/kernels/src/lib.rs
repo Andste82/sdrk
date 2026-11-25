@@ -2091,7 +2091,8 @@ impl Kernel for ConvertOutK {
                         }
                     }
                 }
-                // KFR's `clamp(round(x * scale + bias), 0, 255)` of the level (D2900).
+                // KFR's expression of the contract of the level (NaN as 0, the `f64` formula,
+                // clamped; D2900, D2955).
                 Impl::Kfr => {
                     let values = self.values();
                     // SAFETY: the input holds `values` floats.
@@ -2172,7 +2173,9 @@ impl Kernel for ConvertOutK {
                 OutFormat::Cs8 => "volk_32f_s32f_convert_8i_generic",
                 OutFormat::Cu8 => "volk_32f_s32f_x2_convert_8u_generic",
             }),
-            Impl::Kfr => describe_kfr_ops("clamp(round(x * scale + bias), 0, 255) to uint8_t"),
+            Impl::Kfr => describe_kfr_ops(
+                "clamp(round(double(select(x == x, x, 0)) * scale + bias), 0, 255) to uint8_t (the CU8 contract: NaN as 0, the f64 formula)",
+            ),
             Impl::Cmsis => describe_cmsis(match self.format {
                 OutFormat::Cs16 => "arm_float_to_q15 (truncating, saturating)",
                 OutFormat::Cs8 => "arm_float_to_q7 (truncating, saturating)",

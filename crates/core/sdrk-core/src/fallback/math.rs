@@ -104,7 +104,7 @@ impl Mul<C32> for Fallback {
 
 /// The plain loop of the `C32` product, the form LLVM vectorizes on every target (`ld2`/`st2`
 /// on NEON, deinterleaving shuffles on x86).
-#[cfg(not(all(target_feature = "sse3", not(target_feature = "avx512f"))))]
+#[cfg(not(target_feature = "sse3"))]
 fn mul_c32(a: &[C32], b: &[C32], out: &mut [C32]) {
     for ((o, x), y) in out.iter_mut().zip(a).zip(b) {
         *o = C32::new(x.re * y.re - x.im * y.im, x.re * y.im + x.im * y.re);
@@ -145,6 +145,36 @@ fn mul_c32(a: &[C32], b: &[C32], out: &mut [C32]) {
         .zip(ac.remainder())
         .zip(bc.remainder());
     for ((o, x), y) in rest {
+        *o = C32::new(x.re * y.re - x.im * y.im, x.re * y.im + x.im * y.re);
+    }
+}
+
+/// x86 with AVX-512: the form of SSE3 in groups of four samples, one 256-bit vector per input
+/// and group. [`core::hint::black_box`] keeps the compiler from vectorizing the loop over the
+/// groups once more, which gives the 512-bit deinterleave of the plain loop (`vpermps` of two
+/// `zmm` sources, slow on `znver4`: 0.77 / 0.78 against 0.52 / 0.54 cycles per sample on
+/// `znver4` / `sapphirerapids`, `llvm-mca` of the compiled loops); it emits no instruction. The
+/// same products and sums in the same order as the plain loop, so the same bits.
+#[cfg(target_feature = "avx512f")]
+fn mul_c32(a: &[C32], b: &[C32], out: &mut [C32]) {
+    const GROUP: usize = 4;
+    let (ac, ar) = a.as_chunks::<GROUP>();
+    let (bc, br) = b.as_chunks::<GROUP>();
+    let (oc, or) = out.as_chunks_mut::<GROUP>();
+    for ((out_group, a_group), b_group) in oc.iter_mut().zip(ac).zip(bc) {
+        let mut first = [C32::default(); GROUP];
+        let mut second = [C32::default(); GROUP];
+        let products = first.iter_mut().zip(&mut second).zip(a_group).zip(b_group);
+        for (((p, q), x), y) in products {
+            *p = C32::new(x.re * y.re, x.re * y.im);
+            *q = C32::new(x.im * y.im, x.im * y.re);
+        }
+        for ((o, p), q) in out_group.iter_mut().zip(&first).zip(&second) {
+            *o = C32::new(p.re - q.re, p.im + q.im);
+        }
+        core::hint::black_box(());
+    }
+    for ((o, x), y) in or.iter_mut().zip(ar).zip(br) {
         *o = C32::new(x.re * y.re - x.im * y.im, x.re * y.im + x.im * y.re);
     }
 }

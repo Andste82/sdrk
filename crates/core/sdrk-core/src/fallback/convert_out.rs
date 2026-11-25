@@ -118,7 +118,7 @@ const ROUND_MAGIC_F32: f32 = 12_582_912.0;
 /// `2^-47`, added to `x * 128` for `U8` (see [`u8_direct`]).
 const TINY: f32 = 1.0 / (1u64 << 47) as f32;
 
-/// Whether [`i16_direct`] and [`u8_direct`] clear NaN first and clamp with `f32::max` and
+/// Whether [`i16_direct`] clears NaN first and clamps with `f32::max` and
 /// `f32::min`: on x86 and AArch64, where that compiles to one vector instruction each (for
 /// `I16` 0.38 instead of 0.46 cycles per value at `avx2`, 2.0 instead of 3.0 on Cortex-A72).
 /// Elsewhere [`clamp_nan0`]: the minimum and maximum of wasm32 propagate NaN, so `f32::max` and
@@ -169,11 +169,73 @@ fn clamp_nan0(v: f32, lo: f32, hi: f32) -> f32 {
     p + n
 }
 
-/// The storage byte of `x` for `I8`, as [`i16_direct`] with the scale 128.
+/// The form of the `I8` and `U8` bytes of [`i8_direct`] and [`u8_direct`] on the target (O2,
+/// D2974). Each gives the bytes of the `f64` formula of [`Enc::f32_raw`] for every `f32` (the
+/// test `direct_for_every_f32` checks every form on every target); they differ in what the
+/// compiler makes of them (`llvm-mca` of the compiled loops, cycles per value on the reference
+/// model / the counter-model of the level):
+///
+/// - [`ByteForm::Convert`] on AArch64: the rounding by [`ROUND_MAGIC_F32`] and back, then
+///   `as i32` (`fcvtzs`, which gives 0 for NaN and saturates), then integer bounds. `I8` 1.70 /
+///   1.07 instead of 2.88 / 1.54 (`cortex-a72` / `cortex-a76`), `U8` 2.32 / 1.45 instead of
+///   3.56 / 2.17.
+/// - [`ByteForm::Select`] on x86: NaN as 0 by `x == x` and the clamp by two compare-selects,
+///   which are one `minps` / `maxps` each (x86 returns the second operand where a NaN is
+///   involved, the select of the source); `U8` then bounds and narrows the integer with
+///   saturation. `I8` at `sse2` 1.07 / 1.08 instead of 1.15 / 1.24 (`skylake` / `znver2`),
+///   `sse4.2` 0.75 / 0.76 instead of 0.95 / 0.93, `avx2` 0.46 / 0.47 instead of 0.53 / 0.51
+///   (`znver3` / `alderlake`), `avx512` 0.27 / 0.35 instead of 0.36 / 0.42 (`znver4` /
+///   `sapphirerapids`); `U8` at `sse2` 1.94 / 2.03 instead of 2.71 / 2.86, `sse4.2` 1.54 / 1.70
+///   instead of 2.34 / 2.20, `avx2` 0.65 / 0.74 instead of 0.83 / 0.90, `avx512` 0.48 / 0.63
+///   instead of 0.60 / 0.66.
+/// - [`ByteForm::Clamp`] elsewhere (wasm32, 32-bit Arm, RISC-V): [`clamp_nan0`], unchanged.
+#[derive(Clone, Copy, PartialEq, Eq)]
+enum ByteForm {
+    Convert,
+    Select,
+    Clamp,
+}
+
+/// [`ByteForm`] of the target.
+const BYTE_FORM: ByteForm = if cfg!(target_arch = "aarch64") {
+    ByteForm::Convert
+} else if cfg!(any(target_arch = "x86", target_arch = "x86_64")) {
+    ByteForm::Select
+} else {
+    ByteForm::Clamp
+};
+
+/// `0.5 - 2^-25`: `rint(y - C)` of `y = x * 128` in `f32` is the `U8` value minus 128 for every
+/// `y` but the negative ones above `-2^-25`, which give 0 instead of -1 (the module
+/// documentation of `convert_out` of the SIMD backend, where the same constant serves).
+const U8_C: f32 = 0.5 - 1.0 / (1u32 << 25) as f32;
+
+/// The storage byte of `x` for `I8`, as [`i16_direct`] with the scale 128, in the form of
+/// [`BYTE_FORM`].
 #[inline]
 fn i8_direct(x: f32) -> u8 {
-    let v = clamp_nan0(x * 128.0, -128.0, 127.0);
-    (v + ROUND_MAGIC_F32).to_bits() as u8
+    i8_byte::<{ BYTE_FORM as u8 }>(x)
+}
+
+/// [`i8_direct`] in the [`ByteForm`] `F` (as `u8`).
+#[inline]
+fn i8_byte<const F: u8>(x: f32) -> u8 {
+    let v = x * 128.0;
+    if F == ByteForm::Convert as u8 {
+        // NaN stays NaN through the rounding and converts to 0; beyond `2^22` the rounding
+        // leaves the value, which the conversion and the bounds saturate.
+        let r = ((v + ROUND_MAGIC_F32) - ROUND_MAGIC_F32) as i32;
+        r.clamp(-128, 127) as u8
+    } else if F == ByteForm::Select as u8 {
+        #[allow(clippy::eq_op, reason = "`v == v` is false for NaN only")]
+        let v = if v == v { v } else { 0.0 };
+        let v = if v < 127.0 { v } else { 127.0 };
+        let v = if v > -128.0 { v } else { -128.0 };
+        (v + ROUND_MAGIC_F32).to_bits() as u8
+    } else {
+        let v = clamp_nan0(v, -128.0, 127.0);
+        (v + ROUND_MAGIC_F32).to_bits() as u8
+    }
 }
 
 /// The `U8` byte of `x`, `rint(x * 128 + 127.5)` of the `f64` formula of [`Enc::f32_raw`] (NaN
@@ -190,31 +252,79 @@ fn i8_direct(x: f32) -> u8 {
 /// `r` (so `|y| >= 1/2`) is at least `2^-24` in magnitude, so both cases are the one comparison
 /// `d < t` with `t = 0` for an even `r` and `t = 2^-126` (the bits `1 << 23`) for an odd one.
 /// Checked against the `f64` formula for every `f32` (the test `direct_for_every_f32`).
+///
+/// [`BYTE_FORM`] chooses the form: [`ByteForm::Clamp`] is this one ([`u8_byte`]); the others
+/// take `r = rint(y - C)` with `C = 0.5 - 2^-25` ([`U8_C`]), which is the value minus 128 except
+/// that the negative `y` above `-2^-25` give 0 instead of -1, and bound `r` by -1 where
+/// `y < -2^-47` (where the formula gives at most 127, see above) and by 127 elsewhere: on
+/// AArch64 ([`u8_convert`]) the rounding by [`ROUND_MAGIC_F32`] and `as i32`, on x86 with
+/// SSE4.1 ([`u8_bound`]) the bits of the rounded sum and the minimum with the bound, on x86
+/// without SSE4.1 ([`u8_fix`], no `pminsd`) the correction of the zero where `y < -2^-47`.
 #[inline]
 fn u8_direct(x: f32) -> u8 {
-    u8_byte::<MAX_MIN_CLAMP>(x)
+    match BYTE_FORM {
+        ByteForm::Convert => u8_convert(x),
+        ByteForm::Select if cfg!(target_feature = "sse4.1") => u8_bound(x),
+        ByteForm::Select => u8_fix(x),
+        ByteForm::Clamp => u8_byte(x),
+    }
 }
 
-/// [`u8_direct`] with the clamp of `MAX_MIN` (see [`MAX_MIN_CLAMP`]; both give the same byte).
+/// [`u8_direct`] in the form of [`ByteForm::Clamp`].
 #[inline]
-fn u8_byte<const MAX_MIN: bool>(x: f32) -> u8 {
-    let y = if MAX_MIN {
-        let x = if x.is_nan() { 0.0 } else { x };
-        #[allow(
-            clippy::manual_clamp,
-            reason = "`clamp` compiles to compares and selects here"
-        )]
-        (x * 128.0 + TINY).max(-128.0).min(127.5)
-    } else {
-        // NaN gives 0, as `2^-47` would.
-        clamp_nan0(x * 128.0 + TINY, -128.0, 127.5)
-    };
+fn u8_byte(x: f32) -> u8 {
+    // NaN gives 0, as `2^-47` would.
+    let y = clamp_nan0(x * 128.0 + TINY, -128.0, 127.5);
     let sum = y + ROUND_MAGIC_F32;
     let r = sum - ROUND_MAGIC_F32;
     // `r + 128` as an integer.
     let byte = (sum.to_bits() as i32).wrapping_sub(ROUND_MAGIC_F32.to_bits() as i32 - 128);
     let t = f32::from_bits(((byte & 1) as u32) << 23);
     (byte - i32::from(y - r < t)) as u8
+}
+
+/// [`u8_direct`] in the form of [`ByteForm::Convert`]: NaN stays NaN through the rounding and
+/// converts to 0 (the bound of a NaN is 127), magnitudes beyond `2^22` stay as they are and
+/// saturate in the conversion and the bounds.
+#[inline]
+fn u8_convert(x: f32) -> u8 {
+    let y = x * 128.0;
+    let r = (((y - U8_C) + ROUND_MAGIC_F32) - ROUND_MAGIC_F32) as i32;
+    let bound = if y < -TINY { -1 } else { 127 };
+    ((r.min(bound).max(-128)) ^ 0x80) as u8
+}
+
+/// `y = x * 128` with NaN as 0, at least -129: the input of [`u8_bound`] and [`u8_fix`], for
+/// which the bits of `y - C + 1.5 * 2^23` less those of `1.5 * 2^23` are `rint(y - C)` (above
+/// `2^22` they grow with `y` and stay positive, so the bound caps them).
+#[inline]
+fn u8_scaled(x: f32) -> f32 {
+    let y = x * 128.0;
+    #[allow(clippy::eq_op, reason = "`y == y` is false for NaN only")]
+    let y = if y == y { y } else { 0.0 };
+    if y > -129.0 { y } else { -129.0 }
+}
+
+/// [`u8_direct`] in the form of [`ByteForm::Select`] with SSE4.1 (`pminsd`, `pmaxsd`): the
+/// minimum with the bound, and `+ 128` clamped to `[0, 255]`, which the compiler narrows with
+/// unsigned saturation.
+#[inline]
+fn u8_bound(x: f32) -> u8 {
+    let y = u8_scaled(x);
+    let r = ((y - U8_C) + ROUND_MAGIC_F32).to_bits() as i32 - ROUND_MAGIC_F32.to_bits() as i32;
+    let bound = if y < -TINY { -1 } else { 127 };
+    (r.min(bound) + 128).clamp(0, 255) as u8
+}
+
+/// [`u8_direct`] in the form of [`ByteForm::Select`] without SSE4.1: the zero where
+/// `y < -2^-47` corrected to -1, the value narrowed to `i8` with signed saturation (what
+/// SSE2's `packssdw` / `packsswb` do) and the sign bit flipped.
+#[inline]
+fn u8_fix(x: f32) -> u8 {
+    let y = u8_scaled(x);
+    let r = ((y - U8_C) + ROUND_MAGIC_F32).to_bits() as i32 - ROUND_MAGIC_F32.to_bits() as i32;
+    let r = r - i32::from(y < -TINY && r == 0);
+    (r.clamp(-128, 127) as i8 as u8) ^ 0x80
 }
 
 impl DirectOut {
@@ -839,6 +949,33 @@ mod tests {
         ]
     }
 
+    /// Whether a form of another target (the clamp of `MAX_MIN_CLAMP`, the forms of
+    /// `ByteForm`) gives another word than the form of this target for `x`.
+    fn other_forms_differ(direct: DirectOut, x: f32) -> bool {
+        const CONVERT: u8 = ByteForm::Convert as u8;
+        const SELECT: u8 = ByteForm::Select as u8;
+        const CLAMP: u8 = ByteForm::Clamp as u8;
+        match direct {
+            DirectOut::U8 => {
+                let b = u8_direct(x);
+                [u8_byte(x), u8_convert(x), u8_bound(x), u8_fix(x)]
+                    .iter()
+                    .any(|&o| o != b)
+            }
+            DirectOut::I8 => {
+                let b = i8_direct(x);
+                [
+                    i8_byte::<CONVERT>(x),
+                    i8_byte::<SELECT>(x),
+                    i8_byte::<CLAMP>(x),
+                ]
+                .iter()
+                .any(|&o| o != b)
+            }
+            DirectOut::I16Le | DirectOut::I16Be => i16_word::<true>(x) != i16_word::<false>(x),
+        }
+    }
+
     /// The bytes of the general encoder for `x` in a direct format.
     fn general_bytes(enc: &Enc, direct: DirectOut, x: f32) -> std::vec::Vec<u8> {
         let w = enc.word(enc.f32_raw_f64(x));
@@ -912,9 +1049,10 @@ mod tests {
                     general_bytes(&enc, direct, x)[..],
                     "{format:?}, x = {x:e}"
                 );
-                // Both clamp forms (see `MAX_MIN_CLAMP`) give the same.
+                // Both clamp forms (see `MAX_MIN_CLAMP`) and every byte form (see `ByteForm`)
+                // give the same.
                 assert_eq!(i16_word::<true>(x), i16_word::<false>(x), "x = {x:e}");
-                assert_eq!(u8_byte::<true>(x), u8_byte::<false>(x), "x = {x:e}");
+                assert!(!other_forms_differ(direct, x), "x = {x:e}");
             }
         }
         // Planar, swapped, MSB-aligned, explicit full scale and narrower formats take the
@@ -996,15 +1134,8 @@ mod tests {
                                     {
                                         bad += 1;
                                     }
-                                    // The clamp form of the other targets gives the same.
-                                    let other = match direct {
-                                        DirectOut::U8 => u8_byte::<true>(x) != u8_byte::<false>(x),
-                                        DirectOut::I8 => false,
-                                        DirectOut::I16Le | DirectOut::I16Be => {
-                                            i16_word::<true>(x) != i16_word::<false>(x)
-                                        }
-                                    };
-                                    bad += u64::from(other);
+                                    // The forms of the other targets give the same.
+                                    bad += u64::from(other_forms_differ(direct, x));
                                 }
                                 b = end;
                             }

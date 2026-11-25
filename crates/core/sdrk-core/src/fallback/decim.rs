@@ -89,7 +89,10 @@ impl FbMac for CQ15 {
             im: acc.1.finish(),
         }
     }
-    #[cfg(any(target_arch = "x86_64", target_arch = "aarch64"))]
+    #[cfg(any(
+        all(target_arch = "x86_64", not(target_feature = "avx2")),
+        target_arch = "aarch64"
+    ))]
     #[inline]
     fn decimate_outputs(
         taps: &[Q15],
@@ -573,8 +576,10 @@ mod a64 {
     }
 }
 
-/// `fir_decimate` `CQ15` on x86-64 and AArch64: every output as one exact dot product over its
-/// window, in vector lanes of 32-bit pair sums.
+/// `fir_decimate` `CQ15` on x86-64 below AVX2 and on AArch64: every output as one exact dot
+/// product over its window, in vector lanes of 32-bit pair sums. From AVX2 the grouped engine
+/// stays: there the compiler vectorizes its groups, and the lanes measured 3.3 / 1.3 times
+/// slower (`avx2`, `znver3` / `alderlake`, CI run 45523722662).
 ///
 /// The taps are reversed once per call (`r[k] = h[N - 1 - k]` against the samples of the
 /// window, oldest first) and padded with zero taps in front to a multiple of [`PAD`], so that
@@ -592,8 +597,7 @@ mod a64 {
 ///
 /// - x86-64: blocks of four samples with each tap twice (`[r0, r0, r1, r1, r2, r2, r3, r3]`
 ///   against `[re0, im0, re1, im1, re2, im2, re3, im3]`); lane `i < 4` is the pair sum
-///   `t[i] x[i] + t[i + 4] x[i + 4]` (`pmaddwd` of the samples widened in place at SSE2,
-///   `vpmovzxwd` + `vpmaddwd` from AVX2);
+///   `t[i] x[i] + t[i + 4] x[i + 4]` (`pmaddwd` of the samples widened in place);
 /// - AArch64: pairs of consecutive samples with their two taps (`ld4`, `ld2`, `smull`,
 ///   `smlal`, `uaddw` on sixteen samples per step).
 ///
@@ -601,7 +605,10 @@ mod a64 {
 /// compiler proves the `u32` sums equal to `i64` sums and returns to scalar `i64` products
 /// (x86-64). The outputs whose windows reach into the history are computed in a stack copy of
 /// the zero padding, the history and the start of the input, as the others.
-#[cfg(any(target_arch = "x86_64", target_arch = "aarch64"))]
+#[cfg(any(
+    all(target_arch = "x86_64", not(target_feature = "avx2")),
+    target_arch = "aarch64"
+))]
 mod exact {
     use crate::error::{Error, Result};
     use crate::num::Acc64;

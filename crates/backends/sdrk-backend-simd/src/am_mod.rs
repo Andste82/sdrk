@@ -1,13 +1,21 @@
 //! `am_mod`, bit-exact with the fallback (the contract of the kernel is bit-exact,
 //! `docs/kernels.md`).
 //!
-//! `C32`: the loop of the fallback (`carrier * (1 + depth * x')` with `x'` the clamped input and
-//! NaN masked to 0, the pair `(re, 0)` per sample) compiled at the level of the dispatch, which
-//! LLVM vectorizes at every level as it does the fallback at the level of the build (`maxps`,
-//! `minps`, `cmpordps`, `andps`, two products and a sum without fusion, then `unpcklps` /
-//! `unpckhps` with zero or, from AVX2 on, `vpmovzxdq`). The backend has it so that the build with
-//! run-time detection runs it at the level of the CPU; with a level fixed at compile time it is
-//! the code of the fallback.
+//! `C32`: `carrier * (1 + depth * x')` with `x'` the clamped input and NaN masked to 0, the pair
+//! `(re, 0)` per sample, the operations of the fallback in its order (two products and a sum
+//! without fusion).
+//!
+//! - NEON (O2, D2970): `fcmeq` of `x` with itself for the mask, `fmax` / `fmin` with -1 and 1
+//!   instead of the compare-and-select pairs that LLVM makes of the clamp of the fallback, and
+//!   `st2` of the values with a zero vector for the pairs, two vectors per iteration.
+//! - Every other level: the loop of the fallback compiled at the level of the dispatch, which
+//!   LLVM vectorizes as it does the fallback at the level of the build (`maxps`, `minps`,
+//!   `cmpordps`, `andps`, the products and the sum, then `unpcklps` / `unpckhps` with zero or,
+//!   from AVX2 on, `vpmovzxdq`; SIMD128 `f32x4.pmax` / `pmin`, `f32x4.eq`, `v128.and` and two
+//!   shuffles). A hand-written loop of the same instructions, unrolled, gains less than 10 %
+//!   on x86 in `llvm-mca` and loses on `skylake` (D2970), so these levels keep the compiled
+//!   loop: the build with run-time detection runs it at the level of the CPU; with a level fixed
+//!   at compile time it is the code of the fallback.
 //!
 //! `CQ15`: the `i32` form of the fallback, `re = sat16(c + round_shift(c t, 15))` with
 //! `t = round_shift(m x, 15)` (`c`, `m` the `Q15` gains of carrier and depth, both 0 to 32767;
@@ -65,10 +73,35 @@ fn am_q15(c: i32, m: i32, x: i16) -> i16 {
     (c + r).min(32767) as i16
 }
 
-/// The whole `C32` call: the loop of the fallback at the level of `_simd`.
+/// The level-specific `C32` path for the current level, if there is one: returns the number of
+/// leading samples done.
 #[inline(always)]
-fn am_c32<S: SimdToken>(_simd: S, carrier: f32, depth: f32, input: &[f32], out: &mut [[f32; 2]]) {
-    for (o, &x) in out.iter_mut().zip(input) {
+fn am_c32_level<S: SimdToken>(
+    simd: S,
+    carrier: f32,
+    depth: f32,
+    input: &[f32],
+    out: &mut [[f32; 2]],
+) -> usize {
+    #[cfg(target_arch = "aarch64")]
+    if let Some(t) = simd.level().as_neon() {
+        return neon::am_c32(t, carrier, depth, input, out);
+    }
+    let _ = (simd, carrier, depth, input, out);
+    0
+}
+
+/// The whole `C32` call: the path of the level, then the loop of the fallback at the level of
+/// `simd` for the rest (the whole call where the level has no path).
+#[inline(always)]
+fn am_c32<S: SimdToken>(simd: S, carrier: f32, depth: f32, input: &[f32], out: &mut [[f32; 2]]) {
+    let done = am_c32_level(simd, carrier, depth, input, out);
+    let rest = out
+        .get_mut(done..)
+        .unwrap_or_default()
+        .iter_mut()
+        .zip(input.get(done..).unwrap_or_default());
+    for (o, &x) in rest {
         *o = [am_f32(carrier, depth, x), 0.0];
     }
 }
@@ -221,10 +254,60 @@ mod x86 {
 }
 
 #[cfg(target_arch = "aarch64")]
+#[allow(unsafe_code)]
 mod neon {
-    use core::arch::aarch64::{vdupq_n_s16, vqaddq_s16, vqrdmulhq_s16, vzip1q_s16, vzip2q_s16};
-    use fearless_simd::i16x8;
+    use core::arch::aarch64::{
+        float32x4_t, float32x4x2_t, vaddq_f32, vandq_u32, vceqq_f32, vdupq_n_f32, vdupq_n_s16,
+        vmaxq_f32, vminq_f32, vmulq_n_f32, vqaddq_s16, vqrdmulhq_s16, vreinterpretq_f32_u32,
+        vreinterpretq_u32_f32, vst2q_f32, vzip1q_s16, vzip2q_s16,
+    };
     use fearless_simd::prelude::*;
+    use fearless_simd::{f32x4, i16x8};
+
+    fearless_simd::kernel!(
+        /// `C32` on whole blocks of four samples, two per iteration: `fcmeq` of `x` with itself
+        /// (the mask of the fallback), `fmax` / `fmin` with -1 and 1 (they equal the clamp on
+        /// every value that is not NaN, and the mask takes NaN to `+0` whatever they give), the
+        /// `and`, then `depth x'`, `+ 1` and `carrier u` without fusion, and `st2` of the values
+        /// with a zero vector writes the pairs `(re, 0)`. The operations and their order are the
+        /// fallback's on every lane, so the bits are the same. Returns the number of samples
+        /// done.
+        pub(super) fn am_c32(
+            t: Neon,
+            carrier: f32,
+            depth: f32,
+            input: &[f32],
+            out: &mut [[f32; 2]],
+        ) -> usize {
+            let (lo, hi, zero) = (vdupq_n_f32(-1.0), vdupq_n_f32(1.0), vdupq_n_f32(0.0));
+            let am = |x: float32x4_t| {
+                let keep = vceqq_f32(x, x);
+                let c = vminq_f32(vmaxq_f32(x, lo), hi);
+                let c = vreinterpretq_f32_u32(vandq_u32(vreinterpretq_u32_f32(c), keep));
+                vmulq_n_f32(vaddq_f32(vmulq_n_f32(c, depth), hi), carrier)
+            };
+            let step = |i: &[f32; 4], o: &mut [[f32; 2]; 4]| {
+                let re = am(f32x4::from_slice(t, i).into());
+                // SAFETY: `o` is exactly 4 pairs (8 floats), which `vst2q_f32` writes.
+                unsafe { vst2q_f32(o.as_flattened_mut().as_mut_ptr(), float32x4x2_t(re, zero)) };
+            };
+            let n = input.len().min(out.len()) / 4 * 4;
+            let (ib, _) = input.split_at(n);
+            let (ob, _) = out.split_at_mut(n);
+            let (ib, _) = ib.as_chunks::<4>();
+            let (ob, _) = ob.as_chunks_mut::<4>();
+            let (i2, ir) = ib.as_chunks::<2>();
+            let (o2, or) = ob.as_chunks_mut::<2>();
+            for ([i0, i1], [o0, o1]) in i2.iter().zip(o2) {
+                step(i0, o0);
+                step(i1, o1);
+            }
+            for (i, o) in ir.iter().zip(or) {
+                step(i, o);
+            }
+            n
+        }
+    );
 
     fearless_simd::kernel!(
         pub(super) fn am(t: Neon, c: i16, m: i16, input: &[i16], out: &mut [[i16; 2]]) -> usize {

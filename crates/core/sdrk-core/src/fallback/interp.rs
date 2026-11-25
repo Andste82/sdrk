@@ -360,8 +360,54 @@ const TAP_COPY: usize = 128;
 const MAX_GROUP: usize = 8;
 
 /// `resample` with `up = l` and `down = 1` (the plan of `fallback::decim::polyphase`), each
-/// branch evaluated by [`branch`], its groups compiled for the target `B`.
+/// branch evaluated by [`branch`], its groups compiled for the target `B`. For [`Native`] the
+/// function of the build; for another target the whole call (the plan, the tap copies and the
+/// single outputs as well as the groups) in one function compiled for it through
+/// [`Target::hot`], so that a run-time build runs the code of the build for that target (D2840).
+#[allow(
+    clippy::inline_always,
+    reason = "the choice of the function must vanish"
+)]
+#[inline(always)]
 fn interpolate<B: Target, T: Ring, const G: usize>(
+    target: B,
+    taps: &[T::Tap],
+    hist: &mut [T],
+    l: usize,
+    q: &mut i64,
+    input: &[T],
+    output: &mut [T],
+) -> Result<Progress> {
+    if B::NATIVE {
+        interpolate_native::<B, T, G>(target, taps, hist, l, q, input, output)
+    } else {
+        target.hot(
+            #[inline(always)]
+            move || interpolate_body::<B, T, G>(target, taps, hist, l, q, input, output),
+        )
+    }
+}
+
+/// [`interpolate`] in the build.
+fn interpolate_native<B: Target, T: Ring, const G: usize>(
+    target: B,
+    taps: &[T::Tap],
+    hist: &mut [T],
+    l: usize,
+    q: &mut i64,
+    input: &[T],
+    output: &mut [T],
+) -> Result<Progress> {
+    interpolate_body::<B, T, G>(target, taps, hist, l, q, input, output)
+}
+
+/// The body of [`interpolate`].
+#[allow(
+    clippy::inline_always,
+    reason = "compiled in the function of its target or in its wrapper for `Native`"
+)]
+#[inline(always)]
+fn interpolate_body<B: Target, T: Ring, const G: usize>(
     target: B,
     taps: &[T::Tap],
     hist: &mut [T],
@@ -446,7 +492,53 @@ fn plan(l: usize, q: &mut i64, inputs: usize, room: usize) -> Result<(usize, usi
 /// first copied into a contiguous buffer, so that the group reads its taps without the stride
 /// and without a bounds check per tap.
 #[allow(clippy::too_many_arguments)]
+#[allow(
+    clippy::inline_always,
+    reason = "the choice of the function must vanish"
+)]
+#[inline(always)]
 fn branch<'a, B: Target, T: Ring + 'a, const G: usize>(
+    target: B,
+    taps: &[T::Tap],
+    l: usize,
+    hist: &[T],
+    input: &[T],
+    phase: usize,
+    seen: usize,
+    count: usize,
+    dst: impl Iterator<Item = &'a mut T>,
+) -> Result<()> {
+    if B::NATIVE {
+        branch_native::<B, T, G>(target, taps, l, hist, input, phase, seen, count, dst)
+    } else {
+        branch_body::<B, T, G>(target, taps, l, hist, input, phase, seen, count, dst)
+    }
+}
+
+/// [`branch`] in the build.
+#[allow(clippy::too_many_arguments)]
+fn branch_native<'a, B: Target, T: Ring + 'a, const G: usize>(
+    target: B,
+    taps: &[T::Tap],
+    l: usize,
+    hist: &[T],
+    input: &[T],
+    phase: usize,
+    seen: usize,
+    count: usize,
+    dst: impl Iterator<Item = &'a mut T>,
+) -> Result<()> {
+    branch_body::<B, T, G>(target, taps, l, hist, input, phase, seen, count, dst)
+}
+
+/// The body of [`branch`].
+#[allow(clippy::too_many_arguments)]
+#[allow(
+    clippy::inline_always,
+    reason = "compiled in the function of its target or in its wrapper for `Native`"
+)]
+#[inline(always)]
+fn branch_body<'a, B: Target, T: Ring + 'a, const G: usize>(
     target: B,
     taps: &[T::Tap],
     l: usize,
@@ -515,7 +607,7 @@ fn branch<'a, B: Target, T: Ring + 'a, const G: usize>(
             groups::<B, T, G, _>(target, hs, len, input, at, n, &mut dst)?;
             t += n * G;
         } else {
-            *dst.next().ok_or_else(internal)? = single_exact(hs, len, hist, input, at)?;
+            *dst.next().ok_or_else(internal)? = single_exact_at::<B, T>(hs, len, hist, input, at)?;
             t += 1;
         }
     }
@@ -526,6 +618,43 @@ fn branch<'a, B: Target, T: Ring + 'a, const G: usize>(
 /// output whose window ends after `seen` samples of `input`, the samples of `input` first, then
 /// those of the history.
 fn single_exact<T: Ring>(
+    hs: BranchTaps<'_>,
+    len: usize,
+    hist: &[T],
+    input: &[T],
+    seen: usize,
+) -> Result<T> {
+    single_exact_body(hs, len, hist, input, seen)
+}
+
+/// [`single_exact`] for the target `B`: the function of the build for [`Native`], inline in
+/// the function of the target otherwise.
+#[allow(
+    clippy::inline_always,
+    reason = "the choice of the function must vanish"
+)]
+#[inline(always)]
+fn single_exact_at<B: Target, T: Ring>(
+    hs: BranchTaps<'_>,
+    len: usize,
+    hist: &[T],
+    input: &[T],
+    seen: usize,
+) -> Result<T> {
+    if B::NATIVE {
+        single_exact(hs, len, hist, input, seen)
+    } else {
+        single_exact_body(hs, len, hist, input, seen)
+    }
+}
+
+/// The body of [`single_exact`].
+#[allow(
+    clippy::inline_always,
+    reason = "compiled in the function of its target or in its wrapper for `Native`"
+)]
+#[inline(always)]
+fn single_exact_body<T: Ring>(
     hs: BranchTaps<'_>,
     len: usize,
     hist: &[T],

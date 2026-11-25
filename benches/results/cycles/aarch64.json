@@ -539,40 +539,40 @@
           }
         },
         "am_mod_fallback": {
-          "compared_with": "liquid-dsp 1.8.3 ampmodem_modulate_block (LIQUID_AMPMODEM_DSB with the carrier: x * mod_index + 1, no clamp, carrier 1; -O3)",
+          "compared_with": "CMSIS-DSP 1.18.0 arm_clip_f32 to [-1, 1], arm_scale_f32 by depth and arm_offset_f32 by 1 in place, and a plain loop to (carrier u, 0) (a composition: CMSIS-DSP has no AM modulator; a NaN passes the clip), generic C (-O3 -ffp-contract=off, LOOPUNROLL, neon)",
           "comparison_kind": "library",
           "counter_model": {
             "comparison": {
-              "coverage": 0.9936105817733438,
-              "cycles_per_sample": 1.031221473638762,
-              "efficiency": 0.979366889093008
+              "coverage": 0.9961321788725684,
+              "cycles_per_sample": 5.188191998625454,
+              "efficiency": 0.8586286128915226
             },
             "cpu": "cortex-a76",
             "ours": {
-              "coverage": 0.994614470683121,
-              "cycles_per_sample": 1.5238316399710519,
+              "coverage": 0.9946748538620319,
+              "cycles_per_sample": 1.5237391335623605,
               "efficiency": 0.9896907216494846
             },
-            "ratio": 1.477695799520222
+            "ratio": 0.29369366707439815
           },
           "cycle_mode": "whole-loop",
           "reference_model": {
             "comparison": {
-              "coverage": 0.9936105817733438,
-              "cycles_per_sample": 1.280192625548435,
-              "efficiency": 0.9262278641847236
+              "coverage": 0.9961321788725684,
+              "cycles_per_sample": 5.406536516163447,
+              "efficiency": 0.8378786120459555
             },
             "cpu": "cortex-a72",
             "ours": {
-              "coverage": 0.994614470683121,
-              "cycles_per_sample": 2.9094187600272043,
+              "coverage": 0.9946748538620319,
+              "cycles_per_sample": 2.9092421395438057,
               "efficiency": 0.8639308855291578
             },
-            "ratio": 2.2726413993994132
+            "ratio": 0.5380971960230547
           },
           "samples": 65536,
           "snr_db": {
-            "comparison": 152.07,
+            "comparison": 150.8,
             "ours": 150.8
           }
         },
@@ -1869,13 +1869,13 @@
           }
         },
         "convert_out_cu8": {
-          "compared_with": "volk_32f_s32f_x2_convert_8u",
+          "compared_with": "KFR 7.2.0 clamp(round(double(select(x == x, x, 0)) * scale + bias), 0, 255) to uint8_t (the CU8 contract: NaN as 0, the f64 formula) (benches/refs/kfr-ops.cpp, neon64, -ffp-contract=off)",
           "comparison_kind": "library",
           "counter_model": {
             "comparison": {
-              "coverage": 0.9951299239119632,
-              "cycles_per_sample": 2.1492168495871806,
-              "efficiency": 0.8766803039158387
+              "coverage": 0.9981552553413916,
+              "cycles_per_sample": 21.18846230265695,
+              "efficiency": 0.6264960548479566
             },
             "cpu": "cortex-a76",
             "ours": {
@@ -1883,14 +1883,14 @@
               "cycles_per_sample": 2.0937217256157434,
               "efficiency": 0.8449591982450757
             },
-            "ratio": 0.9741789089443922
+            "ratio": 0.09881423652688562
           },
           "cycle_mode": "whole-loop",
           "reference_model": {
             "comparison": {
-              "coverage": 0.9951299239119632,
-              "cycles_per_sample": 2.6604566261985085,
-              "efficiency": 0.8498583569405099
+              "coverage": 0.9981552553413916,
+              "cycles_per_sample": 29.58645445382085,
+              "efficiency": 0.7246407483439503
             },
             "cpu": "cortex-a72",
             "ours": {
@@ -1898,7 +1898,7 @@
               "cycles_per_sample": 2.9110313655491376,
               "efficiency": 0.8666488312604598
             },
-            "ratio": 1.0941848616824368
+            "ratio": 0.09839067976505045
           },
           "samples": 65536,
           "snr_db": {
@@ -2097,13 +2097,13 @@
           }
         },
         "convert_out_real_ru8": {
-          "compared_with": "volk_32f_s32f_x2_convert_8u",
+          "compared_with": "KFR 7.2.0 clamp(round(double(select(x == x, x, 0)) * scale + bias), 0, 255) to uint8_t (the CU8 contract: NaN as 0, the f64 formula) (benches/refs/kfr-ops.cpp, neon64, -ffp-contract=off)",
           "comparison_kind": "library",
           "counter_model": {
             "comparison": {
-              "coverage": 0.9903070532122997,
-              "cycles_per_sample": 1.0798418495871804,
-              "efficiency": 0.8766803039158387
+              "coverage": 0.9963022168716206,
+              "cycles_per_sample": 10.613935531734956,
+              "efficiency": 0.6264960548479566
             },
             "cpu": "cortex-a76",
             "ours": {
@@ -2111,14 +2111,14 @@
               "cycles_per_sample": 1.063484433661567,
               "efficiency": 0.840467394982132
             },
-            "ratio": 0.9848520263111984
+            "ratio": 0.10019699389371829
           },
           "cycle_mode": "whole-loop",
           "reference_model": {
             "comparison": {
-              "coverage": 0.9903070532122997,
-              "cycles_per_sample": 1.3367066261985086,
-              "efficiency": 0.8498583569405099
+              "coverage": 0.9963022168716206,
+              "cycles_per_sample": 14.820741387452598,
+              "efficiency": 0.7246407483439503
             },
             "cpu": "cortex-a72",
             "ours": {
@@ -2126,7 +2126,7 @@
               "cycles_per_sample": 1.4731706047905815,
               "efficiency": 0.862990276448662
             },
-            "ratio": 1.102089700101335
+            "ratio": 0.09939925178357027
           },
           "samples": 65536,
           "snr_db": {

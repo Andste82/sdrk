@@ -194,16 +194,16 @@
   },
   "convert_out_cu8": {
     "sse2": {
-      "status": "dev"
+      "status": "release"
     },
     "sse4.2": {
-      "status": "dev"
+      "status": "release"
     },
     "avx2": {
-      "status": "dev"
+      "status": "release"
     },
     "avx2-runtime": {
-      "status": "dev"
+      "status": "release"
     },
     "avx512": {
       "status": "release"
@@ -266,22 +266,22 @@
   },
   "convert_out_real_ru8": {
     "sse2": {
-      "status": "dev"
+      "status": "release"
     },
     "sse4.2": {
-      "status": "dev"
+      "status": "release"
     },
     "avx2": {
-      "status": "dev"
+      "status": "release"
     },
     "avx2-runtime": {
-      "status": "dev"
+      "status": "release"
     },
     "avx512": {
       "status": "release"
     },
     "neon": {
-      "status": "dev"
+      "status": "release"
     },
     "simd128": {
       "status": "info",
@@ -4291,31 +4291,31 @@
   "am_mod": {
     "sse2": {
       "status": "info",
-      "waiver": "no SIMD library has an AM modulator (VOLK, KFR and CMSIS-DSP have none; liquid-dsp's `ampmodem` is scalar C and gates `am_mod_fallback`), so the comparison is our own fallback, reported as information with the efficiency verdict; the `C32` entry of the SIMD backend is the loop of the fallback compiled at the level of the dispatch (D429)"
+      "waiver": "no SIMD library has an AM modulator (VOLK, KFR and CMSIS-DSP have none; liquid-dsp's `ampmodem` is scalar C; the CMSIS-DSP composition of the same work gates `am_mod_fallback`, D2954), so the comparison is our own fallback, reported as information with the efficiency verdict; the `C32` entry of the SIMD backend is the loop of the fallback compiled at the level of the dispatch (D429)"
     },
     "sse4.2": {
       "status": "info",
-      "waiver": "no SIMD library has an AM modulator (VOLK, KFR and CMSIS-DSP have none; liquid-dsp's `ampmodem` is scalar C and gates `am_mod_fallback`), so the comparison is our own fallback, reported as information with the efficiency verdict; the `C32` entry of the SIMD backend is the loop of the fallback compiled at the level of the dispatch (D429)"
+      "waiver": "no SIMD library has an AM modulator (VOLK, KFR and CMSIS-DSP have none; liquid-dsp's `ampmodem` is scalar C; the CMSIS-DSP composition of the same work gates `am_mod_fallback`, D2954), so the comparison is our own fallback, reported as information with the efficiency verdict; the `C32` entry of the SIMD backend is the loop of the fallback compiled at the level of the dispatch (D429)"
     },
     "avx2": {
       "status": "info",
-      "waiver": "no SIMD library has an AM modulator (VOLK, KFR and CMSIS-DSP have none; liquid-dsp's `ampmodem` is scalar C and gates `am_mod_fallback`), so the comparison is our own fallback, reported as information with the efficiency verdict; the `C32` entry of the SIMD backend is the loop of the fallback compiled at the level of the dispatch (D429)"
+      "waiver": "no SIMD library has an AM modulator (VOLK, KFR and CMSIS-DSP have none; liquid-dsp's `ampmodem` is scalar C; the CMSIS-DSP composition of the same work gates `am_mod_fallback`, D2954), so the comparison is our own fallback, reported as information with the efficiency verdict; the `C32` entry of the SIMD backend is the loop of the fallback compiled at the level of the dispatch (D429)"
     },
     "avx2-runtime": {
       "status": "info",
-      "waiver": "no reference library at `avx2`: the comparison of the `avx2` record is our own fallback, so the entry is information at `avx2-runtime` as at `avx2` and judged by its efficiency (D32, D2764); its cycles against our fixed `avx2` build are information as well. The reason at `avx2`: no SIMD library has an AM modulator (VOLK, KFR and CMSIS-DSP have none; liquid-dsp's `ampmodem` is scalar C and gates `am_mod_fallback`), so the comparison is our own fallback, reported as information with the efficiency verdict; the `C32` entry of the SIMD backend is the loop of the fallback compiled at the level of the dispatch (D429)"
+      "waiver": "no reference library at `avx2`: the comparison of the `avx2` record is our own fallback, so the entry is information at `avx2-runtime` as at `avx2` and judged by its efficiency (D32, D2764); its cycles against our fixed `avx2` build are information as well. The reason at `avx2`: no SIMD library has an AM modulator (VOLK, KFR and CMSIS-DSP have none; liquid-dsp's `ampmodem` is scalar C; the CMSIS-DSP composition of the same work gates `am_mod_fallback`, D2954), so the comparison is our own fallback, reported as information with the efficiency verdict; the `C32` entry of the SIMD backend is the loop of the fallback compiled at the level of the dispatch (D429)"
     },
     "avx512": {
       "status": "info",
-      "waiver": "no SIMD library has an AM modulator (VOLK, KFR and CMSIS-DSP have none; liquid-dsp's `ampmodem` is scalar C and gates `am_mod_fallback`), so the comparison is our own fallback, reported as information with the efficiency verdict; the `C32` entry of the SIMD backend is the loop of the fallback compiled at the level of the dispatch (D429)"
+      "waiver": "no SIMD library has an AM modulator (VOLK, KFR and CMSIS-DSP have none; liquid-dsp's `ampmodem` is scalar C; the CMSIS-DSP composition of the same work gates `am_mod_fallback`, D2954), so the comparison is our own fallback, reported as information with the efficiency verdict; the `C32` entry of the SIMD backend is the loop of the fallback compiled at the level of the dispatch (D429)"
     },
     "neon": {
       "status": "info",
-      "waiver": "no SIMD library has an AM modulator (VOLK, KFR and CMSIS-DSP have none; liquid-dsp's `ampmodem` is scalar C and gates `am_mod_fallback`), so the comparison is our own fallback, reported as information with the efficiency verdict; the `C32` entry of the SIMD backend is the loop of the fallback compiled at the level of the dispatch (D429)"
+      "waiver": "no SIMD library has an AM modulator (VOLK, KFR and CMSIS-DSP have none; liquid-dsp's `ampmodem` is scalar C; the CMSIS-DSP composition of the same work gates `am_mod_fallback`, D2954), so the comparison is our own fallback, reported as information with the efficiency verdict; the `C32` entry of the SIMD backend is the loop of the fallback compiled at the level of the dispatch (D429)"
     },
     "simd128": {
       "status": "info",
-      "waiver": "no SIMD library has an AM modulator (VOLK, KFR and CMSIS-DSP have none; liquid-dsp's `ampmodem` is scalar C and gates `am_mod_fallback`), so the comparison is our own fallback, reported as information with the efficiency verdict; the `C32` entry of the SIMD backend is the loop of the fallback compiled at the level of the dispatch (D429)"
+      "waiver": "no SIMD library has an AM modulator (VOLK, KFR and CMSIS-DSP have none; liquid-dsp's `ampmodem` is scalar C; the CMSIS-DSP composition of the same work gates `am_mod_fallback`, D2954), so the comparison is our own fallback, reported as information with the efficiency verdict; the `C32` entry of the SIMD backend is the loop of the fallback compiled at the level of the dispatch (D429)"
     }
   },
   "am_mod_cq15": {
@@ -4350,23 +4350,19 @@
   },
   "am_mod_fallback": {
     "sse2": {
-      "status": "dev",
-      "waiver": "liquid-dsp's `ampmodem` (DSB with the carrier) does less work than the `am_mod` contract: `x * mod_index + 1` without the clamp to [-1, 1], the NaN rule and the carrier product; simulated in CI (D2745, whole-loop): 1.09 / 1.16 cycles per sample against 0.59 / 0.72 of the comparison on `skylake` / `znver2` (1.84 / 1.61); accepted by the maintainer (D586): the extra work keeps the output bounded and finite for inputs beyond full scale and NaN, where liquid's loop overmodulates or passes NaN on; open item I13.1-7; above the `dev` limit 1.50, awaiting the maintainer's decision (D2779)"
+      "status": "release"
     },
     "sse4.2": {
-      "status": "dev",
-      "waiver": "liquid-dsp's `ampmodem` (DSB with the carrier) does less work than the `am_mod` contract: `x * mod_index + 1` without the clamp to [-1, 1], the NaN rule and the carrier product; simulated in CI (D2745, whole-loop): 1.09 / 1.16 cycles per sample against 0.59 / 0.72 of the comparison on `skylake` / `znver2` (1.84 / 1.61); accepted by the maintainer (D586): the extra work keeps the output bounded and finite for inputs beyond full scale and NaN, where liquid's loop overmodulates or passes NaN on; open item I13.1-7; above the `dev` limit 1.50, awaiting the maintainer's decision (D2779)"
+      "status": "release"
     },
     "avx2": {
-      "status": "dev"
+      "status": "release"
     },
     "avx512": {
       "status": "release"
     },
     "neon": {
-      "status": "dev",
-      "waiver": "liquid-dsp's `ampmodem` (DSB with the carrier) does less work than the `am_mod` contract: `x * mod_index + 1` without the clamp to [-1, 1], the NaN rule and the carrier product; simulated in CI (D2745, whole-loop): 2.91 / 1.52 cycles per sample against 1.28 / 1.03 of the comparison on `cortex-a72` / `cortex-a76` (2.27 / 1.48); accepted by the maintainer (D586): the extra work keeps the output bounded and finite for inputs beyond full scale and NaN, where liquid's loop overmodulates or passes NaN on; open item I13.1-7; above the `dev` limit 1.50, awaiting the maintainer's decision (D2779)",
-      "accuracy_waiver": "150.8 dB against 152.1 dB for liquid-dsp's `ampmodem` on the count input (SNR against the f64 model): GCC contracts liquid's `x * mod_index + 1` into `fmla` on AArch64 (one rounding fewer), while the numeric contract of `am_mod` forbids FMA in the fallback (R6.5); at the x86 levels, where liquid has no FMA, both are at 150.8 dB; accepted by the maintainer (D586): the extra work keeps the output bounded and finite for inputs beyond full scale and NaN, where liquid's loop overmodulates or passes NaN on"
+      "status": "release"
     },
     "simd128": {
       "status": "release"

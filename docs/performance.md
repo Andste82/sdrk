@@ -469,15 +469,15 @@ Reference model `skylake`, counter-model `znver2`, mode `whole-loop`; execution 
 | `convert_out_cs16` | 1.10 | 1.03 | 1.06 | 1.03 | 1.03 | 1.00 | 95.5 / 95.5 | release | volk_32f_s32f_convert_16i |
 | `convert_out_cs16_fallback` | 2.05 | 11.12 | 0.18 | 2.04 | 12.23 | 0.17 | 95.5 / 95.5 | release | VOLK 3.3.0 volk_32f_s32f_convert_16i_generic, benches/refs/volk-generic.c (-O3 -ffp-contract=off, sse2) |
 | `convert_out_cs8` | 1.02 | 1.02 | 1.00 | 1.03 | 0.96 | 1.08 | 47.3 / 47.3 | release | volk_32f_s32f_convert_8i |
-| `convert_out_cs8_fallback` | 2.32 | 11.72 | 0.20 | 2.48 | 14.21 | 0.17 | 47.3 / 47.3 | release | VOLK 3.3.0 volk_32f_s32f_convert_8i_generic, benches/refs/volk-generic.c (-O3 -ffp-contract=off, sse2) |
+| `convert_out_cs8_fallback` | 2.15 | 11.72 | 0.18 | 2.16 | 14.21 | 0.15 | 47.3 / 47.3 | release | VOLK 3.3.0 volk_32f_s32f_convert_8i_generic, benches/refs/volk-generic.c (-O3 -ffp-contract=off, sse2) |
 | `convert_out_cu8` | 1.59 | 26.54 | 0.06 | 1.55 | 25.65 | 0.06 | 47.3 / 47.3 | release | KFR 7.2.0 clamp(round(double(select(x == x, x, 0)) * scale + bias), 0, 255) to uint8_t (the CU8 contract: NaN as 0, the f64 formula) (benches/refs/kfr-ops.cpp, sse2, -ffp-contract=off) |
-| `convert_out_cu8_fallback` | 5.43 | 12.29 | 0.44 | 5.74 | 14.25 | 0.40 | 47.3 / 47.3 | release | VOLK 3.3.0 volk_32f_s32f_x2_convert_8u_generic, benches/refs/volk-generic.c (-O3 -ffp-contract=off, sse2) |
+| `convert_out_cu8_fallback` | 3.90 | 12.29 | 0.32 | 4.08 | 14.25 | 0.29 | 47.3 / 47.3 | release | VOLK 3.3.0 volk_32f_s32f_x2_convert_8u_generic, benches/refs/volk-generic.c (-O3 -ffp-contract=off, sse2) |
 | `convert_out_real_rs16` | 0.56 | 0.52 | 1.07 | 0.53 | 0.52 | 1.02 | 95.5 / 95.5 | release | volk_32f_s32f_convert_16i |
 | `convert_out_real_rs16_fallback` | 1.03 | 5.56 | 0.19 | 1.02 | 6.12 | 0.17 | 95.5 / 95.5 | release | VOLK 3.3.0 volk_32f_s32f_convert_16i_generic, benches/refs/volk-generic.c (-O3 -ffp-contract=off, sse2) |
 | `convert_out_real_rs8` | 0.52 | 0.52 | 1.02 | 0.53 | 0.48 | 1.09 | 47.2 / 47.2 | release | volk_32f_s32f_convert_8i |
-| `convert_out_real_rs8_fallback` | 1.17 | 5.86 | 0.20 | 1.25 | 7.11 | 0.18 | 47.2 / 47.2 | release | VOLK 3.3.0 volk_32f_s32f_convert_8i_generic, benches/refs/volk-generic.c (-O3 -ffp-contract=off, sse2) |
+| `convert_out_real_rs8_fallback` | 1.08 | 5.86 | 0.18 | 1.09 | 7.11 | 0.15 | 47.2 / 47.2 | release | VOLK 3.3.0 volk_32f_s32f_convert_8i_generic, benches/refs/volk-generic.c (-O3 -ffp-contract=off, sse2) |
 | `convert_out_real_ru8` | 0.81 | 13.28 | 0.06 | 0.79 | 12.83 | 0.06 | 47.2 / 47.2 | release | KFR 7.2.0 clamp(round(double(select(x == x, x, 0)) * scale + bias), 0, 255) to uint8_t (the CU8 contract: NaN as 0, the f64 formula) (benches/refs/kfr-ops.cpp, sse2, -ffp-contract=off) |
-| `convert_out_real_ru8_fallback` | 2.72 | 6.15 | 0.44 | 2.88 | 7.13 | 0.40 | 47.2 / 47.2 | release | VOLK 3.3.0 volk_32f_s32f_x2_convert_8u_generic, benches/refs/volk-generic.c (-O3 -ffp-contract=off, sse2) |
+| `convert_out_real_ru8_fallback` | 1.96 | 6.15 | 0.32 | 2.05 | 7.13 | 0.29 | 47.2 / 47.2 | release | VOLK 3.3.0 volk_32f_s32f_x2_convert_8u_generic, benches/refs/volk-generic.c (-O3 -ffp-contract=off, sse2) |
 | `convert_real_rs16` | 0.28 | 0.59 | 0.47 | 0.31 | 0.72 | 0.44 | exact / exact | release | volk_16i_s32f_convert_32f |
 | `convert_real_rs16_fallback` | 0.40 | 0.39 | 1.03 | 0.49 | 0.48 | 1.01 | exact / exact | release | CMSIS-DSP 1.18.0 arm_q15_to_float, generic C (-O3 -ffp-contract=off, LOOPUNROLL, sse2) |
 | `rotate` | 2.08 | 11.05 | 0.19 | 1.99 | 12.13 | 0.16 | 143.0 / 107.8 | info | volk_32fc_s32fc_x2_rotator2_32fc |
@@ -782,15 +782,15 @@ Reference model `skylake`, counter-model `znver2`, mode `whole-loop`; execution 
 | `convert_out_cs16` | 1.10 | 1.03 | 1.06 | 1.03 | 1.03 | 1.00 | 95.5 / 95.5 | release | volk_32f_s32f_convert_16i |
 | `convert_out_cs16_fallback` | 1.95 | 7.26 | 0.27 | 2.03 | 7.21 | 0.28 | 95.5 / 95.5 | release | VOLK 3.3.0 volk_32f_s32f_convert_16i_generic, benches/refs/volk-generic.c (-O3 -ffp-contract=off, sse4.2) |
 | `convert_out_cs8` | 1.02 | 1.02 | 1.00 | 1.03 | 0.96 | 1.08 | 47.3 / 47.3 | release | volk_32f_s32f_convert_8i |
-| `convert_out_cs8_fallback` | 1.91 | 2.77 | 0.69 | 1.88 | 2.52 | 0.75 | 47.3 / 47.3 | release | VOLK 3.3.0 volk_32f_s32f_convert_8i_generic, benches/refs/volk-generic.c (-O3 -ffp-contract=off, sse4.2) |
+| `convert_out_cs8_fallback` | 1.50 | 2.77 | 0.54 | 1.54 | 2.52 | 0.61 | 47.3 / 47.3 | release | VOLK 3.3.0 volk_32f_s32f_convert_8i_generic, benches/refs/volk-generic.c (-O3 -ffp-contract=off, sse4.2) |
 | `convert_out_cu8` | 1.57 | 18.28 | 0.09 | 1.52 | 18.27 | 0.08 | 47.3 / 47.3 | release | KFR 7.2.0 clamp(round(double(select(x == x, x, 0)) * scale + bias), 0, 255) to uint8_t (the CU8 contract: NaN as 0, the f64 formula) (benches/refs/kfr-ops.cpp, sse42, -ffp-contract=off) |
-| `convert_out_cu8_fallback` | 4.70 | 2.83 | 1.66 | 4.41 | 2.72 | 1.62 | 47.3 / 47.3 | dev | VOLK 3.3.0 volk_32f_s32f_x2_convert_8u_generic, benches/refs/volk-generic.c (-O3 -ffp-contract=off, sse4.2) |
+| `convert_out_cu8_fallback` | 3.28 | 2.83 | 1.16 | 3.39 | 2.72 | 1.25 | 47.3 / 47.3 | dev | VOLK 3.3.0 volk_32f_s32f_x2_convert_8u_generic, benches/refs/volk-generic.c (-O3 -ffp-contract=off, sse4.2) |
 | `convert_out_real_rs16` | 0.56 | 0.52 | 1.07 | 0.53 | 0.52 | 1.02 | 95.5 / 95.5 | release | volk_32f_s32f_convert_16i |
 | `convert_out_real_rs16_fallback` | 0.98 | 3.63 | 0.27 | 1.02 | 3.61 | 0.28 | 95.5 / 95.5 | release | VOLK 3.3.0 volk_32f_s32f_convert_16i_generic, benches/refs/volk-generic.c (-O3 -ffp-contract=off, sse4.2) |
 | `convert_out_real_rs8` | 0.52 | 0.51 | 1.02 | 0.53 | 0.48 | 1.09 | 47.2 / 47.2 | release | volk_32f_s32f_convert_8i |
-| `convert_out_real_rs8_fallback` | 0.96 | 1.39 | 0.69 | 0.94 | 1.26 | 0.75 | 47.2 / 47.2 | release | VOLK 3.3.0 volk_32f_s32f_convert_8i_generic, benches/refs/volk-generic.c (-O3 -ffp-contract=off, sse4.2) |
+| `convert_out_real_rs8_fallback` | 0.76 | 1.39 | 0.55 | 0.78 | 1.26 | 0.62 | 47.2 / 47.2 | release | VOLK 3.3.0 volk_32f_s32f_convert_8i_generic, benches/refs/volk-generic.c (-O3 -ffp-contract=off, sse4.2) |
 | `convert_out_real_ru8` | 0.80 | 9.15 | 0.09 | 0.77 | 9.14 | 0.08 | 47.2 / 47.2 | release | KFR 7.2.0 clamp(round(double(select(x == x, x, 0)) * scale + bias), 0, 255) to uint8_t (the CU8 contract: NaN as 0, the f64 formula) (benches/refs/kfr-ops.cpp, sse42, -ffp-contract=off) |
-| `convert_out_real_ru8_fallback` | 2.36 | 1.42 | 1.66 | 2.21 | 1.36 | 1.62 | 47.2 / 47.2 | dev | VOLK 3.3.0 volk_32f_s32f_x2_convert_8u_generic, benches/refs/volk-generic.c (-O3 -ffp-contract=off, sse4.2) |
+| `convert_out_real_ru8_fallback` | 1.65 | 1.42 | 1.16 | 1.70 | 1.36 | 1.25 | 47.2 / 47.2 | dev | VOLK 3.3.0 volk_32f_s32f_x2_convert_8u_generic, benches/refs/volk-generic.c (-O3 -ffp-contract=off, sse4.2) |
 | `convert_real_rs16` | 0.27 | 0.39 | 0.69 | 0.28 | 0.49 | 0.57 | exact / exact | release | volk_16i_s32f_convert_32f |
 | `convert_real_rs16_fallback` | 0.36 | 0.39 | 0.93 | 0.37 | 0.42 | 0.87 | exact / exact | release | CMSIS-DSP 1.18.0 arm_q15_to_float, generic C (-O3 -ffp-contract=off, LOOPUNROLL, sse4.2) |
 | `rotate` | 2.08 | 9.16 | 0.23 | 1.98 | 11.13 | 0.18 | 143.0 / 107.8 | info | volk_32fc_s32fc_x2_rotator2_32fc |
@@ -1096,15 +1096,15 @@ Reference model `znver3`, counter-model `alderlake`, mode `whole-loop`; executio
 | `convert_out_cs16` | 0.45 | 0.46 | 0.99 | 0.55 | 0.53 | 1.04 | 95.5 / 95.5 | release | volk_32f_s32f_convert_16i |
 | `convert_out_cs16_fallback` | 0.77 | 4.57 | 0.17 | 0.73 | 7.41 | 0.10 | 95.5 / 95.5 | release | VOLK 3.3.0 volk_32f_s32f_convert_16i_generic, benches/refs/volk-generic.c (-O3 -ffp-contract=off, avx2) |
 | `convert_out_cs8` | 0.43 | 0.50 | 0.87 | 0.56 | 0.52 | 1.07 | 47.3 / 47.3 | release | volk_32f_s32f_convert_8i |
-| `convert_out_cs8_fallback` | 1.06 | 1.17 | 0.91 | 1.02 | 1.43 | 0.72 | 47.3 / 47.3 | release | VOLK 3.3.0 volk_32f_s32f_convert_8i_generic, benches/refs/volk-generic.c (-O3 -ffp-contract=off, avx2) |
+| `convert_out_cs8_fallback` | 0.92 | 1.17 | 0.79 | 0.95 | 1.43 | 0.67 | 47.3 / 47.3 | release | VOLK 3.3.0 volk_32f_s32f_convert_8i_generic, benches/refs/volk-generic.c (-O3 -ffp-contract=off, avx2) |
 | `convert_out_cu8` | 0.53 | 13.08 | 0.04 | 0.67 | 11.34 | 0.06 | 47.3 / 47.3 | release | KFR 7.2.0 clamp(round(double(select(x == x, x, 0)) * scale + bias), 0, 255) to uint8_t (the CU8 contract: NaN as 0, the f64 formula) (benches/refs/kfr-ops.cpp, avx2, -ffp-contract=off) |
-| `convert_out_cu8_fallback` | 1.67 | 1.22 | 1.37 | 1.82 | 1.49 | 1.22 | 47.3 / 47.3 | dev | VOLK 3.3.0 volk_32f_s32f_x2_convert_8u_generic, benches/refs/volk-generic.c (-O3 -ffp-contract=off, avx2) |
+| `convert_out_cu8_fallback` | 1.25 | 1.22 | 1.03 | 1.36 | 1.49 | 0.92 | 47.3 / 47.3 | release | VOLK 3.3.0 volk_32f_s32f_x2_convert_8u_generic, benches/refs/volk-generic.c (-O3 -ffp-contract=off, avx2) |
 | `convert_out_real_rs16` | 0.23 | 0.24 | 0.99 | 0.28 | 0.27 | 1.06 | 95.5 / 95.5 | release | volk_32f_s32f_convert_16i |
 | `convert_out_real_rs16_fallback` | 0.39 | 2.29 | 0.17 | 0.37 | 3.71 | 0.10 | 95.5 / 95.5 | release | VOLK 3.3.0 volk_32f_s32f_convert_16i_generic, benches/refs/volk-generic.c (-O3 -ffp-contract=off, avx2) |
 | `convert_out_real_rs8` | 0.22 | 0.25 | 0.88 | 0.29 | 0.26 | 1.09 | 47.2 / 47.2 | release | volk_32f_s32f_convert_8i |
-| `convert_out_real_rs8_fallback` | 0.54 | 0.59 | 0.92 | 0.52 | 0.72 | 0.72 | 47.2 / 47.2 | release | VOLK 3.3.0 volk_32f_s32f_convert_8i_generic, benches/refs/volk-generic.c (-O3 -ffp-contract=off, avx2) |
+| `convert_out_real_rs8_fallback` | 0.47 | 0.59 | 0.80 | 0.48 | 0.72 | 0.67 | 47.2 / 47.2 | release | VOLK 3.3.0 volk_32f_s32f_convert_8i_generic, benches/refs/volk-generic.c (-O3 -ffp-contract=off, avx2) |
 | `convert_out_real_ru8` | 0.27 | 6.55 | 0.04 | 0.34 | 5.68 | 0.06 | 47.2 / 47.2 | release | KFR 7.2.0 clamp(round(double(select(x == x, x, 0)) * scale + bias), 0, 255) to uint8_t (the CU8 contract: NaN as 0, the f64 formula) (benches/refs/kfr-ops.cpp, avx2, -ffp-contract=off) |
-| `convert_out_real_ru8_fallback` | 0.84 | 0.61 | 1.37 | 0.92 | 0.75 | 1.23 | 47.2 / 47.2 | dev | VOLK 3.3.0 volk_32f_s32f_x2_convert_8u_generic, benches/refs/volk-generic.c (-O3 -ffp-contract=off, avx2) |
+| `convert_out_real_ru8_fallback` | 0.63 | 0.61 | 1.03 | 0.69 | 0.75 | 0.92 | 47.2 / 47.2 | release | VOLK 3.3.0 volk_32f_s32f_x2_convert_8u_generic, benches/refs/volk-generic.c (-O3 -ffp-contract=off, avx2) |
 | `convert_real_rs16` | 0.14 | 0.17 | 0.84 | 0.14 | 0.19 | 0.73 | exact / exact | release | volk_16i_s32f_convert_32f |
 | `convert_real_rs16_fallback` | 0.14 | 0.20 | 0.69 | 0.15 | 0.20 | 0.74 | exact / exact | release | CMSIS-DSP 1.18.0 arm_q15_to_float, generic C (-O3 -ffp-contract=off, LOOPUNROLL, avx2) |
 | `rotate` | 0.66 | 3.19 | 0.21 | 0.57 | 3.05 | 0.19 | 144.3 / 115.0 | release | volk_32fc_s32fc_x2_rotator2_32fc |
@@ -1610,15 +1610,15 @@ Reference model `znver4`, counter-model `sapphirerapids`, mode `whole-loop`; exe
 | `convert_out_cs16` | 0.39 | 0.42 | 0.94 | 0.39 | 0.40 | 0.97 | 95.5 / 95.5 | release | volk_32f_s32f_convert_16i |
 | `convert_out_cs16_fallback` | 0.64 | 6.20 | 0.10 | 0.61 | 7.41 | 0.08 | 95.5 / 95.5 | release | VOLK 3.3.0 volk_32f_s32f_convert_16i_generic, benches/refs/volk-generic.c (-O3 -ffp-contract=off, avx512) |
 | `convert_out_cs8` | 0.39 | 0.43 | 0.91 | 0.39 | 0.39 | 1.00 | 47.3 / 47.3 | release | volk_32f_s32f_convert_8i |
-| `convert_out_cs8_fallback` | 0.73 | 0.56 | 1.31 | 0.84 | 1.27 | 0.66 | 47.3 / 47.3 | dev | VOLK 3.3.0 volk_32f_s32f_convert_8i_generic, benches/refs/volk-generic.c (-O3 -ffp-contract=off, avx512) |
+| `convert_out_cs8_fallback` | 0.55 | 0.56 | 0.99 | 0.71 | 1.27 | 0.56 | 47.3 / 47.3 | release | VOLK 3.3.0 volk_32f_s32f_convert_8i_generic, benches/refs/volk-generic.c (-O3 -ffp-contract=off, avx512) |
 | `convert_out_cu8` | 0.53 | 9.63 | 0.06 | 0.49 | 7.90 | 0.06 | 47.3 / 47.3 | release | KFR 7.2.0 clamp(round(double(select(x == x, x, 0)) * scale + bias), 0, 255) to uint8_t (the CU8 contract: NaN as 0, the f64 formula) (benches/refs/kfr-ops.cpp, avx512, -ffp-contract=off) |
-| `convert_out_cu8_fallback` | 1.22 | 0.68 | 1.81 | 1.33 | 1.27 | 1.04 | 47.3 / 47.3 | dev | VOLK 3.3.0 volk_32f_s32f_x2_convert_8u_generic, benches/refs/volk-generic.c (-O3 -ffp-contract=off, avx512) |
+| `convert_out_cu8_fallback` | 0.93 | 0.68 | 1.38 | 1.23 | 1.27 | 0.96 | 47.3 / 47.3 | dev | VOLK 3.3.0 volk_32f_s32f_x2_convert_8u_generic, benches/refs/volk-generic.c (-O3 -ffp-contract=off, avx512) |
 | `convert_out_real_rs16` | 0.20 | 0.21 | 0.95 | 0.20 | 0.20 | 1.00 | 95.5 / 95.5 | release | volk_32f_s32f_convert_16i |
 | `convert_out_real_rs16_fallback` | 0.33 | 3.10 | 0.11 | 0.31 | 3.71 | 0.08 | 95.5 / 95.5 | release | VOLK 3.3.0 volk_32f_s32f_convert_16i_generic, benches/refs/volk-generic.c (-O3 -ffp-contract=off, avx512) |
 | `convert_out_real_rs8` | 0.20 | 0.22 | 0.92 | 0.20 | 0.20 | 1.02 | 47.2 / 47.2 | release | volk_32f_s32f_convert_8i |
-| `convert_out_real_rs8_fallback` | 0.37 | 0.28 | 1.32 | 0.43 | 0.64 | 0.67 | 47.2 / 47.2 | dev | VOLK 3.3.0 volk_32f_s32f_convert_8i_generic, benches/refs/volk-generic.c (-O3 -ffp-contract=off, avx512) |
+| `convert_out_real_rs8_fallback` | 0.28 | 0.28 | 1.00 | 0.36 | 0.64 | 0.56 | 47.2 / 47.2 | release | VOLK 3.3.0 volk_32f_s32f_convert_8i_generic, benches/refs/volk-generic.c (-O3 -ffp-contract=off, avx512) |
 | `convert_out_real_ru8` | 0.27 | 4.83 | 0.06 | 0.25 | 3.96 | 0.06 | 47.2 / 47.2 | release | KFR 7.2.0 clamp(round(double(select(x == x, x, 0)) * scale + bias), 0, 255) to uint8_t (the CU8 contract: NaN as 0, the f64 formula) (benches/refs/kfr-ops.cpp, avx512, -ffp-contract=off) |
-| `convert_out_real_ru8_fallback` | 0.61 | 0.34 | 1.80 | 0.67 | 0.64 | 1.05 | 47.2 / 47.2 | dev | VOLK 3.3.0 volk_32f_s32f_x2_convert_8u_generic, benches/refs/volk-generic.c (-O3 -ffp-contract=off, avx512) |
+| `convert_out_real_ru8_fallback` | 0.47 | 0.34 | 1.38 | 0.62 | 0.64 | 0.97 | 47.2 / 47.2 | dev | VOLK 3.3.0 volk_32f_s32f_x2_convert_8u_generic, benches/refs/volk-generic.c (-O3 -ffp-contract=off, avx512) |
 | `convert_real_rs16` | 0.13 | 0.13 | 1.01 | 0.11 | 0.11 | 0.96 | exact / exact | release | volk_16i_s32f_convert_32f |
 | `convert_real_rs16_fallback` | 0.14 | 0.15 | 0.94 | 0.15 | 0.20 | 0.74 | exact / exact | release | CMSIS-DSP 1.18.0 arm_q15_to_float, generic C (-O3 -ffp-contract=off, LOOPUNROLL, avx512) |
 | `rotate` | 0.71 | 3.89 | 0.18 | 0.44 | 3.36 | 0.13 | 144.0 / 114.5 | release | volk_32fc_s32fc_x2_rotator2_32fc |
@@ -1734,7 +1734,7 @@ Reference model `znver4`, counter-model `sapphirerapids`, mode `whole-loop`; exe
 | `mul` | 0.58 | 0.71 | 0.82 | 0.39 | 0.53 | 0.73 | 150.1 / 148.5 | release | KFR 7.2.0 a * b on complex<float> (benches/refs/kfr-ops.cpp, avx512, -ffp-contract=off) |
 | `mul_cq15` | 0.70 | 0.81 | 0.86 | 0.59 | 1.08 | 0.55 | 94.4 / 94.4 | info | own (information): sdrk fallback |
 | `mul_cq15_fallback` | 0.81 | 1.06 | 0.77 | 1.08 | 1.66 | 0.65 | 94.4 / 19.6 | release | CMSIS-DSP 1.18.0 arm_cmplx_mult_cmplx_q15 (Q3.13, truncating, scaled by 4), generic C (-O3 -ffp-contract=off, LOOPUNROLL, avx512) |
-| `mul_fallback` | 0.77 | 0.53 | 1.47 | 0.78 | 0.79 | 0.98 | 148.5 / 148.5 | dev | CMSIS-DSP 1.18.0 arm_cmplx_mult_cmplx_f32, generic C (-O3 -ffp-contract=off, LOOPUNROLL, avx512) |
+| `mul_fallback` | 0.53 | 0.53 | 1.00 | 0.54 | 0.79 | 0.68 | 148.5 / 148.5 | release | CMSIS-DSP 1.18.0 arm_cmplx_mult_cmplx_f32, generic C (-O3 -ffp-contract=off, LOOPUNROLL, avx512) |
 | `mul_real` | 0.10 | 0.12 | 0.84 | 0.07 | 0.09 | 0.71 | 151.8 / 151.8 | release | volk_32f_x2_multiply_32f |
 | `mul_real_fallback` | 0.19 | 0.20 | 0.96 | 0.14 | 0.18 | 0.76 | 151.8 / 151.8 | release | CMSIS-DSP 1.18.0 arm_mult_f32, generic C (-O3 -ffp-contract=off, LOOPUNROLL, avx512) |
 | `mul_real_q15` | 0.07 | 0.24 | 0.29 | 0.05 | 0.26 | 0.21 | 91.6 / 91.6 | info | own (information): sdrk fallback |
@@ -1924,15 +1924,15 @@ Reference model `cortex-a72`, counter-model `cortex-a76`, mode `whole-loop`; exe
 | `convert_out_cs16` | 1.69 | 2.78 | 0.61 | 1.44 | 1.90 | 0.76 | 95.5 / 95.5 | release | volk_32f_s32f_convert_16i |
 | `convert_out_cs16_fallback` | 4.08 | 9.27 | 0.44 | 2.56 | 10.24 | 0.25 | 95.5 / 95.5 | release | VOLK 3.3.0 volk_32f_s32f_convert_16i_generic, benches/refs/volk-generic.c (-O3 -ffp-contract=off, neon) |
 | `convert_out_cs8` | 1.63 | 2.65 | 0.62 | 1.35 | 1.71 | 0.79 | 47.3 / 47.3 | release | volk_32f_s32f_convert_8i |
-| `convert_out_cs8_fallback` | 5.80 | 4.47 | 1.30 | 3.09 | 2.65 | 1.17 | 47.3 / 47.3 | dev | VOLK 3.3.0 volk_32f_s32f_convert_8i_generic, benches/refs/volk-generic.c (-O3 -ffp-contract=off, neon) |
+| `convert_out_cs8_fallback` | 3.42 | 4.47 | 0.77 | 2.16 | 2.65 | 0.82 | 47.3 / 47.3 | release | VOLK 3.3.0 volk_32f_s32f_convert_8i_generic, benches/refs/volk-generic.c (-O3 -ffp-contract=off, neon) |
 | `convert_out_cu8` | 2.91 | 29.59 | 0.10 | 2.09 | 21.19 | 0.10 | 47.3 / 47.3 | release | KFR 7.2.0 clamp(round(double(select(x == x, x, 0)) * scale + bias), 0, 255) to uint8_t (the CU8 contract: NaN as 0, the f64 formula) (benches/refs/kfr-ops.cpp, neon64, -ffp-contract=off) |
-| `convert_out_cu8_fallback` | 7.14 | 4.90 | 1.46 | 4.35 | 2.84 | 1.53 | 47.3 / 47.3 | dev | VOLK 3.3.0 volk_32f_s32f_x2_convert_8u_generic, benches/refs/volk-generic.c (-O3 -ffp-contract=off, neon) |
+| `convert_out_cu8_fallback` | 4.68 | 4.90 | 0.95 | 2.91 | 2.84 | 1.03 | 47.3 / 47.3 | release | VOLK 3.3.0 volk_32f_s32f_x2_convert_8u_generic, benches/refs/volk-generic.c (-O3 -ffp-contract=off, neon) |
 | `convert_out_real_rs16` | 0.86 | 1.40 | 0.61 | 0.73 | 0.96 | 0.77 | 95.5 / 95.5 | release | volk_32f_s32f_convert_16i |
-| `convert_out_real_rs16_fallback` | 2.05 | 4.64 | 0.44 | 1.30 | 5.12 | 0.25 | 95.5 / 95.5 | release | VOLK 3.3.0 volk_32f_s32f_convert_16i_generic, benches/refs/volk-generic.c (-O3 -ffp-contract=off, neon) |
+| `convert_out_real_rs16_fallback` | 2.05 | 4.64 | 0.44 | 1.29 | 5.12 | 0.25 | 95.5 / 95.5 | release | VOLK 3.3.0 volk_32f_s32f_convert_16i_generic, benches/refs/volk-generic.c (-O3 -ffp-contract=off, neon) |
 | `convert_out_real_rs8` | 0.83 | 1.33 | 0.62 | 0.69 | 0.86 | 0.80 | 47.2 / 47.2 | release | volk_32f_s32f_convert_8i |
-| `convert_out_real_rs8_fallback` | 2.91 | 2.24 | 1.30 | 1.55 | 1.33 | 1.17 | 47.2 / 47.2 | dev | VOLK 3.3.0 volk_32f_s32f_convert_8i_generic, benches/refs/volk-generic.c (-O3 -ffp-contract=off, neon) |
+| `convert_out_real_rs8_fallback` | 1.72 | 2.24 | 0.77 | 1.09 | 1.33 | 0.82 | 47.2 / 47.2 | release | VOLK 3.3.0 volk_32f_s32f_convert_8i_generic, benches/refs/volk-generic.c (-O3 -ffp-contract=off, neon) |
 | `convert_out_real_ru8` | 1.47 | 14.82 | 0.10 | 1.06 | 10.61 | 0.10 | 47.2 / 47.2 | release | KFR 7.2.0 clamp(round(double(select(x == x, x, 0)) * scale + bias), 0, 255) to uint8_t (the CU8 contract: NaN as 0, the f64 formula) (benches/refs/kfr-ops.cpp, neon64, -ffp-contract=off) |
-| `convert_out_real_ru8_fallback` | 3.58 | 2.46 | 1.46 | 2.18 | 1.42 | 1.53 | 47.2 / 47.2 | dev | VOLK 3.3.0 volk_32f_s32f_x2_convert_8u_generic, benches/refs/volk-generic.c (-O3 -ffp-contract=off, neon) |
+| `convert_out_real_ru8_fallback` | 2.35 | 2.46 | 0.96 | 1.47 | 1.42 | 1.03 | 47.2 / 47.2 | release | VOLK 3.3.0 volk_32f_s32f_x2_convert_8u_generic, benches/refs/volk-generic.c (-O3 -ffp-contract=off, neon) |
 | `convert_real_rs16` | 0.69 | 1.15 | 0.60 | 0.56 | 1.02 | 0.55 | exact / exact | release | volk_16i_s32f_convert_32f |
 | `convert_real_rs16_fallback` | 0.79 | 1.28 | 0.62 | 0.66 | 1.28 | 0.52 | exact / exact | release | CMSIS-DSP 1.18.0 arm_q15_to_float, generic C (-O3 -ffp-contract=off, LOOPUNROLL, neon) |
 | `rotate` | 2.74 | 4.63 | 0.59 | 1.96 | 3.71 | 0.53 | 143.9 / 115.2 | release | volk_32fc_s32fc_x2_rotator2_32fc |

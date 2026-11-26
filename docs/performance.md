@@ -1876,7 +1876,7 @@ Reference model `znver4`, counter-model `sapphirerapids`, mode `whole-loop`; exe
 | `snr_estimate_block_svr` | 2.64 | 69.08 | 0.04 | 2.35 | 77.87 | 0.03 | 50.1 / 0.4 | info | GNU Radio mpsk_snr_est_cc(SNR_EST_SVR, 4096, 0.001): \|x\|^4 and \|x_n\|^2 \|x_(n-1)\|^2 averaged in double, two cabsf per symbol (reference does different work: no decisions, a PSK constellation; generic compiler flags) |
 | `stereo_encode` | 1.15 | 1.15 | 1.00 | 5.53 | 5.53 | 1.00 | exact / exact | info | own (information): sdrk fallback |
 | `stereo_encode_rds` | 1.59 | 1.59 | 1.00 | 5.54 | 5.54 | 1.00 | exact / exact | info | own (information): sdrk fallback |
-| `stereo_matrix` | 0.35 | 0.62 | 0.57 | 0.32 | 0.59 | 0.55 | 151.3 / 151.3 | release | KFR 7.2.0 make_complex(s + (d + d), s - (d + d)) of real(x), imag(x) on complex<float>, one pass (benches/refs/kfr-ops.cpp, avx512, -ffp-contract=off) |
+| `stereo_matrix` | 0.35 | 0.85 | 0.42 | 0.32 | 0.81 | 0.40 | 151.3 / 151.3 | release | KFR 7.2.0 make_complex(s + (d + d), s - (d + d)) of real(x), imag(x) on complex<float>, one pass (benches/refs/kfr-ops.cpp, avx512, -ffp-contract=off) |
 | `stereo_matrix_cq15` | 0.20 | 0.39 | 0.51 | 0.13 | 0.58 | 0.23 | exact / exact | info | own (information): sdrk fallback |
 | `stereo_matrix_cq15_fallback` | 0.39 | 0.79 | 0.49 | 0.58 | 1.55 | 0.37 | exact / 12.2 | release | CMSIS-DSP 1.18.0 arm_add_q15 (d + d, saturating), arm_add_q15 (s + d2), arm_sub_q15 (s - d2) on planar data, generic C (-O3 -ffp-contract=off, LOOPUNROLL, avx512) |
 | `stereo_matrix_fallback` | 0.48 | 0.60 | 0.80 | 0.54 | 0.53 | 1.02 | 151.3 / 151.3 | release | CMSIS-DSP 1.18.0 arm_add_f32 (d + d), arm_add_f32 (s + d2), arm_sub_f32 (s - d2) on planar data, generic C (-O3 -ffp-contract=off, LOOPUNROLL, avx512) |

@@ -435,11 +435,11 @@
             },
             "cpu": "sapphirerapids",
             "ours": {
-              "coverage": 0.9930599213539933,
-              "cycles_per_sample": 0.30285255295754426,
+              "coverage": 0.9929987180751405,
+              "cycles_per_sample": 0.30287121921452176,
               "efficiency": 0.8373414510400812
             },
-            "ratio": 0.9999260437081683
+            "ratio": 0.9999876739513611
           },
           "cycle_mode": "whole-loop",
           "reference_model": {
@@ -450,11 +450,11 @@
             },
             "cpu": "znver4",
             "ours": {
-              "coverage": 0.9930599213539933,
-              "cycles_per_sample": 0.3829088826032712,
+              "coverage": 0.9929987180751405,
+              "cycles_per_sample": 0.38293248311623324,
               "efficiency": 0.8268325725035474
             },
-            "ratio": 0.9999260437081683
+            "ratio": 0.9999876739513612
           },
           "samples": 65536,
           "snr_db": {
@@ -10464,9 +10464,9 @@
           "comparison_kind": "library",
           "counter_model": {
             "comparison": {
-              "coverage": 0.9918636187524216,
-              "cycles_per_sample": 0.58853857421875,
-              "efficiency": 0.8565310492505354
+              "coverage": 0.9935254316378908,
+              "cycles_per_sample": 0.8113124683518759,
+              "efficiency": 0.9387209915132572
             },
             "cpu": "sapphirerapids",
             "ours": {
@@ -10474,14 +10474,14 @@
               "cycles_per_sample": 0.3212119955203612,
               "efficiency": 0.7942205078506556
             },
-            "ratio": 0.5457790017362092
+            "ratio": 0.395916503259072
           },
           "cycle_mode": "whole-loop",
           "reference_model": {
             "comparison": {
-              "coverage": 0.9918636187524216,
-              "cycles_per_sample": 0.6238256835937501,
-              "efficiency": 0.8080808080808081
+              "coverage": 0.9935254316378908,
+              "cycles_per_sample": 0.8482201307067532,
+              "efficiency": 0.9707356854292597
             },
             "cpu": "znver4",
             "ours": {
@@ -10489,7 +10489,7 @@
               "cycles_per_sample": 0.3531694275368261,
               "efficiency": 0.7225624838869262
             },
-            "ratio": 0.5661347982697331
+            "ratio": 0.4163652980536534
           },
           "samples": 65536,
           "snr_db": {

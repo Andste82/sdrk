@@ -2,7 +2,7 @@
 
 > Plan: [M13.1](M13.1-cycles-only.md) (cycles per sample, the like-with-like statuses of D2764 to D2779) · Previous round: [O1](O1-cycle-optimisation.md) · Open items it works on: IO1-1 to IO1-9, I13.1-9, I13.1-12, I13.1-13, I13.1-14 ([open-items.md](../open-items.md)), issue #203 (the kernel gap inventory) · Next: [BACKLOG](BACKLOG.md)
 
-> **Status: planned** (2026-11-25 on the maintainer's order of the same day, after O1 was merged; branch `opt-round-2` from `main` 05ff2d25). Decision numbers D2950 to D2999, open items IO2-1 to IO2-n. No seeds.
+> **Status: in progress**: groups 0, 1, 3b and 5 done; groups 2 and 4 done as far as possible without the maintainer (open items IO2-1 to IO2-3, IO2-15 to IO2-18); group 3a not done (planned 2026-11-25 on the maintainer's order of the same day, after O1 was merged; branch `opt-round-2` from `main` 05ff2d25). Decision numbers D2950 to D2999, open items IO2-1 to IO2-n. No seeds.
 
 ## Goal
 
@@ -514,6 +514,22 @@ The composition does the clamp and the carrier product of the contract, its valu
 
 SNR 47.27 dB (`cu8`) and 47.25 dB (`ru8`) on both sides at every level. KFR's expression gives the bytes of the contract bit for bit at `sse4.2`, `avx2` and `avx512`; at `sse2` and on AArch64 its `round` rounds ties away from zero (an input on a multiple of `1 / 128`). KFR is a weak opponent here: its cast to `uint8_t` stores byte by byte, so its cost is that cast and not the work of the contract. What ours does more than VOLK, and what it costs: the NaN rule and the exact rounding, 31 against 22 vector operations per 32 floats (IO1-2), up to 1.260 / 1.233 of VOLK at `sse2`. What it gains: a NaN gives 128 (the zero of the format) instead of 255 (positive full scale); of the 4,278,190,082 non-NaN `f32` inputs VOLK's `f32` formula gives another byte for 243,270,367 (all negative inputs of magnitude at most `2^-25`, 128 instead of 127, and 735 inputs within `2^-24` of a multiple of `1 / 128`); on the measured workload the SNR is the same. The maintainer may take the VOLK ratios as the reason for a contract change of `CU8` (option (b) of the former IO1-2); without it the entries are `release` against the same-work comparison.
 
+## Group 2: accuracy (stopped at numeric contracts)
+
+None of the three remaining gaps can be closed without changing a numeric contract, so each is an open item for the maintainer and nothing of this group is committed in the code:
+
+| Entry | Ours (dB) | Library (dB) | Gap | What blocks it | Open item |
+| --- | --- | --- | --- | --- | --- |
+| `oscillate` | 133.23 | 141.71 (SLEEF), 140.77 (liquid-dsp) | 8.48 | a second-order Taylor form reaches 150.58 dB in a float32 model with two table reads per sample instead of four, but `stereo_encode` and `stereo_encode_rds` equal the composition with `oscillate` bit for bit and have bit-exact golden files | IO2-1 |
+| `deemphasis_fallback` | 145.36 | 151.98 (GNU Radio, `f64`) | 6.62 | the `f32` formula `y += alpha * (x - y)` without FMA of `docs/kernels.md`; `f64` or a compensated sum costs speed (0.920 / 0.945 of GNU Radio now) and Cortex-M4 instructions | IO2-2 |
+| `fir_decimate_fallback` | 133.29 | 134.33 (CMSIS-DSP) | 1.04 | the ascending order in one `f32` accumulator without FMA of the contract | IO2-3 |
+
+SNR against the f64 model, CI run 45641571494, every level the same. `am_mod_fallback` at `neon` is settled by group 1 (D2954: 150.8 dB on both sides). The accuracy waivers of the three entries stay as they are (I13.1-13 for `oscillate`).
+
+## Group 3a: the Q15 / CQ15 FIR family (not done)
+
+The grouped split-tap progressions for x86-64 were written but are not committed, measured or tested at every level; the `runs_fallback` switch of D65 and the route of D2840 are unchanged on the branch, and the SSE2 forms of the `Q15` kernels without a SIMD branch are not started. D2956 to D2969 and IO2-4 to IO2-9 stay free for this group.
+
 ## Group 3b: SIMD entries no faster than their fallback (done, with open items)
 
 Per entry a real SIMD gain or the duplicate removed (D2970 to D2973). CI run 45700747628 on 77f00faf (`measure_only`, `am_mod`, `interleave`, `deinterleave` and `stereo_matrix` with their variants at `avx2`, `avx2-runtime` and `neon`); the cases without a change were judged with `llvm-mca` of written-out loops (the corrected build of D942) against the numbers of CI run 45641571494.
@@ -536,6 +552,30 @@ Per entry a real SIMD gain or the duplicate removed (D2970 to D2973). CI run 457
 
 Attempts in `llvm-mca` (cycles per sample, reference / counter model, written-out loops): `am_mod` x86 unrolled 1.159 / 1.086 against the compiled 1.059 / 1.130 (`sse2`) and 0.564 / 0.440 against 0.628 / 0.443 (`avx2`); `am_mod` NEON with `zip1` / `zip2` and `stp` 2.75 / 1.63, with `st2` 2.38 / 1.38 against the compiled 2.88 / 1.50; `stereo_matrix` NEON without `ld2` / `st2` 2.38 / 1.75 against 2.00 / 1.38; `mag` Newton form 0.629 / 0.503 against 0.627 / 0.753 (`avx512`) and 5.83 / 3.27 against 8.51 / 1.76 (`neon`); `mul` SSE2 without SSE3 1.68 / 2.01 against 1.50 / 1.57. The `avx2-runtime` records of the removed AVX2 paths: `interleave` 0.266 / 0.392, `interleave_cq15` 0.139 / 0.137, `deinterleave` 0.266 / 0.265 (information against the fixed `avx2` build: 1.016 / 0.762, 1.032 / 1.023, 1.011 / 1.007).
 
+## Group 4: above 1.10 of the library (done in part, with open items)
+
+CI run 45717818987 on 052b3f0a (`mul`, `convert_out`, `convert_out_real` at `sse2`, `sse4.2`, `avx2`, `avx2-runtime`, `avx512`, `neon`, with `count_wasm32` and `count_m4_qemu`) and CI run 45720209487 on 471ce53d (`convert_out`, `convert_out_real` at `avx2` and `avx2-runtime`, the `U8` zero correction).
+
+| Entry | Level | Change | Ours (cycles per sample, ref. / counter) | Library (cycles per sample, ref. / counter) | Ours / library (ref. / counter) | Models (ref. / counter) | Status | Decision, open item |
+| --- | --- | --- | --- | --- | --- | --- | --- | --- |
+| `mul_fallback` | `avx512` | the grouped fallback of D2838 back, the `Reference` sum in the written order | 0.53 / 0.54 | 0.53 / 0.79 (CMSIS-DSP) | 0.999 / 0.682 (was 1.466 / 0.977) | znver4 / sapphirerapids | `release` (was `dev`) | D2951, D2974; IO1-9 closed |
+| `mul` | `avx512` | none; now slower than its fallback on `znver4` (1.09 / 0.72 of the fallback) | 0.58 / 0.39 | 0.71 / 0.53 (KFR) | 0.816 / 0.733 | znver4 / sapphirerapids | `release`, `cycle_waiver` | IO2-15 (open, not a gain) |
+| `convert_out_cs8_fallback` | `avx512` | byte form per target | 0.55 / 0.71 | 0.56 / 1.27 (VOLK) | 0.992 / 0.557 (was 1.310 / 0.663) | znver4 / sapphirerapids | `release` (was `dev`) | D2975 |
+| `convert_out_cs8_fallback` | `neon` | byte form per target | 3.42 / 2.16 | 4.47 / 2.65 (VOLK) | 0.766 / 0.817 (was 1.299 / 1.168) | cortex-a72 / cortex-a76 | `release` (was `dev`) | D2975 |
+| `convert_out_real_rs8_fallback` | `avx512` | byte form per target | 0.28 / 0.36 | 0.28 / 0.64 (VOLK) | 1.004 / 0.564 (was 1.316 / 0.670) | znver4 / sapphirerapids | `release` (was `dev`) | D2975 |
+| `convert_out_real_rs8_fallback` | `neon` | byte form per target | 1.72 / 1.09 | 2.24 / 1.33 (VOLK) | 0.768 / 0.822 (was 1.300 / 1.170) | cortex-a72 / cortex-a76 | `release` (was `dev`) | D2975 |
+| `convert_out_cu8_fallback` | `sse4.2` | byte form per target | 3.28 / 3.39 | 2.83 / 2.72 (VOLK) | 1.157 / 1.246 (was 1.658 / 1.621) | skylake / znver2 | `dev` | D2975, IO2-17 |
+| `convert_out_cu8_fallback` | `avx2` | byte form per target, zero correction | 1.25 / 1.36 | 1.22 / 1.49 (VOLK) | 1.027 / 0.916 (was 1.371 / 1.224) | znver3 / alderlake | `release` (was `dev`) | D2975 |
+| `convert_out_cu8_fallback` | `avx512` | byte form per target | 0.93 / 1.23 | 0.68 / 1.27 (VOLK) | 1.376 / 0.964 (was 1.805 / 1.041) | znver4 / sapphirerapids | `dev` | D2975, IO2-17 |
+| `convert_out_cu8_fallback` | `neon` | byte form per target | 4.68 / 2.91 | 4.90 / 2.84 (VOLK) | 0.955 / 1.026 (was 1.456 / 1.532) | cortex-a72 / cortex-a76 | `release` (was `dev`) | D2975 |
+| `convert_out_real_ru8_fallback` | `sse4.2` | byte form per target | 1.65 / 1.70 | 1.42 / 1.36 (VOLK) | 1.160 / 1.249 (was 1.661 / 1.623) | skylake / znver2 | `dev` | D2975, IO2-17 |
+| `convert_out_real_ru8_fallback` | `avx2` | byte form per target, zero correction | 0.63 / 0.69 | 0.61 / 0.75 (VOLK) | 1.031 / 0.920 (was 1.372 / 1.226) | znver3 / alderlake | `release` (was `dev`) | D2975 |
+| `convert_out_real_ru8_fallback` | `avx512` | byte form per target | 0.47 / 0.62 | 0.34 / 0.64 (VOLK) | 1.380 / 0.969 (was 1.797 / 1.046) | znver4 / sapphirerapids | `dev` | D2975, IO2-17 |
+| `convert_out_real_ru8_fallback` | `neon` | byte form per target | 2.35 / 1.47 | 2.46 / 1.42 (VOLK) | 0.956 / 1.032 (was 1.457 / 1.533) | cortex-a72 / cortex-a76 | `release` (was `dev`) | D2975 |
+| `stereo_matrix_fallback` | `sse2`, `sse4.2`, `avx2` | none: the x86 shuffle form needs `unsafe` in `sdrk-core` | unchanged | unchanged | unchanged | — | `dev` | D2952, D2976, IO2-16 |
+
+The "was" ratios are those of I13.1-14 (CI run 45490280535) and IO1-9. At `sse2` and `sse4.2` the `cs8` / `rs8` and at `sse2` the `cu8` / `ru8` fallbacks were `release` before and stay so (at most 0.548 / 0.617 and 0.318 / 0.287). No entry is above 1.50 any more (D2950). Left as they are (D2977): `fft_cq15_1024` and `fft_cq15_1024_full_scale` at `neon` (I13.1-12), IO1-5, IO1-6, IO1-7, IO1-8, and `channelize_fallback` and `fir_interpolate_real_q15` at `avx2-runtime` (information). The speed question of the `release` of the SIMD `CU8` outputs against KFR (group 1) is IO2-18.
+
 ## Group 5: report-only checks (done)
 
 `cargo xtask check cycles` prints two reports after its gates (D2978, `xtask/src/gap_report.rs`, documented in [performance.md](../performance.md#gates-in-detail)); neither fails the command or decides a status:
@@ -553,3 +593,5 @@ On the committed results of the branch at this step: 64 SIMD entries at 224 leve
 - 2026-11-25: the `simd128` count of `am_mod_fallback` against the CMSIS-DSP composition (CI run 45679069124, `count_wasm32`): 10.54 against 49.82 instructions per sample (0.21), `release`.
 - 2026-11-25: group 3b done with open items (D2970 to D2973; CI run 45700747628 on 77f00faf, the `simd128` count of CI run 45702562934 on 93ad9d50): `am_mod` `C32` has NEON and SIMD128 branches (`neon` 0.870 / 0.917 of the fallback, IO2-10; `simd128` 7.92 against 10.54 instructions per sample, 0.75); the AVX2 paths of `interleave`, `interleave_cq15` and `deinterleave` and the NEON paths of `stereo_matrix` and `stereo_matrix_cq15` are removed, the fallback's loops run (1.000 / 1.000, I13.1-15 closed); `mag`, `mul` at `sse2`, `dot_cq15` at `neon` and `equalize` keep their code with the reasons and attempts in IO2-11 to IO2-14. IO2-1 to IO2-9 and D2956 to D2969 stay free for groups 2 and 3a.
 - 2026-11-25: group 5 done (D2978): the report of SIMD entries above 0.80 of their fallback and of kernel entry-levels without a foreign reference in `cargo xtask check cycles`, report only; 64 entries at 224 levels and 57 entries at 322 levels on the committed results.
+- 2026-11-25: group 4 in part (D2974, D2976; CI run 45717818987 on 052b3f0a): `mul_fallback` at `avx512` `release` with the grouped form back (IO1-9 closed; the SIMD `mul` then slower than it on `znver4`, IO2-15, open); the 8-bit `convert_out` fallbacks in a byte form per target, bit-exact; IO1-4 stopped at `unsafe` in `sdrk-core` (IO2-16).
+- 2026-11-26: review fixes. CI run 45720209487 on 471ce53d (the `U8` zero correction at `avx2` and `avx2-runtime`) merged: `convert_out_cu8_fallback` and `convert_out_real_ru8_fallback` `release` at `avx2` (1.027 / 0.916 and 1.031 / 0.920); decision rows D2975 and D2977; I13.1-14 closed; open items IO2-1 to IO2-3 (group 2, the numeric contracts), IO2-17 (`cu8` / `ru8` fallbacks at `sse4.2` and `avx512`) and IO2-18 (the KFR comparison of the SIMD `CU8` outputs, for the maintainer); D2971 states the measured loss of 1 to 2 % of `deinterleave` and `interleave_cq15`; `docs/performance.md` regenerated.

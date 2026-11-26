@@ -206,9 +206,10 @@ const BYTE_FORM: ByteForm = if cfg!(target_arch = "aarch64") {
 };
 
 /// Whether the `U8` form of [`ByteForm::Select`] is [`u8_bound`]: with SSE4.1, but not at AVX2
-/// without AVX-512, where [`u8_fix`] compiles to the shorter loop (CI run 45717818987:
-/// `convert_out_real_ru8_fallback` 0.68 / 0.74 cycles per value on `znver3` / `alderlake` with
-/// [`u8_bound`], 0.62 / 0.68 with [`u8_fix`] in `llvm-mca` of the compiled loops).
+/// without AVX-512, where [`u8_fix`] compiles to the shorter loop
+/// (`convert_out_real_ru8_fallback` on `znver3` / `alderlake`, cycles per value: 0.68 / 0.74
+/// with [`u8_bound`] in CI run 45717818987, 0.63 / 0.69 with [`u8_fix`] in CI run
+/// 45720209487; `llvm-mca` of the compiled loops had given 0.62 / 0.68).
 const U8_BOUND: bool = cfg!(all(
     target_feature = "sse4.1",
     any(not(target_feature = "avx2"), target_feature = "avx512f")

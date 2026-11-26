@@ -2802,7 +2802,7 @@
       "status": "dev"
     },
     "avx2": {
-      "status": "dev"
+      "status": "release"
     },
     "avx512": {
       "status": "dev"
@@ -2822,7 +2822,7 @@
       "status": "dev"
     },
     "avx2": {
-      "status": "dev"
+      "status": "release"
     },
     "avx512": {
       "status": "dev"

@@ -88,6 +88,9 @@ class GenerateTest(unittest.TestCase):
         self.assertIn("| 91.6 / 85.6 (accuracy trade) | release | a library |", text)
         self.assertIn("| 1.00 | - | release | a library |", text)
         self.assertNotIn("(accuracy trade)", ct.block(docs, limits_for(docs)))
+        text = ct.block(docs, limits_for(docs, over={("mul_real_q15_fallback", "avx512"): {
+            "status": "release", "contract_trade": "less work: x; gain: 1; attempts: y"}}))
+        self.assertIn("| 91.6 / 85.6 (contract trade) | release | a library |", text)
 
     def test_levels_come_in_the_order_of_the_policy(self):
         docs = {"aarch64": results({"a": record(1.0, 1.0)}, "neon", "aarch64"),

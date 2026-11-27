@@ -558,8 +558,8 @@ pub(crate) fn qam_lock_metric(q: Qam, y: C32) -> Option<f32> {
 pub trait Costas {
     /// Per symbol, in f32 without FMA, with `phi` the NCO phase before the symbol:
     ///
-    /// 1. `c = cos phi`, `s = sin phi` from the tables of `rotate` with its interpolation (the
-    ///    cosine at `phi` and at `phi - 2^30`).
+    /// 1. `c = cos phi`, `s = sin phi` from the tables with the linear interpolation of
+    ///    `fm_mod` (the cosine at `phi` and at `phi - 2^30`).
     /// 2. `y = (x.re c + x.im s, x.im c - x.re s)` (`x exp(-j phi)`); output `y`.
     /// 3. The detector `e`: BPSK `y.re y.im`; QPSK `sign(y.re) y.im - sign(y.im) y.re`
     ///    (`sign` is 0 for zero and NaN); 8PSK `y.im dr - y.re di` with `(dr, di)` the 8PSK

@@ -5,14 +5,15 @@
 //! needed), and `floor(f 2^32 + 0.5) as i64 as u32` is the `phase_step` of `fm_mod`, which equals
 //! that formula bit for bit without a library call to `floor`.
 //!
-//! `stereo_encode` reads the two sines with two table lookups per sample (the cosine of the
-//! pilot phase is not needed) and runs the phase as a local accumulator.
+//! `stereo_encode` computes only the sines of the oscillator of `oscillate` (the Taylor step of
+//! `nco_sin_f32`, two table reads per harmonic; the cosines are not needed) and runs the phase as
+//! a local accumulator.
 
 #![allow(clippy::many_single_char_names)]
 
 use crate::Fallback;
 use crate::error::{Error, Result};
-use crate::fallback::mix::{interp_f32, interp_f32_pair, interp_q15};
+use crate::fallback::mix::{interp_f32, interp_f32_pair, interp_q15, nco_sin_f32};
 use crate::fallback::modulate::phase_step;
 use crate::kernels::check_len;
 use crate::kernels::stereo::{
@@ -461,11 +462,9 @@ impl StereoEncode for Fallback {
         let (main, pilot, inc) = (state.main, state.pilot, state.nco.increment());
         let mut phase = state.nco.phase();
         for (o, x) in output.iter_mut().zip(input) {
-            // The index is below 4096 and the table has 4097 entries: never `None`.
-            let (Some(s1), Some(s2)) = (
-                interp_f32(phase.wrapping_sub(QUARTER)),
-                interp_f32(phase.wrapping_mul(2).wrapping_sub(QUARTER)),
-            ) else {
+            // The indices are below 4096 and the table has 4097 entries: never `None`.
+            let (Some(s1), Some(s2)) = (nco_sin_f32(phase), nco_sin_f32(phase.wrapping_mul(2)))
+            else {
                 return Err(table_error());
             };
             #[allow(
@@ -496,11 +495,11 @@ impl StereoEncodeRds for Fallback {
         let (main, pilot, level, inc) = (enc.main, enc.pilot, state.rds, enc.nco.increment());
         let mut phase = enc.nco.phase();
         for ((o, x), &b) in output.iter_mut().zip(input).zip(rds) {
-            // The index is below 4096 and the table has 4097 entries: never `None`.
+            // The indices are below 4096 and the table has 4097 entries: never `None`.
             let (Some(s1), Some(s2), Some(s3)) = (
-                interp_f32(phase.wrapping_sub(QUARTER)),
-                interp_f32(phase.wrapping_mul(2).wrapping_sub(QUARTER)),
-                interp_f32(phase.wrapping_mul(3).wrapping_sub(QUARTER)),
+                nco_sin_f32(phase),
+                nco_sin_f32(phase.wrapping_mul(2)),
+                nco_sin_f32(phase.wrapping_mul(3)),
             ) else {
                 return Err(table_error());
             };

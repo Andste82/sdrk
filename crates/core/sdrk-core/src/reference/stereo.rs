@@ -3,7 +3,9 @@
 //! The loop is a discrete feedback system, so an f64 model would drift away from the
 //! fallback. The specification fixes the arithmetic (f32 for `f32`, exact `i64` for `Q15`)
 //! and this reference follows it step by step, written as separate small functions. The
-//! interpolation of the cosine tables is an independent copy of the rule of `rotate`.
+//! interpolation of the cosine tables of `stereo_pll` is an independent copy of the linear
+//! rule; the sines of `stereo_encode` and `stereo_encode_rds` are an independent copy of the
+//! Taylor step of the `C32` oscillator of `oscillate`.
 
 #![allow(clippy::many_single_char_names)]
 
@@ -15,7 +17,7 @@ use crate::kernels::stereo::{
     StereoPll, StereoPllState,
 };
 use crate::num::{flush_denormal, round_shift, sat16};
-use crate::tables::{COS_F32, COS_Q15};
+use crate::tables::{COS_F32, COS_Q15, PHASE_UNIT_F32};
 use crate::types::{C32, CQ15, Q15};
 
 /// The two table entries of a slice of length 2 (the index is below 4096, so the slice exists).
@@ -181,10 +183,25 @@ impl StereoMatrix<CQ15> for Reference {
     }
 }
 
-/// `(sin phi, sin 2 phi)` of `stereo_encode` from the cosine table.
+/// The sine of the `C32` oscillator of `oscillate` at the phase: the Taylor step
+/// `S + d (C - S h)` from the table point `a` below the phase (`C = cos a`, `S = sin a` from the
+/// cosine table, `d` the angle of the low 20 bits, `h = d / 2`), in f32 without FMA.
+fn sin_f32(phase: u32) -> f32 {
+    let idx = (phase >> 20) as usize;
+    let sidx = (idx + 3072) % 4096;
+    let d = (phase & 0xF_FFFF) as f32 * PHASE_UNIT_F32;
+    let h = d * 0.5;
+    let c = COS_F32.get(idx).copied().unwrap_or(0.0);
+    let s = COS_F32.get(sidx).copied().unwrap_or(0.0);
+    let sh = s * h;
+    let step = c - sh;
+    s + d * step
+}
+
+/// `(sin phi, sin 2 phi)` of `stereo_encode` (the oscillator of `oscillate`).
 fn encode_sines(phase: u32) -> (f32, f32) {
-    let s1 = cos_f32(phase.wrapping_sub(QUARTER));
-    let s2 = cos_f32(phase.wrapping_mul(2).wrapping_sub(QUARTER));
+    let s1 = sin_f32(phase);
+    let s2 = sin_f32(phase.wrapping_mul(2));
     (s1, s2)
 }
 
@@ -224,9 +241,9 @@ impl StereoEncode for Reference {
     }
 }
 
-/// `sin(3 phi)` of `stereo_encode_rds` from the cosine table.
+/// `sin(3 phi)` of `stereo_encode_rds` (the oscillator of `oscillate`).
 fn rds_sine(phase: u32) -> f32 {
-    cos_f32(phase.wrapping_mul(3).wrapping_sub(QUARTER))
+    sin_f32(phase.wrapping_mul(3))
 }
 
 /// The RDS term added last to one multiplex sample.

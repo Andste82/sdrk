@@ -9,3 +9,9 @@
 #![allow(clippy::unreadable_literal, clippy::excessive_precision)]
 
 include!(concat!(env!("OUT_DIR"), "/tables.rs"));
+
+/// `2 pi / 2^32` rounded to `f32`: the angle of one unit of the 32-bit oscillator phase. The
+/// `C32` oscillator of `rotate` and `oscillate` multiplies the low 20 bits of the phase (the
+/// distance to the table point below it, an integer, exact in `f32`) by it.
+#[allow(clippy::cast_possible_truncation)]
+pub const PHASE_UNIT_F32: f32 = (core::f64::consts::TAU / 4_294_967_296.0) as f32;

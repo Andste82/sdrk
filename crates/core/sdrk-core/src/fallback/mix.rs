@@ -1,9 +1,9 @@
-//! Fallback implementation of the `rotate` kernel.
+//! Fallback implementation of the `rotate` and `oscillate` kernels.
 
 use crate::Fallback;
 use crate::error::{Error, Result};
 use crate::kernels::mix::{Nco, Oscillate, Rotate, check_harmonic};
-use crate::tables::{COS_F32, COS_Q15};
+use crate::tables::{COS_F32, COS_Q15, PHASE_UNIT_F32};
 use crate::types::{C32, CQ15, Q15};
 
 const QUARTER: u32 = 1 << 30;
@@ -43,6 +43,42 @@ pub(crate) fn interp_f32_pair(p: u32) -> Option<(f32, f32)> {
     let sa = *COS_F32.get(sidx)?;
     let sb = *COS_F32.get(sidx + 1)?;
     Some((a + (b - a) * f, sa + (sb - sa) * f))
+}
+
+/// `(cos, sin)` of the phase for the `C32` oscillator of `rotate` and `oscillate`: the
+/// second-order Taylor step from the table point below the phase, in f32 without FMA.
+///
+/// With `C = COS_F32[i]` and `S = COS_F32[(i + 3072) mod 4096]` (`cos a`, `sin a` of the table
+/// point `a` of the top 12 bits `i` of the phase) and `d` the angle of the low 20 bits
+/// (`(phase & 0xF_FFFF) * PHASE_UNIT_F32`, at most `2 pi / 4096`), `h = d / 2`:
+///
+/// `cos(a + d) = C - d (S + C h)`, `sin(a + d) = S + d (C - S h)`
+///
+/// up to the third-order terms `d^3 / 6` (below `6e-10`). The table values and the final
+/// rounding limit the error (about 150 dB against the exact phasor, against 133 dB of the
+/// linear interpolation [`interp_f32_pair`]), and two table reads replace four.
+#[inline]
+pub(crate) fn nco_f32(phase: u32) -> Option<(f32, f32)> {
+    let idx = (phase >> 20) as usize;
+    let sidx = (idx + 3072) & 4095;
+    let d = (phase & 0xF_FFFF) as f32 * PHASE_UNIT_F32;
+    let h = d * 0.5;
+    let c = *COS_F32.get(idx)?;
+    let s = *COS_F32.get(sidx)?;
+    Some((c - d * (s + c * h), s + d * (c - s * h)))
+}
+
+/// The sine of [`nco_f32`] alone (the imaginary part of `oscillate`, bit for bit): the encoders
+/// of `stereo_encode` and `stereo_encode_rds` need no cosine.
+#[inline]
+pub(crate) fn nco_sin_f32(phase: u32) -> Option<f32> {
+    let idx = (phase >> 20) as usize;
+    let sidx = (idx + 3072) & 4095;
+    let d = (phase & 0xF_FFFF) as f32 * PHASE_UNIT_F32;
+    let h = d * 0.5;
+    let c = *COS_F32.get(idx)?;
+    let s = *COS_F32.get(sidx)?;
+    Some(s + d * (c - s * h))
 }
 
 /// The cosine of the phase `p` from `COS_Q15`, `sat16(a + round_shift((b - a) f15, 15))` of the
@@ -91,7 +127,7 @@ impl Rotate<C32> for Fallback {
         let inc = nco.increment();
         let mut phase = nco.phase();
         for (o, x) in output.iter_mut().zip(input) {
-            let (c, s) = cos_sin_f32(phase)?;
+            let (c, s) = nco_f32(phase).ok_or_else(table_error)?;
             *o = C32::new(x.re * c - x.im * s, x.re * s + x.im * c);
             phase = phase.wrapping_add(inc);
         }
@@ -141,7 +177,7 @@ impl Oscillate<C32> for Fallback {
         let step = nco.increment().wrapping_mul(harmonic);
         let mut phase = nco.phase().wrapping_mul(harmonic);
         for o in out.iter_mut() {
-            let (c, s) = interp_f32_pair(phase).ok_or_else(table_error)?;
+            let (c, s) = nco_f32(phase).ok_or_else(table_error)?;
             *o = C32::new(c, s);
             phase = phase.wrapping_add(step);
         }

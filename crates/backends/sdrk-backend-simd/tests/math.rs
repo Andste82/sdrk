@@ -394,6 +394,33 @@ mod oscillate {
         assert_eq!(a.phase(), b.phase());
     }
 
+    /// The `C32` form of [`cq15_is_bit_exact_over_the_whole_table`], compared bit for bit (the
+    /// sign of a zero included), with the extreme distances to the table point as well.
+    #[test]
+    fn c32_is_bit_exact_over_the_whole_table() {
+        let bits = |v: &[C32]| -> Vec<(u32, u32)> {
+            v.iter().map(|c| (c.re.to_bits(), c.im.to_bits())).collect()
+        };
+        for (inc, phase) in [
+            (0x0001_0007, 0x0000_1234),
+            (1 << 20, 0),
+            (1 << 20, 0xF_FFFF),
+        ] {
+            let n = 2 * 65_536;
+            let (mut a, mut b) = (Nco::from_increment(inc), Nco::from_increment(inc));
+            a.set_phase(phase);
+            b.set_phase(phase);
+            let (mut want, mut got) = (vec![C32::default(); n], vec![C32::default(); n]);
+            Fallback.oscillate(&mut a, 1, &mut want).unwrap();
+            Simd.oscillate(&mut b, 1, &mut got).unwrap();
+            assert!(
+                bits(&want) == bits(&got),
+                "c32 over the whole table, inc={inc:#x}"
+            );
+            assert_eq!(a.phase(), b.phase());
+        }
+    }
+
     #[test]
     fn chunked_calls_equal_one_call() {
         let inc = 0x0123_4567;

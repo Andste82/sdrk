@@ -15,7 +15,7 @@
   "format_version": 1,
   "kernel": "stereo_encode",
   "model": "float32",
-  "notes": "192 kHz; re left 1 kHz 0.6, im right 3 kHz 0.4; pilot 19 kHz with the start phase 0x40000000, main 0.9, pilot 0.09; exact float32 model with the cosine table of rotate and its interpolation; snr_db_guard compares with the float64 formula with exact sines (D34). The seed is not used (no random input)",
+  "notes": "192 kHz; re left 1 kHz 0.6, im right 3 kHz 0.4; pilot 19 kHz with the start phase 0x40000000, main 0.9, pilot 0.09; exact float32 model with the cosine table and the Taylor step of the C32 oscillate; snr_db_guard compares with the float64 formula with exact sines (D34). The seed is not used (no random input)",
   "params": {
     "cos_f32_sha256": "0dcd839f7baca6b1d2b666ccb0d2257ca89a489f5d854858a7658d4ca6ff2384",
     "inc": 425022805,
@@ -25,7 +25,7 @@
     "pilot": 0.09,
     "pilot_hz": 19000.0,
     "rate_hz": 192000,
-    "snr_db_guard": 136.2
+    "snr_db_guard": 144.2
   },
   "provenance": {
     "generator": "tests/golden/generate.py",

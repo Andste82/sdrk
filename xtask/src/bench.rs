@@ -1568,9 +1568,14 @@ pub const KFR_AT_AVX512: [&str; 20] = [
 ///   `arm_offset_f32` and the carrier product (the clamp and the carrier product of the
 ///   contract; a NaN passes its clip), liquid-dsp's `ampmodem` (no clamp, no carrier product, no
 ///   NaN rule) as information (D2954);
-/// - `convert_out_cu8`, `convert_out_real_ru8` at every level but `simd128`: KFR's expression
-///   of the contract (`NaN` as 0 by a select, the `f64` formula `rint(x 128 + 127.5)`, clamped),
-///   VOLK's `volk_32f_s32f_x2_convert_8u` (NaN as 255, the `f32` formula) as information (D2955).
+/// - `convert_out_cu8`, `convert_out_real_ru8` at `sse2`, `sse4.2`, `avx2` and `neon`: VOLK's
+///   `volk_32f_s32f_x2_convert_8u` of the level, the stronger opponent, although it does less
+///   work (NaN as 255, the `f32` formula), with the extra work of ours stated in the `contract_trade`
+///   or the open item of the entry; KFR's expression of the contract (`NaN` as 0 by a select,
+///   the `f64` formula `rint(x 128 + 127.5)`, clamped; 10 to 25 times slower, it stores byte by
+///   byte) as information (the maintainer's decision D3001, superseding D2955). At `avx512`
+///   VOLK's machine runs its AVX2 protokernel, a lower level (D2900), so KFR stays the judged
+///   comparison there and VOLK information ([`KFR_AT_AVX512`]).
 fn audit_comparisons(plan: &LevelPlan, spec: &KernelSpec) -> Option<(Reference, Vec<Reference>)> {
     let wasm = plan.refs == "wasm32";
     Some(match spec.name {
@@ -1600,7 +1605,7 @@ fn audit_comparisons(plan: &LevelPlan, spec: &KernelSpec) -> Option<(Reference, 
         "oscillate" if !wasm => (Reference::Sleef, vec![Reference::Fallback]),
         "am_mod_fallback" => (Reference::Cmsis, vec![Reference::Liquid]),
         "convert_out_cu8" | "convert_out_real_ru8" if !wasm => {
-            (Reference::Kfr, vec![Reference::Volk])
+            (Reference::Volk, vec![Reference::Kfr])
         }
         _ => return None,
     })
@@ -3092,19 +3097,26 @@ mod tests {
     }
 
     #[test]
-    fn the_cu8_outputs_are_judged_against_the_same_work() {
-        // KFR's expression of the `CU8` contract (NaN rule, `f64` rounding) at every level but
-        // `simd128`, VOLK (less work) as information (D2955).
+    fn the_cu8_outputs_are_judged_against_the_stronger_opponent() {
+        // VOLK of the level (less work, the faster opponent) where its machine runs a
+        // protokernel of the level, KFR's expression of the `CU8` contract (NaN rule, `f64`
+        // rounding) as information (D3001); at `avx512` VOLK's protokernel is AVX2, so KFR is
+        // judged there (D2900).
         let plan = |l: &str| PLANS.iter().find(|p| p.level == l).unwrap();
         let kernel = |k: &str| KERNELS.iter().find(|s| s.name == k).unwrap();
-        for level in ["sse2", "sse4.2", "avx2", "avx512", "neon"] {
-            for k in ["convert_out_cu8", "convert_out_real_ru8"] {
+        for k in ["convert_out_cu8", "convert_out_real_ru8"] {
+            for level in ["sse2", "sse4.2", "avx2", "neon"] {
                 assert_eq!(
                     comparisons(plan(level), kernel(k)),
-                    (Reference::Kfr, vec![Reference::Volk]),
+                    (Reference::Volk, vec![Reference::Kfr]),
                     "{k} at {level}"
                 );
             }
+            assert_eq!(
+                comparisons(plan("avx512"), kernel(k)),
+                (Reference::Kfr, vec![Reference::Volk]),
+                "{k} at avx512"
+            );
         }
     }
 

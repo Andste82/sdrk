@@ -1,5 +1,5 @@
 {
-  "host_cpu": "Intel(R) Xeon(R) Platinum 8370C CPU @ 2.80GHz",
+  "host_cpu": "Intel(R) Xeon(R) 6975P-C",
   "levels": {
     "simd128": {
       "counter": "wasmtime fuel",
@@ -5303,18 +5303,18 @@
               "compared_with": "sdrk fallback",
               "comparison_kind": "own_fallback",
               "label": "misaligned by one sample",
-              "other_instr_per_sample": 28.28,
+              "other_instr_per_sample": 24.53,
               "other_snr_db": null,
-              "ours_instr_per_sample": 22.04,
-              "ratio": 0.78
+              "ours_instr_per_sample": 21.79,
+              "ratio": 0.89
             }
           ],
-          "other_instr_per_sample": 28.28,
-          "ours_instr_per_sample": 22.04,
-          "ratio": 0.78,
+          "other_instr_per_sample": 24.53,
+          "ours_instr_per_sample": 21.79,
+          "ratio": 0.89,
           "snr_db": {
-            "other": 133.23,
-            "ours": 133.23
+            "other": 150.56,
+            "ours": 150.56
           },
           "status": "info",
           "verdict": "info"
@@ -5379,19 +5379,19 @@
               "label": "misaligned by one sample",
               "other_instr_per_sample": 175.01,
               "other_snr_db": null,
-              "ours_instr_per_sample": 28.28,
-              "ratio": 0.16
+              "ours_instr_per_sample": 24.53,
+              "ratio": 0.14
             }
           ],
           "other_instr_per_sample": 175.01,
-          "ours_instr_per_sample": 28.28,
-          "ratio": 0.16,
+          "ours_instr_per_sample": 24.53,
+          "ratio": 0.14,
           "snr_db": {
             "other": 140.77,
-            "ours": 133.23
+            "ours": 150.56
           },
           "status": "release",
-          "verdict": "waived"
+          "verdict": "pass"
         },
         "power_db": {
           "compared_with": "KFR 7.2.0 10 * log10(x) + offset (benches/refs/kfr-ops.cpp, sse41 over the SSE headers of Emscripten, SIMD level simd128, -ffp-contract=off)",
@@ -6866,16 +6866,16 @@
               "label": "misaligned by one sample",
               "other_instr_per_sample": 92.21,
               "other_snr_db": null,
-              "ours_instr_per_sample": 35.29,
-              "ratio": 0.38
+              "ours_instr_per_sample": 31.54,
+              "ratio": 0.34
             }
           ],
           "other_instr_per_sample": 92.21,
-          "ours_instr_per_sample": 35.29,
-          "ratio": 0.38,
+          "ours_instr_per_sample": 31.54,
+          "ratio": 0.34,
           "snr_db": {
             "other": 107.79,
-            "ours": 133.0
+            "ours": 145.8
           },
           "status": "release",
           "verdict": "pass"
@@ -7410,14 +7410,14 @@
               "compared_with": "sdrk fallback",
               "comparison_kind": "own_fallback",
               "label": "misaligned by one sample",
-              "other_instr_per_sample": 37.54,
+              "other_instr_per_sample": 45.79,
               "other_snr_db": null,
-              "ours_instr_per_sample": 37.54,
+              "ours_instr_per_sample": 45.79,
               "ratio": 1.0
             }
           ],
-          "other_instr_per_sample": 37.54,
-          "ours_instr_per_sample": 37.54,
+          "other_instr_per_sample": 45.79,
+          "ours_instr_per_sample": 45.79,
           "ratio": 1.0,
           "snr_db": {
             "other": 999.0,
@@ -7434,14 +7434,14 @@
               "compared_with": "sdrk fallback",
               "comparison_kind": "own_fallback",
               "label": "misaligned by one sample",
-              "other_instr_per_sample": 53.05,
+              "other_instr_per_sample": 65.3,
               "other_snr_db": null,
-              "ours_instr_per_sample": 53.05,
+              "ours_instr_per_sample": 65.3,
               "ratio": 1.0
             }
           ],
-          "other_instr_per_sample": 53.05,
-          "ours_instr_per_sample": 53.05,
+          "other_instr_per_sample": 65.3,
+          "ours_instr_per_sample": 65.3,
           "ratio": 1.0,
           "snr_db": {
             "other": 999.0,

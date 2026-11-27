@@ -22,8 +22,8 @@
 //!   (see [`polyphase_f32`]), and the filter length is not limited. `f32` `resample_real` and
 //!   `fir_interpolate_real` run the same code with one component per sample instead of two (the
 //!   const parameter `C` of the forms).
-//! - `CQ15` `fir`, `fir_decimate` and the polyphase kernels compute one output at a time in the
-//!   chunk form with the taps prepared once per call, reversed and duplicated for the real
+//! - `CQ15` `fir`, `fir_decimate` and the polyphase kernels on NEON and SIMD128 compute one
+//!   output at a time in the chunk form with the taps prepared once per call, reversed and duplicated for the real
 //!   and the imaginary lane. A window that reaches into the history is assembled chunk by chunk
 //!   with the same chunk boundaries. The polyphase kernels (`resample`, `fir_interpolate`)
 //!   prepare the taps of all branches at once; a filter that does not fit, and every `CQ15`
@@ -31,8 +31,9 @@
 //!   `fir_interpolate_real` do the same with one lane per tap. Where the grouped fallback is
 //!   faster, these kernels run it instead ([`runs_fallback`], a table of kernel and level). On
 //!   NEON `fir_interpolate` `CQ15` computes four outputs of a branch per pass of its taps
-//!   ([`drive_interpolate`]). At SSE4.2 all six run in progressions of four outputs with taps
-//!   split for `pmaddwd` (the module `x86`, decision D340).
+//!   ([`drive_interpolate`]). On every x86-64 level all six run in progressions of four outputs
+//!   with taps split for `pmaddwd` (the module `x86`; decision D340 at SSE4.2, D3007 at SSE2, AVX2
+//!   and AVX-512).
 //!
 //! `C32` and `f32` results are within the contract of `docs/kernels.md` (110 dB) but not
 //! bit-identical with the fallback, because the sums are formed in a different order (and fused on
@@ -88,20 +89,6 @@ enum Q15Kernel {
 ///
 /// | level     | models                      | kernel                 | SIMD / fallback |
 /// |-----------|-----------------------------|------------------------|-----------------|
-/// | `sse2`    | `skylake` / `znver2`        | `fir`                  | 2.28 / 1.45     |
-/// |           |                             | `fir_decimate`         | 2.24 / 1.27     |
-/// |           |                             | `fir_interpolate`      | 2.09 / 1.30     |
-/// |           |                             | `fir_interpolate_real` | 2.20 / 1.38     |
-/// |           |                             | `resample`             | 2.08 / 1.25     |
-/// |           |                             | `resample_real`        | 1.87 / 1.21     |
-/// | `avx2`    | `znver3` / `alderlake`      | `fir`                  | 1.66 / 1.62     |
-/// |           |                             | `fir_decimate`         | 1.46 / 1.14     |
-/// |           |                             | `fir_interpolate`      | 1.61 / 1.58     |
-/// |           |                             | `fir_interpolate_real` | 1.57 / 1.64     |
-/// |           |                             | `resample`             | 1.16 / 1.28     |
-/// | `avx512`  | `znver4` / `sapphirerapids` | `fir`                  | 1.26 / 1.32     |
-/// |           |                             | `fir_interpolate`      | 1.15 / 1.09     |
-/// |           |                             | `fir_interpolate_real` | 1.33 / 1.17     |
 /// | `neon`    | `cortex-a72` / `cortex-a76` | `fir_decimate`         | 1.76 / 1.63     |
 /// |           |                             | `fir_interpolate_real` | 1.35 / 1.08     |
 /// | `simd128` | instructions                | `fir_interpolate`      | 1.54            |
@@ -110,98 +97,21 @@ enum Q15Kernel {
 /// The `neon` and `simd128` rows of `fir_interpolate` and `fir_interpolate_real` compare with
 /// the scalar ring loop of the fallback (`fallback/interp.rs`), the `neon` row of
 /// `fir_decimate` with its exact lanes (D2830, CI run 45523722662), the other rows with the
-/// grouped engine. Every other kernel and level keeps its SIMD branch: at `sse4.2` the progressions of
-/// the module `x86` (decision D340), faster than the fallback on both models, at `neon` the other
-/// four, faster on `cortex-a76` or both. The fallback is
+/// grouped engine. Every other kernel and level keeps its SIMD branch: on every x86-64 level the
+/// progressions of the module `x86` (decisions D340 and D3007; the rows of `sse2`, `avx2` and
+/// `avx512` and the route of D2840 for `avx2-runtime` are removed), at `neon` the other four,
+/// faster on `cortex-a76` or both. The fallback is
 /// outside the dispatched kernels and compiled for the level of the build, so the switch applies
 /// only at that level ([`crate::level::compiled_for`]): in a build that detects a higher level
 /// at run time the fallback would be the code of the lower level (`fir` `CQ15` at `avx2`
 /// detected in an SSE2 build: 530 instead of 214 instructions per sample), and the SIMD branch
-/// stays, except for the rows of [`runtime_avx2`]. An entry is removed when its kernel gets a
-/// grouped SIMD branch.
+/// stays. An entry is removed when its kernel gets a grouped SIMD branch.
 fn runs_fallback(kernel: Q15Kernel) -> bool {
-    use Q15Kernel::{Fir, FirDecimate, FirInterpolate, FirInterpolateReal, Resample};
+    use Q15Kernel::{FirDecimate, FirInterpolate, FirInterpolateReal};
     match crate::level::compiled_for() {
-        Some("sse2") => true,
-        Some("avx2") => matches!(
-            kernel,
-            Fir | FirDecimate | FirInterpolate | FirInterpolateReal | Resample
-        ),
-        Some("avx512") => matches!(kernel, Fir | FirInterpolate | FirInterpolateReal),
         Some("neon") => matches!(kernel, FirDecimate | FirInterpolateReal),
         Some("simd128") => matches!(kernel, FirInterpolate | FirInterpolateReal),
         _ => false,
-    }
-}
-
-/// The fallback of `kernel` with its loops compiled for AVX2, where a build that detects the level
-/// at run time detects exactly AVX2 and the row `avx2` of [`runs_fallback`] has `kernel`
-/// (decision D2840): `fir`, `fir_interpolate` and `fir_interpolate_real`. The fallback of the
-/// build would be the code of its baseline (SSE2); [`sdrk_core::FallbackAt`] compiles the same
-/// loops with the features of `x86-64-v3` and takes the forms of a build for that level, so the
-/// run-time build runs the code of the build fixed at `avx2`, bit for bit the same outputs.
-/// `None` in a build compiled for the detected level (there [`runs_fallback`] decides) and at
-/// every other level.
-#[cfg(all(feature = "std", target_arch = "x86_64"))]
-fn runtime_avx2(kernel: Q15Kernel) -> Option<sdrk_core::FallbackAt<runtime::Avx2Loops>> {
-    use Q15Kernel::{Fir, FirInterpolate, FirInterpolateReal};
-    if !matches!(kernel, Fir | FirInterpolate | FirInterpolateReal)
-        || crate::level::compiled_for().is_some()
-    {
-        return None;
-    }
-    match crate::level::current() {
-        fearless_simd::Level::Avx2(t) => Some(sdrk_core::FallbackAt(runtime::Avx2Loops::new(t))),
-        _ => None,
-    }
-}
-
-/// The target of [`runtime_avx2`].
-#[cfg(all(feature = "std", target_arch = "x86_64"))]
-#[allow(unsafe_code)]
-mod runtime {
-    use fearless_simd::Avx2;
-    use sdrk_core::Target;
-
-    /// The loops of the fallback compiled with AVX2 (the features of `fearless_simd`'s `Avx2`,
-    /// those of `x86-64-v3`). Made only from the token, which proves the features.
-    #[derive(Clone, Copy)]
-    pub(crate) struct Avx2Loops(Avx2);
-
-    impl Avx2Loops {
-        pub(super) fn new(token: Avx2) -> Self {
-            Self(token)
-        }
-
-        /// Runs `f`, a whole kernel, compiled with AVX2: the code around the loops too.
-        #[inline(always)]
-        pub(super) fn run<R>(self, f: impl FnOnce() -> R) -> R {
-            self.hot(f)
-        }
-    }
-
-    impl Target for Avx2Loops {
-        const NATIVE: bool = false;
-        const AVX2: bool = true;
-        #[allow(
-            clippy::inline_always,
-            reason = "only the call of the AVX2 function remains"
-        )]
-        #[inline(always)]
-        fn hot<R>(self, f: impl FnOnce() -> R) -> R {
-            let Self(_token) = self;
-            // SAFETY: `Avx2Loops` holds an `Avx2` token, which `fearless_simd` makes only when
-            // the CPU has these features (its run-time detection, or a build that enables them).
-            unsafe { with_avx2(f) }
-        }
-    }
-
-    /// `f` in a function of its own compiled with the target features of `fearless_simd`'s
-    /// `Avx2` (`f` is an `#[inline(always)]` closure, so its body is compiled here).
-    #[inline(never)]
-    #[target_feature(enable = "avx2,bmi1,bmi2,cmpxchg16b,f16c,fma,fxsr,lzcnt,movbe,popcnt,xsave")]
-    fn with_avx2<R>(f: impl FnOnce() -> R) -> R {
-        f()
     }
 }
 
@@ -1769,49 +1679,58 @@ fn drive_interpolate<S: SimdToken, const C: usize>(
 }
 
 // ---------------------------------------------------------------------------------------------
-// CQ15 and Q15 at SSE4.2: split taps and `pmaddwd`
+// CQ15 and Q15 on x86-64: split taps and `pmaddwd`
 
-/// Storage for the split taps of [`x86::progression_c1`] and [`x86::progression_c2`]: per
-/// chunk of 8 lanes of the prepared taps, the 8 high parts and then the 8 low parts. The upper
-/// half holds the prepared taps before [`split_in_place`] expands them.
+/// Storage for the split taps of the progressions of the module `x86`: per chunk of `W` lanes
+/// of the prepared taps (`W` the `i16` lanes of the level's vector), the `W` high parts and then
+/// the `W` low parts. The upper half holds the prepared taps before [`split_in_place`] expands
+/// them.
 #[cfg(target_arch = "x86_64")]
 type SplitStorage = [i16; 4 * CAPACITY];
 
-/// The SSE4.2 token of a level that is SSE4.2 and not more: the levels above keep their own
-/// branches (or the fallback, [`runs_fallback`]).
+/// The x86-64 level of `simd` for the progressions of the module `x86`: every level from SSE2
+/// on (decisions D340 and D3007).
 #[cfg(target_arch = "x86_64")]
 #[inline(always)]
-fn sse4_2_only<S: SimdToken>(simd: S) -> Option<fearless_simd::Sse4_2> {
+fn split_level<S: SimdToken>(simd: S) -> Option<x86::Split> {
     let level = simd.level();
-    if level.as_avx2().is_some() {
-        None
+    if let Some(t) = level.as_avx512() {
+        Some(x86::Split::Avx512(t))
+    } else if let Some(t) = level.as_avx2() {
+        Some(x86::Split::Avx2(t))
+    } else if let Some(t) = level.as_sse4_2() {
+        Some(x86::Split::Sse4_2(t))
     } else {
-        level.as_sse4_2()
+        level.as_sse2().map(x86::Split::Sse2)
     }
 }
 
-/// Expands the first `chunks` chunks of prepared taps (8 lanes each, `C` lanes per sample) in
+/// Expands the first `chunks` chunks of prepared taps (`W` lanes each, `C` lanes per sample) in
 /// the upper half of `s` into split taps at the start of `s`. For `C = 2` the lanes of each
-/// chunk are put in the order of the samples after `x86::PAIR` (`h0 h1 h0 h1 h2 h3 h2 h3`). A
-/// tap `t` becomes `256 hi + lo` with `lo` the low byte as a signed value (`-128..=127`) and `hi
-/// = (t - lo) / 256` (`-128..=128`). Chunk `k` is read before it is written, and its 16 lanes
-/// end at or before the chunks not read yet (`16 k + 16 <= 2 CAPACITY + 8 (k + 1)` for
-/// `k < 96`), so the expansion runs in place.
+/// group of 8 are put in the order of the samples after the pairing of the module `x86`
+/// (`h0 h1 h0 h1 h2 h3 h2 h3`). A tap `t` becomes `256 hi + lo` with `lo` the low byte as a
+/// signed value (`-128..=127`) and `hi = (t - lo) / 256` (`-128..=128`). Chunk `k` is read
+/// before it is written, and its `2 W` lanes end at or before the chunks not read yet
+/// (`2 W (k + 1) <= 2 CAPACITY + W (k + 1)` for `k < 2 CAPACITY / W`), so the expansion runs in
+/// place.
 #[cfg(target_arch = "x86_64")]
 #[inline(always)]
-fn split_in_place<const C: usize>(s: &mut SplitStorage, chunks: usize) {
+fn split_in_place<const C: usize, const W: usize>(s: &mut SplitStorage, chunks: usize) {
     const HALF: usize = 2 * CAPACITY;
-    for k in 0..chunks.min(HALF / 8) {
-        let mut v = [0i16; 8];
-        if let Some(src) = s.get(HALF + 8 * k..HALF + 8 * k + 8) {
+    for k in 0..chunks.min(HALF / W) {
+        let mut v = [0i16; W];
+        if let Some(src) = s.get(HALF + W * k..HALF + W * k + W) {
             v.copy_from_slice(src);
         }
         if C == 2 {
-            let [a0, a1, b0, b1, c0, c1, d0, d1] = v;
-            v = [a0, b0, a1, b1, c0, d0, c1, d1];
+            for g in v.chunks_exact_mut(8) {
+                if let [a0, a1, b0, b1, c0, c1, d0, d1] = *g {
+                    g.copy_from_slice(&[a0, b0, a1, b1, c0, d0, c1, d1]);
+                }
+            }
         }
-        if let Some(dst) = s.get_mut(16 * k..16 * k + 16) {
-            let (hi, lo) = dst.split_at_mut(8);
+        if let Some(dst) = s.get_mut(2 * W * k..2 * W * k + 2 * W) {
+            let (hi, lo) = dst.split_at_mut(W);
             for ((h, l), &t) in hi.iter_mut().zip(lo.iter_mut()).zip(&v) {
                 let low = i16::from(t as i8);
                 *l = low;
@@ -1821,13 +1740,24 @@ fn split_in_place<const C: usize>(s: &mut SplitStorage, chunks: usize) {
     }
 }
 
-/// `fir` `CQ15` (`step = 1`) and `fir_decimate` `CQ15` at SSE4.2: outputs `j = 0..count` with
-/// the window of output `j` at sample `first + j step` (decision D340).
+/// [`split_in_place`] at the width of `level`.
+#[cfg(target_arch = "x86_64")]
+#[inline(always)]
+fn split_for<const C: usize>(level: x86::Split, s: &mut SplitStorage, chunks: usize) {
+    match level.lanes() {
+        32 => split_in_place::<C, 32>(s, chunks),
+        16 => split_in_place::<C, 16>(s, chunks),
+        _ => split_in_place::<C, 8>(s, chunks),
+    }
+}
+
+/// `fir` `CQ15` (`step = 1`) and `fir_decimate` `CQ15` on x86-64: outputs `j = 0..count` with
+/// the window of output `j` at sample `first + j step` (decisions D340 and D3007).
 #[cfg(target_arch = "x86_64")]
 #[inline(always)]
 #[allow(clippy::too_many_arguments)]
 fn contiguous_split(
-    t: fearless_simd::Sse4_2,
+    level: x86::Split,
     taps: &[i16],
     hist: &[i16],
     input: &[i16],
@@ -1840,10 +1770,10 @@ fn contiguous_split(
     if let Some(td) = s.get_mut(2 * CAPACITY..) {
         prepare_taps::<2>(taps, td);
     }
-    let chunks = (2 * taps.len()).div_ceil(8);
-    split_in_place::<2>(&mut s, chunks);
-    x86::progression_c2(
-        t,
+    let chunks = (2 * taps.len()).div_ceil(level.lanes());
+    split_for::<2>(level, &mut s, chunks);
+    x86::progression::<2>(
+        level,
         x86::Progression {
             hist,
             input,
@@ -1860,9 +1790,9 @@ fn contiguous_split(
 }
 
 /// `resample` and `fir_interpolate` `CQ15` (`C = 2`), `resample_real` and `fir_interpolate_real`
-/// `Q15` (`C = 1`) at SSE4.2 (decision D340): the outputs `r, r + L, r + 2 L, ...` of a call
-/// share the phase of output `r` and their windows are `M` samples apart, so each branch runs as
-/// one progression of [`x86::progression_c2`] or [`x86::progression_c1`].
+/// `Q15` (`C = 1`) on x86-64 (decisions D340 and D3007): the outputs `r, r + L, r + 2 L, ...` of
+/// a call share the phase of output `r` and their windows are `M` samples apart, so each branch
+/// runs as one progression of the module `x86`. `geom` has chunks of the width of `level`.
 #[cfg(target_arch = "x86_64")]
 #[allow(
     clippy::large_stack_frames,
@@ -1871,7 +1801,7 @@ fn contiguous_split(
 )]
 #[inline(always)]
 fn polyphase_split<const C: usize>(
-    t: fearless_simd::Sse4_2,
+    level: x86::Split,
     taps: &[i16],
     hist: &[i16],
     input: &[i16],
@@ -1882,12 +1812,15 @@ fn polyphase_split<const C: usize>(
     produced: usize,
 ) -> Result<()> {
     let window_err = || internal("resampler window");
+    if geom.g * C != level.lanes() {
+        return Err(window_err());
+    }
     let mut s: SplitStorage = [0; 4 * CAPACITY];
     if let Some(td) = s.get_mut(2 * CAPACITY..) {
         prepare_branch_taps(taps, geom, td);
     }
     let up = geom.up;
-    split_in_place::<C>(&mut s, geom.offset(up.min(geom.n)) / 8);
+    split_for::<C>(level, &mut s, geom.offset(up.min(geom.n)) / level.lanes());
     let l = i128::try_from(up).map_err(|_| window_err())?;
     let hist_len = hist.len() / C;
     for r in 0..up.min(produced) {
@@ -1906,48 +1839,80 @@ fn polyphase_split<const C: usize>(
             o0: r,
             ostride: up,
         };
-        if C == 2 {
-            x86::progression_c2(t, p);
-        } else {
-            x86::progression_c1(t, p);
-        }
+        x86::progression::<C>(level, p);
     }
     Ok(())
 }
 
 #[cfg(target_arch = "x86_64")]
 mod x86 {
-    //! The `CQ15` and `Q15` filters at SSE4.2 (decision D340). `pmaddwd` multiplies 16-bit lanes
-    //! and adds adjacent products into 32-bit lanes; a pair of full-range products does not fit
-    //! (`2 * 2^30`), so every tap is split once per call into `256 hi + lo` ([`super::split_in_place`],
-    //! `|hi|, |lo| <= 128`): a pair of products of a sample with `hi` or `lo` is at most `2^23`
-    //! in magnitude, and a window of at most 96 chunks sums in 32-bit lanes without overflow
-    //! (`96 * 2^23 < 2^30`). The output is `256 sum hi + sum lo` in `i64`, the exact sum, so the
-    //! bits of the fallback. `CQ15` pairs two consecutive samples of the same component
-    //! ([`PAIR`]: `re0 re1 im0 im1 re2 re3 im2 im3`), so the 32-bit lanes alternate between the
-    //! real and the imaginary sums.
+    //! The `CQ15` and `Q15` filters on x86-64 (decision D340 at SSE4.2, D3007 at SSE2, AVX2 and
+    //! AVX-512). `pmaddwd` multiplies 16-bit lanes and adds adjacent products into 32-bit lanes;
+    //! a pair of full-range products does not fit (`2 * 2^30`), so every tap is split once per
+    //! call into `256 hi + lo` ([`super::split_in_place`], `|hi|, |lo| <= 128`): a pair of
+    //! products of a sample with `hi` or `lo` is at most `2^23` in magnitude, and a window of at
+    //! most `2 CAPACITY` lanes of taps adds at most 96 such pairs into each lane of the four
+    //! 32-bit lanes the sums are folded to, without overflow (`96 * 2^23 < 2^30`). The output is
+    //! `256 sum hi + sum lo` in `i64`, the exact sum, so the bits of the fallback. `CQ15` pairs
+    //! two consecutive samples of the same component in every group of 8 lanes
+    //! (`re0 re1 im0 im1 re2 re3 im2 im3`: `pshufb` from SSSE3 on, `pshuflw` and `pshufhw` at
+    //! SSE2), so the 32-bit lanes alternate between the real and the imaginary sums.
     //!
-    //! [`GROUP`] outputs whose windows lie in the input are computed together, so that each
-    //! vector of taps is loaded once for them and the four pairs of sums are independent chains;
-    //! the outputs whose windows reach into the history or past the end of the input are
-    //! computed one at a time, a window that does not lie in one slice assembled chunk by chunk.
+    //! The vector is the widest of the level: 8 lanes at SSE2 and SSE4.2, 16 at AVX2, 32 at
+    //! AVX-512, where `vpdpwssd` (AVX-512 VNNI, part of the level) multiplies and adds in one
+    //! instruction, without saturation, the same sums. [`GROUP`] outputs whose windows lie in
+    //! the input are computed together, so that each vector of taps is loaded once for them and
+    //! the four pairs of sums are independent chains; the outputs whose windows reach into the
+    //! history or past the end of the input are computed one at a time, a window that does not
+    //! lie in one slice assembled chunk by chunk. The sums of an output are folded to four
+    //! 32-bit lanes (one horizontal step per halving of the vector) before the `i64` sum.
 
     use core::arch::x86_64::{
-        __m128i, _mm_add_epi32, _mm_madd_epi16, _mm_setr_epi8, _mm_setzero_si128, _mm_shuffle_epi8,
+        __m128i, __m256i, __m512i, _mm_add_epi32, _mm_madd_epi16, _mm_setr_epi8, _mm_setzero_si128,
+        _mm_shuffle_epi8, _mm_shufflehi_epi16, _mm_shufflelo_epi16, _mm256_add_epi32,
+        _mm256_broadcastsi128_si256, _mm256_castsi256_si128, _mm256_extracti128_si256,
+        _mm256_madd_epi16, _mm256_setzero_si256, _mm256_shuffle_epi8, _mm512_broadcast_i32x4,
+        _mm512_castsi512_si256, _mm512_dpwssd_epi32, _mm512_extracti64x4_epi64,
+        _mm512_setzero_si512, _mm512_shuffle_epi8,
     };
     use core::hint::black_box;
     use fearless_simd::prelude::*;
-    use fearless_simd::{i16x8, i32x4};
+    use fearless_simd::{Avx2, Avx512, Sse2, Sse4_2, i16x8, i16x16, i16x32, i32x4};
     use sdrk_core::num::Acc64;
 
     use super::{Win, fill_window};
+
+    /// The level of a progression.
+    #[derive(Clone, Copy)]
+    pub(super) enum Split {
+        Sse2(Sse2),
+        Sse4_2(Sse4_2),
+        Avx2(Avx2),
+        Avx512(Avx512),
+    }
+
+    impl Split {
+        /// The `i16` lanes of the vector of the level (the width of a chunk of taps).
+        #[inline(always)]
+        pub(super) fn lanes(self) -> usize {
+            match self {
+                Self::Sse2(_) | Self::Sse4_2(_) => 8,
+                Self::Avx2(_) => 16,
+                Self::Avx512(_) => 32,
+            }
+        }
+    }
 
     /// Outputs computed together.
     const GROUP: usize = 4;
 
     /// The byte order of `pshufb` that reorders a vector of interleaved `CQ15` samples to
-    /// `re0 re1 im0 im1 re2 re3 im2 im3`.
+    /// `re0 re1 im0 im1 re2 re3 im2 im3` (in every 128-bit lane).
     const PAIR: [i8; 16] = [0, 1, 4, 5, 2, 3, 6, 7, 8, 9, 12, 13, 10, 11, 14, 15];
+
+    /// The order of `pshuflw` and `pshufhw` with the effect of [`PAIR`]: words 0, 2, 1, 3 of
+    /// each half.
+    const PAIR_WORDS: i32 = 0b11_01_10_00;
 
     /// One progression of outputs: output `j < n` has the window that begins at sample
     /// `first + j stride` of `hist ++ input` and goes to the output with index `o0 + j ostride`;
@@ -1963,6 +1928,21 @@ mod x86 {
         pub(super) out: &'a mut [i16],
         pub(super) o0: usize,
         pub(super) ostride: usize,
+    }
+
+    /// Runs the progression `p` of `C` components per sample at `level`.
+    #[inline(always)]
+    pub(super) fn progression<const C: usize>(level: Split, p: Progression<'_>) {
+        match (level, C) {
+            (Split::Sse2(t), 1) => sse2_c1(t, p),
+            (Split::Sse2(t), _) => sse2_c2(t, p),
+            (Split::Sse4_2(t), 1) => sse4_2_c1(t, p),
+            (Split::Sse4_2(t), _) => sse4_2_c2(t, p),
+            (Split::Avx2(t), 1) => avx2_c1(t, p),
+            (Split::Avx2(t), _) => avx2_c2(t, p),
+            (Split::Avx512(t), 1) => avx512_c1(t, p),
+            (Split::Avx512(t), _) => avx512_c2(t, p),
+        }
     }
 
     /// Writes the output with index `k` from the high-part sums `hi` and the low-part sums `lo`
@@ -1986,16 +1966,25 @@ mod x86 {
         }
     }
 
+    /// A progression function `$name` for `$c` components at the level `$token` with vectors
+    /// `$v` of `$w` lanes (`$vec` the `fearless_simd` type of the load). `$order` is computed
+    /// once and passed to `$pair` (the pairing of `CQ15` samples), `$mac(acc, d, t)` adds the
+    /// pair products of `d` and `t` to `acc`, `$fold` folds a vector of 32-bit sums to four
+    /// lanes.
     macro_rules! progression {
-        ($name:ident, $c:literal) => {
+        (
+            $name:ident, $c:literal, $token:ident, $w:literal, $v:ty, $vec:ident,
+            zero: $zero:expr, order: $order:expr, pair: $pair:expr, mac: $mac:expr,
+            fold: $fold:expr $(,)?
+        ) => {
             fearless_simd::kernel!(
                 #[allow(
                     clippy::large_stack_frames,
-                    reason = "the lint counts the 16-byte temporaries of the inlined steps before \
-                              optimization; the loops keep them in registers"
+                    reason = "the lint counts the vector temporaries of the inlined steps \
+                              before optimization; the loops keep them in registers"
                 )]
                 #[inline(always)]
-                pub(super) fn $name(t: Sse4_2, p: Progression<'_>) {
+                fn $name(t: $token, p: Progression<'_>) {
                     let Progression {
                         hist,
                         input,
@@ -2010,54 +1999,34 @@ mod x86 {
                     } = p;
                     let win = Win::<i16, $c>::new(hist, input);
                     let h = win.h;
-                    let [
-                        b0,
-                        b1,
-                        b2,
-                        b3,
-                        b4,
-                        b5,
-                        b6,
-                        b7,
-                        b8,
-                        b9,
-                        b10,
-                        b11,
-                        b12,
-                        b13,
-                        b14,
-                        b15,
-                    ] = PAIR;
-                    let order = black_box(_mm_setr_epi8(
-                        b0, b1, b2, b3, b4, b5, b6, b7, b8, b9, b10, b11, b12, b13, b14, b15,
-                    ));
-                    let pair = |v: __m128i| {
-                        if $c == 2 {
-                            _mm_shuffle_epi8(v, order)
-                        } else {
-                            v
-                        }
-                    };
-                    let load = |s: &[i16; 8]| -> __m128i { i16x8::from_slice(t, s).into() };
-                    let (lanes, _) = split.get(..16 * chunks).unwrap_or(&[]).as_chunks::<8>();
+                    let order = $order;
+                    let pair_of = $pair;
+                    let mac = $mac;
+                    let fold = $fold;
+                    let pair = |v: $v| -> $v { if $c == 2 { pair_of(order, v) } else { v } };
+                    let load = |s: &[i16; $w]| -> $v { $vec::from_slice(t, s).into() };
+                    let (lanes, _) = split
+                        .get(..2 * $w * chunks)
+                        .unwrap_or(&[])
+                        .as_chunks::<$w>();
                     let (taps, _) = lanes.as_chunks::<2>();
-                    let zero = _mm_setzero_si128();
-                    let lanes_of = |v: __m128i| i32x4::simd_from(t, v);
+                    let zero: $v = $zero;
+                    let lanes_of = |v: $v| i32x4::simd_from(t, fold(v));
                     let one = |j: usize, out: &mut [i16]| {
                         let start = first + j * stride;
                         let (mut hi, mut lo) = (zero, zero);
                         for (k, [th, tl]) in taps.iter().enumerate() {
-                            let pos = start + k * (8 / $c);
-                            let mut tmp = [0i16; 8];
-                            match win.direct(pos, 8) {
+                            let pos = start + k * ($w / $c);
+                            let mut tmp = [0i16; $w];
+                            match win.direct(pos, $w) {
                                 Some(d) => tmp.copy_from_slice(d),
                                 None => {
-                                    fill_window::<_, $c>(hist, input, pos, pos + 8 / $c, &mut tmp)
+                                    fill_window::<_, $c>(hist, input, pos, pos + $w / $c, &mut tmp)
                                 }
                             }
                             let d = pair(load(&tmp));
-                            hi = _mm_add_epi32(hi, _mm_madd_epi16(d, load(th)));
-                            lo = _mm_add_epi32(lo, _mm_madd_epi16(d, load(tl)));
+                            hi = mac(hi, d, load(th));
+                            lo = mac(lo, d, load(tl));
                         }
                         store::<$c>(
                             out,
@@ -2071,7 +2040,7 @@ mod x86 {
                         one(j, out);
                         j += 1;
                     }
-                    let (span, gap) = (8 * chunks, $c * stride);
+                    let (span, gap) = ($w * chunks, $c * stride);
                     while j + GROUP <= n {
                         let o = $c * (first + j * stride - h);
                         let Some(w) = input.get(o..o + gap * (GROUP - 1) + span) else {
@@ -2080,16 +2049,15 @@ mod x86 {
                         let window = |g: usize| {
                             w.get(gap * g..gap * g + span)
                                 .unwrap_or(&[])
-                                .as_chunks::<8>()
+                                .as_chunks::<$w>()
                                 .0
                         };
                         let mut acc = [[zero; 2]; GROUP];
-                        let mac =
-                            |acc: &mut [__m128i; 2], d: &[i16; 8], th: __m128i, tl: __m128i| {
-                                let d = pair(load(d));
-                                acc[0] = _mm_add_epi32(acc[0], _mm_madd_epi16(d, th));
-                                acc[1] = _mm_add_epi32(acc[1], _mm_madd_epi16(d, tl));
-                            };
+                        let step = |acc: &mut [$v; 2], d: &[i16; $w], th: $v, tl: $v| {
+                            let d = pair(load(d));
+                            acc[0] = mac(acc[0], d, th);
+                            acc[1] = mac(acc[1], d, tl);
+                        };
                         let [a0, a1, a2, a3] = &mut acc;
                         for ((((tk, d0), d1), d2), d3) in taps
                             .iter()
@@ -2100,10 +2068,10 @@ mod x86 {
                         {
                             let [th, tl] = tk;
                             let (th, tl) = (load(th), load(tl));
-                            mac(a0, d0, th, tl);
-                            mac(a1, d1, th, tl);
-                            mac(a2, d2, th, tl);
-                            mac(a3, d3, th, tl);
+                            step(a0, d0, th, tl);
+                            step(a1, d1, th, tl);
+                            step(a2, d2, th, tl);
+                            step(a3, d3, th, tl);
                         }
                         for (g, [hi, lo]) in acc.into_iter().enumerate() {
                             store::<$c>(
@@ -2123,8 +2091,106 @@ mod x86 {
             );
         };
     }
-    progression!(progression_c1, 1);
-    progression!(progression_c2, 2);
+
+    /// The bytes of [`PAIR`] as a vector.
+    macro_rules! pair_order {
+        () => {{
+            let [
+                b0,
+                b1,
+                b2,
+                b3,
+                b4,
+                b5,
+                b6,
+                b7,
+                b8,
+                b9,
+                b10,
+                b11,
+                b12,
+                b13,
+                b14,
+                b15,
+            ] = PAIR;
+            _mm_setr_epi8(
+                b0, b1, b2, b3, b4, b5, b6, b7, b8, b9, b10, b11, b12, b13, b14, b15,
+            )
+        }};
+    }
+
+    macro_rules! sse2 {
+        ($name:ident, $c:literal) => {
+            progression!(
+                $name, $c, Sse2, 8, __m128i, i16x8,
+                zero: _mm_setzero_si128(),
+                order: (),
+                pair: |(): (), v: __m128i| {
+                    _mm_shufflehi_epi16::<PAIR_WORDS>(_mm_shufflelo_epi16::<PAIR_WORDS>(v))
+                },
+                mac: |acc: __m128i, d: __m128i, t: __m128i| _mm_add_epi32(acc, _mm_madd_epi16(d, t)),
+                fold: |v: __m128i| v,
+            );
+        };
+    }
+
+    macro_rules! sse4_2 {
+        ($name:ident, $c:literal) => {
+            progression!(
+                $name, $c, Sse4_2, 8, __m128i, i16x8,
+                zero: _mm_setzero_si128(),
+                order: black_box(pair_order!()),
+                pair: |o: __m128i, v: __m128i| _mm_shuffle_epi8(v, o),
+                mac: |acc: __m128i, d: __m128i, t: __m128i| _mm_add_epi32(acc, _mm_madd_epi16(d, t)),
+                fold: |v: __m128i| v,
+            );
+        };
+    }
+
+    macro_rules! avx2 {
+        ($name:ident, $c:literal) => {
+            progression!(
+                $name, $c, Avx2, 16, __m256i, i16x16,
+                zero: _mm256_setzero_si256(),
+                order: black_box(_mm256_broadcastsi128_si256(pair_order!())),
+                pair: |o: __m256i, v: __m256i| _mm256_shuffle_epi8(v, o),
+                mac: |acc: __m256i, d: __m256i, t: __m256i| {
+                    _mm256_add_epi32(acc, _mm256_madd_epi16(d, t))
+                },
+                fold: |v: __m256i| {
+                    _mm_add_epi32(_mm256_castsi256_si128(v), _mm256_extracti128_si256::<1>(v))
+                },
+            );
+        };
+    }
+
+    macro_rules! avx512 {
+        ($name:ident, $c:literal) => {
+            progression!(
+                $name, $c, Avx512, 32, __m512i, i16x32,
+                zero: _mm512_setzero_si512(),
+                order: black_box(_mm512_broadcast_i32x4(pair_order!())),
+                pair: |o: __m512i, v: __m512i| _mm512_shuffle_epi8(v, o),
+                mac: |acc: __m512i, d: __m512i, t: __m512i| _mm512_dpwssd_epi32(acc, d, t),
+                fold: |v: __m512i| {
+                    let a = _mm256_add_epi32(
+                        _mm512_castsi512_si256(v),
+                        _mm512_extracti64x4_epi64::<1>(v),
+                    );
+                    _mm_add_epi32(_mm256_castsi256_si128(a), _mm256_extracti128_si256::<1>(a))
+                },
+            );
+        };
+    }
+
+    sse2!(sse2_c1, 1);
+    sse2!(sse2_c2, 2);
+    sse4_2!(sse4_2_c1, 1);
+    sse4_2!(sse4_2_c2, 2);
+    avx2!(avx2_c1, 1);
+    avx2!(avx2_c2, 2);
+    avx512!(avx512_c1, 1);
+    avx512!(avx512_c2, 2);
 }
 
 // ---------------------------------------------------------------------------------------------
@@ -2263,8 +2329,8 @@ fn polyphase_outputs(
 fn fir_cq15<S: SimdToken>(simd: S, taps: &[i16], hist: &[i16], input: &[i16], out: &mut [i16]) {
     let len = input.len() / 2;
     #[cfg(target_arch = "x86_64")]
-    if let Some(t) = sse4_2_only(simd) {
-        contiguous_split(t, taps, hist, input, out, 0, 1, len);
+    if let Some(level) = split_level(simd) {
+        contiguous_split(level, taps, hist, input, out, 0, 1, len);
         return;
     }
     let mut storage: TapStorageQ15 = [0i16; 2 * CAPACITY];
@@ -2307,8 +2373,8 @@ fn decimate_cq15<S: SimdToken>(
     count: usize,
 ) {
     #[cfg(target_arch = "x86_64")]
-    if let Some(t) = sse4_2_only(simd) {
-        contiguous_split(t, taps, hist, input, out, first, factor, count);
+    if let Some(level) = split_level(simd) {
+        contiguous_split(level, taps, hist, input, out, first, factor, count);
         return;
     }
     let mut storage: TapStorageQ15 = [0i16; 2 * CAPACITY];
@@ -2400,8 +2466,8 @@ fn polyphase_q15<S: SimdToken, const C: usize>(
     let (consumed, produced, new_q) = polyphase_plan(*q, up, down, input.len() / C, out.len() / C)
         .ok_or_else(|| internal("resampler window"))?;
     #[cfg(target_arch = "x86_64")]
-    if let Some(t) = sse4_2_only(simd) {
-        polyphase_split::<C>(t, taps, hist, input, out, geom, down, *q, produced)?;
+    if let Some(level) = split_level(simd) {
+        polyphase_split::<C>(level, taps, hist, input, out, geom, down, *q, produced)?;
         *q = new_q;
         return Ok(Some((consumed, produced)));
     }
@@ -2457,13 +2523,6 @@ impl Fir<CQ15> for Simd {
         Taps: AsRef<[Q15]>,
         Hist: AsRef<[CQ15]> + AsMut<[CQ15]>,
     {
-        #[cfg(all(feature = "std", target_arch = "x86_64"))]
-        if let Some(fb) = runtime_avx2(Q15Kernel::Fir) {
-            return fb.0.run(
-                #[inline(always)]
-                || fb.fir(state, input, output),
-            );
-        }
         if state.taps().len() > PREP_TAPS || runs_fallback(Q15Kernel::Fir) {
             return Fallback.fir(state, input, output);
         }
@@ -3209,13 +3268,6 @@ macro_rules! interpolate_q15_impl {
                 Tp: AsRef<[Q15]>,
                 Hist: AsRef<[$t]> + AsMut<[$t]>,
             {
-                #[cfg(all(feature = "std", target_arch = "x86_64"))]
-                if let Some(fb) = runtime_avx2(Q15Kernel::$kernel) {
-                    return fb.0.run(
-                        #[inline(always)]
-                        || fb.$method(state, input, output),
-                    );
-                }
                 if runs_fallback(Q15Kernel::$kernel) {
                     return Fallback.$method(state, input, output);
                 }
@@ -3245,9 +3297,10 @@ interpolate_q15_impl!(
 #[cfg(all(test, feature = "std", target_arch = "x86_64"))]
 #[allow(clippy::indexing_slicing, clippy::unwrap_used)]
 mod tests {
-    //! The route of [`runtime_avx2`]: taken in a run-time build that detects exactly AVX2, for
-    //! its three kernels, and the outputs of the fallback bit for bit (the kernel tests in
-    //! `tests/` check the outputs against the definition at every level).
+    //! The progressions of the module `x86` at the level detected at run time (in a build for
+    //! a lower level, such as the run-time build that detects AVX2, D3007) give the outputs of
+    //! the fallback bit for bit (the kernel tests in `tests/` check the outputs against the
+    //! definition at every level).
 
     extern crate std;
 
@@ -3260,7 +3313,7 @@ mod tests {
     };
     use sdrk_core::{CQ15, Fallback, Q15};
 
-    use super::{Q15Kernel, runtime_avx2};
+    use crate::Simd;
 
     fn noise(s: &mut u32, n: usize) -> Vec<Q15> {
         (0..n)
@@ -3278,30 +3331,8 @@ mod tests {
     }
 
     #[test]
-    fn the_route_is_taken_where_avx2_is_detected_at_run_time() {
-        let detected = matches!(crate::level::current(), fearless_simd::Level::Avx2(_));
-        let expected = detected && crate::level::compiled_for().is_none();
-        for k in [
-            Q15Kernel::Fir,
-            Q15Kernel::FirInterpolate,
-            Q15Kernel::FirInterpolateReal,
-        ] {
-            assert_eq!(runtime_avx2(k).is_some(), expected);
-        }
-        for k in [
-            Q15Kernel::FirDecimate,
-            Q15Kernel::Resample,
-            Q15Kernel::ResampleReal,
-        ] {
-            assert!(runtime_avx2(k).is_none());
-        }
-    }
-
-    #[test]
-    fn the_route_gives_the_bits_of_the_fallback() {
-        let Some(fb) = runtime_avx2(Q15Kernel::Fir) else {
-            return;
-        };
+    fn the_detected_level_gives_the_bits_of_the_fallback() {
+        let fb = Simd;
         let mut s = 7;
         for (n, l) in [(1usize, 2usize), (31, 2), (64, 4), (127, 3), (300, 8)] {
             let taps = noise(&mut s, n);
@@ -3323,22 +3354,18 @@ mod tests {
                 let x = cq15(&noise(&mut s, 2 * len));
                 let (mut ya, mut yb) = (vec![CQ15::default(); len], vec![CQ15::default(); len]);
                 Fallback.fir(&mut a, &x, &mut ya).unwrap();
-                fb.0.run(|| fb.fir(&mut b, &x, &mut yb)).unwrap();
+                fb.fir(&mut b, &x, &mut yb).unwrap();
                 assert_eq!(ya, yb, "fir {n} taps, {len} samples");
                 let room = len * l - len % 2;
                 let (mut ya, mut yb) = (vec![CQ15::default(); room], vec![CQ15::default(); room]);
                 let pa = Fallback.fir_interpolate(&mut ia, &x, &mut ya).unwrap();
-                let pb =
-                    fb.0.run(|| fb.fir_interpolate(&mut ib, &x, &mut yb))
-                        .unwrap();
+                let pb = fb.fir_interpolate(&mut ib, &x, &mut yb).unwrap();
                 assert_eq!((pa.consumed, pa.produced), (pb.consumed, pb.produced));
                 assert_eq!(ya, yb, "fir_interpolate {n} taps, L {l}, {len} samples");
                 let x = noise(&mut s, len);
                 let (mut ya, mut yb) = (vec![Q15(0); room], vec![Q15(0); room]);
                 let pa = Fallback.fir_interpolate_real(&mut ra, &x, &mut ya).unwrap();
-                let pb =
-                    fb.0.run(|| fb.fir_interpolate_real(&mut rb, &x, &mut yb))
-                        .unwrap();
+                let pb = fb.fir_interpolate_real(&mut rb, &x, &mut yb).unwrap();
                 assert_eq!((pa.consumed, pa.produced), (pb.consumed, pb.produced));
                 assert_eq!(
                     ya, yb,

@@ -8,7 +8,10 @@
 //! assert_eq!(q15_mul(Q15(16384), Q15(16384)), Q15(8192));
 //! ```
 #![no_std]
-#![forbid(unsafe_code)]
+// `deny`, not `forbid`: the one module of x86 shuffle intrinsics of the `C32` stereo matrix
+// fallback allows `unsafe` under `cfg(target_feature)` (the maintainer's decision D3005); no
+// other code of the crate may.
+#![deny(unsafe_code)]
 #![deny(
     clippy::unwrap_used,
     clippy::expect_used,

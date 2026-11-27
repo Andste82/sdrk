@@ -38,7 +38,8 @@ heapless = "0.9.4"
 # `--cfg sdrk_fallback_only` (RUSTFLAGS) forces the portable fallback everywhere (M13).
 unexpected_cfgs = { level = "warn", check-cfg = ['cfg(sdrk_fallback_only)'] }
 # `deny`, not `forbid`: backend crates later allow unsafe locally.
-# Every non-backend library crate adds `#![forbid(unsafe_code)]` itself.
+# Every non-backend library crate adds `#![forbid(unsafe_code)]` itself, except `sdrk-core`:
+# `#![deny(unsafe_code)]` with one module of x86 intrinsics under `cfg(target_feature)` (D3005).
 unsafe_code = "deny"
 missing_docs = "deny"
 unsafe_op_in_unsafe_fn = "deny"

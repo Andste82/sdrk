@@ -241,28 +241,6 @@ impl StereoPll<Q15> for Fallback {
     }
 }
 
-/// Pairs per block of the `C32` matrix in [`matrix_blocks`], 0 for the plain loop: 8 in an
-/// AVX2 build without AVX-512 (`znver3` / `alderlake` 0.63 / 0.86 to 0.44 / 0.64 cycles per
-/// sample in the loop), 4 from SSE3 below AVX2 (`skylake` / `znver2` at `sse4.2` 1.52 / 1.46 to
-/// 1.19 / 1.34), the plain loop at SSE2 (2.02 / 1.61 with blocks of 4), with AVX-512
-/// (`sapphirerapids` 0.54 to 0.64 with blocks of 8) and on the other targets (`llvm-mca` of
-/// the compiled loops).
-const MATRIX_BLOCK: usize = if cfg!(all(
-    target_arch = "x86_64",
-    target_feature = "avx2",
-    not(target_feature = "avx512f")
-)) {
-    8
-} else if cfg!(all(
-    target_arch = "x86_64",
-    target_feature = "sse3",
-    not(target_feature = "avx2")
-)) {
-    4
-} else {
-    0
-};
-
 /// One `C32` pair of the matrix: `d2 = d + d`, `l = s + d2`, `r = s - d2`.
 #[inline]
 fn matrix_c32(i: C32) -> C32 {
@@ -270,38 +248,159 @@ fn matrix_c32(i: C32) -> C32 {
     C32::new(i.re + d2, i.re - d2)
 }
 
-/// The `C32` matrix in blocks of `P` pairs. The block is one set of vector lanes: the compiler
-/// takes `s` and `2 d` with the duplicating shuffles (`movsldup`, `movshdup`), forms `l` and
-/// `r` on all lanes and blends them, without the deinterleave and the interleave of the plain
-/// loop. [`core::hint::black_box`] keeps it from vectorizing the loop once more across blocks,
-/// which brings the shuffles back; it emits no instruction. The values are those of
-/// [`matrix_c32`], pair by pair.
-#[inline]
-fn matrix_blocks<const P: usize>(input: &[C32], output: &mut [C32]) {
-    let (ic, ir) = input.as_chunks::<P>();
-    let (oc, or) = output.as_chunks_mut::<P>();
-    for (o, i) in oc.iter_mut().zip(ic) {
-        for (o, i) in o.iter_mut().zip(i) {
-            *o = matrix_c32(*i);
+/// The `C32` matrix of x86-64 below AVX-512 in the one-shuffle form of the SIMD backend (the
+/// maintainer's decisions D2952 and D3005, open items IO1-4 and IO2-16): per step two vectors of
+/// pairs, `shufps` 0x88 / 0xDD take the `s` and `d` of the step into one vector each, then
+/// `d + d`, `s + d2` and `s - d2` on all lanes, and `unpcklps` / `unpckhps` give the pairs back,
+/// 128-bit (four pairs per step) below AVX2 and 256-bit (eight pairs per step, the shuffles and
+/// unpacks within the 128-bit lanes invert each other) with AVX2. The values are those of
+/// [`matrix_c32`], lane by lane in the same order of the operands, bit for bit (the tests
+/// below). No portable form compiles to this shuffle count (IO1-4: LLVM canonicalizes every
+/// one to the duplicating shuffles or its own deinterleave).
+///
+/// The only module of `sdrk-core` with `unsafe` code (D3005): on x86-64 every `core::arch`
+/// intrinsic is an `unsafe` call outside a function with the same `#[target_feature]`, and a
+/// trait method cannot carry one. Its soundness is given by `cfg(target_feature)`: the module
+/// is compiled only where the build itself enables the instructions it uses (`sse2`, and `avx`
+/// for the 256-bit form), so every CPU the binary may run on has them; the loads and stores
+/// read and write whole arrays of the slices through their pointers.
+#[cfg(all(
+    target_arch = "x86_64",
+    target_feature = "sse2",
+    not(target_feature = "avx512f")
+))]
+#[allow(
+    unsafe_code,
+    reason = "x86 shuffle intrinsics under cfg(target_feature), the maintainer's decision D3005"
+)]
+mod matrix_x86 {
+    #[cfg(not(target_feature = "avx2"))]
+    use core::arch::x86_64::{
+        __m128, _mm_add_ps, _mm_loadu_ps, _mm_shuffle_ps, _mm_storeu_ps, _mm_sub_ps,
+        _mm_unpackhi_ps, _mm_unpacklo_ps,
+    };
+    #[cfg(target_feature = "avx2")]
+    use core::arch::x86_64::{
+        __m256, _mm256_add_ps, _mm256_loadu_ps, _mm256_shuffle_ps, _mm256_storeu_ps, _mm256_sub_ps,
+        _mm256_unpackhi_ps, _mm256_unpacklo_ps,
+    };
+
+    use crate::types::C32;
+
+    /// Pairs per vector: two in 128 bits, four in 256 bits.
+    #[cfg(not(target_feature = "avx2"))]
+    const LANES: usize = 2;
+    #[cfg(target_feature = "avx2")]
+    const LANES: usize = 4;
+
+    /// Pairs per step: two vectors.
+    pub(super) const STEP: usize = 2 * LANES;
+
+    /// One step of [`STEP`] pairs, 128-bit.
+    #[cfg(not(target_feature = "avx2"))]
+    #[inline]
+    fn step(i: &[[C32; LANES]; 2], o: &mut [[C32; LANES]; 2]) {
+        let [i0, i1] = i;
+        let [o0, o1] = o;
+        // SAFETY: this module is compiled only with `target_feature = "sse2"` enabled for the
+        // whole build (the `cfg` of the module), so the instructions exist on every CPU that the
+        // binary runs on. `C32` is `#[repr(C)]` with two `f32`, so `i0` and `i1` are 4 floats
+        // each, readable through their pointers; `_mm_loadu_ps` needs no alignment.
+        let (a, b): (__m128, __m128) = unsafe {
+            (
+                _mm_loadu_ps(i0.as_ptr().cast::<f32>()),
+                _mm_loadu_ps(i1.as_ptr().cast::<f32>()),
+            )
+        };
+        // SAFETY: SSE2 is enabled for the whole build (the `cfg` of the module); the intrinsics
+        // only compute on registers.
+        let (lo, hi) = unsafe {
+            let s = _mm_shuffle_ps::<0x88>(a, b);
+            let d = _mm_shuffle_ps::<0xDD>(a, b);
+            let d2 = _mm_add_ps(d, d);
+            let l = _mm_add_ps(s, d2);
+            let r = _mm_sub_ps(s, d2);
+            (_mm_unpacklo_ps(l, r), _mm_unpackhi_ps(l, r))
+        };
+        // SAFETY: SSE2 is enabled for the whole build (the `cfg` of the module). `o0` and `o1`
+        // are 4 floats each (`C32` is `#[repr(C)]` with two `f32`), writable through their
+        // pointers as the exclusive borrows; `_mm_storeu_ps` needs no alignment.
+        unsafe {
+            _mm_storeu_ps(o0.as_mut_ptr().cast::<f32>(), lo);
+            _mm_storeu_ps(o1.as_mut_ptr().cast::<f32>(), hi);
         }
-        core::hint::black_box(());
     }
-    for (o, i) in or.iter_mut().zip(ir) {
-        *o = matrix_c32(*i);
+
+    /// One step of [`STEP`] pairs, 256-bit.
+    #[cfg(target_feature = "avx2")]
+    #[inline]
+    fn step(i: &[[C32; LANES]; 2], o: &mut [[C32; LANES]; 2]) {
+        let [i0, i1] = i;
+        let [o0, o1] = o;
+        // SAFETY: this module is compiled only with `target_feature = "avx2"` (which includes
+        // AVX) enabled for the whole build here (the `cfg` of the function and the module), so
+        // the instructions exist on every CPU that the binary runs on. `C32` is `#[repr(C)]` with
+        // two `f32`, so `i0` and `i1` are 8 floats each, readable through their pointers;
+        // `_mm256_loadu_ps` needs no alignment.
+        let (a, b): (__m256, __m256) = unsafe {
+            (
+                _mm256_loadu_ps(i0.as_ptr().cast::<f32>()),
+                _mm256_loadu_ps(i1.as_ptr().cast::<f32>()),
+            )
+        };
+        // SAFETY: AVX is enabled for the whole build (the `cfg`); the intrinsics only compute on
+        // registers. The shuffles and unpacks work within each 128-bit lane, so the unpacks put
+        // every pair back where the shuffles took it from.
+        let (lo, hi) = unsafe {
+            let s = _mm256_shuffle_ps::<0x88>(a, b);
+            let d = _mm256_shuffle_ps::<0xDD>(a, b);
+            let d2 = _mm256_add_ps(d, d);
+            let l = _mm256_add_ps(s, d2);
+            let r = _mm256_sub_ps(s, d2);
+            (_mm256_unpacklo_ps(l, r), _mm256_unpackhi_ps(l, r))
+        };
+        // SAFETY: AVX is enabled for the whole build (the `cfg`). `o0` and `o1` are 8 floats
+        // each (`C32` is `#[repr(C)]` with two `f32`), writable through their pointers as the
+        // exclusive borrows; `_mm256_storeu_ps` needs no alignment.
+        unsafe {
+            _mm256_storeu_ps(o0.as_mut_ptr().cast::<f32>(), lo);
+            _mm256_storeu_ps(o1.as_mut_ptr().cast::<f32>(), hi);
+        }
+    }
+
+    /// The whole steps of `input` into `output` (of the same length); the pairs done.
+    #[inline]
+    pub(super) fn matrix(input: &[C32], output: &mut [C32]) -> usize {
+        let (ic, _) = input.as_chunks::<LANES>();
+        let (oc, _) = output.as_chunks_mut::<LANES>();
+        let (ic, _) = ic.as_chunks::<2>();
+        let (oc, _) = oc.as_chunks_mut::<2>();
+        let mut done = 0;
+        for (o, i) in oc.iter_mut().zip(ic) {
+            step(i, o);
+            done += STEP;
+        }
+        done
     }
 }
 
 impl StereoMatrix<C32> for Fallback {
     fn stereo_matrix(&self, input: &[C32], output: &mut [C32]) -> Result<()> {
         check_len(input.len(), output.len())?;
-        match MATRIX_BLOCK {
-            8 => matrix_blocks::<8>(input, output),
-            4 => matrix_blocks::<4>(input, output),
-            _ => {
-                for (o, i) in output.iter_mut().zip(input) {
-                    *o = matrix_c32(*i);
-                }
-            }
+        #[cfg(all(
+            target_arch = "x86_64",
+            target_feature = "sse2",
+            not(target_feature = "avx512f")
+        ))]
+        let (input, output) = {
+            let done = matrix_x86::matrix(input, output);
+            (
+                input.get(done..).unwrap_or(&[]),
+                output.get_mut(done..).unwrap_or(&mut []),
+            )
+        };
+        for (o, i) in output.iter_mut().zip(input) {
+            *o = matrix_c32(*i);
         }
         Ok(())
     }
@@ -424,11 +523,12 @@ mod tests {
     use super::*;
     use crate::Fallback;
 
-    /// The block forms of the `C32` matrix give the pairs of the plain form bit for bit, for
-    /// every length (whole blocks and the rest), with signed zeros, infinities and a NaN in one
-    /// component.
+    /// The `C32` matrix of the fallback gives the pairs of the plain form bit for bit (on x86-64
+    /// below AVX-512 the intrinsic form of `matrix_x86`, D3005), for every length (whole steps
+    /// and the rest) and every offset into the buffers, with signed zeros, infinities,
+    /// denormals, the largest values and NaNs of both signs with payloads in either component.
     #[test]
-    fn c32_matrix_blocks_equal_the_pairs() {
+    fn c32_matrix_equals_the_pairs() {
         let mut seed = 7u32;
         let mut next = || {
             seed = seed.wrapping_mul(1_664_525).wrapping_add(1_013_904_223);
@@ -440,29 +540,72 @@ mod tests {
             f32::INFINITY,
             f32::NEG_INFINITY,
             f32::NAN,
+            -f32::NAN,
+            f32::from_bits(0x7fc0_1234),
+            f32::from_bits(0xff80_0001),
             1e-45,
+            -1e-45,
+            f32::MIN_POSITIVE,
             f32::MAX,
+            f32::MIN,
         ];
         let mut input: std::vec::Vec<C32> = (0..300).map(|_| C32::new(next(), next())).collect();
         for (k, &v) in specials.iter().enumerate() {
             input[3 * k] = C32::new(v, next());
             input[3 * k + 1] = C32::new(next(), v);
+            input[3 * k + 2] = C32::new(v, specials[(k + 5) % specials.len()]);
         }
         let bits = |v: &[C32]| -> std::vec::Vec<(u32, u32)> {
             v.iter().map(|c| (c.re.to_bits(), c.im.to_bits())).collect()
         };
-        for n in [0, 1, 3, 4, 7, 8, 9, 15, 16, 17, 64, 299, 300] {
-            let x = &input[..n];
-            let want: std::vec::Vec<C32> = x.iter().map(|&i| matrix_c32(i)).collect();
-            let mut got4 = std::vec![C32::default(); n];
-            let mut got8 = std::vec![C32::default(); n];
-            let mut got = std::vec![C32::default(); n];
-            matrix_blocks::<4>(x, &mut got4);
-            matrix_blocks::<8>(x, &mut got8);
-            Fallback.stereo_matrix(x, &mut got).unwrap();
-            assert_eq!(bits(&got4), bits(&want), "n {n}");
-            assert_eq!(bits(&got8), bits(&want), "n {n}");
-            assert_eq!(bits(&got), bits(&want), "n {n}");
+        for offset in [0, 1, 3] {
+            for n in [0, 1, 3, 4, 5, 7, 8, 9, 15, 16, 17, 64, 290, 297] {
+                let x = &input[offset..offset + n];
+                let want: std::vec::Vec<C32> = x.iter().map(|&i| matrix_c32(i)).collect();
+                let mut got = std::vec![C32::default(); n + 1];
+                Fallback.stereo_matrix(x, &mut got[1..]).unwrap();
+                assert_eq!(bits(&got[1..]), bits(&want), "offset {offset} n {n}");
+            }
+        }
+        // Every pair of a list of bit patterns, in steps and in the rest.
+        let patterns: std::vec::Vec<f32> = specials
+            .iter()
+            .copied()
+            .chain((0..=u32::MAX).step_by(65_537 * 251).map(f32::from_bits))
+            .collect();
+        let all: std::vec::Vec<C32> = patterns
+            .iter()
+            .flat_map(|&a| patterns.iter().map(move |&b| C32::new(a, b)))
+            .collect();
+        let want: std::vec::Vec<C32> = all.iter().map(|&i| matrix_c32(i)).collect();
+        let mut got = std::vec![C32::default(); all.len()];
+        Fallback.stereo_matrix(&all, &mut got).unwrap();
+        assert_eq!(bits(&got), bits(&want));
+    }
+
+    /// The intrinsic form of x86-64 below AVX-512 runs whole steps only and leaves the rest of
+    /// the call to the plain loop (D3005).
+    #[cfg(all(
+        target_arch = "x86_64",
+        target_feature = "sse2",
+        not(target_feature = "avx512f")
+    ))]
+    #[test]
+    fn the_x86_matrix_runs_whole_steps() {
+        let step = matrix_x86::STEP;
+        assert_eq!(step, if cfg!(target_feature = "avx2") { 8 } else { 4 });
+        for n in [0, 1, step - 1, step, step + 1, 3 * step + 2] {
+            let x = std::vec![C32::new(1.0, 2.0); n];
+            let mut out = std::vec![C32::new(7.0, 7.0); n];
+            assert_eq!(matrix_x86::matrix(&x, &mut out), n / step * step, "n {n}");
+            for (k, o) in out.iter().enumerate() {
+                let want = if k < n / step * step {
+                    C32::new(5.0, -3.0)
+                } else {
+                    C32::new(7.0, 7.0)
+                };
+                assert_eq!(*o, want, "n {n} k {k}");
+            }
         }
     }
 

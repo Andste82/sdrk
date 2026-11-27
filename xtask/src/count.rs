@@ -102,6 +102,12 @@ pub struct Limit {
     /// [`crate::cycle_gate::TRADE_DB`] above the comparison's and its ratio within the `dev`
     /// limit; the text names the SNR of both sides. Not used by the count of `simd128`.
     pub accuracy_trade: Option<String>,
+    /// The contract trade of the cycle gate (`cargo xtask check cycles`, D3000, the maintainer's
+    /// decision): a `release` entry above the release limit in cycles stays `release` while its
+    /// ratio is at most [`crate::cycle_gate::TRADE_CAP`] on both models and the text states the
+    /// less work of the library, the measured gain and the attempts to make the extra work
+    /// cheaper ([`crate::cycle_gate::CONTRACT_TRADE_PARTS`]). Not used by the count of `simd128`.
+    pub contract_trade: Option<String>,
 }
 
 #[cfg(test)]
@@ -114,6 +120,7 @@ impl Limit {
             waiver: None,
             accuracy_waiver: None,
             accuracy_trade: None,
+            contract_trade: None,
         }
     }
 }
@@ -129,7 +136,7 @@ pub struct Limits {
 impl Limits {
     /// Parses the file: `{ "_limits": { "release": 1.10, ... }, "<kernel>": { "<level>": {
     /// "status": "release" | "dev" | "info", "waiver": "<text>", "accuracy_waiver": "<text>",
-    /// "accuracy_trade": "<text>" } } }`.
+    /// "accuracy_trade": "<text>", "contract_trade": "<text>" } } }`.
     /// Other keys starting with `_` are comments.
     ///
     /// # Errors
@@ -189,6 +196,7 @@ impl Limits {
                         waiver: text("waiver"),
                         accuracy_waiver: text("accuracy_waiver"),
                         accuracy_trade: text("accuracy_trade"),
+                        contract_trade: text("contract_trade"),
                     },
                 );
             }
@@ -431,7 +439,8 @@ pub const AWAITING: &str = "awaiting the maintainer's decision";
 
 /// Whether a plain `waiver` may cover a ratio `worst` above the limit of `status` (D2779, the
 /// maintainer's measurement order): never for `release` above [`Caps::release`] (only an
-/// `accuracy_trade` keeps `release` there, up to [`crate::cycle_gate::TRADE_CAP`]: the entry is
+/// `accuracy_trade` or a `contract_trade` keeps `release` there, up to
+/// [`crate::cycle_gate::TRADE_CAP`]: the entry is
 /// `dev` with its open item), and for `dev` above [`Caps::dev`] only while the waiver names its
 /// open item and says that it is [`AWAITING`]. `Err` says why not.
 ///
@@ -445,7 +454,7 @@ pub fn waiver_above_cap(
 ) -> Result<(), String> {
     match status {
         Status::Release if worst > caps.release => Err(format!(
-            "a waiver cannot keep a `release` entry above the release limit of {:.2}x: only an `accuracy_trade` keeps it `release` (up to {:.2}x, D2760); otherwise it is `dev` with its open item (D2779)",
+            "a waiver cannot keep a `release` entry above the release limit of {:.2}x: only an `accuracy_trade` or a `contract_trade` keeps it `release` (up to {:.2}x, D2760, D3000); otherwise it is `dev` with its open item (D2779)",
             caps.release,
             crate::cycle_gate::TRADE_CAP
         )),
@@ -1607,6 +1616,7 @@ mod tests {
             waiver: waiver.map(Into::into),
             accuracy_waiver: accuracy.map(Into::into),
             accuracy_trade: None,
+            contract_trade: None,
         }
     }
 

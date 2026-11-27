@@ -50,7 +50,8 @@ pub struct Waiver {
     pub entry: String,
     /// `dev` or `release`.
     pub status: String,
-    /// `waiver`, `accuracy_waiver`, `cycle_waiver`, `accuracy_trade` or several of them.
+    /// `waiver`, `accuracy_waiver`, `cycle_waiver`, `accuracy_trade`, `contract_trade` or several
+    /// of them.
     pub field: String,
     /// The open items and issues the text names (empty: the text states why the gap is
     /// accepted).
@@ -153,6 +154,7 @@ pub fn waivers(limits_json: &str) -> anyhow::Result<Vec<Waiver>> {
                 "accuracy_waiver",
                 "cycle_waiver",
                 "accuracy_trade",
+                "contract_trade",
             ]
             .iter()
             .filter_map(|f| entry.get(*f).and_then(Value::as_str).map(|t| (*f, t)))

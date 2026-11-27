@@ -21,23 +21,25 @@
 //! `Q15`, products of real streams: the rounding high multiplication (`pmulhrsw`, `sqrdmulh`,
 //! `i16x8.q15mulr_sat`) as in `scale`; `pmulhrsw` wraps `-32768 * -32768` to `-32768`, which is
 //! the only lane that gives `0x8000`, so a compare and an exclusive or (a masked blend on
-//! AVX-512) turn it into `32767`. SSE2 has no rounding high multiplication and runs the
-//! fallback.
+//! AVX-512) turn it into `32767`. SSE2 has no rounding high multiplication and computes the one
+//! of `pmulhrsw` in six SSE2 instructions (`crate::util::mulhrs_sse2!`, the same bits, D3008).
 //!
 //! `CQ15` complex product, whose sums of two products reach 2^31:
 //!
-//! - x86 (SSE4.2 and AVX2; AVX-512 runs the AVX2 path): `pmaddwd` on the `(I, Q)` pairs.
+//! - x86 (SSE2, SSE4.2 and AVX2; AVX-512 runs the AVX2 path): `pmaddwd` on the `(I, Q)` pairs.
 //!   With `a = (ar, ai)` and `b = (br, bi)`, `pmaddwd(a, (br, !bi))` is
 //!   `ar br - ai bi - ai` (`!bi = -bi - 1` cannot overflow where `-bi` can), so adding `ai` gives
 //!   the real part; the sum wraps modulo 2^32 but the result is in range, so it is exact.
 //!   `pmaddwd(a, (bi, br))` is the imaginary part; it overflows only when all four values are
 //!   `-32768` (the sum 2^31 wraps to `i32::MIN`, a value no other input gives), which a compare
 //!   after the sum turns into `32767` after the pack. The rounding term, the shift by 15 and
-//!   `packssdw` are `round_shift` and `sat16`; `pshufb` interleaves the packed parts.
+//!   `packssdw` are `round_shift` and `sat16`; `pshufb` interleaves the packed parts. SSE2 swaps
+//!   the halves of the pairs with `pshuflw` and `pshufhw` and interleaves with `psrldq` and
+//!   `punpcklwd` instead of the two `pshufb` (D3008).
 //! - NEON: `ld2`, the widening `smull`/`smlsl`, a saturating `sqadd` for the imaginary part
 //!   (the sum 2^31 saturates to a value that `sat16` clamps the same), `sqrshrn` (the rounding
 //!   shift with saturation) and `st2`.
-//! - SIMD128 and SSE2: no path (the fallback runs).
+//! - SIMD128: no path (the fallback runs).
 //!
 //! `interleave` and `deinterleave`: the paths of `split_x86`, `split_neon` and `split_wasm` do the
 //! whole call (an overlapping last step; calls shorter than one step run the plain loops of the
@@ -462,7 +464,8 @@ fn mul_cq15_sample([ar, ai]: [i16; 2], [br, bi]: [i16; 2]) -> [i16; 2] {
 }
 
 /// The `Q15` product of real streams at the level of `simd`: the whole call by the path of the
-/// level ([`whole_zip`], D322 and D332), or by the fallback where the level has none (SSE2).
+/// level ([`whole_zip`], D322 and D332; SSE2 with `pmulhrsw` in SSE2 instructions, D3008), or by
+/// the fallback where the level has none.
 #[inline(always)]
 fn mul_real_q15<S: SimdToken>(simd: S, a: &[i16], b: &[i16], out: &mut [i16]) {
     let level = simd.level();
@@ -476,6 +479,9 @@ fn mul_real_q15<S: SimdToken>(simd: S, a: &[i16], b: &[i16], out: &mut [i16]) {
         }
         if let Some(t) = level.as_sse4_2() {
             return x86::mul_real_sse4_2(t, a, b, out);
+        }
+        if let Some(t) = level.as_sse2() {
+            return x86::mul_real_sse2(t, a, b, out);
         }
     }
     #[cfg(target_arch = "aarch64")]
@@ -496,8 +502,8 @@ fn mul_real_q15<S: SimdToken>(simd: S, a: &[i16], b: &[i16], out: &mut [i16]) {
 }
 
 /// The `CQ15` complex product at the level of `simd` (samples as `[re, im]`): the whole call by
-/// the path of the level ([`whole_zip`], D322 and D332), or by the fallback where the level
-/// has none (SSE2, SIMD128).
+/// the path of the level ([`whole_zip`], D322 and D332; SSE2 since D3008), or by the fallback
+/// where the level has none (SIMD128).
 #[inline(always)]
 fn mul_cq15<S: SimdToken>(simd: S, a: &[[i16; 2]], b: &[[i16; 2]], out: &mut [[i16; 2]]) {
     let level = simd.level();
@@ -508,6 +514,9 @@ fn mul_cq15<S: SimdToken>(simd: S, a: &[[i16; 2]], b: &[[i16; 2]], out: &mut [[i
         }
         if let Some(t) = level.as_sse4_2() {
             return x86::mul_cq15_sse4_2(t, a, b, out);
+        }
+        if let Some(t) = level.as_sse2() {
+            return x86::mul_cq15_sse2(t, a, b, out);
         }
     }
     #[cfg(target_arch = "aarch64")]
@@ -677,18 +686,19 @@ mod x86 {
         __m128, __m256, _mm_add_epi32, _mm_addsub_ps, _mm_cmpeq_epi16, _mm_cmpeq_epi32,
         _mm_madd_epi16, _mm_movehdup_ps, _mm_moveldup_ps, _mm_mul_ps, _mm_mulhrs_epi16,
         _mm_packs_epi32, _mm_set1_epi16, _mm_set1_epi32, _mm_setr_epi8, _mm_setzero_si128,
-        _mm_shuffle_epi8, _mm_shuffle_ps, _mm_srai_epi32, _mm_xor_si128, _mm256_add_epi32,
-        _mm256_cmpeq_epi16, _mm256_cmpeq_epi32, _mm256_fmaddsub_ps, _mm256_madd_epi16,
-        _mm256_movehdup_ps, _mm256_moveldup_ps, _mm256_mul_ps, _mm256_mulhrs_epi16,
-        _mm256_packs_epi32, _mm256_permute_ps, _mm256_set1_epi16, _mm256_set1_epi32,
-        _mm256_setr_epi8, _mm256_setzero_si256, _mm256_shuffle_epi8, _mm256_srai_epi32,
-        _mm256_xor_si256, _mm512_cmpeq_epi16_mask, _mm512_mask_blend_epi16, _mm512_mulhrs_epi16,
-        _mm512_set1_epi16,
+        _mm_shuffle_epi8, _mm_shuffle_ps, _mm_shufflehi_epi16, _mm_shufflelo_epi16, _mm_srai_epi32,
+        _mm_srli_si128, _mm_unpacklo_epi16, _mm_xor_si128, _mm256_add_epi32, _mm256_cmpeq_epi16,
+        _mm256_cmpeq_epi32, _mm256_fmaddsub_ps, _mm256_madd_epi16, _mm256_movehdup_ps,
+        _mm256_moveldup_ps, _mm256_mul_ps, _mm256_mulhrs_epi16, _mm256_packs_epi32,
+        _mm256_permute_ps, _mm256_set1_epi16, _mm256_set1_epi32, _mm256_setr_epi8,
+        _mm256_setzero_si256, _mm256_shuffle_epi8, _mm256_srai_epi32, _mm256_xor_si256,
+        _mm512_cmpeq_epi16_mask, _mm512_mask_blend_epi16, _mm512_mulhrs_epi16, _mm512_set1_epi16,
     };
     use fearless_simd::prelude::*;
     use fearless_simd::{f32x4, f32x8, i16x8, i16x16, i16x32};
 
     use super::{mul_cq15_sample, mul_q15, whole_zip_token};
+    use crate::util::mulhrs_sse2;
 
     fearless_simd::kernel!(
         /// The `C32` product of AVX2 on the interleaved floats, four samples per vector:
@@ -766,6 +776,29 @@ mod x86 {
                 out,
                 |a, b, o| {
                     let r = _mm_mulhrs_epi16(
+                        i16x8::from_slice(t, a).into(),
+                        i16x8::from_slice(t, b).into(),
+                    );
+                    i16x8::simd_from(t, _mm_xor_si128(r, _mm_cmpeq_epi16(r, min))).store_slice(o);
+                },
+                mul_q15,
+            );
+        }
+    );
+
+    fearless_simd::kernel!(
+        /// [`mul_real_sse4_2`] with `pmulhrsw` in SSE2 instructions ([`mulhrs_sse2!`], the same
+        /// bits, so the same fix-up; D3008).
+        #[inline]
+        pub(super) fn mul_real_sse2(t: Sse2, a: &[i16], b: &[i16], out: &mut [i16]) {
+            let min = _mm_set1_epi16(i16::MIN);
+            whole_zip_token(
+                8,
+                a,
+                b,
+                out,
+                |a, b, o| {
+                    let r = mulhrs_sse2!(
                         i16x8::from_slice(t, a).into(),
                         i16x8::from_slice(t, b).into(),
                     );
@@ -858,6 +891,44 @@ mod x86 {
                     let im = _mm_srai_epi32::<15>(_mm_add_epi32(im, round));
                     let p = _mm_xor_si128(_mm_packs_epi32(re, im), _mm_packs_epi32(zero, ovf));
                     i16x8::simd_from(t, _mm_shuffle_epi8(p, weave))
+                        .store_slice(o.as_flattened_mut());
+                },
+                mul_cq15_sample,
+            );
+        }
+    );
+
+    fearless_simd::kernel!(
+        /// [`mul_cq15_sse4_2`] in SSE2 instructions (D3008): the halves of every pair swapped by
+        /// `pshuflw` and `pshufhw`, the packed parts `re0 .. re3 im0 .. im3` interleaved by
+        /// `punpcklwd` with the vector shifted by 8 bytes. The same values in every lane.
+        pub(super) fn mul_cq15_sse2(t: Sse2, a: &[[i16; 2]], b: &[[i16; 2]], out: &mut [[i16; 2]]) {
+            const SWAP: i32 = 0b10_11_00_01;
+            let not_im = _mm_set1_epi32(!0xFFFF);
+            let (min, round, zero) = (
+                _mm_set1_epi32(i32::MIN),
+                _mm_set1_epi32(1 << 14),
+                _mm_setzero_si128(),
+            );
+            whole_zip_token(
+                4,
+                a,
+                b,
+                out,
+                |a, b, o| {
+                    let x = i16x8::from_slice(t, a.as_flattened()).into();
+                    let y = i16x8::from_slice(t, b.as_flattened()).into();
+                    let re = _mm_add_epi32(
+                        _mm_madd_epi16(x, _mm_xor_si128(y, not_im)),
+                        _mm_srai_epi32::<16>(x),
+                    );
+                    let ys = _mm_shufflehi_epi16::<SWAP>(_mm_shufflelo_epi16::<SWAP>(y));
+                    let im = _mm_madd_epi16(x, ys);
+                    let ovf = _mm_cmpeq_epi32(im, min);
+                    let re = _mm_srai_epi32::<15>(_mm_add_epi32(re, round));
+                    let im = _mm_srai_epi32::<15>(_mm_add_epi32(im, round));
+                    let p = _mm_xor_si128(_mm_packs_epi32(re, im), _mm_packs_epi32(zero, ovf));
+                    i16x8::simd_from(t, _mm_unpacklo_epi16(p, _mm_srli_si128::<8>(p)))
                         .store_slice(o.as_flattened_mut());
                 },
                 mul_cq15_sample,

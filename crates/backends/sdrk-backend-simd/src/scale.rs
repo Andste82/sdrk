@@ -6,7 +6,8 @@
 //! range is `-1 * -1 = 32768`: NEON and WASM saturate it to 32767 like `q15_mul`, `pmulhrsw`
 //! wraps it to -32768, so on x86 a gain of -32768 takes the saturating negation instead
 //! (`q15_mul(x, -32768)` is `-x` limited to 32767). SSE2 has no rounding high multiplication
-//! and runs the fallback.
+//! and computes the one of `pmulhrsw` in six instructions ([`crate::util::mulhrs_sse2!`],
+//! decision D3008), the same bits.
 //!
 //! `C32`: the multiplication of every float by the gain in generic code, bit-exact with the
 //! fallback; the backend has it so that the build with run-time detection runs it at the level
@@ -35,6 +36,9 @@ fn scale_q15_level<S: SimdToken>(simd: S, input: &[i16], out: &mut [i16], gain: 
         }
         if let Some(t) = level.as_sse4_2() {
             return x86::scale_sse4_2(t, input, out, gain);
+        }
+        if let Some(t) = level.as_sse2() {
+            return x86::scale_sse2(t, input, out, gain);
         }
     }
     #[cfg(target_arch = "aarch64")]
@@ -149,6 +153,8 @@ mod x86 {
     use fearless_simd::prelude::*;
     use fearless_simd::{i16x8, i16x16, i16x32};
 
+    use crate::util::mulhrs_sse2;
+
     fearless_simd::kernel!(
         pub(super) fn scale_sse4_2(t: Sse4_2, input: &[i16], out: &mut [i16], gain: i16) -> usize {
             if gain == i16::MIN {
@@ -162,6 +168,25 @@ mod x86 {
                 blocks!(input, out, 8, |i, o| {
                     let x = i16x8::from_slice(t, i).into();
                     i16x8::simd_from(t, _mm_mulhrs_epi16(x, g)).store_array(o);
+                })
+            }
+        }
+    );
+
+    fearless_simd::kernel!(
+        /// [`scale_sse4_2`] with `pmulhrsw` in SSE2 instructions (D3008).
+        pub(super) fn scale_sse2(t: Sse2, input: &[i16], out: &mut [i16], gain: i16) -> usize {
+            if gain == i16::MIN {
+                let zero = _mm_setzero_si128();
+                blocks!(input, out, 8, |i, o| {
+                    let x = i16x8::from_slice(t, i).into();
+                    i16x8::simd_from(t, _mm_subs_epi16(zero, x)).store_array(o);
+                })
+            } else {
+                let g = _mm_set1_epi16(gain);
+                blocks!(input, out, 8, |i, o| {
+                    let x = i16x8::from_slice(t, i).into();
+                    i16x8::simd_from(t, mulhrs_sse2!(x, g)).store_array(o);
                 })
             }
         }

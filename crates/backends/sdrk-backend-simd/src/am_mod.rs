@@ -24,14 +24,15 @@
 //! `t = round_shift(m x, 15)` (`c`, `m` the `Q15` gains of carrier and depth, both 0 to 32767;
 //! the proof that this equals the `i64` formula of the contract is at the fallback), on whole
 //! vectors of 16-bit lanes: the two rounding products are the rounding high multiplication of
-//! the level (`pmulhrsw`, SSSE3, so SSE4.2, AVX2 and AVX-512 on the AVX2 path; `sqrdmulh` on
+//! the level (`pmulhrsw`, SSSE3, so SSE4.2, AVX2 and AVX-512 on the AVX2 path; at SSE2 its six
+//! SSE2 instructions of [`crate::util::mulhrs_sse2!`], the same bits, D3008; `sqrdmulh` on
 //! NEON, which computes `(2 a b + 2^15) >> 16`, the same value; `i16x8.q15mulr_sat_s` on
 //! SIMD128). Each computes `(a b + 2^14) >> 15` exactly; the only product outside the 16-bit
 //! range, `-32768 * -32768`, cannot occur because `m` and `c` are at most 32767. `t` lies in
 //! `[-32767, 32766]`, the sum `c + round_shift(c t, 15)` in `[0, 65532]`, so the saturating
 //! 16-bit addition (`paddsw`, `sqadd`, `i16x8.add_sat_s`) is `sat16` of the sum. The samples
 //! `(re, 0)` are the zero extension of `re` to 32 bits: `punpcklwd` / `punpckhwd` with zero
-//! (SSE4.2), `vpmovzxwd` of each half (AVX2), `zip1` / `zip2` with zero (NEON),
+//! (SSE2, SSE4.2), `vpmovzxwd` of each half (AVX2), `zip1` / `zip2` with zero (NEON),
 //! `i32x4.extend_low/high_i16x8_u` (SIMD128). The rest of the call, shorter than one vector, and
 //! SSE2 (no rounding high multiplication) run the `i32` loop of the fallback at the level of the
 //! dispatch.
@@ -132,6 +133,9 @@ fn am_cq15_level<S: SimdToken>(
         if let Some(t) = level.as_sse4_2() {
             return x86::sse4_2(t, c, m, input, out);
         }
+        if let Some(t) = level.as_sse2() {
+            return x86::sse2(t, c, m, input, out);
+        }
     }
     #[cfg(target_arch = "aarch64")]
     if let Some(t) = level.as_neon() {
@@ -223,6 +227,8 @@ mod x86 {
     use fearless_simd::prelude::*;
     use fearless_simd::{i16x8, i16x16};
 
+    use crate::util::mulhrs_sse2;
+
     fearless_simd::kernel!(
         pub(super) fn sse4_2(
             t: Sse4_2,
@@ -235,6 +241,21 @@ mod x86 {
             blocks!(input, out, 8, |i, o| {
                 let x = i16x8::from_slice(t, i).into();
                 let r = _mm_mulhrs_epi16(_mm_mulhrs_epi16(x, mv), cv);
+                let re = _mm_adds_epi16(r, cv);
+                let (o0, o1) = o.as_flattened_mut().split_at_mut(8);
+                i16x8::simd_from(t, _mm_unpacklo_epi16(re, zero)).store_slice(o0);
+                i16x8::simd_from(t, _mm_unpackhi_epi16(re, zero)).store_slice(o1);
+            })
+        }
+    );
+
+    fearless_simd::kernel!(
+        /// [`sse4_2`] with `pmulhrsw` in SSE2 instructions ([`mulhrs_sse2!`], decision D3008).
+        pub(super) fn sse2(t: Sse2, c: i16, m: i16, input: &[i16], out: &mut [[i16; 2]]) -> usize {
+            let (cv, mv, zero) = (_mm_set1_epi16(c), _mm_set1_epi16(m), _mm_setzero_si128());
+            blocks!(input, out, 8, |i, o| {
+                let x = i16x8::from_slice(t, i).into();
+                let r = mulhrs_sse2!(mulhrs_sse2!(x, mv), cv);
                 let re = _mm_adds_epi16(r, cv);
                 let (o0, o1) = o.as_flattened_mut().split_at_mut(8);
                 i16x8::simd_from(t, _mm_unpacklo_epi16(re, zero)).store_slice(o0);

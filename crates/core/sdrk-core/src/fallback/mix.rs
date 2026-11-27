@@ -9,10 +9,10 @@ use crate::types::{C32, CQ15, Q15};
 const QUARTER: u32 = 1 << 30;
 
 /// Samples per pass of the `C32` oscillator of `oscillate`: on AArch64 two samples of one pass
-/// share the phase and the loop overhead (simulated 7.32 against 8.18 cycles per sample on
-/// `cortex-a72`, 8.54 against 9.11 on `cortex-a76`); on x86-64 the pass of two was slower
-/// (7.74 against 6.41 on `skylake`), so the other targets keep one sample per pass. Every
-/// sample has the bits of [`nco_f32`] at its own phase.
+/// share the phase and the loop overhead (CI run 46068881482: 7.33 / 8.55 cycles per sample on
+/// `cortex-a72` / `cortex-a76`, against 8.17 / 9.11 with one sample per pass); on x86-64 the
+/// pass of two simulated slower (7.74 against 6.41 on `skylake`), so the other targets keep one
+/// sample per pass. Every sample has the bits of [`nco_f32`] at its own phase.
 const OSC_GROUP: usize = if cfg!(target_arch = "aarch64") { 2 } else { 1 };
 
 fn table_error() -> Error {

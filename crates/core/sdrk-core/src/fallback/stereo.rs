@@ -453,13 +453,15 @@ impl StereoMatrix<CQ15> for Fallback {
 }
 
 /// Samples per pass of `stereo_encode` and `stereo_encode_rds`: four samples of one pass share
-/// the phase and the loop overhead, and the compiler interleaves their sines (simulated on the
-/// loop of `stereo_encode`: 13.8 against 18.2 cycles per sample on `cortex-a72`, 10.8 against
-/// 19.1 on `cortex-a76`, 7.8 against 12.5 on `skylake`, 7.3 against 13.4 on `znver2`). The
-/// embedded targets (32-bit Arm, RISC-V) keep one sample per pass. Every sample has the bits of
-/// the contract at its own phase.
+/// the phase and the loop overhead, and the compiler interleaves their sines. CI run
+/// 46068881482 (cycles per sample, reference / counter model): AArch64 14.80 / 10.79 against
+/// 17.18 / 20.08 with one sample per pass (`cortex-a72` / `cortex-a76`), `sse2` 8.30 / 7.55
+/// against 12.73 / 13.41 (`skylake` / `znver2`); with AVX2 the pass of four was slower
+/// (6.41 / 5.92 against 4.48 / 5.88 on `znver3` / `alderlake`), so x86-64 with AVX2 keeps one
+/// sample per pass, as do the embedded targets (32-bit Arm, RISC-V). Every sample has the bits
+/// of the contract at its own phase.
 const ENC_GROUP: usize = if cfg!(any(
-    target_arch = "x86_64",
+    all(target_arch = "x86_64", not(target_feature = "avx2")),
     target_arch = "aarch64",
     target_arch = "wasm32"
 )) {

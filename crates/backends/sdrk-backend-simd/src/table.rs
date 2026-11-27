@@ -813,7 +813,7 @@ pub(crate) mod wasm {
     #[cfg(feature = "nco-tables")]
     use core::arch::wasm32::i64x2_shuffle;
     #[cfg(not(feature = "nco-tables"))]
-    use core::arch::wasm32::{f32x4, i16x8_shuffle, i16x8_sub, i32x4_sub, u32x4, v128_xor};
+    use core::arch::wasm32::{f32x4, i16x8_shuffle, i16x8_sub, i32x4_sub, u32x4};
     use core::arch::wasm32::{
         f32x4_add, f32x4_convert_i32x4, f32x4_mul, i32x4_shuffle, u32x4_extract_lane, u32x4_shr,
         u32x4_splat, u64x2, v128, v128_and,
@@ -859,6 +859,7 @@ pub(crate) mod wasm {
     }
 
     /// `V - D (W + V H)` of two samples, `H = D / 2` (see the module documentation).
+    #[cfg(feature = "nco-tables")]
     #[inline(always)]
     fn taylor_x2(v: v128, w: v128, d: v128) -> v128 {
         let h = f32x4_mul(d, f32x4_splat(0.5));
@@ -890,35 +891,38 @@ pub(crate) mod wasm {
         )
     }
 
-    /// [`nco_f32_x4`] from `COS_F32` itself: `V = (C, S)` of two samples from four scalar
-    /// reads, `W = (S, -C)` from `V` by a shuffle and the sign bit of the odd lanes.
+    /// [`nco_f32_x4`] from `COS_F32` itself, planar: `C` and `S` of the four samples in a
+    /// vector each (eight scalar reads at byte offsets computed in the vector), the fallback's
+    /// `C - d (S + C h)` and `S + d (C - S h)` on the four lanes, then two shuffles into output
+    /// order. No negation is needed, so every lane is the fallback's expression itself.
     #[cfg(not(feature = "nco-tables"))]
     #[inline(always)]
     pub(crate) fn nco_f32_x4(p: v128) -> (v128, v128) {
         let d = f32x4_mul(fraction_x4(p), f32x4_splat(PHASE_UNIT_F32));
-        // The index is at most 4095, inside the 4097 entries of the table.
-        let at = |i: u32| COS_F32.get(i as usize).copied().unwrap_or(0.0);
-        let cos = u32x4_shr(p, 20);
-        let sin = u32x4_shr(i32x4_sub(p, u32x4_splat(1 << 30)), 20);
-        let v = |a: v128, b: v128| -> v128 {
-            f32x4(
-                at(u32x4_extract_lane::<0>(a)),
-                at(u32x4_extract_lane::<0>(b)),
-                at(u32x4_extract_lane::<1>(a)),
-                at(u32x4_extract_lane::<1>(b)),
-            )
-        };
-        let sign = u32x4(0, 0x8000_0000, 0, 0x8000_0000);
-        let pair =
-            |v: v128, d: v128| taylor_x2(v, v128_xor(i32x4_shuffle::<1, 0, 3, 2>(v, v), sign), d);
-        let v01 = v(cos, sin);
-        let v23 = v(
-            i32x4_shuffle::<2, 3, 2, 3>(cos, cos),
-            i32x4_shuffle::<2, 3, 2, 3>(sin, sin),
+        let h = f32x4_mul(d, f32x4_splat(0.5));
+        // The byte offsets `4 i` of the table points of the phase and of the phase minus a
+        // quarter turn; the index is at most 4095, inside the 4097 entries of the table.
+        let offsets = |p: v128| v128_and(u32x4_shr(p, 18), u32x4_splat(0x3FFC));
+        let co = offsets(p);
+        let so = offsets(i32x4_sub(p, u32x4_splat(1 << 30)));
+        let at = |o: u32| COS_F32.get((o / 4) as usize).copied().unwrap_or(0.0);
+        let c = f32x4(
+            at(u32x4_extract_lane::<0>(co)),
+            at(u32x4_extract_lane::<1>(co)),
+            at(u32x4_extract_lane::<2>(co)),
+            at(u32x4_extract_lane::<3>(co)),
         );
+        let s = f32x4(
+            at(u32x4_extract_lane::<0>(so)),
+            at(u32x4_extract_lane::<1>(so)),
+            at(u32x4_extract_lane::<2>(so)),
+            at(u32x4_extract_lane::<3>(so)),
+        );
+        let cos = f32x4_sub(c, f32x4_mul(d, f32x4_add(s, f32x4_mul(c, h))));
+        let sin = f32x4_add(s, f32x4_mul(d, f32x4_sub(c, f32x4_mul(s, h))));
         (
-            pair(v01, i32x4_shuffle::<0, 0, 1, 1>(d, d)),
-            pair(v23, i32x4_shuffle::<2, 2, 3, 3>(d, d)),
+            i32x4_shuffle::<0, 4, 1, 5>(cos, sin),
+            i32x4_shuffle::<2, 6, 3, 7>(cos, sin),
         )
     }
 

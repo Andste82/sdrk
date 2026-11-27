@@ -3931,28 +3931,22 @@
   },
   "oscillate_fallback": {
     "sse2": {
-      "status": "release",
-      "accuracy_waiver": "decision D320: accepted by the maintainer: CMSIS-DSP `arm_sin_cos_f32` reaches 140.8 dB against 133.2 dB of our linear table interpolation at harmonic 1 (SNR against the f64 model), 13 dB above the contract of 120 dB and far below the noise of every real signal path"
+      "status": "release"
     },
     "sse4.2": {
-      "status": "release",
-      "accuracy_waiver": "decision D320: accepted by the maintainer: CMSIS-DSP `arm_sin_cos_f32` reaches 140.8 dB against 133.2 dB of our linear table interpolation at harmonic 1 (SNR against the f64 model), 13 dB above the contract of 120 dB and far below the noise of every real signal path"
+      "status": "release"
     },
     "avx2": {
-      "status": "release",
-      "accuracy_waiver": "decision D320: accepted by the maintainer: CMSIS-DSP `arm_sin_cos_f32` reaches 140.8 dB against 133.2 dB of our linear table interpolation at harmonic 1 (SNR against the f64 model), 13 dB above the contract of 120 dB and far below the noise of every real signal path"
+      "status": "release"
     },
     "avx512": {
-      "status": "release",
-      "accuracy_waiver": "decision D320: accepted by the maintainer: CMSIS-DSP `arm_sin_cos_f32` reaches 140.8 dB against 133.2 dB of our linear table interpolation at harmonic 1 (SNR against the f64 model), 13 dB above the contract of 120 dB and far below the noise of every real signal path"
+      "status": "release"
     },
     "neon": {
-      "status": "release",
-      "accuracy_waiver": "decision D320: accepted by the maintainer: CMSIS-DSP `arm_sin_cos_f32` reaches 140.8 dB against 133.2 dB of our linear table interpolation at harmonic 1 (SNR against the f64 model), 13 dB above the contract of 120 dB and far below the noise of every real signal path"
+      "status": "release"
     },
     "simd128": {
-      "status": "release",
-      "accuracy_waiver": "decision D320: accepted by the maintainer: CMSIS-DSP `arm_sin_cos_f32` reaches 140.8 dB against 133.2 dB of our linear table interpolation at harmonic 1 (SNR against the f64 model), 13 dB above the contract of 120 dB and far below the noise of every real signal path"
+      "status": "release"
     }
   },
   "oscillate_cq15_fallback": {
@@ -4140,28 +4134,22 @@
   },
   "oscillate": {
     "sse2": {
-      "status": "release",
-      "accuracy_waiver": "open item I13.1-13: SLEEF's `Sleef_sincosf_u10` reaches 141.71 dB against 133.23 dB of our linear table interpolation (SNR against the f64 model; the gap that D320 accepted for the fallback against CMSIS-DSP's 140.8 dB), 13 dB above the contract of 120 dB, awaiting the maintainer's decision"
+      "status": "release"
     },
     "sse4.2": {
-      "status": "release",
-      "accuracy_waiver": "open item I13.1-13: SLEEF's `Sleef_sincosf_u10` reaches 141.71 dB against 133.23 dB of our linear table interpolation (SNR against the f64 model; the gap that D320 accepted for the fallback against CMSIS-DSP's 140.8 dB), 13 dB above the contract of 120 dB, awaiting the maintainer's decision"
+      "status": "release"
     },
     "avx2": {
-      "status": "release",
-      "accuracy_waiver": "open item I13.1-13: SLEEF's `Sleef_sincosf_u10` reaches 141.71 dB against 133.23 dB of our linear table interpolation (SNR against the f64 model; the gap that D320 accepted for the fallback against CMSIS-DSP's 140.8 dB), 13 dB above the contract of 120 dB, awaiting the maintainer's decision"
+      "status": "release"
     },
     "avx2-runtime": {
-      "status": "release",
-      "accuracy_waiver": "open item I13.1-13: SLEEF's `Sleef_sincosf_u10` reaches 141.71 dB against 133.23 dB of our linear table interpolation (SNR against the f64 model; the gap that D320 accepted for the fallback against CMSIS-DSP's 140.8 dB), 13 dB above the contract of 120 dB, awaiting the maintainer's decision"
+      "status": "release"
     },
     "avx512": {
-      "status": "release",
-      "accuracy_waiver": "open item I13.1-13: SLEEF's `Sleef_sincosf_u10` reaches 141.71 dB against 133.23 dB of our linear table interpolation (SNR against the f64 model; the gap that D320 accepted for the fallback against CMSIS-DSP's 140.8 dB), 13 dB above the contract of 120 dB, awaiting the maintainer's decision"
+      "status": "release"
     },
     "neon": {
-      "status": "release",
-      "accuracy_waiver": "open item I13.1-13: SLEEF's `Sleef_sincosf_u10` reaches 141.71 dB against 133.23 dB of our linear table interpolation (SNR against the f64 model; the gap that D320 accepted for the fallback against CMSIS-DSP's 140.8 dB), 13 dB above the contract of 120 dB, awaiting the maintainer's decision"
+      "status": "release"
     },
     "simd128": {
       "status": "info",

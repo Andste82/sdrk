@@ -610,6 +610,52 @@ The maintainer's order of 2026-11-27 ("ja, wie vorgeschlagen die punkte erledige
 
 The contract trade (D3000) is a rule of `cargo xtask check cycles`: a `release` entry above 1.10 stays `release` only with a text that states what the library does less, the measured gain and the attempts, and only up to 1.20 on both models. The `CU8` fallbacks at `sse4.2` and `avx512` are above 1.20 on one model and stay `dev` (IO2-17). Closed as the maintainer's decisions: IO2-2 and IO2-3 (D3002, the accuracy gaps above 130 dB accepted, the waivers stay), IO2-10 to IO2-14 (D3003, the ties and delegations accepted). `stereo_matrix_fallback` at `avx512`, `neon` and `simd128` and on Cortex-M4 runs the plain loop as before (the module is x86-64 below AVX-512 only).
 
+### O2b item (2): the Taylor step of the `C32` oscillator (D3006)
+
+`oscillate` `C32` (and the `rotate` fallback, so that harmonic 1 stays `rotate` of `(1, 0)`) takes the second-order Taylor step from the table point below the phase, `cos(a + d) = C - d (S + C h)`, `sin(a + d) = S + d (C - S h)` with `h = d / 2`, in `f32` without FMA; `stereo_encode` and `stereo_encode_rds` take their sines from it, their float model and golden files are regenerated. The SIMD paths of every level equal the fallback bit for bit. Measured in the full CI run 46077838791 on 241b93d8 (every entry at every level, after the toolchain moved from rustc 1.100.0 to 1.100.1, so the records replace the files; the `simd128` and Cortex-M4 counts of the same run).
+
+| Entry | Level | SNR ours / comparison (dB) | Ours (cycles per sample, ref. / counter) | Comparison (cycles per sample, ref. / counter) | Ours / comparison (ref. / counter) | Was (ours, ref. / counter) | Status |
+| --- | --- | --- | --- | --- | --- | --- | --- |
+| `oscillate` | `sse2` | 150.56 / 141.71 (SLEEF) | 3.08 / 3.01 | 36.86 / 28.44 | 0.084 / 0.106 | 2.30 / 2.28 | `release`, waiver removed |
+| `oscillate` | `sse4.2` | 150.56 / 141.71 (SLEEF) | 3.07 / 3.29 | 22.92 / 21.71 | 0.134 / 0.151 | 2.29 / 2.57 | `release`, waiver removed |
+| `oscillate` | `avx2` | 150.56 / 141.71 (SLEEF) | 1.40 / 1.74 | 4.93 / 4.57 | 0.284 / 0.381 | 1.40 / 1.45 | `release`, waiver removed |
+| `oscillate` | `avx512` | 150.56 / 141.71 (SLEEF) | 0.65 / 2.97 | 6.46 / 8.59 | 0.101 / 0.346 | 0.43 / 2.08 | `release`, waiver removed |
+| `oscillate` | `neon` | 150.56 / 141.71 (SLEEF) | 7.31 / 3.79 | 35.40 / 23.70 | 0.207 / 0.160 | 5.55 / 3.28 | `release`, waiver removed |
+| `oscillate_fallback` | `sse2`, `sse4.2` | 150.56 / 140.77 (CMSIS-DSP) | 6.81 / 7.37 | 56.29 / 51.64, 51.98 / 50.82 | 0.121 / 0.143, 0.131 / 0.145 | 4.90 / 6.35 | `release`, waiver removed |
+| `oscillate_fallback` | `avx2` | 150.56 / 140.77 (CMSIS-DSP) | 1.57 / 2.28 | 31.51 / 80.72 | 0.050 / 0.028 | 2.27 / 4.03 | `release`, waiver removed |
+| `oscillate_fallback` | `avx512` | 150.56 / 140.77 (CMSIS-DSP) | 0.78 / 4.17 | 78.52 / 90.69 | 0.010 / 0.046 | 0.76 / 3.79 | `release`, waiver removed |
+| `oscillate_fallback` | `neon` | 150.56 / 140.77 (CMSIS-DSP) | 7.33 / 8.55 | 52.62 / 46.15 | 0.139 / 0.185 | 8.10 / 10.06 | `release`, waiver removed |
+| `rotate_fallback` | `sse2` | 145.8 / 107.79 (GNU Radio) | 3.99 / 4.37 | 15.45 / 16.79 | 0.258 / 0.260 | 8.64 / 8.88 | `release` |
+| `rotate_fallback` | `sse4.2` | 145.8 / 107.79 (GNU Radio) | 10.16 / 10.64 | 15.45 / 16.79 | 0.658 / 0.634 | 7.15 / 8.62 | `release` |
+| `rotate_fallback` | `avx2` | 145.8 / 107.79 (GNU Radio) | 2.03 / 2.66 | 10.63 / 11.17 | 0.191 / 0.238 | 2.65 / 4.41 | `release` |
+| `rotate_fallback` | `avx512` | 145.8 / 107.79 (GNU Radio) | 1.23 / 6.66 | 10.63 / 11.17 | 0.115 / 0.597 | 1.05 / 9.30 | `release` |
+| `rotate_fallback` | `neon` | 145.8 / 108.84 (GNU Radio) | 8.80 / 6.30 | 11.10 / 14.09 | 0.793 / 0.447 | 11.17 / 13.08 | `release` |
+| `stereo_encode` | `sse2` | exact | 8.30 / 7.55 | own fallback | 1.000 / 1.000 | 10.15 / 10.88 | `info` |
+| `stereo_encode` | `sse4.2` | exact | 7.23 / 5.62 | own fallback | 1.000 / 1.000 | 10.15 / 10.88 | `info` |
+| `stereo_encode` | `avx2` | exact | 3.98 / 5.78 | own fallback | 1.000 / 1.000 | 4.47 / 5.92 | `info` |
+| `stereo_encode` | `avx512` | exact | 1.61 / 3.80 | own fallback | 1.000 / 1.000 | 1.15 / 5.53 | `info` |
+| `stereo_encode` | `neon` | exact | 14.80 / 10.79 | own fallback | 1.000 / 1.000 | 15.13 / 16.08 | `info` |
+| `stereo_encode_rds` | `sse2` | exact | 10.30 / 10.05 | own fallback | 1.000 / 1.000 | 18.68 / 17.96 | `info` |
+| `stereo_encode_rds` | `sse4.2` | exact | 9.23 / 8.17 | own fallback | 1.000 / 1.000 | 14.16 / 15.14 | `info` |
+| `stereo_encode_rds` | `avx2` | exact | 7.40 / 8.36 | own fallback | 1.000 / 1.000 | 7.17 / 8.91 | `info` |
+| `stereo_encode_rds` | `avx512` | exact | 2.25 / 8.67 | own fallback | 1.000 / 1.000 | 1.59 / 5.54 | `info` |
+| `stereo_encode_rds` | `neon` | exact | 20.29 / 15.54 | own fallback | 1.000 / 1.000 | 21.13 / 22.07 | `info` |
+
+Models: `sse2`, `sse4.2` skylake / znver2; `avx2` znver3 / alderlake; `avx512` znver4 / sapphirerapids; `neon` cortex-a72 / cortex-a76. The `stereo_encode` workloads are bit-exact against their float32 model ("exact").
+
+| Count | Entry | Ours (instructions per sample) | Comparison (instructions per sample) | Was (ours / comparison) |
+| --- | --- | --- | --- | --- |
+| `simd128` | `oscillate` | 21.79 | 24.53 (own fallback) | 22.04 / 28.28 |
+| `simd128` | `oscillate_fallback` | 24.53 | 175.01 (CMSIS-DSP) | 28.28 / 175.01 |
+| `simd128` | `rotate_fallback` | 31.54 | 92.21 (GNU Radio) | 35.29 / 92.21 |
+| `simd128` | `stereo_encode` | 45.79 | own fallback | 37.54 |
+| `simd128` | `stereo_encode_rds` | 65.30 | own fallback | 53.05 |
+| Cortex-M4 | `rotate` | 34.53 | report only | 34.53 |
+
+- The AArch64 fallbacks are all faster than before (the rule that no fallback change is slower on the AArch64 build): the first form (CI run 46062107651) made `stereo_encode` slower there (17.18 / 20.08 against 15.13 / 16.08) and `oscillate_fallback` on `cortex-a72` (8.17 against 8.10); the encoders now compute four samples per pass (on x86-64 without AVX2 and on AArch64) and the `oscillate` fallback two (on AArch64), every sample with the bits of the contract. The pass of four was slower with AVX2 and on wasm32 (CI run 46068881482), so those keep one sample per pass, as do the embedded targets.
+- Slower than before on x86-64, all within their status: `oscillate` SIMD at every x86-64 level but `avx2` on `znver3` and at `neon` (the step costs two more operations per sine than the interpolation; at most 0.381 of SLEEF), `oscillate_fallback` at `sse2` and `sse4.2`, `rotate_fallback` at `sse4.2`, `stereo_encode_rds` at `avx2` on `znver3`, both encoders at `avx512` on `znver4` (`info`, own fallback). On `simd128` the encoders take 22 % and 23 % more instructions (the step; `info`).
+- Not run on this branch: the full test tree. The SIMD tests ran locally at `x86-64` and `x86-64-v3`, on AArch64 under QEMU and on wasm32 under wasmtime; the `avx512` path (SDE) and the embedded QEMU suites run on the pull request and the nightly run (the `m4` QEMU suite of CI run 46062107651 passed on b791247a, whose embedded code is the final one).
+
 ## Status
 
 - 2026-11-25: planned; group 0 inventory above; the maintainer's decisions recorded (D2950 to D2953).
@@ -622,3 +668,4 @@ The contract trade (D3000) is a rule of `cargo xtask check cycles`: a `release` 
 - 2026-11-26: review fixes. CI run 45720209487 on 471ce53d (the `U8` zero correction at `avx2` and `avx2-runtime`) merged: `convert_out_cu8_fallback` and `convert_out_real_ru8_fallback` `release` at `avx2` (1.027 / 0.916 and 1.031 / 0.920); decision rows D2975 and D2977; I13.1-14 closed; open items IO2-1 to IO2-3 (group 2, the numeric contracts), IO2-17 (`cu8` / `ru8` fallbacks at `sse4.2` and `avx512`) and IO2-18 (the KFR comparison of the SIMD `CU8` outputs, for the maintainer); D2971 states the measured loss of 1 to 2 % of `deinterleave` and `interleave_cq15`; `docs/performance.md` regenerated.
 - 2026-11-26: final measurement on e0f7d81f (CI run 45731948390, `am_mod`, `am_mod_fallback`, `interleave`, `deinterleave`, `stereo_matrix`, `mul`, `convert_out`, `convert_out_real` at `sse2`, `sse4.2`, `avx2`, `avx2-runtime`, `avx512`, `neon`, plus `count_wasm32`): 216 records merged, only noise of the branch counts (no status changed, the `neon` records are identical, the `simd128` counts equal the committed ones apart from the host name); `cargo xtask check` passes with 23 remarks (before 25). The full tree of CI run 45727543928 on f5ba91cc (embedded QEMU `m4`, `m55` and `rv32`, the SDE `avx512` jobs, `wasm32`, `arm64`) passed, which verifies the fixed sum order of the `Reference` product (D2951, D2974) on the embedded targets and under SDE. Issue #203 re-run on the final records (A: 57 kernel entries at 322 entry-levels without a foreign reference, B: 64 SIMD entries at 224 levels above 0.80 of their fallback, 83 of those levels run the fallback). Not done: group 3a (the FIR family and the `sse2` `Q15` branches) and the groups 2 and 4 parts that wait for the maintainer (IO2-1 to IO2-3, IO2-15 to IO2-18). The unfinished work is kept in two local branches of the working copy only (`o2-wip-g3a-fir`, `o2-wip-g2-oscillate`, not pushed).
 - 2026-11-27: O2b items (1), (3), (4), (5), (6) done (D3000 to D3005; CI run 46050916654 on 5d831289): the contract trade in `cargo xtask check cycles`; `convert_out_cu8` and `convert_out_real_ru8` judged against VOLK (contract trades at `sse4.2`, `avx2`, `avx2-runtime`, `ru8` at `neon`; `dev` at `sse2`, IO2-19; KFR stays judged at `avx512`, IO2-20); IO2-2, IO2-3, IO2-10 to IO2-14 closed as the maintainer's decisions; `mul` at `avx512` in the 256-bit form, faster than its fallback on both models (IO2-15 closed); the x86 shuffle module of the `stereo_matrix` fallback, `release` at `sse2`, `sse4.2` and `avx2` (IO1-4, IO2-16 closed).
+- 2026-11-27: O2b item (2) done (D3006; CI runs 46062107651, 46068881482 and the full run 46077838791 on 241b93d8, whose records replace the result files after the toolchain moved to rustc 1.100.1): the Taylor step of the `C32` oscillator, 150.56 dB at every level against 141.71 dB of SLEEF, the accuracy waivers of `oscillate` and `oscillate_fallback` removed, I13.1-13 and IO2-1 closed; `stereo_encode` and `stereo_encode_rds` following with their golden files regenerated; the AArch64 fallbacks faster, the Cortex-M4 count of `rotate` unchanged.

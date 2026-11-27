@@ -194,16 +194,19 @@
   },
   "convert_out_cu8": {
     "sse2": {
-      "status": "release"
+      "status": "dev"
     },
     "sse4.2": {
-      "status": "release"
+      "status": "release",
+      "contract_trade": "ours / VOLK 1.177 / 1.094 on `skylake` / `znver2` (CI run 46050916654), within 1.20 on both models; less work: VOLK's `volk_32f_s32f_x2_convert_8u` (the faster opponent, judged by D3001) clamps and rounds in `f32` and has no NaN rule; the `CU8` contract asks for NaN as 128 (the zero of the format) and the bytes of the `f64` formula `rint(x 128 + 127.5)` (the shift by `0.5 - 2^-25` and the bound byte of the tiny negative values), 31 against 22 vector operations per 32 floats at `avx2` (IO1-2, D2823); gain: a NaN gives 128 instead of VOLK's 255 (positive full scale); of the 4,278,190,082 non-NaN `f32` inputs VOLK's `f32` formula gives another byte for 243,270,367 (all negative inputs of magnitude at most `2^-25` and 735 inputs within `2^-24` of a multiple of `1 / 128`, D2955); the same SNR on the measured workload (47.27 dB); attempts: the byte bound of AVX-512 needs mask registers; no single operation clears a NaN to 128 (`min` / `max` return their constant operand); no other constant shift is exact for the negative values (`y = -1 + 2^-24` needs `0.5 - 2^-25`); the real formats recognised by one comparison took 0.6 % off (IO1-2, D2823); the forms of the fallback's `U8` bytes in IO2-17 (D2975) (the maintainer's decisions D3000, D3001)"
     },
     "avx2": {
-      "status": "release"
+      "status": "release",
+      "contract_trade": "ours / VOLK 0.985 / 1.114 on `znver3` / `alderlake` (CI run 46050916654), within 1.20 on both models; less work: VOLK's `volk_32f_s32f_x2_convert_8u` (the faster opponent, judged by D3001) clamps and rounds in `f32` and has no NaN rule; the `CU8` contract asks for NaN as 128 (the zero of the format) and the bytes of the `f64` formula `rint(x 128 + 127.5)` (the shift by `0.5 - 2^-25` and the bound byte of the tiny negative values), 31 against 22 vector operations per 32 floats at `avx2` (IO1-2, D2823); gain: a NaN gives 128 instead of VOLK's 255 (positive full scale); of the 4,278,190,082 non-NaN `f32` inputs VOLK's `f32` formula gives another byte for 243,270,367 (all negative inputs of magnitude at most `2^-25` and 735 inputs within `2^-24` of a multiple of `1 / 128`, D2955); the same SNR on the measured workload (47.27 dB); attempts: the byte bound of AVX-512 needs mask registers; no single operation clears a NaN to 128 (`min` / `max` return their constant operand); no other constant shift is exact for the negative values (`y = -1 + 2^-24` needs `0.5 - 2^-25`); the real formats recognised by one comparison took 0.6 % off (IO1-2, D2823); the forms of the fallback's `U8` bytes in IO2-17 (D2975) (the maintainer's decisions D3000, D3001)"
     },
     "avx2-runtime": {
-      "status": "release"
+      "status": "release",
+      "contract_trade": "ours / VOLK 0.978 / 1.101 on `znver3` / `alderlake` (CI run 46050916654, against VOLK of the `avx2` record), within 1.20 on both models; less work: VOLK's `volk_32f_s32f_x2_convert_8u` (the faster opponent, judged by D3001) clamps and rounds in `f32` and has no NaN rule; the `CU8` contract asks for NaN as 128 (the zero of the format) and the bytes of the `f64` formula `rint(x 128 + 127.5)` (the shift by `0.5 - 2^-25` and the bound byte of the tiny negative values), 31 against 22 vector operations per 32 floats at `avx2` (IO1-2, D2823); gain: a NaN gives 128 instead of VOLK's 255 (positive full scale); of the 4,278,190,082 non-NaN `f32` inputs VOLK's `f32` formula gives another byte for 243,270,367 (all negative inputs of magnitude at most `2^-25` and 735 inputs within `2^-24` of a multiple of `1 / 128`, D2955); the same SNR on the measured workload (47.27 dB); attempts: the byte bound of AVX-512 needs mask registers; no single operation clears a NaN to 128 (`min` / `max` return their constant operand); no other constant shift is exact for the negative values (`y = -1 + 2^-24` needs `0.5 - 2^-25`); the real formats recognised by one comparison took 0.6 % off (IO1-2, D2823); the forms of the fallback's `U8` bytes in IO2-17 (D2975) (the maintainer's decisions D3000, D3001)"
     },
     "avx512": {
       "status": "release"
@@ -266,22 +269,26 @@
   },
   "convert_out_real_ru8": {
     "sse2": {
-      "status": "release"
+      "status": "dev"
     },
     "sse4.2": {
-      "status": "release"
+      "status": "release",
+      "contract_trade": "ours / VOLK 1.190 / 1.105 on `skylake` / `znver2` (CI run 46050916654), within 1.20 on both models; less work: VOLK's `volk_32f_s32f_x2_convert_8u` (the faster opponent, judged by D3001) clamps and rounds in `f32` and has no NaN rule; the `CU8` contract asks for NaN as 128 (the zero of the format) and the bytes of the `f64` formula `rint(x 128 + 127.5)` (the shift by `0.5 - 2^-25` and the bound byte of the tiny negative values), 31 against 22 vector operations per 32 floats at `avx2` (IO1-2, D2823); gain: a NaN gives 128 instead of VOLK's 255 (positive full scale); of the 4,278,190,082 non-NaN `f32` inputs VOLK's `f32` formula gives another byte for 243,270,367 (all negative inputs of magnitude at most `2^-25` and 735 inputs within `2^-24` of a multiple of `1 / 128`, D2955); the same SNR on the measured workload (47.25 dB); attempts: the byte bound of AVX-512 needs mask registers; no single operation clears a NaN to 128 (`min` / `max` return their constant operand); no other constant shift is exact for the negative values (`y = -1 + 2^-24` needs `0.5 - 2^-25`); the real formats recognised by one comparison took 0.6 % off (IO1-2, D2823); the forms of the fallback's `U8` bytes in IO2-17 (D2975) (the maintainer's decisions D3000, D3001)"
     },
     "avx2": {
-      "status": "release"
+      "status": "release",
+      "contract_trade": "ours / VOLK 0.992 / 1.132 on `znver3` / `alderlake` (CI run 46050916654), within 1.20 on both models; less work: VOLK's `volk_32f_s32f_x2_convert_8u` (the faster opponent, judged by D3001) clamps and rounds in `f32` and has no NaN rule; the `CU8` contract asks for NaN as 128 (the zero of the format) and the bytes of the `f64` formula `rint(x 128 + 127.5)` (the shift by `0.5 - 2^-25` and the bound byte of the tiny negative values), 31 against 22 vector operations per 32 floats at `avx2` (IO1-2, D2823); gain: a NaN gives 128 instead of VOLK's 255 (positive full scale); of the 4,278,190,082 non-NaN `f32` inputs VOLK's `f32` formula gives another byte for 243,270,367 (all negative inputs of magnitude at most `2^-25` and 735 inputs within `2^-24` of a multiple of `1 / 128`, D2955); the same SNR on the measured workload (47.25 dB); attempts: the byte bound of AVX-512 needs mask registers; no single operation clears a NaN to 128 (`min` / `max` return their constant operand); no other constant shift is exact for the negative values (`y = -1 + 2^-24` needs `0.5 - 2^-25`); the real formats recognised by one comparison took 0.6 % off (IO1-2, D2823); the forms of the fallback's `U8` bytes in IO2-17 (D2975) (the maintainer's decisions D3000, D3001)"
     },
     "avx2-runtime": {
-      "status": "release"
+      "status": "release",
+      "contract_trade": "ours / VOLK 0.989 / 1.118 on `znver3` / `alderlake` (CI run 46050916654, against VOLK of the `avx2` record), within 1.20 on both models; less work: VOLK's `volk_32f_s32f_x2_convert_8u` (the faster opponent, judged by D3001) clamps and rounds in `f32` and has no NaN rule; the `CU8` contract asks for NaN as 128 (the zero of the format) and the bytes of the `f64` formula `rint(x 128 + 127.5)` (the shift by `0.5 - 2^-25` and the bound byte of the tiny negative values), 31 against 22 vector operations per 32 floats at `avx2` (IO1-2, D2823); gain: a NaN gives 128 instead of VOLK's 255 (positive full scale); of the 4,278,190,082 non-NaN `f32` inputs VOLK's `f32` formula gives another byte for 243,270,367 (all negative inputs of magnitude at most `2^-25` and 735 inputs within `2^-24` of a multiple of `1 / 128`, D2955); the same SNR on the measured workload (47.25 dB); attempts: the byte bound of AVX-512 needs mask registers; no single operation clears a NaN to 128 (`min` / `max` return their constant operand); no other constant shift is exact for the negative values (`y = -1 + 2^-24` needs `0.5 - 2^-25`); the real formats recognised by one comparison took 0.6 % off (IO1-2, D2823); the forms of the fallback's `U8` bytes in IO2-17 (D2975) (the maintainer's decisions D3000, D3001)"
     },
     "avx512": {
       "status": "release"
     },
     "neon": {
-      "status": "release"
+      "status": "release",
+      "contract_trade": "ours / VOLK 1.102 / 0.985 on `cortex-a72` / `cortex-a76` (CI run 46050916654), within 1.20 on both models; less work: VOLK's `volk_32f_s32f_x2_convert_8u` (the faster opponent, judged by D3001) clamps and rounds in `f32` and has no NaN rule; the `CU8` contract asks for NaN as 128 (the zero of the format) and the bytes of the `f64` formula `rint(x 128 + 127.5)` (the shift by `0.5 - 2^-25` and the bound byte of the tiny negative values), 31 against 22 vector operations per 32 floats at `avx2` (IO1-2, D2823); gain: a NaN gives 128 instead of VOLK's 255 (positive full scale); of the 4,278,190,082 non-NaN `f32` inputs VOLK's `f32` formula gives another byte for 243,270,367 (all negative inputs of magnitude at most `2^-25` and 735 inputs within `2^-24` of a multiple of `1 / 128`, D2955); the same SNR on the measured workload (47.25 dB); attempts: the byte bound of AVX-512 needs mask registers; no single operation clears a NaN to 128 (`min` / `max` return their constant operand); no other constant shift is exact for the negative values (`y = -1 + 2^-24` needs `0.5 - 2^-25`); the real formats recognised by one comparison took 0.6 % off (IO1-2, D2823); the forms of the fallback's `U8` bytes in IO2-17 (D2975) (the maintainer's decisions D3000, D3001)"
     },
     "simd128": {
       "status": "info",
@@ -3409,13 +3416,13 @@
   },
   "stereo_matrix_fallback": {
     "sse2": {
-      "status": "dev"
+      "status": "release"
     },
     "sse4.2": {
-      "status": "dev"
+      "status": "release"
     },
     "avx2": {
-      "status": "dev"
+      "status": "release"
     },
     "avx512": {
       "status": "release"
@@ -4304,7 +4311,7 @@
     },
     "neon": {
       "status": "info",
-      "waiver": "no SIMD library has an AM modulator (VOLK, KFR and CMSIS-DSP have none; liquid-dsp's `ampmodem` is scalar C; the CMSIS-DSP composition of the same work gates `am_mod_fallback`, D2954), so the comparison is our own fallback, reported as information with the efficiency verdict; the `C32` entry of the SIMD backend has a NEON path since O2 (D2970: `fmax` / `fmin`, the `fcmeq` mask and `st2` with zero), 0.870 / 0.917 of the fallback (2.53 / 1.40 against 2.91 / 1.52 cycles per sample on `cortex-a72` / `cortex-a76`, CI run 45700747628), above the 0.80 of O2: open item IO2-10"
+      "waiver": "no SIMD library has an AM modulator (VOLK, KFR and CMSIS-DSP have none; liquid-dsp's `ampmodem` is scalar C; the CMSIS-DSP composition of the same work gates `am_mod_fallback`, D2954), so the comparison is our own fallback, reported as information with the efficiency verdict; the `C32` entry of the SIMD backend has a NEON path since O2 (D2970: `fmax` / `fmin`, the `fcmeq` mask and `st2` with zero), 0.870 / 0.917 of the fallback (2.53 / 1.40 against 2.91 / 1.52 cycles per sample on `cortex-a72` / `cortex-a76`, CI run 45700747628), above the 0.80 of O2, accepted by the maintainer as the result of the branch (D3003, open item IO2-10 closed)"
     },
     "simd128": {
       "status": "info",

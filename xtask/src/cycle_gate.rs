@@ -43,6 +43,19 @@
 //! and fails as soon as one of them does not ("3 dB better must not mean that we may be
 //! slow"). A trade on an entry within its limit is a remark.
 //!
+//! **The contract trade (D3000, the maintainer's decision of 2026-11-27).** A `release` entry
+//! above the release limit in cycles stays `release` with a `contract_trade` text only if all of
+//! these hold: (a) the library, the stronger opponent, provably does less work than our contract
+//! asks, and the text states what exactly (`less work:`); (b) what the extra work gains is
+//! measured and stated, robustness or accuracy figures (`gain:`, with numbers); (c) the attempts
+//! to make the extra work cheaper are documented (`attempts:`); (d) the ratio is at most
+//! [`TRADE_CAP`] on both models, as for the accuracy trade. The gate checks the three parts of
+//! the text ([`CONTRACT_TRADE_PARTS`]) and the ratio on every measurement; otherwise the entry
+//! is `dev` with an open item. A trade on an entry within its limit is a remark, and a
+//! `contract_trade` beside a `waiver` or an `accuracy_trade`, or on a `dev` or `info` entry,
+//! fails. With several opponents the faster one is judged, and the differences in work are
+//! always stated.
+//!
 //! **The report of the gaps (O2 group 5, D2978, issue #203).** After the gates, a report that
 //! never fails: every SIMD entry and level above 0.80 of its own fallback on a model, and every
 //! kernel entry and level without a foreign reference ([`crate::gap_report`]).
@@ -88,6 +101,11 @@ pub const TRADE_CAP: f64 = 1.20;
 /// maintainer's decision): above it, as for most `f32` kernels at 137 to 150 dB, a few dB more
 /// accuracy have no practical effect and do not justify more cycles.
 pub const TRADE_SCARCE_DB: f64 = 100.0;
+/// The parts that a `contract_trade` text states (D3000, the maintainer's decision): what the
+/// library does less, the measured gain of the extra work (with its figures) and the attempts to
+/// make it cheaper.
+pub const CONTRACT_TRADE_PARTS: [&str; 3] = ["less work:", "gain:", "attempts:"];
+
 /// The SNR the measurement binary reports for an exact result.
 pub const EXACT_DB: f64 = 999.0;
 
@@ -538,7 +556,8 @@ pub enum Verdict {
     /// Above its limit on a model, with a waiver.
     Waived(String),
     /// A `release` entry above the release limit, at most [`TRADE_CAP`] of its comparison on
-    /// both models and at least [`TRADE_DB`] more accurate, with an `accuracy_trade` (D2760).
+    /// both models and at least [`TRADE_DB`] more accurate, with an `accuracy_trade` (D2760), or
+    /// with a complete `contract_trade` (D3000).
     Traded(String),
     /// Above its limit without a waiver, a waiver that names a missing open item, or no entry
     /// in `benches/limits.json`.
@@ -579,6 +598,44 @@ fn valid_waiver(text: &str, open_items: &str) -> Result<(), String> {
     } else {
         Err(missing.join(", "))
     }
+}
+
+/// Whether a `contract_trade` text states the three parts of D3000 ([`CONTRACT_TRADE_PARTS`]):
+/// `less work:`, `gain:` with at least one measured figure, and `attempts:`, each with a text of
+/// its own. `Err` names what is missing.
+fn valid_contract_trade(text: &str) -> Result<(), String> {
+    let lower = text.to_lowercase();
+    let mut at: Vec<(usize, &str)> = Vec::new();
+    let mut missing = Vec::new();
+    for part in CONTRACT_TRADE_PARTS {
+        match lower.find(part) {
+            Some(i) => at.push((i, part)),
+            None => missing.push(format!("`{part}`")),
+        }
+    }
+    if !missing.is_empty() {
+        return Err(format!(
+            "the contract trade must state what the library does less (`less work:`), the measured gain (`gain:`) and the attempts to make the extra work cheaper (`attempts:`); missing: {}",
+            missing.join(", ")
+        ));
+    }
+    at.sort_unstable();
+    for (k, &(i, part)) in at.iter().enumerate() {
+        let end = at.get(k + 1).map_or(lower.len(), |&(j, _)| j);
+        let body = lower.get(i + part.len()..end).unwrap_or("");
+        let body =
+            body.trim_matches(|c: char| c.is_whitespace() || c == ';' || c == ',' || c == '.');
+        if body.is_empty() {
+            return Err(format!("the part `{part}` of the contract trade is empty"));
+        }
+        if part == "gain:" && !body.chars().any(|c| c.is_ascii_digit()) {
+            return Err(
+                "the part `gain:` of the contract trade names no measured figure (robustness or accuracy numbers)"
+                    .into(),
+            );
+        }
+    }
+    Ok(())
 }
 
 /// The accuracy part of a judgement (D34): ours at most [`SNR_MARGIN_DB`] below the
@@ -668,6 +725,19 @@ pub fn judge_record(
             ));
         }
     }
+    if let Some(t) = &limit.contract_trade {
+        if limit.status != Status::Release {
+            return Verdict::Fail(format!(
+                "a `contract_trade` is only for a `release` entry against a library, not for a `{}` entry (D3000; contract trade: {t})",
+                status_name(limit.status)
+            ));
+        }
+        if limit.waiver.is_some() || limit.accuracy_trade.is_some() {
+            return Verdict::Fail(format!(
+                "an entry has one of `waiver`, `accuracy_trade` and `contract_trade`, not several (D3000; contract trade: {t})"
+            ));
+        }
+    }
     let cap = match limit.status {
         Status::Info => return Verdict::Info,
         Status::Release => caps.release,
@@ -688,8 +758,22 @@ pub fn judge_record(
             "ours / {against} {} exceeds the {status} limit of {cap:.2}x on a model",
             ratios(r, cap)
         );
-        match (&limit.accuracy_trade, &limit.waiver) {
-            (Some(t), _) => {
+        match (&limit.contract_trade, &limit.accuracy_trade, &limit.waiver) {
+            (Some(t), ..) => {
+                if worst > TRADE_CAP {
+                    failing.push(format!(
+                        "{text}; the contract trade holds only up to {TRADE_CAP:.2}x on both models: {}; the entry is `dev` with an open item (D3000; contract trade: {t})",
+                        ratios(r, TRADE_CAP)
+                    ));
+                } else if let Err(why) = valid_contract_trade(t) {
+                    failing.push(format!("{text}; {why} (D3000; contract trade: {t})"));
+                } else {
+                    traded.push(format!(
+                        "{text}, traded for the contract (D3000; contract trade: {t})"
+                    ));
+                }
+            }
+            (None, Some(t), _) => {
                 let advantage = r.snr.map(Snr::advantage);
                 if worst > TRADE_CAP {
                     failing.push(format!(
@@ -713,8 +797,8 @@ pub fn judge_record(
                     ));
                 }
             }
-            (None, None) => failing.push(text),
-            (None, Some(w)) => match (
+            (None, None, None) => failing.push(text),
+            (None, None, Some(w)) => match (
                 crate::count::waiver_above_cap(caps, limit.status, worst, w),
                 valid_waiver(w, open_items),
             ) {
@@ -735,6 +819,12 @@ pub fn judge_record(
         if let Some(t) = &limit.accuracy_trade {
             notes.push(format!(
                 "{} is within the {status} limit of {cap:.2}x: the accuracy trade is no longer needed ({t})",
+                ratios(r, cap)
+            ));
+        }
+        if let Some(t) = &limit.contract_trade {
+            notes.push(format!(
+                "{} is within the {status} limit of {cap:.2}x: the contract trade is no longer needed ({t})",
                 ratios(r, cap)
             ));
         }
@@ -789,7 +879,7 @@ pub struct Gate {
     pub findings: Vec<Finding>,
     /// The waived exceedances: `entry level: text`.
     pub waived: Vec<String>,
-    /// The accuracy trades that hold (D2760): `entry level: text`.
+    /// The accuracy trades (D2760) and contract trades (D3000) that hold: `entry level: text`.
     pub traded: Vec<String>,
     /// The remarks: `entry level: text`.
     pub warnings: Vec<String>,
@@ -1396,7 +1486,7 @@ pub fn check(root: &Path, o: &Options) -> anyhow::Result<Vec<Finding>> {
         );
     }
     println!(
-        "check cycles: {} entries and levels against their comparison: {} at the goal of {:.2}x, {} waived, {} accuracy trades, {} with remarks, {} failed (D14 in cycles, the accuracy of D34)",
+        "check cycles: {} entries and levels against their comparison: {} at the goal of {:.2}x, {} waived, {} accuracy and contract trades, {} with remarks, {} failed (D14 in cycles, the accuracy of D34)",
         gate.judged,
         gate.goal,
         limits.caps.goal,
@@ -1409,7 +1499,7 @@ pub fn check(root: &Path, o: &Options) -> anyhow::Result<Vec<Finding>> {
         println!("  waived: {w}");
     }
     for t in &gate.traded {
-        println!("  accuracy trade: {t}");
+        println!("  trade: {t}");
     }
     for w in &gate.warnings {
         println!("  warn: {w}");
@@ -2030,6 +2120,102 @@ mod tests {
         // A trade does not cover an accuracy below the comparison of another entry's kind:
         // the accuracy is judged on its own.
         let g = gate(&rec(1.0, Some((90.0, 100.0))), &l("release", ""));
+        assert!(
+            g.findings
+                .iter()
+                .any(|f| f.message.contains("below the comparison"))
+        );
+    }
+
+    #[test]
+    fn a_contract_trade_keeps_release_while_its_three_parts_are_stated_and_the_cap_holds() {
+        const FULL: &str = "less work: VOLK has no NaN rule and rounds in f32; gain: NaN gives 128 instead of 255, 243270367 inputs get the byte of the f64 formula; attempts: IO2-17 lists seven forms";
+        let l = |status: &str, text: &str, extra: &str| {
+            limits_with(&format!(
+                r#""k": {{"sse2": {{"status": "{status}", "contract_trade": "{text}"{extra}}}}}"#
+            ))
+        };
+        let rec = |reference: f64, counter: f64, kind: &str| {
+            with_snr(
+                results(&[("k", reference, 1.0, counter, 1.0, kind)], "sse2"),
+                "sse2",
+                "k",
+                Some((47.27, 47.27)),
+            )
+        };
+        // (a) to (d) hold: above the release limit, at most 1.20 on both models: traded.
+        for (reference, counter) in [(1.2, 1.2), (1.177, 1.094), (0.985, 1.114)] {
+            let g = gate(&rec(reference, counter, "VOLK"), &l("release", FULL, ""));
+            assert_eq!(
+                (g.findings.len(), g.traded.len(), g.waived.len()),
+                (0, 1, 0),
+                "{:?}",
+                g.findings
+            );
+            assert!(g.traded[0].contains("traded for the contract"));
+        }
+        // (d): above 1.20 on either model fails, however complete the text.
+        for (reference, counter) in [(1.2001, 1.0), (1.0, 1.25), (1.252, 1.225), (1.6, 1.6)] {
+            let g = gate(&rec(reference, counter, "VOLK"), &l("release", FULL, ""));
+            assert_eq!((g.findings.len(), g.traded.len()), (1, 0), "{reference}");
+            assert!(g.findings[0].message.contains("only up to 1.20x"));
+            assert!(g.findings[0].message.contains("`dev` with an open item"));
+        }
+        // (a) to (c): every part must be stated, the gain with a figure.
+        for (text, why) in [
+            ("gain: 128 for NaN; attempts: seven forms", "`less work:`"),
+            ("less work: no NaN rule; attempts: seven forms", "`gain:`"),
+            ("less work: no NaN rule; gain: 128 for NaN", "`attempts:`"),
+            (
+                "less work: no NaN rule; gain: robust; attempts: seven forms",
+                "no measured figure",
+            ),
+            (
+                "less work: ; gain: 128 for NaN; attempts: seven forms",
+                "`less work:` of the contract trade is empty",
+            ),
+            (
+                "less work: no NaN rule; gain: 128; attempts:",
+                "`attempts:` of the contract trade is empty",
+            ),
+        ] {
+            let g = gate(&rec(1.15, 1.0, "VOLK"), &l("release", text, ""));
+            assert_eq!((g.findings.len(), g.traded.len()), (1, 0), "{text}");
+            assert!(
+                g.findings[0].message.contains(why),
+                "{text}: {}",
+                g.findings[0].message
+            );
+        }
+        // Within the release limit: a remark.
+        let g = gate(&rec(1.05, 0.9, "VOLK"), &l("release", FULL, ""));
+        assert_eq!((g.findings.len(), g.traded.len()), (0, 0));
+        assert!(g.warnings[0].contains("contract trade is no longer needed"));
+        // Only on a release entry, and not beside a waiver or an accuracy trade.
+        for status in ["dev", "info"] {
+            let g = gate(&rec(1.15, 1.0, "VOLK"), &l(status, FULL, ""));
+            assert_eq!(g.findings.len(), 1, "{status}");
+            assert!(g.findings[0].message.contains("only for a `release` entry"));
+        }
+        for extra in [
+            r#", "waiver": "open item I30-9""#,
+            r#", "accuracy_trade": "exact against 82.6 dB""#,
+        ] {
+            let g = gate(&rec(1.15, 1.0, "VOLK"), &l("release", FULL, extra));
+            assert_eq!(g.findings.len(), 1, "{extra}");
+            assert!(g.findings[0].message.contains("not several"));
+        }
+        // Against our own code there is no trade: the status itself fails (D32).
+        let own = gate(&rec(1.15, 1.0, "sdrk fallback"), &l("release", FULL, ""));
+        assert_eq!((own.findings.len(), own.traded.len()), (1, 0));
+        // The accuracy is judged on its own: a trade does not cover an SNR below the library.
+        let low = with_snr(
+            results(&[("k", 1.15, 1.0, 1.0, 1.0, "VOLK")], "sse2"),
+            "sse2",
+            "k",
+            Some((40.0, 47.27)),
+        );
+        let g = gate(&low, &l("release", FULL, ""));
         assert!(
             g.findings
                 .iter()

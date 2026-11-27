@@ -455,10 +455,18 @@ impl StereoMatrix<CQ15> for Fallback {
 /// Samples per pass of `stereo_encode` and `stereo_encode_rds`: four samples of one pass share
 /// the phase and the loop overhead, and the compiler interleaves their sines (simulated on the
 /// loop of `stereo_encode`: 13.8 against 18.2 cycles per sample on `cortex-a72`, 10.8 against
-/// 19.1 on `cortex-a76`, 7.8 against 12.5 on `skylake`, 7.3 against 13.4 on `znver2`). 32-bit
-/// Arm (the Cortex-M targets) keeps one sample per pass. Every sample has the bits of the
-/// contract at its own phase.
-const ENC_GROUP: usize = if cfg!(target_arch = "arm") { 1 } else { 4 };
+/// 19.1 on `cortex-a76`, 7.8 against 12.5 on `skylake`, 7.3 against 13.4 on `znver2`). The
+/// embedded targets (32-bit Arm, RISC-V) keep one sample per pass. Every sample has the bits of
+/// the contract at its own phase.
+const ENC_GROUP: usize = if cfg!(any(
+    target_arch = "x86_64",
+    target_arch = "aarch64",
+    target_arch = "wasm32"
+)) {
+    4
+} else {
+    1
+};
 
 /// One multiplex sample of `stereo_encode` at the pilot phase `phase`; `None` never happens
 /// (the indices are below 4096 and the table has 4097 entries).

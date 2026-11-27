@@ -11,7 +11,8 @@ docs/performance.md: per entry the cycles per sample of ours and of the comparis
 reference model and on the counter-model of the level, the two ratios, the accuracy of both sides
 (the SNR in dB against the f64 reference, `ours / comparison`, D34; `exact` for an exact result) and
 the status of `benches/limits.json` (`--limits FILE` takes another file) and the comparison. An entry
-with an `accuracy_trade` (D2760) is marked `(accuracy trade)` in the accuracy column. A comparison
+with an `accuracy_trade` (D2760) is marked `(accuracy trade)` in the accuracy column, one with a
+`contract_trade` (D3000) `(contract trade)`. A comparison
 with our own code (`comparison_kind` other than `library`: our fallback, our build of another level,
 our kernel) is marked `own (information)` in the comparison column and is never `release` or `dev`
 (D2764, D2767): such a row, a simulated row without an entry in `benches/limits.json` and a record
@@ -132,12 +133,13 @@ def db(x):
     return "exact" if x >= EXACT else f"{x:.1f}"
 
 
-def accuracy(snr, traded=False):
-    """The accuracy cell: `ours / comparison` in dB, `-` without an SNR."""
+def accuracy(snr, trade=None):
+    """The accuracy cell: `ours / comparison` in dB, `-` without an SNR; `trade` is the kind of
+    trade of the entry (`accuracy trade`, `contract trade`) or `None`."""
     if not snr:
         return "-"
     cell = f"{db(snr['ours'])} / {db(snr.get('comparison', snr.get('other')))}"
-    return cell + " (accuracy trade)" if traded else cell
+    return f"{cell} ({trade})" if trade else cell
 
 
 def against_library(v, lib):
@@ -210,7 +212,7 @@ def render(platform, level, lv, limits, library=None):
                    f"| {fmt(r['comparison']['cycles_per_sample'])} | {fmt(r['ratio'])} "
                    f"| {fmt(c['ours']['cycles_per_sample'])} "
                    f"| {fmt(c['comparison']['cycles_per_sample'])} | {fmt(c['ratio'])} "
-                   f"| {accuracy(v.get('snr_db'), (name, level) in trades)} |{extra} {status} | {comp} |")
+                   f"| {accuracy(v.get('snr_db'), trades.get((name, level)))} |{extra} {status} | {comp} |")
     out.append("")
     for name, note in failed:
         out.append(f"- `{name}`: {note}.")
@@ -222,9 +224,20 @@ def render(platform, level, lv, limits, library=None):
 
 
 def trades_of(limits):
-    """The (entry, level) pairs of `benches/limits.json` with an `accuracy_trade`."""
-    return frozenset((k, l) for k, levels in limits.items() if not k.startswith("_")
-                     for l, e in levels.items() if isinstance(e, dict) and "accuracy_trade" in e)
+    """The (entry, level) pairs of `benches/limits.json` with an `accuracy_trade` (D2760) or a
+    `contract_trade` (D3000), each with the kind of its trade."""
+    out = {}
+    for k, levels in limits.items():
+        if k.startswith("_"):
+            continue
+        for l, e in levels.items():
+            if not isinstance(e, dict):
+                continue
+            if "accuracy_trade" in e:
+                out[(k, l)] = "accuracy trade"
+            elif "contract_trade" in e:
+                out[(k, l)] = "contract trade"
+    return out
 
 
 def block(docs, limits):

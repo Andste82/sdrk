@@ -1,10 +1,12 @@
 """Cases for the ``stereo_encode`` kernel (stereo audio to the FM multiplex signal, M36 section 2).
 
-The sines come from the cosine table of ``rotate`` with its interpolation, so the expected
-values come from the exact float32 model (``f32model``) of the arithmetic fixed by the
-specification, with the table and the interpolation of ``cases/stereo.py`` (the model of
-``stereo_pll``): ``s1 = sin(phi)`` at the phase minus a quarter turn, ``s2 = sin(2 phi)`` at the
-doubled phase minus a quarter turn, ``m = (L + R) 0.5``, ``d = (L - R) 0.5``,
+The sines are those of the ``C32`` oscillator of ``oscillate`` (D3006), so the expected values
+come from the exact float32 model (``f32model``) of the arithmetic fixed by the specification,
+with the cosine table of ``cases/stereo.py``: the second-order Taylor step from the table point
+``a`` below the phase, ``sin(a + d) = S + d (C - S h)`` with ``C = cos a``, ``S = sin a`` (the
+entries ``i`` and ``(i + 3072) mod 4096`` of the top 12 bits ``i``), ``d`` the low 20 bits times
+``2 pi / 2^32`` rounded to float32 and ``h = d / 2``; ``s1 = sin(phi)``, ``s2 = sin(2 phi)`` at the
+doubled phase, ``m = (L + R) 0.5``, ``d = (L - R) 0.5``,
 ``mpx = (main m + (main d) s2) + pilot s1``. The tones use ``math.sin`` of exactly reduced
 phases, so the files are identical on every CPU.
 
@@ -20,17 +22,31 @@ import numpy as np
 from .. import f32model as fm
 from ..registry import Array, case
 from .rotate import increment
-from .stereo import COS_F32_SHA256, _interp_f32
+from .stereo import COS_F32_LIST, COS_F32_SHA256
 
 TWO32 = 1 << 32
 MASK = TWO32 - 1
-QUARTER = 1 << 30
 
 RATE_HZ = 192000
 PILOT_HZ = 19000.0
 MAIN = 0.9
 PILOT = 0.09
 PHASE0 = 0x40000000
+
+# ``2 pi / 2^32`` rounded to float32: the angle of one unit of the phase (``PHASE_UNIT_F32``).
+PHASE_UNIT_F32 = fm.f32(2.0 * math.pi / TWO32)
+HALF = fm.f32(0.5)
+
+
+def _nco_sin_f32(p):
+    """The sine of the ``C32`` oscillator of ``oscillate`` at the phase ``p``: the Taylor step
+    ``S + d (C - S h)`` in float32 without FMA."""
+    idx = p >> 20
+    c = COS_F32_LIST[idx]
+    s = COS_F32_LIST[(idx + 3072) & 4095]
+    d = fm.mul(fm.f32(p & 0xFFFFF), PHASE_UNIT_F32)
+    h = fm.mul(d, HALF)
+    return fm.add(s, fm.mul(d, fm.sub(c, fm.mul(s, h))))
 
 
 def tone(n, freq, amp):
@@ -50,8 +66,8 @@ def encode_f32(left, right, main, pilot, inc, phase0):
     out = np.zeros(len(left), dtype=np.float32)
     for i, (sl, sr) in enumerate(zip(np.asarray(left, dtype=np.float32).tolist(),
                                      np.asarray(right, dtype=np.float32).tolist())):
-        s1 = _interp_f32((phase - QUARTER) & MASK)
-        s2 = _interp_f32(((2 * phase) - QUARTER) & MASK)
+        s1 = _nco_sin_f32(phase)
+        s2 = _nco_sin_f32((2 * phase) & MASK)
         m = fm.mul(fm.add(sl, sr), half)
         d = fm.mul(fm.sub(sl, sr), half)
         total = fm.add(fm.mul(main, m), fm.mul(fm.mul(main, d), s2))
@@ -108,8 +124,8 @@ def c32_case(_rng):
         tolerance={"class": "bit_exact"},
         model="float32",
         notes="192 kHz; re left 1 kHz 0.6, im right 3 kHz 0.4; pilot 19 kHz with the start phase "
-        "0x40000000, main 0.9, pilot 0.09; exact float32 model with the cosine table of rotate "
-        "and its interpolation; snr_db_guard compares with the float64 formula with exact sines "
+        "0x40000000, main 0.9, pilot 0.09; exact float32 model with the cosine table and the "
+        "Taylor step of the C32 oscillate; snr_db_guard compares with the float64 formula with exact sines "
         "(D34). The seed is not used (no random input)",
     )
 
@@ -124,14 +140,14 @@ RDS_LEVEL = 0.04
 
 def encode_rds_f32(left, right, rds, main, pilot, level, inc, phase0):
     """Float32 model of ``stereo_encode_rds``: the multiplex of ``encode_f32`` plus
-    ``(level b) s3`` with ``s3 = sin(3 phi)`` at the tripled phase minus a quarter turn, added
+    ``(level b) s3`` with ``s3 = sin(3 phi)`` at the tripled phase, added
     last. Returns the output and the phase after the last sample."""
     base, phase_end = encode_f32(left, right, main, pilot, inc, phase0)
     level = fm.f32(level)
     out = np.zeros(len(base), dtype=np.float32)
     phase = phase0
     for i, (m, b) in enumerate(zip(base.tolist(), np.asarray(rds, dtype=np.float32).tolist())):
-        s3 = _interp_f32(((3 * phase) - QUARTER) & MASK)
+        s3 = _nco_sin_f32((3 * phase) & MASK)
         out[i] = fm.add(m, fm.mul(fm.mul(level, b), s3))
         phase = (phase + inc) & MASK
     return out, phase_end
@@ -189,7 +205,7 @@ def c32_rds_case(rng):
         notes="192 kHz; re left 1 kHz 0.6, im right 3 kHz 0.4; rds: the RDS baseband of "
         "cases/rds.py (rds_baseband at 192 kHz) of random amplitudes +-1, rounded to float32; "
         "pilot 19 kHz with the start phase 0x40000000, main 0.87, pilot 0.09, rds 0.04; exact "
-        "float32 model of stereo_encode plus (rds b) sin(3 phi) from the cosine table of rotate "
+        "float32 model of stereo_encode plus (rds b) sin(3 phi) from the oscillator of oscillate "
         "at the tripled phase, added last; snr_db_guard compares with the float64 formula with "
         "exact sines (D34)",
     )

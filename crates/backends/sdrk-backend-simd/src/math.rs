@@ -58,7 +58,7 @@ use sdrk_core::{C32, CQ15, Fallback, Q15, Result};
 use crate::Simd;
 use crate::level::dispatch_fn;
 use crate::mix::{Portable, Split};
-use crate::table::cos_sin_f32;
+use crate::table::nco_f32;
 use crate::util::check_len;
 
 /// The three lengths of an element-wise call must be equal.
@@ -2192,8 +2192,8 @@ impl Interleave<CQ15> for Simd {
 
 // oscillate
 
-/// `(cos, sin)` of the phases `phase + n step` for whole vectors of samples (the lookups of
-/// `table.rs`, bit-exact with the fallback); `done` is the number of samples done.
+/// `(cos, sin)` of the phases `phase + n step` for whole vectors of samples (the lookup
+/// `nco_f32` of `table.rs`, bit-exact with the fallback); `done` is the number of samples done.
 #[inline(always)]
 fn osc_f32<S: SimdToken>(simd: S, phase: u32, step: u32, out: &mut [f32], done: &mut usize) {
     let h = S::u32s::LEN;
@@ -2203,7 +2203,7 @@ fn osc_f32<S: SimdToken>(simd: S, phase: u32, step: u32, out: &mut [f32], done: 
     let mut n = 0;
     for y in out.chunks_exact_mut(2 * h) {
         let p = S::u32s::splat(simd, base) + ramp;
-        let (o0, o1) = cos_sin_f32(simd, p);
+        let (o0, o1) = nco_f32(simd, p);
         let (d0, d1) = y.split_at_mut(h);
         o0.store_slice(d0);
         o1.store_slice(d1);
@@ -2301,9 +2301,10 @@ fn osc_q15_level<S: SimdToken>(simd: S, phase: u32, step: u32, out: &mut [i16]) 
     None
 }
 
-/// The level-specific paths of the `C32` oscillator: the vector lookups of `table.rs` that
-/// `fm_mod` uses (bit-exact with the fallback), on the phases `phase + n step` kept in a
-/// register and advanced by one vector add per vector.
+/// The level-specific paths of the `C32` oscillator: the vector lookups `nco_f32_*` of
+/// `table.rs` (the Taylor step of the fallback from the entries of `NCO_F32`, bit-exact with
+/// the fallback), on the phases `phase + n step` kept in a register and advanced by one vector
+/// add per vector.
 #[cfg(all(feature = "nco-tables", target_arch = "x86_64"))]
 mod osc_x86 {
     use core::arch::x86_64::{
@@ -2314,11 +2315,13 @@ mod osc_x86 {
         _mm256_srli_epi32, _mm256_unpackhi_pd, _mm256_unpacklo_pd, _mm512_add_epi32,
         _mm512_set1_epi32, _mm512_setr_epi32,
     };
+    use core::arch::x86_64::{_mm256_set1_ps, _mm256_sub_ps};
 
     use fearless_simd::{Simd as SimdToken, f32x4, f32x8, f32x16, prelude::*};
+    use sdrk_core::tables::PHASE_UNIT_F32;
 
-    use crate::table::entry_f32_at;
-    use crate::table::x86::{cos_sin_f32_x4, cos_sin_f32_x16};
+    use crate::table::nco_entry_f32_at;
+    use crate::table::x86::{nco_f32_x4, nco_f32_x16};
 
     /// The phases `phase + k step` of the lanes `k = 0..4` and the step of one vector.
     #[target_feature(enable = "sse2")]
@@ -2338,7 +2341,7 @@ mod osc_x86 {
             let (mut p, inc) = ramp_x4($phase, $step);
             let (vectors, _) = $out.as_chunks_mut::<8>();
             for y in vectors.iter_mut() {
-                let (o0, o1) = cos_sin_f32_x4($t, p);
+                let (o0, o1) = nco_f32_x4($t, p);
                 let (d0, d1) = y.split_at_mut(4);
                 f32x4::simd_from($t, o0).store_slice(d0);
                 f32x4::simd_from($t, o1).store_slice(d1);
@@ -2360,10 +2363,10 @@ mod osc_x86 {
         }
     );
 
-    /// The f32 table entry at the byte offset `o` as one vector.
+    /// The `NCO_F32` entry at the byte offset `o` as one vector.
     #[inline(always)]
     fn load_f32<S: SimdToken>(simd: S, o: i32) -> __m128 {
-        f32x4::simd_from(simd, entry_f32_at(o as u32)).into()
+        f32x4::simd_from(simd, nco_entry_f32_at(o as u32)).into()
     }
 
     /// `[lo | hi]` of two 128-bit vectors.
@@ -2374,13 +2377,14 @@ mod osc_x86 {
     }
 
     /// Interleaved `(cos, sin)` of eight phases (samples 0 to 3, samples 4 to 7): the lookups
-    /// of `cos_sin_f32_x4` with the interpolation on 256-bit vectors. The entries of samples
-    /// `j` and `j + 2` share a vector, so that the in-lane unpacks of two such vectors give
-    /// the values and the differences of four samples in output order.
+    /// of `nco_f32_x4` with the Taylor step on 256-bit vectors. The entries of samples `j` and
+    /// `j + 2` share a vector, so that the in-lane unpacks of two such vectors give `V` and
+    /// `W` of four samples in output order.
     #[target_feature(enable = "avx2")]
     #[inline]
-    fn cos_sin_f32_x8<S: SimdToken>(simd: S, p: __m256i) -> (__m256, __m256) {
+    fn nco_f32_x8<S: SimdToken>(simd: S, p: __m256i) -> (__m256, __m256) {
         let f = _mm256_cvtepi32_ps(_mm256_and_si256(p, _mm256_set1_epi32(0xF_FFFF)));
+        let d = _mm256_mul_ps(f, _mm256_set1_ps(PHASE_UNIT_F32));
         let o = _mm256_and_si256(_mm256_srli_epi32::<16>(p), _mm256_set1_epi32(0xFFF0));
         let e = |k: i32| load_f32(simd, k);
         let (e0, e1) = (
@@ -2399,19 +2403,21 @@ mod osc_x86 {
             e(_mm256_extract_epi32::<6>(o)),
             e(_mm256_extract_epi32::<7>(o)),
         );
-        let interp = |x: __m256, y: __m256, idx: __m256i| {
+        let taylor = |x: __m256, y: __m256, idx: __m256i| {
             let (x, y) = (_mm256_castps_pd(x), _mm256_castps_pd(y));
-            let a = _mm256_castpd_ps(_mm256_unpacklo_pd(x, y));
-            let d = _mm256_castpd_ps(_mm256_unpackhi_pd(x, y));
-            _mm256_add_ps(a, _mm256_mul_ps(d, _mm256_permutevar8x32_ps(f, idx)))
+            let v = _mm256_castpd_ps(_mm256_unpacklo_pd(x, y));
+            let w = _mm256_castpd_ps(_mm256_unpackhi_pd(x, y));
+            let d = _mm256_permutevar8x32_ps(d, idx);
+            let h = _mm256_mul_ps(d, _mm256_set1_ps(0.5));
+            _mm256_sub_ps(v, _mm256_mul_ps(d, _mm256_add_ps(w, _mm256_mul_ps(v, h))))
         };
         (
-            interp(
+            taylor(
                 pair(e0, e2),
                 pair(e1, e3),
                 _mm256_setr_epi32(0, 0, 1, 1, 2, 2, 3, 3),
             ),
-            interp(
+            taylor(
                 pair(e4, e6),
                 pair(e5, e7),
                 _mm256_setr_epi32(4, 4, 5, 5, 6, 6, 7, 7),
@@ -2426,7 +2432,7 @@ mod osc_x86 {
             let inc = _mm256_set1_epi32(step.wrapping_mul(8) as i32);
             let (vectors, _) = out.as_chunks_mut::<16>();
             for y in vectors.iter_mut() {
-                let (o0, o1) = cos_sin_f32_x8(t, p);
+                let (o0, o1) = nco_f32_x8(t, p);
                 let (d0, d1) = y.split_at_mut(8);
                 f32x8::simd_from(t, o0).store_slice(d0);
                 f32x8::simd_from(t, o1).store_slice(d1);
@@ -2460,7 +2466,7 @@ mod osc_x86 {
             let inc = _mm512_set1_epi32(step.wrapping_mul(16) as i32);
             let (vectors, _) = out.as_chunks_mut::<32>();
             for y in vectors.iter_mut() {
-                let (o0, o1) = cos_sin_f32_x16(p);
+                let (o0, o1) = nco_f32_x16(p);
                 let (d0, d1) = y.split_at_mut(16);
                 f32x16::simd_from(t, o0).store_slice(d0);
                 f32x16::simd_from(t, o1).store_slice(d1);
@@ -2478,7 +2484,7 @@ mod osc_neon {
 
     use fearless_simd::{f32x4, prelude::*, u32x4};
 
-    use crate::table::neon::cos_sin_f32_x4;
+    use crate::table::neon::nco_f32_x4;
 
     fearless_simd::kernel!(
         pub(super) fn f32(t: Neon, phase: u32, step: u32, out: &mut [f32]) -> usize {
@@ -2487,7 +2493,7 @@ mod osc_neon {
             let inc = vdupq_n_u32(step.wrapping_mul(4));
             let (vectors, _) = out.as_chunks_mut::<8>();
             for y in vectors.iter_mut() {
-                let (o0, o1) = cos_sin_f32_x4(t, p);
+                let (o0, o1) = nco_f32_x4(t, p);
                 let (d0, d1) = y.split_at_mut(4);
                 f32x4::simd_from(t, o0).store_slice(d0);
                 f32x4::simd_from(t, o1).store_slice(d1);
@@ -2506,7 +2512,7 @@ mod osc_wasm {
 
     use fearless_simd::{f32x4, i16x8, prelude::*};
 
-    use crate::table::wasm::{cos_sin_f32_x4, cos_sin_q15_x4};
+    use crate::table::wasm::{cos_sin_q15_x4, nco_f32_x4};
 
     fearless_simd::kernel!(
         pub(super) fn f32(t: WasmSimd128, phase: u32, step: u32, out: &mut [f32]) -> usize {
@@ -2516,9 +2522,9 @@ mod osc_wasm {
             let (vectors, _) = out.as_chunks_mut::<8>();
             for y in vectors.iter_mut() {
                 #[cfg(feature = "nco-tables")]
-                let (o0, o1) = cos_sin_f32_x4(t, p);
+                let (o0, o1) = nco_f32_x4(t, p);
                 #[cfg(not(feature = "nco-tables"))]
-                let (o0, o1) = cos_sin_f32_x4(p);
+                let (o0, o1) = nco_f32_x4(p);
                 let (d0, d1) = y.split_at_mut(4);
                 f32x4::simd_from(t, o0).store_slice(d0);
                 f32x4::simd_from(t, o1).store_slice(d1);

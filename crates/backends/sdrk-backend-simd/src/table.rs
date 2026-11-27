@@ -25,9 +25,21 @@
 //!
 //! Without the feature (the default of the backend; the facade enables it on x86-64 and
 //! AArch64) the lookups read `COS_F32` and `COS_Q15` directly.
+//!
+//! # The `C32` oscillator of `rotate` and `oscillate`
+//!
+//! The fallback of these two kernels does not interpolate linearly: it takes the second-order
+//! Taylor step `cos(a + d) = C - d (S + C h)`, `sin(a + d) = S + d (C - S h)` from the table
+//! point `a` below the phase (`C = cos a`, `S = sin a`, `d = (p & 0xF_FFFF) * PHASE_UNIT_F32`,
+//! `h = d / 2`; `nco_f32` of `sdrk-core`). [`NCO_F32`] keeps `[C, S, S, -C]` per index (64 KiB,
+//! feature `nco-tables`): the low half of an entry is `V = (C, S)`, the high half
+//! `W = (S, -C)`, and `V - D (W + V H)` with `D = (d, d)` and `H = (h, h)` is the interleaved
+//! output pair. Its sine lane `S - d (-C + S h)` is the fallback's `S + d (C - S h)` bit for bit:
+//! the negations are exact and the rounding to nearest is symmetric (a zero of `C - S h`
+//! may change its sign, but it is multiplied by `d` and added to `S`, which is not zero then).
 
 use fearless_simd::{Simd as SimdToken, prelude::*};
-use sdrk_core::tables::{COS_F32, COS_Q15};
+use sdrk_core::tables::{COS_F32, COS_Q15, PHASE_UNIT_F32};
 
 /// A quarter turn of the 32-bit phase.
 #[cfg(not(feature = "nco-tables"))]
@@ -76,6 +88,27 @@ pub(crate) static COS_SIN_F32: CosSinF32 = {
     CosSinF32(t)
 };
 
+/// The entry table of the `C32` oscillator: `[C, S, S, -C]` per index (see the module
+/// documentation), built at compile time from `COS_F32`.
+#[cfg(feature = "nco-tables")]
+#[allow(
+    clippy::large_stack_arrays,
+    clippy::indexing_slicing,
+    reason = "evaluated at compile time: the array is the static itself, and an index out of \
+              range would be a compile error"
+)]
+pub(crate) static NCO_F32: CosSinF32 = {
+    let mut t = [[0.0f32; 4]; ENTRIES];
+    let mut i = 0;
+    while i < ENTRIES {
+        let j = (i + 3 * ENTRIES / 4) % ENTRIES;
+        let (c, s) = (COS_F32[i], COS_F32[j]);
+        t[i] = [c, s, s, -c];
+        i += 1;
+    }
+    CosSinF32(t)
+};
+
 /// The Q15 table, built at compile time from `COS_Q15`. Neighbouring Q15 cosines differ by
 /// at most 51, so every difference fits `i16`.
 #[cfg(feature = "nco-tables")]
@@ -115,6 +148,26 @@ pub(crate) fn entry_f32(i: u32) -> [f32; 4] {
 #[inline(always)]
 pub(crate) fn entry_f32_at(o: u32) -> [f32; 4] {
     entry_f32(o / 16)
+}
+
+/// The entry of [`NCO_F32`] of the table index `i` (below 4096).
+#[cfg(feature = "nco-tables")]
+#[inline(always)]
+pub(crate) fn nco_entry_f32(i: u32) -> [f32; 4] {
+    NCO_F32.0.get(i as usize).copied().unwrap_or_default()
+}
+
+/// The entry of [`NCO_F32`] at the byte offset `o` (`16 * i`, below 64 KiB).
+#[cfg(all(
+    feature = "nco-tables",
+    any(
+        target_arch = "x86_64",
+        all(target_arch = "wasm32", target_feature = "simd128")
+    )
+))]
+#[inline(always)]
+pub(crate) fn nco_entry_f32_at(o: u32) -> [f32; 4] {
+    nco_entry_f32(o / 16)
 }
 
 /// The Q15 entry of the table index `i` (below 4096).
@@ -181,8 +234,22 @@ pub(crate) fn cos_sin_f32<S: SimdToken>(simd: S, p: S::u32s) -> (S::f32s, S::f32
     }
 }
 
+/// The interleaved `(cos, sin)` of the phases `p` of the `C32` oscillator of `rotate` and
+/// `oscillate`, as `nco_f32` of the fallback (see the module documentation): the pairs of
+/// lanes `0..h/2` and of lanes `h/2..h`.
+#[inline(always)]
+pub(crate) fn nco_f32<S: SimdToken>(simd: S, p: S::u32s) -> (S::f32s, S::f32s) {
+    let d = fraction_units::<S>(p) * PHASE_UNIT_F32;
+    let h = d * 0.5;
+    let idx = p >> 20u32;
+    let c = gather_f32(simd, idx, 0);
+    let s = gather_f32(simd, (idx + 3072u32) & 4095u32, 0);
+    let cos = c - d * (s + c * h);
+    let sin = s + d * (c - s * h);
+    cos.interleave(sin)
+}
+
 /// `COS_F32[(i & 4095) + add]` for every lane (the mask keeps the index inside the table).
-#[cfg(not(feature = "nco-tables"))]
 #[inline(always)]
 fn gather_f32<S: SimdToken>(simd: S, idx: S::u32s, add: usize) -> S::f32s {
     let mut it = idx.to_array().into_iter();
@@ -308,10 +375,12 @@ pub(crate) mod x86 {
         _mm512_mulhrs_epi16, _mm512_or_si512, _mm512_permutex2var_epi32, _mm512_permutexvar_ps,
         _mm512_set1_epi32, _mm512_setr_epi32, _mm512_slli_epi32, _mm512_srli_epi32,
     };
+    use core::arch::x86_64::{_mm_set1_ps, _mm_sub_ps, _mm512_set1_ps, _mm512_sub_ps};
 
     use fearless_simd::{Simd as SimdToken, f32x4, prelude::*};
+    use sdrk_core::tables::PHASE_UNIT_F32;
 
-    use super::{COS_SIN_F32, entry_f32_at, entry_q15_at};
+    use super::{COS_SIN_F32, NCO_F32, entry_f32_at, entry_q15_at, nco_entry_f32_at};
 
     /// The f32 table entry at the byte offset `o` as one vector.
     #[inline(always)]
@@ -374,6 +443,85 @@ pub(crate) mod x86 {
         (
             interp_x2(e0, e1, _mm_unpacklo_ps(f, f)),
             interp_x2(e2, e3, _mm_unpackhi_ps(f, f)),
+        )
+    }
+
+    /// The entry of `NCO_F32` at the byte offset `o` as one vector.
+    #[inline(always)]
+    fn load_nco<S: SimdToken>(simd: S, o: i32) -> __m128 {
+        f32x4::simd_from(simd, nco_entry_f32_at(o as u32)).into()
+    }
+
+    /// `V - D (W + V H)` of the `NCO_F32` entries `e0` and `e1` (two samples) with the angles
+    /// `[d0, d0, d1, d1]`, `H = D / 2`: the interleaved output of `nco_f32`.
+    #[target_feature(enable = "sse2")]
+    #[inline]
+    fn taylor_x2(e0: __m128, e1: __m128, d: __m128) -> __m128 {
+        let (e0, e1) = (_mm_castps_pd(e0), _mm_castps_pd(e1));
+        let v = _mm_castpd_ps(_mm_unpacklo_pd(e0, e1));
+        let w = _mm_castpd_ps(_mm_unpackhi_pd(e0, e1));
+        let h = _mm_mul_ps(d, _mm_set1_ps(0.5));
+        _mm_sub_ps(v, _mm_mul_ps(d, _mm_add_ps(w, _mm_mul_ps(v, h))))
+    }
+
+    /// The angles `(p & 0xF_FFFF) * PHASE_UNIT_F32` of four phases.
+    #[target_feature(enable = "sse2")]
+    #[inline]
+    fn angle_x4(p: __m128i) -> __m128 {
+        _mm_mul_ps(fraction_x4(p), _mm_set1_ps(PHASE_UNIT_F32))
+    }
+
+    /// Interleaved `(cos, sin)` of the `C32` oscillator (`nco_f32` of the fallback) of four
+    /// phases: samples 0 and 1, samples 2 and 3.
+    #[target_feature(enable = "sse2")]
+    #[inline]
+    pub(crate) fn nco_f32_x4<S: SimdToken>(simd: S, p: __m128i) -> (__m128, __m128) {
+        let d = angle_x4(p);
+        let o = offsets_f32_x4(p);
+        let e0 = load_nco(simd, _mm_cvtsi128_si32(o));
+        let e1 = load_nco(simd, _mm_cvtsi128_si32(_mm_shuffle_epi32::<0x55>(o)));
+        let e2 = load_nco(simd, _mm_cvtsi128_si32(_mm_shuffle_epi32::<0xAA>(o)));
+        let e3 = load_nco(simd, _mm_cvtsi128_si32(_mm_shuffle_epi32::<0xFF>(o)));
+        (
+            taylor_x2(e0, e1, _mm_unpacklo_ps(d, d)),
+            taylor_x2(e2, e3, _mm_unpackhi_ps(d, d)),
+        )
+    }
+
+    /// [`nco_f32_x4`] for sixteen phases (samples 0 to 7, samples 8 to 15), the entry halves
+    /// fetched with 64-bit gathers as in [`cos_sin_f32_x16`].
+    #[target_feature(enable = "avx512f")]
+    #[inline]
+    pub(crate) fn nco_f32_x16(p: __m512i) -> (__m512, __m512) {
+        let frac = _mm512_and_si512(p, _mm512_set1_epi32(0xF_FFFF));
+        let d = _mm512_mul_ps(_mm512_cvtepi32_ps(frac), _mm512_set1_ps(PHASE_UNIT_F32));
+        // Index of the entry in units of 8 bytes: 2 * (p >> 20) < 8192.
+        let idx = _mm512_slli_epi32::<1>(_mm512_srli_epi32::<20>(p));
+        let base = core::ptr::from_ref(&NCO_F32).cast::<f64>();
+        let half = |idx: __m256i, d: __m512| {
+            // SAFETY: as in `cos_sin_f32_x16`: every index is even and at most 8190, `base`
+            // points to the 8192 doubles (64 KiB) of `NCO_F32`, and the high halves start one
+            // double later (the largest index plus one, 8191, is inside the table).
+            let (v, w) = unsafe {
+                (
+                    _mm512_castpd_ps(_mm512_i32gather_pd::<8>(idx, base)),
+                    _mm512_castpd_ps(_mm512_i32gather_pd::<8>(idx, base.add(1))),
+                )
+            };
+            let h = _mm512_mul_ps(d, _mm512_set1_ps(0.5));
+            _mm512_sub_ps(v, _mm512_mul_ps(d, _mm512_add_ps(w, _mm512_mul_ps(v, h))))
+        };
+        let dup_lo = _mm512_setr_epi32(0, 0, 1, 1, 2, 2, 3, 3, 4, 4, 5, 5, 6, 6, 7, 7);
+        let dup_hi = _mm512_setr_epi32(8, 8, 9, 9, 10, 10, 11, 11, 12, 12, 13, 13, 14, 14, 15, 15);
+        (
+            half(
+                _mm512_castsi512_si256(idx),
+                _mm512_permutexvar_ps(dup_lo, d),
+            ),
+            half(
+                _mm512_extracti64x4_epi64::<1>(idx),
+                _mm512_permutexvar_ps(dup_hi, d),
+            ),
         )
     }
 
@@ -571,9 +719,12 @@ pub(crate) mod neon {
         vzip2q_f64,
     };
 
-    use fearless_simd::{Neon, f32x4, prelude::*};
+    use core::arch::aarch64::{vdupq_n_f32, vsubq_f32};
 
-    use super::{entry_f32, entry_q15};
+    use fearless_simd::{Neon, f32x4, prelude::*};
+    use sdrk_core::tables::PHASE_UNIT_F32;
+
+    use super::{entry_f32, entry_q15, nco_entry_f32};
 
     /// The interpolation fractions `p & 0xF_FFFF` of four phases (the weights of the scaled
     /// differences).
@@ -602,6 +753,30 @@ pub(crate) mod neon {
         (
             interp(e0, e1, vzip1q_f32(f, f)),
             interp(e2, e3, vzip2q_f32(f, f)),
+        )
+    }
+
+    /// Interleaved `(cos, sin)` of the `C32` oscillator (`nco_f32` of the fallback) of four
+    /// phases: samples 0 and 1, samples 2 and 3 (see the module documentation).
+    #[target_feature(enable = "neon")]
+    #[inline]
+    pub(crate) fn nco_f32_x4(simd: Neon, p: uint32x4_t) -> (float32x4_t, float32x4_t) {
+        let d = vmulq_f32(fraction_x4(p), vdupq_n_f32(PHASE_UNIT_F32));
+        let i = vshrq_n_u32::<20>(p);
+        let load = |i: u32| vreinterpretq_f64_f32(f32x4::simd_from(simd, nco_entry_f32(i)).into());
+        let e0 = load(vgetq_lane_u32::<0>(i));
+        let e1 = load(vgetq_lane_u32::<1>(i));
+        let e2 = load(vgetq_lane_u32::<2>(i));
+        let e3 = load(vgetq_lane_u32::<3>(i));
+        let taylor = |e0: float64x2_t, e1: float64x2_t, d: float32x4_t| {
+            let v = vreinterpretq_f32_f64(vzip1q_f64(e0, e1));
+            let w = vreinterpretq_f32_f64(vzip2q_f64(e0, e1));
+            let h = vmulq_f32(d, vdupq_n_f32(0.5));
+            vsubq_f32(v, vmulq_f32(d, vaddq_f32(w, vmulq_f32(v, h))))
+        };
+        (
+            taylor(e0, e1, vzip1q_f32(d, d)),
+            taylor(e2, e3, vzip2q_f32(d, d)),
         )
     }
 
@@ -637,12 +812,13 @@ pub(crate) mod neon {
 pub(crate) mod wasm {
     #[cfg(feature = "nco-tables")]
     use core::arch::wasm32::i64x2_shuffle;
+    #[cfg(not(feature = "nco-tables"))]
+    use core::arch::wasm32::{f32x4, i16x8_shuffle, i16x8_sub, i32x4_sub, u32x4, v128_xor};
     use core::arch::wasm32::{
         f32x4_add, f32x4_convert_i32x4, f32x4_mul, i32x4_shuffle, u32x4_extract_lane, u32x4_shr,
         u32x4_splat, u64x2, v128, v128_and,
     };
-    #[cfg(not(feature = "nco-tables"))]
-    use core::arch::wasm32::{f32x4_splat, f32x4_sub, i16x8_shuffle, i16x8_sub, i32x4_sub, u32x4};
+    use core::arch::wasm32::{f32x4_splat, f32x4_sub};
     use core::arch::wasm32::{i16x8_add, i16x8_q15mulr_sat, i32x4_shl, v128_or};
 
     #[cfg(feature = "nco-tables")]
@@ -651,7 +827,8 @@ pub(crate) mod wasm {
     #[cfg(not(feature = "nco-tables"))]
     use super::{COS_F32, COS_Q15};
     #[cfg(feature = "nco-tables")]
-    use super::{entry_f32_at, entry_q15_at};
+    use super::{entry_f32_at, entry_q15_at, nco_entry_f32_at};
+    use sdrk_core::tables::PHASE_UNIT_F32;
 
     /// The interpolation fractions `p & 0xF_FFFF` of four phases.
     #[inline(always)]
@@ -678,6 +855,70 @@ pub(crate) mod wasm {
         (
             interp(e0, e1, i32x4_shuffle::<0, 0, 1, 1>(f, f)),
             interp(e2, e3, i32x4_shuffle::<2, 2, 3, 3>(f, f)),
+        )
+    }
+
+    /// `V - D (W + V H)` of two samples, `H = D / 2` (see the module documentation).
+    #[inline(always)]
+    fn taylor_x2(v: v128, w: v128, d: v128) -> v128 {
+        let h = f32x4_mul(d, f32x4_splat(0.5));
+        f32x4_sub(v, f32x4_mul(d, f32x4_add(w, f32x4_mul(v, h))))
+    }
+
+    /// Interleaved `(cos, sin)` of the `C32` oscillator (`nco_f32` of the fallback) of four
+    /// phases: samples 0 and 1, samples 2 and 3.
+    #[cfg(feature = "nco-tables")]
+    #[inline(always)]
+    pub(crate) fn nco_f32_x4(simd: WasmSimd128, p: v128) -> (v128, v128) {
+        let d = f32x4_mul(fraction_x4(p), f32x4_splat(PHASE_UNIT_F32));
+        let o = v128_and(u32x4_shr(p, 16), u32x4_splat(0xFFF0));
+        let load = |o: u32| -> v128 { f32x4::simd_from(simd, nco_entry_f32_at(o)).into() };
+        let e0 = load(u32x4_extract_lane::<0>(o));
+        let e1 = load(u32x4_extract_lane::<1>(o));
+        let e2 = load(u32x4_extract_lane::<2>(o));
+        let e3 = load(u32x4_extract_lane::<3>(o));
+        let pair = |e0: v128, e1: v128, d: v128| {
+            taylor_x2(
+                i64x2_shuffle::<0, 2>(e0, e1),
+                i64x2_shuffle::<1, 3>(e0, e1),
+                d,
+            )
+        };
+        (
+            pair(e0, e1, i32x4_shuffle::<0, 0, 1, 1>(d, d)),
+            pair(e2, e3, i32x4_shuffle::<2, 2, 3, 3>(d, d)),
+        )
+    }
+
+    /// [`nco_f32_x4`] from `COS_F32` itself: `V = (C, S)` of two samples from four scalar
+    /// reads, `W = (S, -C)` from `V` by a shuffle and the sign bit of the odd lanes.
+    #[cfg(not(feature = "nco-tables"))]
+    #[inline(always)]
+    pub(crate) fn nco_f32_x4(p: v128) -> (v128, v128) {
+        let d = f32x4_mul(fraction_x4(p), f32x4_splat(PHASE_UNIT_F32));
+        // The index is at most 4095, inside the 4097 entries of the table.
+        let at = |i: u32| COS_F32.get(i as usize).copied().unwrap_or(0.0);
+        let cos = u32x4_shr(p, 20);
+        let sin = u32x4_shr(i32x4_sub(p, u32x4_splat(1 << 30)), 20);
+        let v = |a: v128, b: v128| -> v128 {
+            f32x4(
+                at(u32x4_extract_lane::<0>(a)),
+                at(u32x4_extract_lane::<0>(b)),
+                at(u32x4_extract_lane::<1>(a)),
+                at(u32x4_extract_lane::<1>(b)),
+            )
+        };
+        let sign = u32x4(0, 0x8000_0000, 0, 0x8000_0000);
+        let pair =
+            |v: v128, d: v128| taylor_x2(v, v128_xor(i32x4_shuffle::<1, 0, 3, 2>(v, v), sign), d);
+        let v01 = v(cos, sin);
+        let v23 = v(
+            i32x4_shuffle::<2, 3, 2, 3>(cos, cos),
+            i32x4_shuffle::<2, 3, 2, 3>(sin, sin),
+        );
+        (
+            pair(v01, i32x4_shuffle::<0, 0, 1, 1>(d, d)),
+            pair(v23, i32x4_shuffle::<2, 2, 3, 3>(d, d)),
         )
     }
 

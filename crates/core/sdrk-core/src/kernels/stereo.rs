@@ -406,7 +406,7 @@ pub trait StereoPll<T: RealSample> {
     /// enabled, else `(mpx[n], 0)`. The three slices must have equal lengths, otherwise
     /// `LengthMismatch` is returned and nothing changes.
     ///
-    /// Sine and cosine come from the cosine tables of `rotate` with its interpolation, and
+    /// Sine and cosine come from the cosine tables with the linear interpolation of `fm_mod`, and
     /// `sin(2 theta)` from the phase `2 theta` (`phase.wrapping_mul(2)`). Per sample (`f32`,
     /// no FMA; a non-finite `pilot[n]` gives `e = q = 0` and leaves the level unchanged):
     /// `e = p c`, `q = p s`; `level = flush(level + beta (q - level))`; stereo on at
@@ -595,8 +595,8 @@ impl Timing for StereoEncodeState {
 /// ```
 pub trait StereoEncode {
     /// Per sample (f32, no FMA), with `phi` the pilot phase before the sample:
-    /// `s1 = sin(phi)` and `s2 = sin(2 phi)` from the cosine tables of `rotate` with its
-    /// interpolation (`s2` at the phase `phi.wrapping_mul(2)`, as in `stereo_pll`),
+    /// `s1 = sin(phi)` and `s2 = sin(2 phi)`, the sines of the `C32` oscillator of `oscillate`
+    /// (the Taylor step from the cosine table; `s2` at the phase `phi.wrapping_mul(2)`),
     /// `m = (L + R) 0.5`, `d = (L - R) 0.5`, `mpx = (main m + (main d) s2) + pilot s1`
     /// (the products first, then the sums from left to right); the phase advances by one step.
     /// A NaN or infinite input passes into the output of that sample only (there is no
@@ -747,8 +747,8 @@ impl Timing for StereoEncodeRdsState {
 pub trait StereoEncodeRds {
     /// The multiplex of [`StereoEncode::stereo_encode`] plus the RDS subcarrier, added last:
     /// `mpx = stereo_encode + (rds_level b) s3` with `b = rds[n]` and `s3 = sin(3 phi)` from
-    /// the cosine table of `rotate` with its interpolation at the phase
-    /// `phi.wrapping_mul(3).wrapping_sub(2^30)` (f32, no FMA, the product `rds_level b` first).
+    /// the `C32` oscillator of `oscillate` at the phase `phi.wrapping_mul(3)` (f32, no FMA, the
+    /// product `rds_level b` first).
     /// The RDS carrier is locked to three times the pilot phase. A NaN or infinite input
     /// passes into the output of that sample only. The three lengths must be equal, otherwise
     /// `LengthMismatch` and nothing changes.

@@ -607,11 +607,9 @@ macro_rules! blocks3m {
 
 /// The complex products of the whole steps of `$w` floats of `$a` and `$b` with the [`Split`]
 /// `$split` of the token `$t`, in the unrolled groups of [`blocks3`], fused ([`cmul`] with
-/// `FMA`: the macro runs on AVX-512 and NEON only); evaluates to the number of floats done.
-/// AVX-512 keeps this split form: the form of [`x86::mul_c32_avx2`] on 512 bits (`vfmaddsub`
-/// after `vmovsldup`, `vmovshdup`, `vpermilps`) simulates 0.51 instead of 0.47 cycles per sample
-/// on `znver4` and 0.39 on `sapphirerapids` either way (D326).
-#[cfg(any(target_arch = "x86_64", target_arch = "aarch64"))]
+/// `FMA`: the macro runs on NEON only); evaluates to the number of floats done. AVX-512 ran this
+/// split form until D3004 (D945, D326).
+#[cfg(target_arch = "aarch64")]
 macro_rules! mul_split_blocks {
     ($t:ident, $split:expr, $w:literal, $a:ident, $b:ident, $out:ident) => {{
         let split = $split;
@@ -625,7 +623,8 @@ macro_rules! mul_split_blocks {
 }
 
 /// The `C32` product at the level of `simd`: on SSE4.2 and AVX2 [`x86::mul_c32_sse4_2`] and
-/// [`x86::mul_c32_avx2`] (D295, D288), on AVX-512 and NEON
+/// [`x86::mul_c32_avx2`] (D295, D288), on AVX-512 [`x86::mul_c32_avx512`], the form of AVX2 in
+/// 256-bit vectors (D3004, the maintainer's decision on open item IO2-15), on NEON
 /// [`mul_split`] with the [`Split`] of the level in the unrolled groups of [`blocks3`] (eight
 /// steps per iteration, independent of each other); the rest of the call by [`mul_split`]
 /// (D288). AVX2, AVX-512 and NEON fuse the products (D326), SSE2, SSE4.2 and SIMD128 do not.
@@ -635,7 +634,7 @@ fn mul_c32<S: SimdToken>(simd: S, a: &[f32], b: &[f32], out: &mut [f32]) {
     #[cfg(target_arch = "x86_64")]
     {
         if let Some(t) = level.as_avx512() {
-            let k = mul_split_blocks!(t, crate::mix::x86::InLane, 32, a, b, out);
+            let k = x86::mul_c32_avx512(t, a, b, out);
             return mul_rest::<_, _, true>(t, crate::mix::x86::InLane, k, a, b, out);
         }
         if let Some(t) = level.as_avx2() {
@@ -705,6 +704,29 @@ mod x86 {
                 // shuffles come first: written that way LLVM gives the swap of `y` a register of
                 // its own; with each product written next to its shuffle it reuses the register
                 // of `y`, and `znver3` simulates 16.1 instead of 13.4 cycles per eight steps.
+                let ar = _mm256_moveldup_ps(x);
+                let ai = _mm256_movehdup_ps(x);
+                let ys = _mm256_permute_ps::<0xB1>(y);
+                let r = _mm256_fmaddsub_ps(ar, y, _mm256_mul_ps(ai, ys));
+                f32x8::simd_from(t, r).store_slice(z);
+            }) * 8
+        }
+    );
+
+    fearless_simd::kernel!(
+        /// The `C32` product of AVX-512 in the form of [`mul_c32_avx2`], four samples per 256-bit
+        /// vector, the same instructions and values (D3004, the maintainer's decision on open item
+        /// IO2-15). The split `zmm` form of D945 (deinterleave, fused products, interleave on 512
+        /// bits) simulated 0.58 / 0.39 cycles per sample on `znver4` / `sapphirerapids`, slower than
+        /// the fallback's groups of four samples in 256-bit vectors (0.53 / 0.54, D2974) on `znver4`;
+        /// this form is faster than that fallback on both models (0.45 / 0.51 in O1, D2823;
+        /// `llvm-mca` of the written-out loop 0.44 / 0.50). In the unrolled groups of [`blocks3`];
+        /// the number of floats done.
+        pub(super) fn mul_c32_avx512(t: Avx512, a: &[f32], b: &[f32], out: &mut [f32]) -> usize {
+            blocks3!(a, 8, b, 8, out, 8, |x, y, z| {
+                let x: __m256 = f32x8::from_slice(t, x).into();
+                let y: __m256 = f32x8::from_slice(t, y).into();
+                // The shuffles first, as in `mul_c32_avx2`.
                 let ar = _mm256_moveldup_ps(x);
                 let ai = _mm256_movehdup_ps(x);
                 let ys = _mm256_permute_ps::<0xB1>(y);

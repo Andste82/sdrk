@@ -2505,9 +2505,11 @@ fn decimate_cq15<S: SimdToken>(
     factor: usize,
     count: usize,
 ) {
+    // Not on AArch64: there `fir_decimate` `CQ15` runs the fallback before this function
+    // ([`DECIMATE_CQ15_RUNS_FALLBACK`], open item IO2-22), so its NEON progression is not
+    // compiled for it.
     #[cfg(any(
         target_arch = "x86_64",
-        target_arch = "aarch64",
         all(target_arch = "wasm32", target_feature = "simd128")
     ))]
     if let Some(level) = split_level(simd) {

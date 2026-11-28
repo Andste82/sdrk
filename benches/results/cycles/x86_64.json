@@ -17063,26 +17063,26 @@
           "branches": {
             "comparison": {
               "branches_per_sample": 0.63726806640625,
-              "mispredictions_per_sample": 0.0016021728515625
+              "mispredictions_per_sample": 0.001617431640625
             },
             "ours": {
               "branches_per_sample": 0.06549072265625,
-              "mispredictions_per_sample": 0.000396728515625
+              "mispredictions_per_sample": 0.0004425048828125
             }
           },
           "compared_with": "VOLK 3.3.0 composition: volk_32fc_deinterleave_32f_x2, volk_32f_x2_add_32f (d + d), volk_32f_x2_add_32f (s + d2), volk_32f_x2_subtract_32f (s - d2), volk_32f_x2_interleave_32fc (five passes over memory)",
           "comparison_kind": "library",
           "cost": {
             "counter_model": {
-              "comparison": 1.4817398132864665,
+              "comparison": 1.4820449890677165,
               "cpu": "alderlake",
-              "ours": 0.46051665619536714,
+              "ours": 0.4598051249900753,
               "penalty": 20.0
             },
             "reference_model": {
-              "comparison": 1.2780811694809642,
+              "comparison": 1.2782795337387767,
               "cpu": "znver3",
-              "ours": 0.32976412088887674,
+              "ours": 0.32919223414249904,
               "penalty": 13.0
             }
           },
@@ -17094,11 +17094,11 @@
             },
             "cpu": "alderlake",
             "ours": {
-              "coverage": 0.9912199630314233,
-              "cycles_per_sample": 0.45258208588286714,
+              "coverage": 0.9947963128159382,
+              "cycles_per_sample": 0.4509550273338253,
               "efficiency": 0.6998639455782313
             },
-            "ratio": 0.31219095221564513
+            "ratio": 0.3110686078419276
           },
           "cycle_mode": "whole-loop",
           "reference_model": {
@@ -17109,11 +17109,11 @@
             },
             "cpu": "znver3",
             "ours": {
-              "coverage": 0.9912199630314233,
-              "cycles_per_sample": 0.32460665018575174,
-              "efficiency": 0.8203867472484948
+              "coverage": 0.9947963128159382,
+              "cycles_per_sample": 0.32343967066593654,
+              "efficiency": 0.8398113687149779
             },
-            "ratio": 0.25818723058790133
+            "ratio": 0.2572590326899178
           },
           "samples": 65536,
           "snr_db": {
@@ -17125,26 +17125,26 @@
           "branches": {
             "comparison": {
               "branches_per_sample": 0.06475830078125,
-              "mispredictions_per_sample": 0.0004730224609375
+              "mispredictions_per_sample": 0.00048828125
             },
             "ours": {
               "branches_per_sample": 0.03375244140625,
-              "mispredictions_per_sample": 0.000457763671875
+              "mispredictions_per_sample": 0.0005340576171875
             }
           },
           "compared_with": "sdrk fallback",
           "comparison_kind": "own_fallback",
           "cost": {
             "counter_model": {
-              "comparison": 0.5464453567058587,
+              "comparison": 0.5467505324871087,
               "cpu": "alderlake",
-              "ours": 0.2059799913660251,
+              "ours": 0.2075058702722751,
               "penalty": 20.0
             },
             "reference_model": {
-              "comparison": 0.39337307614690503,
+              "comparison": 0.39357144040471753,
               "cpu": "znver3",
-              "ours": 0.15515888168543274,
+              "ours": 0.15615070297449524,
               "penalty": 13.0
             }
           },
@@ -17187,26 +17187,26 @@
           "branches": {
             "comparison": {
               "branches_per_sample": 0.19903564453125,
-              "mispredictions_per_sample": 0.0009613037109375
+              "mispredictions_per_sample": 0.000946044921875
             },
             "ours": {
               "branches_per_sample": 0.06475830078125,
-              "mispredictions_per_sample": 0.0004730224609375
+              "mispredictions_per_sample": 0.00048828125
             }
           },
           "compared_with": "CMSIS-DSP 1.18.0 arm_add_q15 (d + d, saturating), arm_add_q15 (s + d2), arm_sub_q15 (s - d2) on planar data, generic C (-O3 -ffp-contract=off, LOOPUNROLL, avx2)",
           "comparison_kind": "library",
           "cost": {
             "counter_model": {
-              "comparison": 1.5738066314066708,
+              "comparison": 1.5735014556254208,
               "cpu": "alderlake",
-              "ours": 0.5464453567058587,
+              "ours": 0.5467567119012273,
               "penalty": 20.0
             },
             "reference_model": {
-              "comparison": 1.559989576001603,
+              "comparison": 1.5597912117437904,
               "cpu": "znver3",
-              "ours": 0.39337307614690503,
+              "ours": 0.39357589642589336,
               "penalty": 13.0
             }
           },
@@ -17218,11 +17218,11 @@
             },
             "cpu": "alderlake",
             "ours": {
-              "coverage": 0.994625945062659,
-              "cycles_per_sample": 0.5369849074871087,
+              "coverage": 0.994614499424626,
+              "cycles_per_sample": 0.5369910869012273,
               "efficiency": 0.5872457911842279
             },
-            "ratio": 0.3454210880254801
+            "ratio": 0.3454250629974364
           },
           "cycle_mode": "whole-loop",
           "reference_model": {
@@ -17233,11 +17233,11 @@
             },
             "cpu": "znver3",
             "ours": {
-              "coverage": 0.994625945062659,
-              "cycles_per_sample": 0.38722378415471753,
+              "coverage": 0.994614499424626,
+              "cycles_per_sample": 0.38722824017589336,
               "efficiency": 0.8142398473577616
             },
-            "ratio": 0.25022657763182454
+            "ratio": 0.25022945714226347
           },
           "samples": 65536,
           "snr_db": {
@@ -17249,26 +17249,26 @@
           "branches": {
             "comparison": {
               "branches_per_sample": 0.38604736328125,
-              "mispredictions_per_sample": 0.0008697509765625
+              "mispredictions_per_sample": 0.0008544921875
             },
             "ours": {
               "branches_per_sample": 0.06524658203125,
-              "mispredictions_per_sample": 0.0003814697265625
+              "mispredictions_per_sample": 0.00042724609375
             }
           },
           "compared_with": "CMSIS-DSP 1.18.0 arm_add_f32 (d + d), arm_add_f32 (s + d2), arm_sub_f32 (s - d2) on planar data, generic C (-O3 -ffp-contract=off, LOOPUNROLL, avx2)",
           "comparison_kind": "library",
           "cost": {
             "counter_model": {
-              "comparison": 0.5515124181168366,
+              "comparison": 0.5512072423355866,
               "cpu": "alderlake",
-              "ours": 0.45868703988882215,
+              "ours": 0.45960256723257215,
               "penalty": 20.0
             },
             "reference_model": {
-              "comparison": 0.6115123385903031,
+              "comparison": 0.6113139743324906,
               "cpu": "znver3",
-              "ours": 0.3266020320012019,
+              "ours": 0.3271971247746394,
               "penalty": 13.0
             }
           },
@@ -26313,8 +26313,8 @@
           "comparison_kind": "own_build",
           "counter_model": {
             "comparison": {
-              "coverage": 0.9912199630314233,
-              "cycles_per_sample": 0.45258208588286714,
+              "coverage": 0.9947963128159382,
+              "cycles_per_sample": 0.4509550273338253,
               "efficiency": 0.6998639455782313
             },
             "cpu": "alderlake",
@@ -26323,7 +26323,7 @@
               "cycles_per_sample": 0.4559030569055371,
               "efficiency": 0.6990475625315253
             },
-            "ratio": 1.007337831359789
+            "ratio": 1.010972334871098
           },
           "cycle_mode": "whole-loop",
           "judged_against": {
@@ -26332,9 +26332,9 @@
           },
           "reference_model": {
             "comparison": {
-              "coverage": 0.9912199630314233,
-              "cycles_per_sample": 0.32460665018575174,
-              "efficiency": 0.8203867472484948
+              "coverage": 0.9947963128159382,
+              "cycles_per_sample": 0.32343967066593654,
+              "efficiency": 0.8398113687149779
             },
             "cpu": "znver3",
             "ours": {
@@ -26342,7 +26342,7 @@
               "cycles_per_sample": 0.32862925424822753,
               "efficiency": 0.8164319178553788
             },
-            "ratio": 1.0123922416875129
+            "ratio": 1.0160449816548665
           },
           "samples": 65536,
           "snr_db": {
@@ -44342,26 +44342,26 @@
           "branches": {
             "comparison": {
               "branches_per_sample": 1.26226806640625,
-              "mispredictions_per_sample": 0.0016632080078125
+              "mispredictions_per_sample": 0.0017242431640625
             },
             "ours": {
               "branches_per_sample": 0.12847900390625,
-              "mispredictions_per_sample": 0.0004119873046875
+              "mispredictions_per_sample": 0.0004425048828125
             }
           },
           "compared_with": "VOLK 3.3.0 composition: volk_32fc_deinterleave_32f_x2, volk_32f_x2_add_32f (d + d), volk_32f_x2_add_32f (s + d2), volk_32f_x2_subtract_32f (s - d2), volk_32f_x2_interleave_32fc (five passes over memory)",
           "comparison_kind": "library",
           "cost": {
             "counter_model": {
-              "comparison": 2.503439684416118,
+              "comparison": 2.504416246916118,
               "cpu": "znver2",
-              "ours": 0.9942095356602823,
+              "ours": 0.9946978169102823,
               "penalty": 16.0
             },
             "reference_model": {
-              "comparison": 2.1326349840666117,
+              "comparison": 2.1338556871916117,
               "cpu": "skylake",
-              "ours": 1.027310279107863,
+              "ours": 1.027920630670363,
               "penalty": 20.0
             }
           },
@@ -44408,7 +44408,7 @@
             },
             "ours": {
               "branches_per_sample": 0.06549072265625,
-              "mispredictions_per_sample": 0.000396728515625
+              "mispredictions_per_sample": 0.0003814697265625
             }
           },
           "compared_with": "sdrk fallback",
@@ -44417,13 +44417,13 @@
             "counter_model": {
               "comparison": 1.149174436681411,
               "cpu": "znver2",
-              "ours": 0.5413532106472679,
+              "ours": 0.5411090700222679,
               "penalty": 16.0
             },
             "reference_model": {
               "comparison": 1.0280846898696003,
               "cpu": "skylake",
-              "ours": 0.5211228082257386,
+              "ours": 0.5208176324444886,
               "penalty": 20.0
             }
           },
@@ -44466,26 +44466,26 @@
           "branches": {
             "comparison": {
               "branches_per_sample": 0.38580322265625,
-              "mispredictions_per_sample": 0.000885009765625
+              "mispredictions_per_sample": 0.0008544921875
             },
             "ours": {
               "branches_per_sample": 0.25201416015625,
-              "mispredictions_per_sample": 0.0004425048828125
+              "mispredictions_per_sample": 0.0004730224609375
             }
           },
           "compared_with": "CMSIS-DSP 1.18.0 arm_add_q15 (d + d, saturating), arm_add_q15 (s + d2), arm_sub_q15 (s - d2) on planar data, generic C (-O3 -ffp-contract=off, LOOPUNROLL, sse2)",
           "comparison_kind": "library",
           "cost": {
             "counter_model": {
-              "comparison": 5.690003918586893,
+              "comparison": 5.689515637336893,
               "cpu": "znver2",
-              "ours": 1.149174436681411,
+              "ours": 1.149662717931411,
               "penalty": 16.0
             },
             "reference_model": {
-              "comparison": 5.512820574172,
+              "comparison": 5.5122102226095,
               "cpu": "skylake",
-              "ours": 1.0280846898696003,
+              "ours": 1.0286950414321003,
               "penalty": 20.0
             }
           },
@@ -63264,26 +63264,26 @@
           "branches": {
             "comparison": {
               "branches_per_sample": 1.26226806640625,
-              "mispredictions_per_sample": 0.001708984375
+              "mispredictions_per_sample": 0.0016937255859375
             },
             "ours": {
               "branches_per_sample": 0.12799072265625,
-              "mispredictions_per_sample": 0.0003814697265625
+              "mispredictions_per_sample": 0.0004119873046875
             }
           },
           "compared_with": "VOLK 3.3.0 composition: volk_32fc_deinterleave_32f_x2, volk_32f_x2_add_32f (d + d), volk_32f_x2_add_32f (s + d2), volk_32f_x2_subtract_32f (s - d2), volk_32f_x2_interleave_32fc (five passes over memory)",
           "comparison_kind": "library",
           "cost": {
             "counter_model": {
-              "comparison": 2.504172106291118,
+              "comparison": 2.503927965666118,
               "cpu": "znver2",
-              "ours": 0.9927320911038305,
+              "ours": 0.9932203723538305,
               "penalty": 16.0
             },
             "reference_model": {
-              "comparison": 2.1335505114103617,
+              "comparison": 2.1332453356291117,
               "cpu": "skylake",
-              "ours": 1.0256792622227822,
+              "ours": 1.0262896137852822,
               "penalty": 20.0
             }
           },
@@ -63326,26 +63326,26 @@
           "branches": {
             "comparison": {
               "branches_per_sample": 0.25201416015625,
-              "mispredictions_per_sample": 0.000457763671875
+              "mispredictions_per_sample": 0.0004119873046875
             },
             "ours": {
               "branches_per_sample": 0.06500244140625,
-              "mispredictions_per_sample": 0.00048828125
+              "mispredictions_per_sample": 0.000518798828125
             }
           },
           "compared_with": "sdrk fallback",
           "comparison_kind": "own_fallback",
           "cost": {
             "counter_model": {
-              "comparison": 0.8418915381798379,
+              "comparison": 0.8411591163048379,
               "cpu": "znver2",
-              "ours": 0.5397470092773436,
+              "ours": 0.5402352905273436,
               "penalty": 16.0
             },
             "reference_model": {
-              "comparison": 1.531456263615535,
+              "comparison": 1.530540736271785,
               "cpu": "skylake",
-              "ours": 0.5202460734049479,
+              "ours": 0.5208564249674479,
               "penalty": 20.0
             }
           },
@@ -63388,26 +63388,26 @@
           "branches": {
             "comparison": {
               "branches_per_sample": 0.38580322265625,
-              "mispredictions_per_sample": 0.000946044921875
+              "mispredictions_per_sample": 0.0009613037109375
             },
             "ours": {
               "branches_per_sample": 0.25201416015625,
-              "mispredictions_per_sample": 0.000457763671875
+              "mispredictions_per_sample": 0.0004119873046875
             }
           },
           "compared_with": "CMSIS-DSP 1.18.0 arm_add_q15 (d + d, saturating), arm_add_q15 (s + d2), arm_sub_q15 (s - d2) on planar data, generic C (-O3 -ffp-contract=off, LOOPUNROLL, sse4.2)",
           "comparison_kind": "library",
           "cost": {
             "counter_model": {
-              "comparison": 2.2174505150836445,
+              "comparison": 2.2176946557086445,
               "cpu": "znver2",
-              "ours": 0.8418915381798379,
+              "ours": 0.8411591163048379,
               "penalty": 16.0
             },
             "reference_model": {
-              "comparison": 3.4443222709324046,
+              "comparison": 3.4446274467136546,
               "cpu": "skylake",
-              "ours": 1.531456263615535,
+              "ours": 1.530540736271785,
               "penalty": 20.0
             }
           },
@@ -63450,26 +63450,26 @@
           "branches": {
             "comparison": {
               "branches_per_sample": 0.75958251953125,
-              "mispredictions_per_sample": 0.0008544921875
+              "mispredictions_per_sample": 0.0008392333984375
             },
             "ours": {
               "branches_per_sample": 0.25225830078125,
-              "mispredictions_per_sample": 0.0003662109375
+              "mispredictions_per_sample": 0.0004119873046875
             }
           },
           "compared_with": "CMSIS-DSP 1.18.0 arm_add_f32 (d + d), arm_add_f32 (s + d2), arm_sub_f32 (s - d2) on planar data, generic C (-O3 -ffp-contract=off, LOOPUNROLL, sse4.2)",
           "comparison_kind": "library",
           "cost": {
             "counter_model": {
-              "comparison": 1.3954247041689896,
+              "comparison": 1.3951805635439896,
               "cpu": "znver2",
-              "ours": 1.0971076516544116,
+              "ours": 1.0978400735294116,
               "penalty": 16.0
             },
             "reference_model": {
-              "comparison": 1.0865252642556402,
+              "comparison": 1.0862200884743902,
               "cpu": "skylake",
-              "ours": 1.037111385569853,
+              "ours": 1.038026912913603,
               "penalty": 20.0
             }
           },

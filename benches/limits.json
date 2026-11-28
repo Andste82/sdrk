@@ -418,7 +418,7 @@
   "fir_cq15": {
     "sse2": {
       "status": "info",
-      "waiver": "no established library has a SIMD `CQ15` FIR with real `Q15` taps on our levels (VOLK's `volk_16ic_x2_dot_prod_16ic` takes complex taps and saturates its 16-bit sums, GNU Radio has no 16-bit FIR); the comparison is our own fallback, reported as information, and the branch is judged by its efficiency (D32); at this level the kernel runs the fallback (hotfix D65: its one-output-at-a-time SIMD branch took more simulated cycles than the grouped fallback on both core models of the level), so the entry compares the fallback with itself and reads 1.00 until a grouped SIMD branch replaces it"
+      "waiver": "no established library has a SIMD `CQ15` FIR with real `Q15` taps on our levels (VOLK's `volk_16ic_x2_dot_prod_16ic` takes complex taps and saturates its 16-bit sums, GNU Radio has no 16-bit FIR); the comparison is our own fallback, reported as information, and the branch is judged by its efficiency (D32)"
     },
     "sse4.2": {
       "status": "info",
@@ -426,11 +426,11 @@
     },
     "avx2": {
       "status": "info",
-      "waiver": "no established library has a SIMD `CQ15` FIR with real `Q15` taps on our levels (VOLK's `volk_16ic_x2_dot_prod_16ic` takes complex taps and saturates its 16-bit sums, GNU Radio has no 16-bit FIR); the comparison is our own fallback, reported as information, and the branch is judged by its efficiency (D32); at this level the kernel runs the fallback (hotfix D65: its one-output-at-a-time SIMD branch took more simulated cycles than the grouped fallback on both core models of the level), so the entry compares the fallback with itself and reads 1.00 until a grouped SIMD branch replaces it"
+      "waiver": "no established library has a SIMD `CQ15` FIR with real `Q15` taps on our levels (VOLK's `volk_16ic_x2_dot_prod_16ic` takes complex taps and saturates its 16-bit sums, GNU Radio has no 16-bit FIR); the comparison is our own fallback, reported as information, and the branch is judged by its efficiency (D32)"
     },
     "avx512": {
       "status": "info",
-      "waiver": "no established library has a SIMD `CQ15` FIR with real `Q15` taps on our levels (VOLK's `volk_16ic_x2_dot_prod_16ic` takes complex taps and saturates its 16-bit sums, GNU Radio has no 16-bit FIR); the comparison is our own fallback, reported as information, and the branch is judged by its efficiency (D32); at this level the kernel runs the fallback (hotfix D65: its one-output-at-a-time SIMD branch took more simulated cycles than the grouped fallback on both core models of the level), so the entry compares the fallback with itself and reads 1.00 until a grouped SIMD branch replaces it"
+      "waiver": "no established library has a SIMD `CQ15` FIR with real `Q15` taps on our levels (VOLK's `volk_16ic_x2_dot_prod_16ic` takes complex taps and saturates its 16-bit sums, GNU Radio has no 16-bit FIR); the comparison is our own fallback, reported as information, and the branch is judged by its efficiency (D32)"
     },
     "neon": {
       "status": "info",
@@ -442,7 +442,7 @@
     },
     "avx2-runtime": {
       "status": "info",
-      "waiver": "no reference library at `avx2`: the comparison of the `avx2` record is our own fallback, so the entry is information at `avx2-runtime` as at `avx2` and judged by its efficiency (D32, D2764); its cycles against our fixed `avx2` build are information as well. The reason at `avx2`: no established library has a SIMD `CQ15` FIR with real `Q15` taps on our levels (VOLK's `volk_16ic_x2_dot_prod_16ic` takes complex taps and saturates its 16-bit sums, GNU Radio has no 16-bit FIR); the comparison is our own fallback, reported as information, and the branch is judged by its efficiency (D32); at this level the kernel runs the fallback (hotfix D65: its one-output-at-a-time SIMD branch took more simulated cycles than the grouped fallback on both core models of the level), so the entry compares the fallback with itself and reads 1.00 until a grouped SIMD branch replaces it"
+      "waiver": "no reference library at `avx2`: the comparison of the `avx2` record is our own fallback, so the entry is information at `avx2-runtime` as at `avx2` and judged by its efficiency (D32, D2764); its cycles against our fixed `avx2` build are information as well. The reason at `avx2`: no established library has a SIMD `CQ15` FIR with real `Q15` taps on our levels (VOLK's `volk_16ic_x2_dot_prod_16ic` takes complex taps and saturates its 16-bit sums, GNU Radio has no 16-bit FIR); the comparison is our own fallback, reported as information, and the branch is judged by its efficiency (D32)"
     }
   },
   "fir_decimate": {
@@ -472,7 +472,7 @@
   "fir_decimate_cq15": {
     "sse2": {
       "status": "info",
-      "waiver": "no established library has a SIMD `CQ15` FIR with real `Q15` taps on our levels (VOLK's `volk_16ic_x2_dot_prod_16ic` takes complex taps and saturates its 16-bit sums, GNU Radio has no 16-bit FIR); the comparison is our own fallback, reported as information, and the branch is judged by its efficiency (D32); at this level the kernel runs the fallback (hotfix D65: its one-output-at-a-time SIMD branch took more simulated cycles than the grouped fallback on both core models of the level), so the entry compares the fallback with itself and reads 1.00 until a grouped SIMD branch replaces it"
+      "waiver": "no established library has a SIMD `CQ15` FIR with real `Q15` taps on our levels (VOLK's `volk_16ic_x2_dot_prod_16ic` takes complex taps and saturates its 16-bit sums, GNU Radio has no 16-bit FIR); the comparison is our own fallback, reported as information, and the branch is judged by its efficiency (D32)"
     },
     "sse4.2": {
       "status": "info",
@@ -480,11 +480,11 @@
     },
     "avx2": {
       "status": "info",
-      "waiver": "no established library has a SIMD `CQ15` FIR with real `Q15` taps on our levels (VOLK's `volk_16ic_x2_dot_prod_16ic` takes complex taps and saturates its 16-bit sums, GNU Radio has no 16-bit FIR); the comparison is our own fallback, reported as information, and the branch is judged by its efficiency (D32); at this level the kernel runs the fallback (hotfix D65: its one-output-at-a-time SIMD branch took more simulated cycles than the grouped fallback on both core models of the level), so the entry compares the fallback with itself and reads 1.00 until a grouped SIMD branch replaces it"
+      "waiver": "no established library has a SIMD `CQ15` FIR with real `Q15` taps on our levels (VOLK's `volk_16ic_x2_dot_prod_16ic` takes complex taps and saturates its 16-bit sums, GNU Radio has no 16-bit FIR); the comparison is our own fallback, reported as information, and the branch is judged by its efficiency (D32)"
     },
     "avx2-runtime": {
       "status": "info",
-      "waiver": "no reference library at `avx2`: the comparison of the `avx2` record is our own fallback, so the entry is information at `avx2-runtime` as at `avx2` and judged by its efficiency (D32, D2764); its cycles against our fixed `avx2` build are information as well. The reason at `avx2`: no established library has a SIMD `CQ15` FIR with real `Q15` taps on our levels (VOLK's `volk_16ic_x2_dot_prod_16ic` takes complex taps and saturates its 16-bit sums, GNU Radio has no 16-bit FIR); the comparison is our own fallback, reported as information, and the branch is judged by its efficiency (D32); at this level the kernel runs the fallback (hotfix D65: its one-output-at-a-time SIMD branch took more simulated cycles than the grouped fallback on both core models of the level), so the entry compares the fallback with itself and reads 1.00 until a grouped SIMD branch replaces it"
+      "waiver": "no reference library at `avx2`: the comparison of the `avx2` record is our own fallback, so the entry is information at `avx2-runtime` as at `avx2` and judged by its efficiency (D32, D2764); its cycles against our fixed `avx2` build are information as well. The reason at `avx2`: no established library has a SIMD `CQ15` FIR with real `Q15` taps on our levels (VOLK's `volk_16ic_x2_dot_prod_16ic` takes complex taps and saturates its 16-bit sums, GNU Radio has no 16-bit FIR); the comparison is our own fallback, reported as information, and the branch is judged by its efficiency (D32)"
     },
     "avx512": {
       "status": "info",
@@ -492,7 +492,7 @@
     },
     "neon": {
       "status": "info",
-      "waiver": "no established library has a SIMD `CQ15` FIR with real `Q15` taps on our levels (VOLK's `volk_16ic_x2_dot_prod_16ic` takes complex taps and saturates its 16-bit sums, GNU Radio has no 16-bit FIR); the comparison is our own fallback, reported as information, and the branch is judged by its efficiency (D32); at this level the kernel runs the fallback (the switch of hotfix D65, D2838: its one-output-at-a-time SIMD branch took more simulated cycles than the exact lanes of the fallback, D2830, on both core models of the level), so the entry compares the fallback with itself and reads 1.00 until a grouped SIMD branch replaces it"
+      "waiver": "no established library has a SIMD `CQ15` FIR with real `Q15` taps on our levels (VOLK's `volk_16ic_x2_dot_prod_16ic` takes complex taps and saturates its 16-bit sums, GNU Radio has no 16-bit FIR); the comparison is our own fallback, reported as information, and the branch is judged by its efficiency (D32); at this level the kernel runs the fallback (the switch of hotfix D65, kept by D3007: the NEON progressions took 14.98 / 12.05 cycles per sample against 14.98 / 14.64 of the exact lanes of the fallback, D2830, on `cortex-a72` / `cortex-a76`, above 0.80 on both models, open item IO2-22), so the entry compares the fallback with itself and reads 1.00"
     },
     "simd128": {
       "status": "info",
@@ -550,7 +550,7 @@
   "fir_interpolate_cq15": {
     "sse2": {
       "status": "info",
-      "waiver": "no established library has a SIMD `CQ15` FIR with real `Q15` taps on our levels (VOLK's `volk_16ic_x2_dot_prod_16ic` takes complex taps and saturates its 16-bit sums, GNU Radio has no 16-bit FIR); the comparison is our own fallback, reported as information, and the branch is judged by its efficiency (D32); at this level the kernel runs the fallback (hotfix D65: its one-output-at-a-time SIMD branch took more simulated cycles than the grouped fallback on both core models of the level), so the entry compares the fallback with itself and reads 1.00 until a grouped SIMD branch replaces it"
+      "waiver": "no established library has a SIMD `CQ15` FIR with real `Q15` taps on our levels (VOLK's `volk_16ic_x2_dot_prod_16ic` takes complex taps and saturates its 16-bit sums, GNU Radio has no 16-bit FIR); the comparison is our own fallback, reported as information, and the branch is judged by its efficiency (D32)"
     },
     "sse4.2": {
       "status": "info",
@@ -558,11 +558,11 @@
     },
     "avx2": {
       "status": "info",
-      "waiver": "no established library has a SIMD `CQ15` FIR with real `Q15` taps on our levels (VOLK's `volk_16ic_x2_dot_prod_16ic` takes complex taps and saturates its 16-bit sums, GNU Radio has no 16-bit FIR); the comparison is our own fallback, reported as information, and the branch is judged by its efficiency (D32); at this level the kernel runs the fallback (hotfix D65: its one-output-at-a-time SIMD branch took more simulated cycles than the grouped fallback on both core models of the level), so the entry compares the fallback with itself and reads 1.00 until a grouped SIMD branch replaces it"
+      "waiver": "no established library has a SIMD `CQ15` FIR with real `Q15` taps on our levels (VOLK's `volk_16ic_x2_dot_prod_16ic` takes complex taps and saturates its 16-bit sums, GNU Radio has no 16-bit FIR); the comparison is our own fallback, reported as information, and the branch is judged by its efficiency (D32)"
     },
     "avx512": {
       "status": "info",
-      "waiver": "no established library has a SIMD `CQ15` FIR with real `Q15` taps on our levels (VOLK's `volk_16ic_x2_dot_prod_16ic` takes complex taps and saturates its 16-bit sums, GNU Radio has no 16-bit FIR); the comparison is our own fallback, reported as information, and the branch is judged by its efficiency (D32); at this level the kernel runs the fallback (hotfix D65: its one-output-at-a-time SIMD branch took more simulated cycles than the grouped fallback on both core models of the level), so the entry compares the fallback with itself and reads 1.00 until a grouped SIMD branch replaces it"
+      "waiver": "no established library has a SIMD `CQ15` FIR with real `Q15` taps on our levels (VOLK's `volk_16ic_x2_dot_prod_16ic` takes complex taps and saturates its 16-bit sums, GNU Radio has no 16-bit FIR); the comparison is our own fallback, reported as information, and the branch is judged by its efficiency (D32)"
     },
     "neon": {
       "status": "info",
@@ -574,7 +574,7 @@
     },
     "avx2-runtime": {
       "status": "info",
-      "waiver": "no reference library at `avx2`: the comparison of the `avx2` record is our own fallback, so the entry is information at `avx2-runtime` as at `avx2` and judged by its efficiency (D32, D2764); its cycles against our fixed `avx2` build are information as well. The reason at `avx2`: no established library has a SIMD `CQ15` FIR with real `Q15` taps on our levels (VOLK's `volk_16ic_x2_dot_prod_16ic` takes complex taps and saturates its 16-bit sums, GNU Radio has no 16-bit FIR); the comparison is our own fallback, reported as information, and the branch is judged by its efficiency (D32); at this level the kernel runs the fallback (hotfix D65: its one-output-at-a-time SIMD branch took more simulated cycles than the grouped fallback on both core models of the level), so the entry compares the fallback with itself and reads 1.00 until a grouped SIMD branch replaces it"
+      "waiver": "no reference library at `avx2`: the comparison of the `avx2` record is our own fallback, so the entry is information at `avx2-runtime` as at `avx2` and judged by its efficiency (D32, D2764); its cycles against our fixed `avx2` build are information as well. The reason at `avx2`: no established library has a SIMD `CQ15` FIR with real `Q15` taps on our levels (VOLK's `volk_16ic_x2_dot_prod_16ic` takes complex taps and saturates its 16-bit sums, GNU Radio has no 16-bit FIR); the comparison is our own fallback, reported as information, and the branch is judged by its efficiency (D32)"
     }
   },
   "resample": {
@@ -604,7 +604,7 @@
   "resample_cq15": {
     "sse2": {
       "status": "info",
-      "waiver": "no established library has a SIMD `CQ15` FIR with real `Q15` taps on our levels (VOLK's `volk_16ic_x2_dot_prod_16ic` takes complex taps and saturates its 16-bit sums, GNU Radio has no 16-bit FIR); the comparison is our own fallback, reported as information, and the branch is judged by its efficiency (D32); at this level the kernel runs the fallback (hotfix D65: its one-output-at-a-time SIMD branch took more simulated cycles than the grouped fallback on both core models of the level), so the entry compares the fallback with itself and reads 1.00 until a grouped SIMD branch replaces it"
+      "waiver": "no established library has a SIMD `CQ15` FIR with real `Q15` taps on our levels (VOLK's `volk_16ic_x2_dot_prod_16ic` takes complex taps and saturates its 16-bit sums, GNU Radio has no 16-bit FIR); the comparison is our own fallback, reported as information, and the branch is judged by its efficiency (D32)"
     },
     "sse4.2": {
       "status": "info",
@@ -612,11 +612,11 @@
     },
     "avx2": {
       "status": "info",
-      "waiver": "no established library has a SIMD `CQ15` FIR with real `Q15` taps on our levels (VOLK's `volk_16ic_x2_dot_prod_16ic` takes complex taps and saturates its 16-bit sums, GNU Radio has no 16-bit FIR); the comparison is our own fallback, reported as information, and the branch is judged by its efficiency (D32); at this level the kernel runs the fallback (hotfix D65: its one-output-at-a-time SIMD branch took more simulated cycles than the grouped fallback on both core models of the level), so the entry compares the fallback with itself and reads 1.00 until a grouped SIMD branch replaces it"
+      "waiver": "no established library has a SIMD `CQ15` FIR with real `Q15` taps on our levels (VOLK's `volk_16ic_x2_dot_prod_16ic` takes complex taps and saturates its 16-bit sums, GNU Radio has no 16-bit FIR); the comparison is our own fallback, reported as information, and the branch is judged by its efficiency (D32)"
     },
     "avx2-runtime": {
       "status": "info",
-      "waiver": "no reference library at `avx2`: the comparison of the `avx2` record is our own fallback, so the entry is information at `avx2-runtime` as at `avx2` and judged by its efficiency (D32, D2764); its cycles against our fixed `avx2` build are information as well. The reason at `avx2`: no established library has a SIMD `CQ15` FIR with real `Q15` taps on our levels (VOLK's `volk_16ic_x2_dot_prod_16ic` takes complex taps and saturates its 16-bit sums, GNU Radio has no 16-bit FIR); the comparison is our own fallback, reported as information, and the branch is judged by its efficiency (D32); at this level the kernel runs the fallback (hotfix D65: its one-output-at-a-time SIMD branch took more simulated cycles than the grouped fallback on both core models of the level), so the entry compares the fallback with itself and reads 1.00 until a grouped SIMD branch replaces it"
+      "waiver": "no reference library at `avx2`: the comparison of the `avx2` record is our own fallback, so the entry is information at `avx2-runtime` as at `avx2` and judged by its efficiency (D32, D2764); its cycles against our fixed `avx2` build are information as well. The reason at `avx2`: no established library has a SIMD `CQ15` FIR with real `Q15` taps on our levels (VOLK's `volk_16ic_x2_dot_prod_16ic` takes complex taps and saturates its 16-bit sums, GNU Radio has no 16-bit FIR); the comparison is our own fallback, reported as information, and the branch is judged by its efficiency (D32)"
     },
     "avx512": {
       "status": "info",
@@ -682,7 +682,7 @@
   "fir_interpolate_real_q15": {
     "sse2": {
       "status": "info",
-      "waiver": "no established library has a SIMD `Q15` real polyphase filter or dot product on our levels (VOLK has no 16-bit real dot product, GNU Radio no 16-bit real polyphase filter); the comparison is our own fallback, reported as information, and the branch is judged by its efficiency (D32); at this level the kernel runs the fallback (hotfix D65: its one-output-at-a-time SIMD branch took more simulated cycles than the grouped fallback on both core models of the level), so the entry compares the fallback with itself and reads 1.00 until a grouped SIMD branch replaces it"
+      "waiver": "no established library has a SIMD `Q15` real polyphase filter or dot product on our levels (VOLK has no 16-bit real dot product, GNU Radio no 16-bit real polyphase filter); the comparison is our own fallback, reported as information, and the branch is judged by its efficiency (D32)"
     },
     "sse4.2": {
       "status": "info",
@@ -690,11 +690,11 @@
     },
     "avx2": {
       "status": "info",
-      "waiver": "no established library has a SIMD `Q15` real polyphase filter or dot product on our levels (VOLK has no 16-bit real dot product, GNU Radio no 16-bit real polyphase filter); the comparison is our own fallback, reported as information, and the branch is judged by its efficiency (D32); at this level the kernel runs the fallback (hotfix D65: its one-output-at-a-time SIMD branch took more simulated cycles than the grouped fallback on both core models of the level), so the entry compares the fallback with itself and reads 1.00 until a grouped SIMD branch replaces it"
+      "waiver": "no established library has a SIMD `Q15` real polyphase filter or dot product on our levels (VOLK has no 16-bit real dot product, GNU Radio no 16-bit real polyphase filter); the comparison is our own fallback, reported as information, and the branch is judged by its efficiency (D32)"
     },
     "avx512": {
       "status": "info",
-      "waiver": "no established library has a SIMD `Q15` real polyphase filter or dot product on our levels (VOLK has no 16-bit real dot product, GNU Radio no 16-bit real polyphase filter); the comparison is our own fallback, reported as information, and the branch is judged by its efficiency (D32); at this level the kernel runs the fallback (hotfix D65: its one-output-at-a-time SIMD branch took more simulated cycles than the grouped fallback on both core models of the level), so the entry compares the fallback with itself and reads 1.00 until a grouped SIMD branch replaces it"
+      "waiver": "no established library has a SIMD `Q15` real polyphase filter or dot product on our levels (VOLK has no 16-bit real dot product, GNU Radio no 16-bit real polyphase filter); the comparison is our own fallback, reported as information, and the branch is judged by its efficiency (D32)"
     },
     "neon": {
       "status": "info",
@@ -702,17 +702,17 @@
     },
     "simd128": {
       "status": "info",
-      "waiver": "no established library has a SIMD `Q15` real polyphase filter or dot product on our levels (VOLK has no 16-bit real dot product, GNU Radio no 16-bit real polyphase filter); the comparison is our own fallback, reported as information, and the branch is judged by its efficiency (D32); at this level the kernel runs the fallback (hotfix D65: its one-output-at-a-time SIMD branch took more instructions than the grouped fallback, the measure of `simd128` (D33)), so the entry compares the fallback with itself and reads 1.00 until a grouped SIMD branch replaces it"
+      "waiver": "no established library has a SIMD `Q15` real polyphase filter or dot product on our levels (VOLK has no 16-bit real dot product, GNU Radio no 16-bit real polyphase filter); the comparison is our own fallback, reported as information, and the branch is judged by its efficiency (D32)"
     },
     "avx2-runtime": {
       "status": "info",
-      "waiver": "no reference library at `avx2`: the comparison of the `avx2` record is our own fallback, so the entry is information at `avx2-runtime` as at `avx2` and judged by its efficiency (D32, D2764); its cycles against our fixed `avx2` build are information as well. The reason at `avx2`: no established library has a SIMD `Q15` real polyphase filter or dot product on our levels (VOLK has no 16-bit real dot product, GNU Radio no 16-bit real polyphase filter); the comparison is our own fallback, reported as information, and the branch is judged by its efficiency (D32); at this level the kernel runs the fallback (hotfix D65: its one-output-at-a-time SIMD branch took more simulated cycles than the grouped fallback on both core models of the level), so the entry compares the fallback with itself and reads 1.00 until a grouped SIMD branch replaces it"
+      "waiver": "no reference library at `avx2`: the comparison of the `avx2` record is our own fallback, so the entry is information at `avx2-runtime` as at `avx2` and judged by its efficiency (D32, D2764); its cycles against our fixed `avx2` build are information as well. The reason at `avx2`: no established library has a SIMD `Q15` real polyphase filter or dot product on our levels (VOLK has no 16-bit real dot product, GNU Radio no 16-bit real polyphase filter); the comparison is our own fallback, reported as information, and the branch is judged by its efficiency (D32)"
     }
   },
   "resample_real_q15": {
     "sse2": {
       "status": "info",
-      "waiver": "no established library has a SIMD `Q15` real polyphase filter or dot product on our levels (VOLK has no 16-bit real dot product, GNU Radio no 16-bit real polyphase filter); the comparison is our own fallback, reported as information, and the branch is judged by its efficiency (D32); at this level the kernel runs the fallback (hotfix D65: its one-output-at-a-time SIMD branch took more simulated cycles than the grouped fallback on both core models of the level), so the entry compares the fallback with itself and reads 1.00 until a grouped SIMD branch replaces it"
+      "waiver": "no established library has a SIMD `Q15` real polyphase filter or dot product on our levels (VOLK has no 16-bit real dot product, GNU Radio no 16-bit real polyphase filter); the comparison is our own fallback, reported as information, and the branch is judged by its efficiency (D32)"
     },
     "sse4.2": {
       "status": "info",

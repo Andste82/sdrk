@@ -31,8 +31,9 @@
 //!   prepare those of all branches at once, and a filter that does not fit, and every `CQ15`
 //!   filter with more than [`PREP_TAPS`] taps, runs on the fallback. The portable level (no SIMD
 //!   level) computes one output at a time in the chunk form, a window that reaches into the
-//!   history assembled chunk by chunk with the same chunk boundaries. Of the switch of D65 only
-//!   `fir_decimate` on AArch64 stays ([`DECIMATE_CQ15_RUNS_FALLBACK`], D3007).
+//!   history assembled chunk by chunk with the same chunk boundaries. No kernel and level runs
+//!   the fallback in place of its branch (the switch of D65 is removed, D3007; its last row,
+//!   `fir_decimate` on AArch64, by D3016).
 //!
 //! `C32` and `f32` results are within the contract of `docs/kernels.md` (110 dB) but not
 //! bit-identical with the fallback, because the sums are formed in a different order (and fused on
@@ -2505,11 +2506,9 @@ fn decimate_cq15<S: SimdToken>(
     factor: usize,
     count: usize,
 ) {
-    // Not on AArch64: there `fir_decimate` `CQ15` runs the fallback before this function
-    // ([`DECIMATE_CQ15_RUNS_FALLBACK`], open item IO2-22), so its NEON progression is not
-    // compiled for it.
     #[cfg(any(
         target_arch = "x86_64",
+        target_arch = "aarch64",
         all(target_arch = "wasm32", target_feature = "simd128")
     ))]
     if let Some(level) = split_level(simd) {
@@ -2679,7 +2678,7 @@ impl Fir<CQ15> for Simd {
 }
 
 macro_rules! decimate_impl {
-    ($t:ty, $tap:ty, $lane:ty, $run:ident, $limit:expr, $switched:expr) => {
+    ($t:ty, $tap:ty, $lane:ty, $run:ident, $limit:expr) => {
         impl FirDecimate<$t> for Simd {
             fn fir_decimate<Tp, Hist>(
                 &self,
@@ -2691,7 +2690,7 @@ macro_rules! decimate_impl {
                 Tp: AsRef<[$tap]>,
                 Hist: AsRef<[$t]> + AsMut<[$t]>,
             {
-                if state.taps().len() > $limit || $switched {
+                if state.taps().len() > $limit {
                     return Fallback.fir_decimate(state, input, output);
                 }
                 let p = state.parts_mut();
@@ -2712,22 +2711,8 @@ macro_rules! decimate_impl {
     };
 }
 
-decimate_impl!(C32, f32, f32, decimate_c32, usize::MAX, false);
-/// On AArch64 `fir_decimate` `CQ15` runs the fallback (its exact lanes, D2830) in place of the
-/// NEON progressions: these take 14.98 / 12.05 cycles per sample against 14.98 / 14.64 of the
-/// fallback on `cortex-a72` / `cortex-a76` (CI run 46093881387), 1.000 / 0.823, above the 0.80 of
-/// the target on both models (the switch of D65, kept by D3007; open item IO2-22). Both are exact
-/// integer sums, so the outputs are the same.
-const DECIMATE_CQ15_RUNS_FALLBACK: bool = cfg!(target_arch = "aarch64");
-
-decimate_impl!(
-    CQ15,
-    Q15,
-    i16,
-    decimate_cq15,
-    PREP_TAPS,
-    DECIMATE_CQ15_RUNS_FALLBACK
-);
+decimate_impl!(C32, f32, f32, decimate_c32, usize::MAX);
+decimate_impl!(CQ15, Q15, i16, decimate_cq15, PREP_TAPS);
 
 /// `resample` (complex) and `resample_real` of `f32` taps: `C` floats per sample.
 macro_rules! resample_f32_impl {

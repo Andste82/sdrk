@@ -11,7 +11,7 @@
     },
     "agc_cq15": {
       "implementation": "fallback",
-      "instructions_per_sample": 1336.96
+      "instructions_per_sample": 1374.59
     },
     "biquad": {
       "compared_with": "CMSIS-DSP 1.18.0 arm_biquad_cascade_stereo_df2T_f32 (re and im as the two channels), Cortex-M4 with the FPU (-mcpu=cortex-m4 -mfpu=fpv4-sp-d16 -mfloat-abi=hard -mthumb -O3 -ffp-contract=off, LOOPUNROLL, CMSIS-Core 6.3.0)",
@@ -63,15 +63,15 @@
     },
     "convert_cs16": {
       "implementation": "fallback",
-      "instructions_per_sample": 162.23
+      "instructions_per_sample": 12.62
     },
     "convert_cs8": {
       "implementation": "fallback",
-      "instructions_per_sample": 136.23
+      "instructions_per_sample": 13.62
     },
     "convert_out_cs16": {
       "implementation": "fallback",
-      "instructions_per_sample": 151.45
+      "instructions_per_sample": 180.48
     },
     "dc_block_real": {
       "implementation": "fallback",
@@ -83,23 +83,23 @@
     },
     "fft_1024": {
       "implementation": "fallback",
-      "instructions_per_sample": 278.86
+      "instructions_per_sample": 107.11
     },
     "fft_cq15_1024": {
       "implementation": "fallback",
-      "instructions_per_sample": 1366.67
+      "instructions_per_sample": 465.92
     },
     "fir": {
       "implementation": "fallback",
-      "instructions_per_sample": 562.01
+      "instructions_per_sample": 510.45
     },
     "fir_decimate": {
       "implementation": "fallback",
-      "instructions_per_sample": 141.7
+      "instructions_per_sample": 112.28
     },
     "fm_mod": {
       "implementation": "fallback",
-      "instructions_per_sample": 423.06
+      "instructions_per_sample": 557.12
     },
     "gauss_noise_c32": {
       "implementation": "fallback",
@@ -149,6 +149,9 @@
       "cmsis_dsp": {
         "build": "CMSIS-Core, DSP extension and FPU, cmsis-biquad.c and cmsis-m4-heap.c: -DARM_MATH_LOOPUNROLL -O3 -ffp-contract=off, per level cortex-m4:-mcpu=cortex-m4 -mfpu=fpv4-sp-d16 -mfloat-abi=hard -mthumb",
         "sha256": "b60944180f51f9bb50df1a8cccad19d7c1ef8c14ed13da50b9b3f141032c3f56",
+        "simd_level": {
+          "cortex-m4": "cortex-m4"
+        },
         "version": "1.18.0"
       }
     },

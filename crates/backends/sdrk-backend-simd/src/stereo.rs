@@ -10,7 +10,8 @@
 //! the unzip is `shufps` and the zip `unpcklps`/`unpckhps`, which work within 128-bit lanes
 //! and cancel each other (the arithmetic acts on every lane alike), so no cross-lane
 //! permutation is needed at AVX2 and AVX-512 (SSE2 included); SIMD128 uses the generic unzip
-//! and zip of the token, and NEON runs the fallback (below).
+//! and zip of the token, and NEON runs the fallback (below). A build with AVX2 runs the
+//! fallback at `avx2` too: its x86 module (D3005) is this 256-bit form.
 //!
 //! `CQ15`: `s + 2 d` and `s - 2 d` are exact in 32 bits and the result is `sat16` of them.
 //!
@@ -51,6 +52,14 @@ fn matrix_f32<S: SimdToken>(simd: S, input: &[f32], out: &mut [f32], done: &mut 
             return;
         }
         if let Some(t) = level.as_avx2() {
+            // A build with AVX2 compiles the fallback to the same 256-bit shuffles (its module
+            // `matrix_x86`, D3005), which measured as fast (CI run 46050916654: 0.322 / 0.451
+            // against 0.325 / 0.453 cycles per sample on `znver3` / `alderlake`). The run-time
+            // dispatch build has the 128-bit fallback and keeps this path.
+            if cfg!(target_feature = "avx2") {
+                *done = 0;
+                return;
+            }
             *done = x86::matrix_f32_avx2(t, input, out);
             return;
         }

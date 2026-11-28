@@ -58,7 +58,7 @@ Judged opponent (D2953), count of `count_wasm32` of CI run 46157162937:
 | `scale_fallback` | blocks of 32 floats (D3106) | 5.59 | 5.40 (CMSIS-DSP `arm_scale_f32`) | 1.03 | 1.14 | `release` (was `dev`) |
 | `fir_interpolate_real_fallback` | the head outputs in groups (D3104) | 292.07 | 296.50 (CMSIS-DSP) | 0.99 | 1.18 | `release` (was `dev`) |
 | `fir_interpolate_short_fallback` | two columns per pass (D3105) | 134.51 | 127.10 (CMSIS-DSP) | 1.06 | 1.38 | `release` (was `dev`) |
-| `fir_cq15_fallback` | the head outputs in groups (D3104) | 899.10 | 785.69 (CMSIS-DSP `arm_fir_q15`) | 1.14 | 1.19 | `dev`, waiver, IO2-29 |
+| `fir_cq15_fallback` | the head outputs in groups (D3104) | 897.87 | 785.69 (CMSIS-DSP `arm_fir_q15`) | 1.14 | 1.19 | `dev`, waiver, IO2-29 |
 | `fft_4096_fallback` | none | 244.93 | 221.28 (CMSIS-DSP `arm_cfft_f32`) | 1.11 | 1.11 | `dev`, waiver, IO2-29 |
 | `stereo_pll_fallback` | none | 189.06 | 143.86 (liquid-dsp) | 1.31 | 1.31 | `dev`, `slower_because` (`more accurate`) |
 

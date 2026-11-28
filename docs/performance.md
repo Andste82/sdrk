@@ -503,17 +503,17 @@ Reference model `skylake`, counter-model `znver2`, mode `whole-loop`; execution 
 | `scramble_cq15_b8` | 3.78 | 7.36 | 0.51 | 3.66 | 7.52 | 0.49 | 92.2 / 72.1 | info | CMSIS-DSP 1.18.0 phasor lookup into a buffer of 256 + arm_cmplx_mult_cmplx_q15 (3.13 output), generic C (-O3 -ffp-contract=off, LOOPUNROLL, sse2) |
 | `scramble_cq15_b8_fallback` | 9.44 | 7.36 | 1.28 | 8.86 | 7.52 | 1.18 | 92.2 / 72.1 | info | CMSIS-DSP 1.18.0 phasor lookup into a buffer of 256 + arm_cmplx_mult_cmplx_q15 (3.13 output), generic C (-O3 -ffp-contract=off, LOOPUNROLL, sse2) |
 | `fir` | 33.63 | 77.65 | 0.43 | 29.99 | 78.96 | 0.38 | 141.7 / 141.7 | release | volk_32fc_32f_dot_prod_32fc_a as GNU Radio's fir_filter_ccf calls it |
-| `fir_cq15` | 37.86 | 138.97 | 0.27 | 41.96 | 184.33 | 0.23 | exact / exact | info | own (information): sdrk fallback |
-| `fir_cq15_fallback` | 138.97 | 177.35 | 0.78 | 184.33 | 220.90 | 0.83 | exact / 83.1 | release | CMSIS-DSP 1.18.0 arm_fir_q15, generic C (-O3 -ffp-contract=off, LOOPUNROLL, sse2) |
+| `fir_cq15` | 37.86 | 138.97 | 0.27 | 41.96 | 184.08 | 0.23 | exact / exact | info | own (information): sdrk fallback |
+| `fir_cq15_fallback` | 138.97 | 177.35 | 0.78 | 184.08 | 220.90 | 0.83 | exact / 83.1 | release | CMSIS-DSP 1.18.0 arm_fir_q15, generic C (-O3 -ffp-contract=off, LOOPUNROLL, sse2) |
 | `fir_decimate` | 6.87 | 12.46 | 0.55 | 6.08 | 13.37 | 0.45 | 141.0 / 139.0 | release | volk_32fc_32f_dot_prod_32fc_a as GNU Radio's fir_filter_ccf (filterNdec) calls it |
 | `fir_decimate_cq15` | 6.95 | 8.85 | 0.79 | 6.99 | 9.23 | 0.76 | exact / exact | info | own (information): sdrk fallback |
 | `fir_decimate_cq15_fallback` | 8.85 | 24.93 | 0.35 | 9.23 | 25.79 | 0.36 | exact / 82.2 | release | CMSIS-DSP 1.18.0 arm_fir_decimate_q15 (block 4090 of 4096), generic C (-O3 -ffp-contract=off, LOOPUNROLL, sse2) |
-| `fir_decimate_fallback` | 15.10 | 38.80 | 0.39 | 15.84 | 23.74 | 0.67 | 133.3 / 134.3 | release | CMSIS-DSP 1.18.0 arm_fir_decimate_f32 (block 4090 of 4096), generic C (-O3 -ffp-contract=off, LOOPUNROLL, sse2) |
-| `fir_fallback` | 38.08 | 132.97 | 0.29 | 48.25 | 111.96 | 0.43 | 136.3 / 136.4 | release | CMSIS-DSP 1.18.0 arm_fir_f32, generic C (-O3 -ffp-contract=off, LOOPUNROLL, sse2) |
+| `fir_decimate_fallback` | 15.09 | 38.80 | 0.39 | 15.82 | 23.74 | 0.67 | 133.3 / 134.3 | release | CMSIS-DSP 1.18.0 arm_fir_decimate_f32 (block 4090 of 4096), generic C (-O3 -ffp-contract=off, LOOPUNROLL, sse2) |
+| `fir_fallback` | 37.98 | 132.97 | 0.29 | 48.05 | 111.96 | 0.43 | 136.3 / 136.4 | release | CMSIS-DSP 1.18.0 arm_fir_f32, generic C (-O3 -ffp-contract=off, LOOPUNROLL, sse2) |
 | `fir_interpolate` | 36.22 | 86.10 | 0.42 | 34.15 | 88.20 | 0.39 | 141.9 / 141.5 | release | volk_32fc_32f_dot_prod_32fc_a per output as GNU Radio's interp_fir_filter_ccf calls it |
 | `fir_interpolate_cq15` | 38.19 | 59.70 | 0.64 | 42.35 | 60.72 | 0.70 | exact / exact | info | own (information): sdrk fallback |
 | `fir_interpolate_cq15_fallback` | 59.70 | 137.61 | 0.43 | 60.72 | 164.43 | 0.37 | exact / 80.1 | release | CMSIS-DSP 1.18.0 arm_fir_interpolate_q15 by 2, generic C (-O3 -ffp-contract=off, LOOPUNROLL, sse2) |
-| `fir_interpolate_fallback` | 61.05 | 141.75 | 0.43 | 65.19 | 114.81 | 0.57 | 136.3 / 136.5 | release | CMSIS-DSP 1.18.0 arm_fir_interpolate_f32 by 2, generic C (-O3 -ffp-contract=off, LOOPUNROLL, sse2) |
+| `fir_interpolate_fallback` | 61.23 | 141.75 | 0.43 | 65.00 | 114.81 | 0.57 | 136.3 / 136.5 | release | CMSIS-DSP 1.18.0 arm_fir_interpolate_f32 by 2, generic C (-O3 -ffp-contract=off, LOOPUNROLL, sse2) |
 | `fir_interpolate_real` | 19.44 | 79.39 | 0.24 | 18.20 | 77.13 | 0.24 | 141.8 / 141.4 | release | volk_32f_x2_dot_prod_32f_a per output as GNU Radio's interp_fir_filter_fff calls it |
 | `fir_interpolate_real_fallback` | 33.05 | 70.88 | 0.47 | 37.08 | 57.41 | 0.65 | 136.5 / 136.4 | release | CMSIS-DSP 1.18.0 arm_fir_interpolate_f32 by 2, generic C (-O3 -ffp-contract=off, LOOPUNROLL, sse2) |
 | `fir_interpolate_real_q15` | 27.51 | 28.88 | 0.95 | 34.99 | 37.70 | 0.93 | exact / exact | info | own (information): sdrk fallback |
@@ -521,9 +521,9 @@ Reference model `skylake`, counter-model `znver2`, mode `whole-loop`; execution 
 | `fir_interpolate_short` | 7.16 | 49.49 | 0.14 | 8.99 | 58.82 | 0.15 | 144.0 / 143.4 | release | volk_32fc_32f_dot_prod_32fc_a per output as GNU Radio's interp_fir_filter_ccf calls it |
 | `fir_interpolate_short_fallback` | 14.74 | 24.83 | 0.59 | 19.29 | 22.72 | 0.85 | 143.1 / 143.0 | release | CMSIS-DSP 1.18.0 arm_fir_interpolate_f32 by 8 (80 taps), generic C (-O3 -ffp-contract=off, LOOPUNROLL, sse2) |
 | `resample` | 38.72 | 87.37 | 0.44 | 35.30 | 89.05 | 0.40 | 141.6 / 141.4 | release | volk_32fc_32f_dot_prod_32fc_a per output as GNU Radio's rational_resampler_ccf calls it |
-| `resample_cq15` | 40.31 | 168.57 | 0.24 | 43.57 | 240.68 | 0.18 | exact / exact | info | own (information): sdrk fallback |
-| `resample_cq15_fallback` | 168.57 | 136.68 | 1.23 | 240.68 | 163.55 | 1.47 | exact / 78.2 | info | CMSIS-DSP 1.18.0 arm_fir_interpolate_q15 by 3, the same outputs per sample (no rational resampler), generic C (-O3 -ffp-contract=off, LOOPUNROLL, sse2) |
-| `resample_fallback` | 84.45 | 367.93 | 0.23 | 87.00 | 303.00 | 0.29 | 136.5 / 136.4 | release | liquid-dsp 1.8.3 rresamp_crcf_create(3, 2, 32, h) and rresamp_crcf_execute_block (firpfb of 3 branches of 64 taps, portable dot product, benches/refs/liquid-rresamp.c, -O3 -ffp-contract=off; 4095 of the 4096 outputs) |
+| `resample_cq15` | 40.31 | 168.47 | 0.24 | 43.57 | 240.58 | 0.18 | exact / exact | info | own (information): sdrk fallback |
+| `resample_cq15_fallback` | 168.47 | 136.68 | 1.23 | 240.58 | 163.55 | 1.47 | exact / 78.2 | info | CMSIS-DSP 1.18.0 arm_fir_interpolate_q15 by 3, the same outputs per sample (no rational resampler), generic C (-O3 -ffp-contract=off, LOOPUNROLL, sse2) |
+| `resample_fallback` | 84.45 | 367.93 | 0.23 | 87.25 | 303.00 | 0.29 | 136.5 / 136.4 | release | liquid-dsp 1.8.3 rresamp_crcf_create(3, 2, 32, h) and rresamp_crcf_execute_block (firpfb of 3 branches of 64 taps, portable dot product, benches/refs/liquid-rresamp.c, -O3 -ffp-contract=off; 4095 of the 4096 outputs) |
 | `resample_real` | 22.41 | 80.59 | 0.28 | 22.04 | 77.71 | 0.28 | 141.8 / 141.3 | release | volk_32f_x2_dot_prod_32f_a per output as GNU Radio's rational_resampler_fff calls it |
 | `resample_real_fallback` | 84.40 | 300.59 | 0.28 | 86.78 | 235.47 | 0.37 | 136.5 / 136.7 | release | liquid-dsp 1.8.3 rresamp_rrrf_create(3, 2, 32, h) and rresamp_rrrf_execute_block (firpfb of 3 branches of 64 taps, portable dot product, benches/refs/liquid-rresamp.c, -O3 -ffp-contract=off; 4095 of the 4096 outputs) |
 | `resample_real_q15` | 26.84 | 102.50 | 0.26 | 34.18 | 143.93 | 0.24 | exact / exact | info | own (information): sdrk fallback |
@@ -691,7 +691,7 @@ Reference model `skylake`, counter-model `znver2`, mode `whole-loop`; execution 
 | `halfband_decimate_real_fallback` | 12.87 | 68.61 | 0.19 | 13.53 | 55.10 | 0.25 | 142.5 / 142.0 | release | liquid-dsp 1.8.3 resamp2_rrrf_decim_execute (dotprod_rrrf) with its portable dot product (-O3 -ffp-contract=off, sse2) |
 | `halfband_decimate_real_q15` | 6.99 | 22.40 | 0.31 | 6.51 | 27.26 | 0.24 | exact / exact | info | own (information): sdrk fallback |
 | `halfband_decimate_real_q15_fallback` | 22.40 | 20.77 | 1.08 | 27.26 | 25.03 | 1.09 | exact / 82.6 | release | CMSIS-DSP 1.18.0 arm_fir_q15 (24 taps) on the even samples, arm_scale_q15 (centre tap) on the odd samples and arm_add_q15 (a composition: CMSIS-DSP has no halfband decimator), generic C (-O3 -ffp-contract=off, LOOPUNROLL, sse2) |
-| `halfband_ref_fir_decimate` | 13.12 | 29.68 | 0.44 | 12.55 | 29.90 | 0.42 | 143.9 / 139.9 | info | own (information): sdrk fallback |
+| `halfband_ref_fir_decimate` | 13.12 | 29.65 | 0.44 | 12.55 | 29.81 | 0.42 | 143.9 / 139.9 | info | own (information): sdrk fallback |
 | `halfband_ref_fir_decimate_cq15` | 18.56 | 20.25 | 0.92 | 19.49 | 21.62 | 0.90 | exact / exact | info | own (information): sdrk fallback |
 | `halfband_ref_shifted` | 9.54 | 17.92 | 0.53 | 11.35 | 21.03 | 0.54 | 148.5 / 142.9 | info | own (information): sdrk fallback |
 | `halfband_ref_shifted_cq15` | 19.59 | 42.48 | 0.46 | 20.37 | 50.32 | 0.40 | exact / exact | info | own (information): sdrk fallback |
@@ -816,17 +816,17 @@ Reference model `skylake`, counter-model `znver2`, mode `whole-loop`; execution 
 | `scramble_cq15_b8` | 3.61 | 5.77 | 0.63 | 3.72 | 6.26 | 0.59 | 92.2 / 72.1 | info | CMSIS-DSP 1.18.0 phasor lookup into a buffer of 256 + arm_cmplx_mult_cmplx_q15 (3.13 output), generic C (-O3 -ffp-contract=off, LOOPUNROLL, sse4.2) |
 | `scramble_cq15_b8_fallback` | 6.18 | 5.77 | 1.07 | 6.87 | 6.26 | 1.10 | 92.2 / 72.1 | info | CMSIS-DSP 1.18.0 phasor lookup into a buffer of 256 + arm_cmplx_mult_cmplx_q15 (3.13 output), generic C (-O3 -ffp-contract=off, LOOPUNROLL, sse4.2) |
 | `fir` | 33.63 | 86.68 | 0.39 | 29.99 | 88.48 | 0.34 | 141.7 / 141.7 | release | volk_32fc_32f_dot_prod_32fc_a as GNU Radio's fir_filter_ccf calls it |
-| `fir_cq15` | 28.79 | 138.96 | 0.21 | 32.33 | 184.33 | 0.18 | exact / exact | info | own (information): sdrk fallback |
-| `fir_cq15_fallback` | 138.96 | 177.24 | 0.78 | 184.33 | 220.40 | 0.84 | exact / 83.1 | release | CMSIS-DSP 1.18.0 arm_fir_q15, generic C (-O3 -ffp-contract=off, LOOPUNROLL, sse4.2) |
+| `fir_cq15` | 28.79 | 138.96 | 0.21 | 32.33 | 184.08 | 0.18 | exact / exact | info | own (information): sdrk fallback |
+| `fir_cq15_fallback` | 138.96 | 177.24 | 0.78 | 184.08 | 220.40 | 0.84 | exact / 83.1 | release | CMSIS-DSP 1.18.0 arm_fir_q15, generic C (-O3 -ffp-contract=off, LOOPUNROLL, sse4.2) |
 | `fir_decimate` | 6.86 | 14.45 | 0.47 | 6.06 | 14.17 | 0.43 | 141.0 / 139.0 | release | volk_32fc_32f_dot_prod_32fc_a as GNU Radio's fir_filter_ccf (filterNdec) calls it |
 | `fir_decimate_cq15` | 4.98 | 8.84 | 0.56 | 5.60 | 9.21 | 0.61 | exact / exact | info | own (information): sdrk fallback |
 | `fir_decimate_cq15_fallback` | 8.84 | 27.95 | 0.32 | 9.21 | 22.79 | 0.40 | exact / 82.2 | release | CMSIS-DSP 1.18.0 arm_fir_decimate_q15 (block 4090 of 4096), generic C (-O3 -ffp-contract=off, LOOPUNROLL, sse4.2) |
-| `fir_decimate_fallback` | 15.10 | 38.81 | 0.39 | 15.84 | 23.69 | 0.67 | 133.3 / 134.3 | release | CMSIS-DSP 1.18.0 arm_fir_decimate_f32 (block 4090 of 4096), generic C (-O3 -ffp-contract=off, LOOPUNROLL, sse4.2) |
-| `fir_fallback` | 38.08 | 132.97 | 0.29 | 48.25 | 111.96 | 0.43 | 136.3 / 136.4 | release | CMSIS-DSP 1.18.0 arm_fir_f32, generic C (-O3 -ffp-contract=off, LOOPUNROLL, sse4.2) |
+| `fir_decimate_fallback` | 15.09 | 38.81 | 0.39 | 15.82 | 23.69 | 0.67 | 133.3 / 134.3 | release | CMSIS-DSP 1.18.0 arm_fir_decimate_f32 (block 4090 of 4096), generic C (-O3 -ffp-contract=off, LOOPUNROLL, sse4.2) |
+| `fir_fallback` | 37.98 | 132.97 | 0.29 | 48.05 | 111.96 | 0.43 | 136.3 / 136.4 | release | CMSIS-DSP 1.18.0 arm_fir_f32, generic C (-O3 -ffp-contract=off, LOOPUNROLL, sse4.2) |
 | `fir_interpolate` | 36.22 | 95.13 | 0.38 | 34.15 | 97.71 | 0.35 | 141.9 / 141.5 | release | volk_32fc_32f_dot_prod_32fc_a per output as GNU Radio's interp_fir_filter_ccf calls it |
 | `fir_interpolate_cq15` | 29.09 | 51.42 | 0.57 | 32.70 | 53.93 | 0.61 | exact / exact | info | own (information): sdrk fallback |
 | `fir_interpolate_cq15_fallback` | 51.42 | 137.61 | 0.37 | 53.93 | 164.43 | 0.33 | exact / 80.1 | release | CMSIS-DSP 1.18.0 arm_fir_interpolate_q15 by 2, generic C (-O3 -ffp-contract=off, LOOPUNROLL, sse4.2) |
-| `fir_interpolate_fallback` | 61.05 | 141.75 | 0.43 | 65.19 | 114.81 | 0.57 | 136.3 / 136.5 | release | CMSIS-DSP 1.18.0 arm_fir_interpolate_f32 by 2, generic C (-O3 -ffp-contract=off, LOOPUNROLL, sse4.2) |
+| `fir_interpolate_fallback` | 61.23 | 141.75 | 0.43 | 65.00 | 114.81 | 0.57 | 136.3 / 136.5 | release | CMSIS-DSP 1.18.0 arm_fir_interpolate_f32 by 2, generic C (-O3 -ffp-contract=off, LOOPUNROLL, sse4.2) |
 | `fir_interpolate_real` | 19.44 | 72.80 | 0.27 | 18.20 | 62.85 | 0.29 | 141.8 / 141.5 | release | volk_32f_x2_dot_prod_32f_a per output as GNU Radio's interp_fir_filter_fff calls it |
 | `fir_interpolate_real_fallback` | 33.05 | 70.88 | 0.47 | 37.08 | 57.41 | 0.65 | 136.5 / 136.4 | release | CMSIS-DSP 1.18.0 arm_fir_interpolate_f32 by 2, generic C (-O3 -ffp-contract=off, LOOPUNROLL, sse4.2) |
 | `fir_interpolate_real_q15` | 26.86 | 29.08 | 0.92 | 32.96 | 36.46 | 0.90 | exact / exact | info | own (information): sdrk fallback |
@@ -834,9 +834,9 @@ Reference model `skylake`, counter-model `znver2`, mode `whole-loop`; execution 
 | `fir_interpolate_short` | 7.20 | 49.96 | 0.14 | 8.86 | 61.82 | 0.14 | 144.0 / 143.4 | release | volk_32fc_32f_dot_prod_32fc_a per output as GNU Radio's interp_fir_filter_ccf calls it |
 | `fir_interpolate_short_fallback` | 12.79 | 24.83 | 0.52 | 17.63 | 22.72 | 0.78 | 143.1 / 143.0 | release | CMSIS-DSP 1.18.0 arm_fir_interpolate_f32 by 8 (80 taps), generic C (-O3 -ffp-contract=off, LOOPUNROLL, sse4.2) |
 | `resample` | 38.72 | 96.79 | 0.40 | 35.30 | 98.80 | 0.36 | 141.6 / 141.4 | release | volk_32fc_32f_dot_prod_32fc_a per output as GNU Radio's rational_resampler_ccf calls it |
-| `resample_cq15` | 30.22 | 168.57 | 0.18 | 33.57 | 240.68 | 0.14 | exact / exact | info | own (information): sdrk fallback |
-| `resample_cq15_fallback` | 168.57 | 136.68 | 1.23 | 240.68 | 163.55 | 1.47 | exact / 78.2 | info | CMSIS-DSP 1.18.0 arm_fir_interpolate_q15 by 3, the same outputs per sample (no rational resampler), generic C (-O3 -ffp-contract=off, LOOPUNROLL, sse4.2) |
-| `resample_fallback` | 84.45 | 367.93 | 0.23 | 87.00 | 303.00 | 0.29 | 136.5 / 136.4 | release | liquid-dsp 1.8.3 rresamp_crcf_create(3, 2, 32, h) and rresamp_crcf_execute_block (firpfb of 3 branches of 64 taps, portable dot product, benches/refs/liquid-rresamp.c, -O3 -ffp-contract=off; 4095 of the 4096 outputs) |
+| `resample_cq15` | 30.22 | 168.47 | 0.18 | 33.57 | 240.57 | 0.14 | exact / exact | info | own (information): sdrk fallback |
+| `resample_cq15_fallback` | 168.47 | 136.68 | 1.23 | 240.57 | 163.55 | 1.47 | exact / 78.2 | info | CMSIS-DSP 1.18.0 arm_fir_interpolate_q15 by 3, the same outputs per sample (no rational resampler), generic C (-O3 -ffp-contract=off, LOOPUNROLL, sse4.2) |
+| `resample_fallback` | 84.45 | 367.93 | 0.23 | 87.25 | 303.00 | 0.29 | 136.5 / 136.4 | release | liquid-dsp 1.8.3 rresamp_crcf_create(3, 2, 32, h) and rresamp_crcf_execute_block (firpfb of 3 branches of 64 taps, portable dot product, benches/refs/liquid-rresamp.c, -O3 -ffp-contract=off; 4095 of the 4096 outputs) |
 | `resample_real` | 22.29 | 73.99 | 0.30 | 21.79 | 63.40 | 0.34 | 141.8 / 141.4 | release | volk_32f_x2_dot_prod_32f_a per output as GNU Radio's rational_resampler_fff calls it |
 | `resample_real_fallback` | 84.43 | 300.59 | 0.28 | 75.08 | 235.47 | 0.32 | 136.5 / 136.7 | release | liquid-dsp 1.8.3 rresamp_rrrf_create(3, 2, 32, h) and rresamp_rrrf_execute_block (firpfb of 3 branches of 64 taps, portable dot product, benches/refs/liquid-rresamp.c, -O3 -ffp-contract=off; 4095 of the 4096 outputs) |
 | `resample_real_q15` | 26.38 | 102.50 | 0.26 | 32.25 | 143.93 | 0.22 | exact / exact | info | own (information): sdrk fallback |
@@ -1004,7 +1004,7 @@ Reference model `skylake`, counter-model `znver2`, mode `whole-loop`; execution 
 | `halfband_decimate_real_fallback` | 12.87 | 68.61 | 0.19 | 13.53 | 55.10 | 0.25 | 142.5 / 142.0 | release | liquid-dsp 1.8.3 resamp2_rrrf_decim_execute (dotprod_rrrf) with its portable dot product (-O3 -ffp-contract=off, sse4.2) |
 | `halfband_decimate_real_q15` | 6.21 | 16.50 | 0.38 | 5.38 | 16.82 | 0.32 | exact / exact | info | own (information): sdrk fallback |
 | `halfband_decimate_real_q15_fallback` | 16.50 | 19.39 | 0.85 | 16.82 | 23.61 | 0.71 | exact / 82.6 | release | CMSIS-DSP 1.18.0 arm_fir_q15 (24 taps) on the even samples, arm_scale_q15 (centre tap) on the odd samples and arm_add_q15 (a composition: CMSIS-DSP has no halfband decimator), generic C (-O3 -ffp-contract=off, LOOPUNROLL, sse4.2) |
-| `halfband_ref_fir_decimate` | 13.07 | 29.68 | 0.44 | 12.48 | 29.90 | 0.42 | 143.9 / 139.9 | info | own (information): sdrk fallback |
+| `halfband_ref_fir_decimate` | 13.07 | 29.65 | 0.44 | 12.48 | 29.81 | 0.42 | 143.9 / 139.9 | info | own (information): sdrk fallback |
 | `halfband_ref_fir_decimate_cq15` | 13.54 | 20.27 | 0.67 | 14.50 | 21.62 | 0.67 | exact / exact | info | own (information): sdrk fallback |
 | `halfband_ref_shifted` | 9.52 | 18.49 | 0.51 | 11.31 | 21.34 | 0.53 | 148.5 / 142.9 | info | own (information): sdrk fallback |
 | `halfband_ref_shifted_cq15` | 16.01 | 26.85 | 0.60 | 17.14 | 25.98 | 0.66 | exact / exact | info | own (information): sdrk fallback |
@@ -1130,27 +1130,27 @@ Reference model `znver3`, counter-model `alderlake`, mode `whole-loop`; executio
 | `scramble_cq15_b8` | 1.21 | 3.15 | 0.38 | 1.13 | 3.31 | 0.34 | 92.2 / 72.1 | info | CMSIS-DSP 1.18.0 phasor lookup into a buffer of 256 + arm_cmplx_mult_cmplx_q15 (3.13 output), generic C (-O3 -ffp-contract=off, LOOPUNROLL, avx2) |
 | `scramble_cq15_b8_fallback` | 3.69 | 3.15 | 1.17 | 3.25 | 3.31 | 0.98 | 92.2 / 72.1 | info | CMSIS-DSP 1.18.0 phasor lookup into a buffer of 256 + arm_cmplx_mult_cmplx_q15 (3.13 output), generic C (-O3 -ffp-contract=off, LOOPUNROLL, avx2) |
 | `fir` | 9.63 | 58.05 | 0.17 | 8.85 | 72.63 | 0.12 | 142.1 / 142.4 | release | volk_32fc_32f_dot_prod_32fc_a as GNU Radio's fir_filter_ccf calls it |
-| `fir_cq15` | 15.70 | 36.03 | 0.44 | 22.60 | 54.65 | 0.41 | exact / exact | info | own (information): sdrk fallback |
-| `fir_cq15_fallback` | 36.03 | 144.83 | 0.25 | 54.65 | 154.65 | 0.35 | exact / 83.1 | release | CMSIS-DSP 1.18.0 arm_fir_q15, generic C (-O3 -ffp-contract=off, LOOPUNROLL, avx2) |
+| `fir_cq15` | 15.70 | 35.84 | 0.44 | 22.60 | 54.47 | 0.41 | exact / exact | info | own (information): sdrk fallback |
+| `fir_cq15_fallback` | 35.84 | 144.83 | 0.25 | 54.47 | 154.65 | 0.35 | exact / 83.1 | release | CMSIS-DSP 1.18.0 arm_fir_q15, generic C (-O3 -ffp-contract=off, LOOPUNROLL, avx2) |
 | `fir_decimate` | 2.42 | 9.29 | 0.26 | 2.08 | 12.60 | 0.17 | 142.0 / 141.1 | release | volk_32fc_32f_dot_prod_32fc_a as GNU Radio's fir_filter_ccf (filterNdec) calls it |
 | `fir_decimate_cq15` | 2.42 | 5.56 | 0.44 | 3.17 | 6.64 | 0.48 | exact / exact | info | own (information): sdrk fallback |
 | `fir_decimate_cq15_fallback` | 5.56 | 42.02 | 0.13 | 6.64 | 17.52 | 0.38 | exact / 82.2 | release | CMSIS-DSP 1.18.0 arm_fir_decimate_q15 (block 4090 of 4096), generic C (-O3 -ffp-contract=off, LOOPUNROLL, avx2) |
-| `fir_decimate_fallback` | 11.64 | 71.28 | 0.16 | 11.55 | 32.88 | 0.35 | 133.3 / 134.3 | release | CMSIS-DSP 1.18.0 arm_fir_decimate_f32 (block 4090 of 4096), generic C (-O3 -ffp-contract=off, LOOPUNROLL, avx2) |
-| `fir_fallback` | 28.79 | 51.44 | 0.56 | 27.62 | 80.42 | 0.34 | 136.3 / 136.4 | release | CMSIS-DSP 1.18.0 arm_fir_f32, generic C (-O3 -ffp-contract=off, LOOPUNROLL, avx2) |
+| `fir_decimate_fallback` | 11.63 | 71.28 | 0.16 | 11.54 | 32.88 | 0.35 | 133.3 / 134.3 | release | CMSIS-DSP 1.18.0 arm_fir_decimate_f32 (block 4090 of 4096), generic C (-O3 -ffp-contract=off, LOOPUNROLL, avx2) |
+| `fir_fallback` | 28.60 | 51.44 | 0.56 | 27.44 | 80.42 | 0.34 | 136.3 / 136.4 | release | CMSIS-DSP 1.18.0 arm_fir_f32, generic C (-O3 -ffp-contract=off, LOOPUNROLL, avx2) |
 | `fir_interpolate` | 12.44 | 66.84 | 0.19 | 11.40 | 76.70 | 0.15 | 141.8 / 142.5 | release | volk_32fc_32f_dot_prod_32fc_a per output as GNU Radio's interp_fir_filter_ccf calls it |
-| `fir_interpolate_cq15` | 15.92 | 43.84 | 0.36 | 22.82 | 59.77 | 0.38 | exact / exact | info | own (information): sdrk fallback |
-| `fir_interpolate_cq15_fallback` | 43.84 | 136.94 | 0.32 | 59.77 | 136.97 | 0.44 | exact / 80.1 | release | CMSIS-DSP 1.18.0 arm_fir_interpolate_q15 by 2, generic C (-O3 -ffp-contract=off, LOOPUNROLL, avx2) |
-| `fir_interpolate_fallback` | 35.60 | 101.68 | 0.35 | 32.80 | 101.03 | 0.32 | 136.3 / 136.5 | release | CMSIS-DSP 1.18.0 arm_fir_interpolate_f32 by 2, generic C (-O3 -ffp-contract=off, LOOPUNROLL, avx2) |
+| `fir_interpolate_cq15` | 15.92 | 43.71 | 0.36 | 22.82 | 59.67 | 0.38 | exact / exact | info | own (information): sdrk fallback |
+| `fir_interpolate_cq15_fallback` | 43.71 | 136.94 | 0.32 | 59.67 | 136.97 | 0.44 | exact / 80.1 | release | CMSIS-DSP 1.18.0 arm_fir_interpolate_q15 by 2, generic C (-O3 -ffp-contract=off, LOOPUNROLL, avx2) |
+| `fir_interpolate_fallback` | 35.41 | 101.68 | 0.35 | 32.57 | 101.03 | 0.32 | 136.3 / 136.5 | release | CMSIS-DSP 1.18.0 arm_fir_interpolate_f32 by 2, generic C (-O3 -ffp-contract=off, LOOPUNROLL, avx2) |
 | `fir_interpolate_real` | 7.27 | 83.60 | 0.09 | 6.78 | 93.79 | 0.07 | 141.8 / 140.7 | release | volk_32f_x2_dot_prod_32f_a per output as GNU Radio's interp_fir_filter_fff calls it |
 | `fir_interpolate_real_fallback` | 19.96 | 50.84 | 0.39 | 18.18 | 50.51 | 0.36 | 136.5 / 136.4 | release | CMSIS-DSP 1.18.0 arm_fir_interpolate_f32 by 2, generic C (-O3 -ffp-contract=off, LOOPUNROLL, avx2) |
 | `fir_interpolate_real_q15` | 15.81 | 42.12 | 0.38 | 15.82 | 38.06 | 0.42 | exact / exact | info | own (information): sdrk fallback |
 | `fir_interpolate_real_q15_fallback` | 42.12 | 68.47 | 0.62 | 38.06 | 68.49 | 0.56 | exact / 80.3 | release | CMSIS-DSP 1.18.0 arm_fir_interpolate_q15 by 2, generic C (-O3 -ffp-contract=off, LOOPUNROLL, avx2) |
 | `fir_interpolate_short` | 3.31 | 64.34 | 0.05 | 3.12 | 67.82 | 0.05 | 145.1 / 143.3 | release | volk_32fc_32f_dot_prod_32fc_a per output as GNU Radio's interp_fir_filter_ccf calls it |
 | `fir_interpolate_short_fallback` | 10.02 | 18.52 | 0.54 | 9.80 | 17.80 | 0.55 | 143.1 / 143.0 | release | CMSIS-DSP 1.18.0 arm_fir_interpolate_f32 by 8 (80 taps), generic C (-O3 -ffp-contract=off, LOOPUNROLL, avx2) |
-| `resample` | 14.92 | 68.15 | 0.22 | 14.17 | 77.87 | 0.18 | 142.2 / 142.2 | release | volk_32fc_32f_dot_prod_32fc_a per output as GNU Radio's rational_resampler_ccf calls it |
-| `resample_cq15` | 16.37 | 117.36 | 0.14 | 23.27 | 113.12 | 0.21 | exact / exact | info | own (information): sdrk fallback |
-| `resample_cq15_fallback` | 117.36 | 136.18 | 0.86 | 113.12 | 136.22 | 0.83 | exact / 78.2 | info | CMSIS-DSP 1.18.0 arm_fir_interpolate_q15 by 3, the same outputs per sample (no rational resampler), generic C (-O3 -ffp-contract=off, LOOPUNROLL, avx2) |
-| `resample_fallback` | 65.09 | 301.28 | 0.22 | 61.91 | 285.85 | 0.22 | 136.5 / 136.4 | release | liquid-dsp 1.8.3 rresamp_crcf_create(3, 2, 32, h) and rresamp_crcf_execute_block (firpfb of 3 branches of 64 taps, portable dot product, benches/refs/liquid-rresamp.c, -O3 -ffp-contract=off; 4095 of the 4096 outputs) |
+| `resample` | 14.92 | 68.15 | 0.22 | 14.17 | 77.87 | 0.18 | 142.2 / 142.1 | release | volk_32fc_32f_dot_prod_32fc_a per output as GNU Radio's rational_resampler_ccf calls it |
+| `resample_cq15` | 16.37 | 117.47 | 0.14 | 23.27 | 113.13 | 0.21 | exact / exact | info | own (information): sdrk fallback |
+| `resample_cq15_fallback` | 117.47 | 136.18 | 0.86 | 113.13 | 136.22 | 0.83 | exact / 78.2 | info | CMSIS-DSP 1.18.0 arm_fir_interpolate_q15 by 3, the same outputs per sample (no rational resampler), generic C (-O3 -ffp-contract=off, LOOPUNROLL, avx2) |
+| `resample_fallback` | 64.87 | 301.28 | 0.22 | 61.65 | 285.85 | 0.22 | 136.5 / 136.4 | release | liquid-dsp 1.8.3 rresamp_crcf_create(3, 2, 32, h) and rresamp_crcf_execute_block (firpfb of 3 branches of 64 taps, portable dot product, benches/refs/liquid-rresamp.c, -O3 -ffp-contract=off; 4095 of the 4096 outputs) |
 | `resample_real` | 9.82 | 84.38 | 0.12 | 9.13 | 94.98 | 0.10 | 142.3 / 140.6 | release | volk_32f_x2_dot_prod_32f_a per output as GNU Radio's rational_resampler_fff calls it |
 | `resample_real_fallback` | 61.16 | 233.72 | 0.26 | 69.88 | 219.13 | 0.32 | 136.5 / 136.7 | release | liquid-dsp 1.8.3 rresamp_rrrf_create(3, 2, 32, h) and rresamp_rrrf_execute_block (firpfb of 3 branches of 64 taps, portable dot product, benches/refs/liquid-rresamp.c, -O3 -ffp-contract=off; 4095 of the 4096 outputs) |
 | `resample_real_q15` | 15.23 | 112.58 | 0.14 | 15.41 | 99.36 | 0.16 | exact / exact | info | own (information): sdrk fallback |
@@ -1318,7 +1318,7 @@ Reference model `znver3`, counter-model `alderlake`, mode `whole-loop`; executio
 | `halfband_decimate_real_fallback` | 9.11 | 80.18 | 0.11 | 8.76 | 50.72 | 0.17 | 142.5 / 142.0 | release | liquid-dsp 1.8.3 resamp2_rrrf_decim_execute (dotprod_rrrf) with its portable dot product (-O3 -ffp-contract=off, avx2) |
 | `halfband_decimate_real_q15` | 2.94 | 11.33 | 0.26 | 3.82 | 10.11 | 0.38 | exact / exact | info | own (information): sdrk fallback |
 | `halfband_decimate_real_q15_fallback` | 11.33 | 15.45 | 0.73 | 10.11 | 16.66 | 0.61 | exact / 82.6 | release | CMSIS-DSP 1.18.0 arm_fir_q15 (24 taps) on the even samples, arm_scale_q15 (centre tap) on the odd samples and arm_add_q15 (a composition: CMSIS-DSP has no halfband decimator), generic C (-O3 -ffp-contract=off, LOOPUNROLL, avx2) |
-| `halfband_ref_fir_decimate` | 5.53 | 21.90 | 0.25 | 5.48 | 21.42 | 0.26 | 145.1 / 139.9 | info | own (information): sdrk fallback |
+| `halfband_ref_fir_decimate` | 5.53 | 21.85 | 0.25 | 5.48 | 21.36 | 0.26 | 145.1 / 139.9 | info | own (information): sdrk fallback |
 | `halfband_ref_fir_decimate_cq15` | 7.43 | 13.45 | 0.55 | 10.78 | 15.22 | 0.71 | exact / exact | info | own (information): sdrk fallback |
 | `halfband_ref_shifted` | 5.80 | 63.70 | 0.09 | 5.42 | 16.31 | 0.33 | 150.0 / 142.9 | info | own (information): sdrk fallback |
 | `halfband_ref_shifted_cq15` | 9.34 | 15.65 | 0.60 | 10.19 | 16.35 | 0.62 | exact / exact | info | own (information): sdrk fallback |
@@ -1332,11 +1332,11 @@ Reference model `znver3`, counter-model `alderlake`, mode `whole-loop`; executio
 | `preemph_limit_q15` | 27.62 | 27.62 | 1.00 | 18.69 | 18.69 | 1.00 | exact / exact | info | own (information): sdrk fallback |
 | `preemph_limit_stereo` | 16.71 | 16.71 | 1.00 | 22.32 | 22.32 | 1.00 | exact / exact | info | own (information): sdrk fallback |
 | `psk_demod_block` | 37.91 | 1161.39 | 0.03 | 38.80 | 415.11 | 0.09 | exact / exact | info | GNU Radio fir_filter_ccf + symbol_sync_cc + costas_loop_cc + constellation_decoder_cb (the sum of the blocks of the receiver chain, generic compiler flags; no acquisition and no lock watches) |
-| `psk_mod_block` | 4.37 | 180.44 | 0.02 | 4.27 | 249.90 | 0.02 | 144.8 / 144.0 | info | GNU Radio constellation_modulator as the sum of its blocks: pack_k_bits_bb + chunks_to_symbols_bc + pfb_arb_resampler_ccf (32 filters of 88 taps and their derivative filters), VOLK's dispatched dot product of the level |
+| `psk_mod_block` | 4.37 | 180.44 | 0.02 | 4.27 | 249.90 | 0.02 | 144.8 / 143.7 | info | GNU Radio constellation_modulator as the sum of its blocks: pack_k_bits_bb + chunks_to_symbols_bc + pfb_arb_resampler_ccf (32 filters of 88 taps and their derivative filters), VOLK's dispatched dot product of the level |
 | `psk_mod_block_liquid` | 4.37 | 57.11 | 0.08 | 4.27 | 57.04 | 0.07 | 144.8 / 143.6 | info | liquid-dsp 1.8.3 modemcf_modulate (arbitrary-constellation modem) + firinterp_crcf (the root-raised cosine of the block), the SIMD dot products of the level (the portable loop at simd128) |
 | `pulse_match_block` | 12.32 | 878.31 | 0.01 | 11.29 | 149.29 | 0.08 | 142.2 / 145.6 | info | GNU Radio fir_filter_ccf (fir_filter_ccf_impl.cc of gr-filter) with VOLK's dispatched dot product of the level (volk_32fc_32f_dot_prod_32fc_a, the aligned tap copies of fir_filter) |
 | `pulse_match_block_liquid` | 12.32 | 109.99 | 0.11 | 11.29 | 94.89 | 0.12 | 142.2 / 143.9 | info | liquid-dsp 1.8.3 firfilt_crcf (firfilt.proto.c), the SIMD dot product of the level (the portable loop at simd128) |
-| `pulse_shape_block` | 3.57 | 64.78 | 0.06 | 3.54 | 69.12 | 0.05 | 143.9 / 143.2 | info | GNU Radio interp_fir_filter_ccf (interp_fir_filter_impl.cc of gr-filter) with VOLK's dispatched dot product of the level (volk_32fc_32f_dot_prod_32fc_a, the aligned tap copies of fir_filter) |
+| `pulse_shape_block` | 3.57 | 64.78 | 0.06 | 3.54 | 69.12 | 0.05 | 143.9 / 142.6 | info | GNU Radio interp_fir_filter_ccf (interp_fir_filter_impl.cc of gr-filter) with VOLK's dispatched dot product of the level (volk_32fc_32f_dot_prod_32fc_a, the aligned tap copies of fir_filter) |
 | `pulse_shape_block_liquid` | 3.57 | 55.18 | 0.06 | 3.54 | 55.16 | 0.06 | 143.9 / 142.2 | info | liquid-dsp 1.8.3 firinterp_crcf (firinterp.proto.c, firpfb.proto.c), the SIMD dot products of the level (the portable loop at simd128) |
 | `qam_acquire_block` | 26.92 | 26.92 | 1.00 | 32.63 | 32.63 | 1.00 | exact / exact | info | own (information): sdrk fallback |
 | `qam_demod_block` | 62.75 | 1192.78 | 0.05 | 70.69 | 455.70 | 0.16 | exact / 0.0 | info | GNU Radio fir_filter_ccf + symbol_sync_cc + linear_equalizer + constellation_receiver_cb (the sum of the blocks of the receiver chain, generic compiler flags and VOLK generic dot products; no acquisition, no blind equalizer stage and no lock watches) |
@@ -1344,7 +1344,7 @@ Reference model `znver3`, counter-model `alderlake`, mode `whole-loop`; executio
 | `qam_demod_search_block` | 65.65 | 65.65 | 1.00 | 74.37 | 74.37 | 1.00 | exact / exact | info | own (information): sdrk fallback |
 | `qam_frame_decode_block` | 74.73 | 74.73 | 1.00 | 81.49 | 81.49 | 1.00 | exact / exact | info | own (information): sdrk fallback |
 | `qam_frame_encode_block` | 5.26 | 5.26 | 1.00 | 5.48 | 5.48 | 1.00 | 144.1 / 144.1 | info | own (information): sdrk fallback |
-| `qam_mod_block` | 4.39 | 180.83 | 0.02 | 4.57 | 250.43 | 0.02 | 143.9 / 142.4 | info | GNU Radio constellation_modulator as the sum of its blocks: pack_k_bits_bb + chunks_to_symbols_bc + pfb_arb_resampler_ccf (32 filters of 88 taps and their derivative filters), VOLK's dispatched dot product of the level |
+| `qam_mod_block` | 4.39 | 180.83 | 0.02 | 4.57 | 250.43 | 0.02 | 143.9 / 142.1 | info | GNU Radio constellation_modulator as the sum of its blocks: pack_k_bits_bb + chunks_to_symbols_bc + pfb_arb_resampler_ccf (32 filters of 88 taps and their derivative filters), VOLK's dispatched dot product of the level |
 | `qam_mod_block_liquid` | 4.39 | 57.62 | 0.08 | 4.57 | 57.80 | 0.08 | 143.9 / 138.1 | info | liquid-dsp 1.8.3 modemcf_modulate (arbitrary-constellation modem) + firinterp_crcf (the root-raised cosine of the block), the SIMD dot products of the level (the portable loop at simd128) |
 | `qam_mod_qam256_block` | 4.96 | 181.61 | 0.03 | 4.74 | 251.49 | 0.02 | 144.3 / 142.7 | info | GNU Radio constellation_modulator as the sum of its blocks: pack_k_bits_bb + chunks_to_symbols_bc + pfb_arb_resampler_ccf (32 filters of 88 taps and their derivative filters), VOLK's dispatched dot product of the level |
 | `qam_mod_qam256_block_liquid` | 4.96 | 58.64 | 0.08 | 4.74 | 59.33 | 0.08 | 144.3 / 128.3 | info | liquid-dsp 1.8.3 modemcf_modulate (arbitrary-constellation modem) + firinterp_crcf (the root-raised cosine of the block), the SIMD dot products of the level (the portable loop at simd128) |
@@ -1426,16 +1426,16 @@ Judged like every level against the reference library: the comparison is the one
 | `scramble_cq15_b2` | 0.42 | 3.15 | 0.13 | 0.66 | 3.31 | 0.20 | 318.2 / 75.9 | 1.00 / 1.00 | info | CMSIS-DSP 1.18.0 phasor lookup into a buffer of 256 + arm_cmplx_mult_cmplx_q15 (3.13 output), generic C (-O3 -ffp-contract=off, LOOPUNROLL, avx2) |
 | `scramble_cq15_b8` | 1.21 | 3.15 | 0.39 | 1.13 | 3.31 | 0.34 | 92.2 / 72.1 | 1.01 / 1.01 | info | CMSIS-DSP 1.18.0 phasor lookup into a buffer of 256 + arm_cmplx_mult_cmplx_q15 (3.13 output), generic C (-O3 -ffp-contract=off, LOOPUNROLL, avx2) |
 | `fir` | 9.64 | 58.05 | 0.17 | 8.85 | 72.63 | 0.12 | 142.1 / 142.4 | 1.00 / 1.00 | release | volk_32fc_32f_dot_prod_32fc_a as GNU Radio's fir_filter_ccf calls it |
-| `fir_cq15` | 16.63 | 36.03 | 0.46 | 23.43 | 54.65 | 0.43 | exact / exact | 1.06 / 1.04 | info | own (information): sdrk fallback |
+| `fir_cq15` | 16.63 | 35.84 | 0.46 | 23.43 | 54.47 | 0.43 | exact / exact | 1.06 / 1.04 | info | own (information): sdrk fallback |
 | `fir_decimate` | 2.43 | 9.29 | 0.26 | 2.09 | 12.60 | 0.17 | 141.9 / 141.1 | 1.00 / 1.00 | release | volk_32fc_32f_dot_prod_32fc_a as GNU Radio's fir_filter_ccf (filterNdec) calls it |
 | `fir_decimate_cq15` | 2.58 | 5.56 | 0.46 | 3.32 | 6.64 | 0.50 | exact / exact | 1.06 / 1.05 | info | own (information): sdrk fallback |
 | `fir_interpolate` | 12.44 | 66.84 | 0.19 | 11.41 | 76.70 | 0.15 | 141.8 / 142.5 | 1.00 / 1.00 | release | volk_32fc_32f_dot_prod_32fc_a per output as GNU Radio's interp_fir_filter_ccf calls it |
-| `fir_interpolate_cq15` | 16.85 | 43.84 | 0.38 | 23.66 | 59.77 | 0.40 | exact / exact | 1.06 / 1.04 | info | own (information): sdrk fallback |
+| `fir_interpolate_cq15` | 16.85 | 43.71 | 0.39 | 23.66 | 59.67 | 0.40 | exact / exact | 1.06 / 1.04 | info | own (information): sdrk fallback |
 | `fir_interpolate_real` | 7.15 | 83.60 | 0.09 | 6.80 | 93.79 | 0.07 | 141.8 / 140.7 | 0.98 / 1.00 | release | volk_32f_x2_dot_prod_32f_a per output as GNU Radio's interp_fir_filter_fff calls it |
 | `fir_interpolate_real_q15` | 15.84 | 42.12 | 0.38 | 15.61 | 38.06 | 0.41 | exact / exact | 1.00 / 0.99 | info | own (information): sdrk fallback |
 | `fir_interpolate_short` | 3.34 | 64.34 | 0.05 | 3.12 | 67.82 | 0.05 | 145.1 / 143.3 | 1.01 / 1.00 | release | volk_32fc_32f_dot_prod_32fc_a per output as GNU Radio's interp_fir_filter_ccf calls it |
-| `resample` | 15.03 | 68.15 | 0.22 | 14.10 | 77.87 | 0.18 | 142.3 / 142.2 | 1.01 / 1.00 | release | volk_32fc_32f_dot_prod_32fc_a per output as GNU Radio's rational_resampler_ccf calls it |
-| `resample_cq15` | 17.37 | 117.36 | 0.15 | 24.19 | 113.12 | 0.21 | exact / exact | 1.06 / 1.04 | info | own (information): sdrk fallback |
+| `resample` | 15.03 | 68.15 | 0.22 | 14.10 | 77.87 | 0.18 | 142.3 / 142.1 | 1.01 / 1.00 | release | volk_32fc_32f_dot_prod_32fc_a per output as GNU Radio's rational_resampler_ccf calls it |
+| `resample_cq15` | 17.37 | 117.47 | 0.15 | 24.19 | 113.13 | 0.21 | exact / exact | 1.06 / 1.04 | info | own (information): sdrk fallback |
 | `resample_real` | 9.74 | 84.38 | 0.12 | 9.18 | 94.98 | 0.10 | 142.3 / 140.6 | 0.99 / 1.01 | release | volk_32f_x2_dot_prod_32f_a per output as GNU Radio's rational_resampler_fff calls it |
 | `resample_real_q15` | 15.28 | 112.58 | 0.14 | 15.19 | 99.36 | 0.15 | exact / exact | 1.00 / 0.99 | info | own (information): sdrk fallback |
 | `mag` | 0.77 | 0.91 | 0.85 | 0.77 | 0.78 | 0.98 | 150.5 / 150.5 | 1.01 / 1.01 | release | volk_32fc_magnitude_32f |
@@ -1541,11 +1541,11 @@ Judged like every level against the reference library: the comparison is the one
 | `preemph_limit_q15` | 28.42 | 27.62 | 1.03 | 18.69 | 18.69 | 1.00 | exact / exact | 1.03 / 1.00 | info | own (information): sdrk fallback |
 | `preemph_limit_stereo` | 19.59 | 16.71 | 1.17 | 22.55 | 22.32 | 1.01 | exact / exact | 1.17 / 1.01 | info | own (information): sdrk fallback |
 | `psk_demod_block` | 37.68 | 1161.39 | 0.03 | 38.73 | 415.11 | 0.09 | exact / exact | 0.99 / 1.00 | info | GNU Radio fir_filter_ccf + symbol_sync_cc + costas_loop_cc + constellation_decoder_cb (the sum of the blocks of the receiver chain, generic compiler flags; no acquisition and no lock watches) |
-| `psk_mod_block` | 4.40 | 180.44 | 0.02 | 4.23 | 249.90 | 0.02 | 144.8 / 144.0 | 1.01 / 0.99 | info | GNU Radio constellation_modulator as the sum of its blocks: pack_k_bits_bb + chunks_to_symbols_bc + pfb_arb_resampler_ccf (32 filters of 88 taps and their derivative filters), VOLK's dispatched dot product of the level |
+| `psk_mod_block` | 4.40 | 180.44 | 0.02 | 4.23 | 249.90 | 0.02 | 144.8 / 143.7 | 1.01 / 0.99 | info | GNU Radio constellation_modulator as the sum of its blocks: pack_k_bits_bb + chunks_to_symbols_bc + pfb_arb_resampler_ccf (32 filters of 88 taps and their derivative filters), VOLK's dispatched dot product of the level |
 | `psk_mod_block_liquid` | 4.40 | 57.11 | 0.08 | 4.23 | 57.04 | 0.07 | 144.8 / 143.6 | 1.01 / 0.99 | info | liquid-dsp 1.8.3 modemcf_modulate (arbitrary-constellation modem) + firinterp_crcf (the root-raised cosine of the block), the SIMD dot products of the level (the portable loop at simd128) |
 | `pulse_match_block` | 12.40 | 878.31 | 0.01 | 11.32 | 149.29 | 0.08 | 142.2 / 145.6 | 1.01 / 1.00 | info | GNU Radio fir_filter_ccf (fir_filter_ccf_impl.cc of gr-filter) with VOLK's dispatched dot product of the level (volk_32fc_32f_dot_prod_32fc_a, the aligned tap copies of fir_filter) |
 | `pulse_match_block_liquid` | 12.40 | 109.99 | 0.11 | 11.32 | 94.89 | 0.12 | 142.2 / 143.9 | 1.01 / 1.00 | info | liquid-dsp 1.8.3 firfilt_crcf (firfilt.proto.c), the SIMD dot product of the level (the portable loop at simd128) |
-| `pulse_shape_block` | 3.59 | 64.78 | 0.06 | 3.51 | 69.12 | 0.05 | 143.9 / 143.2 | 1.01 / 0.99 | info | GNU Radio interp_fir_filter_ccf (interp_fir_filter_impl.cc of gr-filter) with VOLK's dispatched dot product of the level (volk_32fc_32f_dot_prod_32fc_a, the aligned tap copies of fir_filter) |
+| `pulse_shape_block` | 3.59 | 64.78 | 0.06 | 3.51 | 69.12 | 0.05 | 143.9 / 142.6 | 1.01 / 0.99 | info | GNU Radio interp_fir_filter_ccf (interp_fir_filter_impl.cc of gr-filter) with VOLK's dispatched dot product of the level (volk_32fc_32f_dot_prod_32fc_a, the aligned tap copies of fir_filter) |
 | `pulse_shape_block_liquid` | 3.59 | 55.18 | 0.07 | 3.51 | 55.16 | 0.06 | 143.9 / 142.2 | 1.01 / 0.99 | info | liquid-dsp 1.8.3 firinterp_crcf (firinterp.proto.c, firpfb.proto.c), the SIMD dot products of the level (the portable loop at simd128) |
 | `qam_acquire_block` | 26.55 | 26.92 | 0.99 | 33.04 | 32.63 | 1.01 | exact / exact | 0.99 / 1.01 | info | own (information): sdrk fallback |
 | `qam_demod_block` | 64.42 | 1192.78 | 0.05 | 65.10 | 455.70 | 0.14 | exact / 0.0 | 1.03 / 0.92 | info | GNU Radio fir_filter_ccf + symbol_sync_cc + linear_equalizer + constellation_receiver_cb (the sum of the blocks of the receiver chain, generic compiler flags and VOLK generic dot products; no acquisition, no blind equalizer stage and no lock watches) |
@@ -1553,7 +1553,7 @@ Judged like every level against the reference library: the comparison is the one
 | `qam_demod_search_block` | 68.30 | 65.65 | 1.04 | 69.82 | 74.37 | 0.94 | exact / exact | 1.04 / 0.94 | info | own (information): sdrk fallback |
 | `qam_frame_decode_block` | 76.51 | 74.73 | 1.02 | 76.11 | 81.49 | 0.93 | exact / exact | 1.02 / 0.93 | info | own (information): sdrk fallback |
 | `qam_frame_encode_block` | 5.17 | 5.26 | 0.98 | 5.28 | 5.48 | 0.96 | 144.1 / 144.1 | 0.98 / 0.96 | info | own (information): sdrk fallback |
-| `qam_mod_block` | 4.31 | 180.83 | 0.02 | 4.39 | 250.43 | 0.02 | 143.9 / 142.4 | 0.98 / 0.96 | info | GNU Radio constellation_modulator as the sum of its blocks: pack_k_bits_bb + chunks_to_symbols_bc + pfb_arb_resampler_ccf (32 filters of 88 taps and their derivative filters), VOLK's dispatched dot product of the level |
+| `qam_mod_block` | 4.31 | 180.83 | 0.02 | 4.39 | 250.43 | 0.02 | 143.9 / 142.1 | 0.98 / 0.96 | info | GNU Radio constellation_modulator as the sum of its blocks: pack_k_bits_bb + chunks_to_symbols_bc + pfb_arb_resampler_ccf (32 filters of 88 taps and their derivative filters), VOLK's dispatched dot product of the level |
 | `qam_mod_block_liquid` | 4.31 | 57.62 | 0.07 | 4.39 | 57.80 | 0.08 | 143.9 / 138.1 | 0.98 / 0.96 | info | liquid-dsp 1.8.3 modemcf_modulate (arbitrary-constellation modem) + firinterp_crcf (the root-raised cosine of the block), the SIMD dot products of the level (the portable loop at simd128) |
 | `qam_mod_qam256_block` | 4.89 | 181.61 | 0.03 | 5.12 | 251.49 | 0.02 | 144.3 / 142.7 | 0.99 / 1.08 | info | GNU Radio constellation_modulator as the sum of its blocks: pack_k_bits_bb + chunks_to_symbols_bc + pfb_arb_resampler_ccf (32 filters of 88 taps and their derivative filters), VOLK's dispatched dot product of the level |
 | `qam_mod_qam256_block_liquid` | 4.89 | 58.64 | 0.08 | 5.12 | 59.33 | 0.09 | 144.3 / 128.3 | 0.99 / 1.08 | info | liquid-dsp 1.8.3 modemcf_modulate (arbitrary-constellation modem) + firinterp_crcf (the root-raised cosine of the block), the SIMD dot products of the level (the portable loop at simd128) |
@@ -1644,17 +1644,17 @@ Reference model `znver4`, counter-model `sapphirerapids`, mode `whole-loop`; exe
 | `scramble_cq15_b8` | 0.49 | 2.92 | 0.17 | 2.43 | 3.56 | 0.68 | 92.2 / 72.1 | info | CMSIS-DSP 1.18.0 phasor lookup into a buffer of 256 + arm_cmplx_mult_cmplx_q15 (3.13 output), generic C (-O3 -ffp-contract=off, LOOPUNROLL, avx512) |
 | `scramble_cq15_b8_fallback` | 4.04 | 2.92 | 1.38 | 3.95 | 3.56 | 1.11 | 92.2 / 72.1 | info | CMSIS-DSP 1.18.0 phasor lookup into a buffer of 256 + arm_cmplx_mult_cmplx_q15 (3.13 output), generic C (-O3 -ffp-contract=off, LOOPUNROLL, avx512) |
 | `fir` | 8.65 | 63.03 | 0.14 | 4.82 | 97.97 | 0.05 | 142.1 / 141.9 | release | volk_32fc_32f_dot_prod_32fc_a as GNU Radio's fir_filter_ccf calls it |
-| `fir_cq15` | 15.78 | 31.77 | 0.50 | 18.35 | 35.14 | 0.52 | exact / exact | info | own (information): sdrk fallback |
-| `fir_cq15_fallback` | 31.77 | 144.59 | 0.22 | 35.14 | 154.66 | 0.23 | exact / 83.1 | release | CMSIS-DSP 1.18.0 arm_fir_q15, generic C (-O3 -ffp-contract=off, LOOPUNROLL, avx512) |
+| `fir_cq15` | 15.78 | 31.53 | 0.50 | 18.35 | 34.99 | 0.52 | exact / exact | info | own (information): sdrk fallback |
+| `fir_cq15_fallback` | 31.53 | 144.59 | 0.22 | 34.99 | 154.66 | 0.23 | exact / 83.1 | release | CMSIS-DSP 1.18.0 arm_fir_q15, generic C (-O3 -ffp-contract=off, LOOPUNROLL, avx512) |
 | `fir_decimate` | 2.05 | 8.83 | 0.23 | 1.61 | 15.25 | 0.11 | 141.9 / 141.1 | release | volk_32fc_32f_dot_prod_32fc_a as GNU Radio's fir_filter_ccf (filterNdec) calls it |
 | `fir_decimate_cq15` | 2.01 | 14.79 | 0.14 | 2.38 | 5.46 | 0.44 | exact / exact | info | own (information): sdrk fallback |
 | `fir_decimate_cq15_fallback` | 14.79 | 37.21 | 0.40 | 5.46 | 20.44 | 0.27 | exact / 82.2 | release | CMSIS-DSP 1.18.0 arm_fir_decimate_q15 (block 4090 of 4096), generic C (-O3 -ffp-contract=off, LOOPUNROLL, avx512) |
-| `fir_decimate_fallback` | 11.13 | 71.32 | 0.16 | 10.29 | 38.89 | 0.26 | 133.3 / 134.3 | release | CMSIS-DSP 1.18.0 arm_fir_decimate_f32 (block 4090 of 4096), generic C (-O3 -ffp-contract=off, LOOPUNROLL, avx512) |
-| `fir_fallback` | 28.59 | 51.41 | 0.56 | 27.57 | 80.41 | 0.34 | 136.3 / 136.4 | release | CMSIS-DSP 1.18.0 arm_fir_f32, generic C (-O3 -ffp-contract=off, LOOPUNROLL, avx512) |
+| `fir_decimate_fallback` | 11.12 | 71.32 | 0.16 | 10.28 | 38.89 | 0.26 | 133.3 / 134.3 | release | CMSIS-DSP 1.18.0 arm_fir_decimate_f32 (block 4090 of 4096), generic C (-O3 -ffp-contract=off, LOOPUNROLL, avx512) |
+| `fir_fallback` | 28.28 | 51.41 | 0.55 | 27.39 | 80.41 | 0.34 | 136.3 / 136.4 | release | CMSIS-DSP 1.18.0 arm_fir_f32, generic C (-O3 -ffp-contract=off, LOOPUNROLL, avx512) |
 | `fir_interpolate` | 11.16 | 71.37 | 0.16 | 7.51 | 102.01 | 0.07 | 141.8 / 141.9 | release | volk_32fc_32f_dot_prod_32fc_a per output as GNU Radio's interp_fir_filter_ccf calls it |
-| `fir_interpolate_cq15` | 16.00 | 36.72 | 0.44 | 18.57 | 43.72 | 0.42 | exact / exact | info | own (information): sdrk fallback |
-| `fir_interpolate_cq15_fallback` | 36.72 | 136.84 | 0.27 | 43.72 | 136.97 | 0.32 | exact / 80.1 | release | CMSIS-DSP 1.18.0 arm_fir_interpolate_q15 by 2, generic C (-O3 -ffp-contract=off, LOOPUNROLL, avx512) |
-| `fir_interpolate_fallback` | 33.87 | 101.17 | 0.33 | 32.71 | 100.78 | 0.32 | 136.3 / 136.5 | release | CMSIS-DSP 1.18.0 arm_fir_interpolate_f32 by 2, generic C (-O3 -ffp-contract=off, LOOPUNROLL, avx512) |
+| `fir_interpolate_cq15` | 16.00 | 36.84 | 0.43 | 18.57 | 43.75 | 0.42 | exact / exact | info | own (information): sdrk fallback |
+| `fir_interpolate_cq15_fallback` | 36.84 | 136.84 | 0.27 | 43.75 | 136.97 | 0.32 | exact / 80.1 | release | CMSIS-DSP 1.18.0 arm_fir_interpolate_q15 by 2, generic C (-O3 -ffp-contract=off, LOOPUNROLL, avx512) |
+| `fir_interpolate_fallback` | 33.81 | 101.17 | 0.33 | 32.55 | 100.78 | 0.32 | 136.3 / 136.5 | release | CMSIS-DSP 1.18.0 arm_fir_interpolate_f32 by 2, generic C (-O3 -ffp-contract=off, LOOPUNROLL, avx512) |
 | `fir_interpolate_real` | 6.69 | 81.93 | 0.08 | 4.79 | 118.66 | 0.04 | 141.8 / 139.4 | release | volk_32f_x2_dot_prod_32f_a per output as GNU Radio's interp_fir_filter_fff calls it |
 | `fir_interpolate_real_fallback` | 19.66 | 50.59 | 0.39 | 18.17 | 50.39 | 0.36 | 136.5 / 136.4 | release | CMSIS-DSP 1.18.0 arm_fir_interpolate_f32 by 2, generic C (-O3 -ffp-contract=off, LOOPUNROLL, avx512) |
 | `fir_interpolate_real_q15` | 15.59 | 22.72 | 0.69 | 13.61 | 29.26 | 0.47 | exact / exact | info | own (information): sdrk fallback |
@@ -1662,9 +1662,9 @@ Reference model `znver4`, counter-model `sapphirerapids`, mode `whole-loop`; exe
 | `fir_interpolate_short` | 3.63 | 79.65 | 0.05 | 2.68 | 85.17 | 0.03 | 145.1 / 143.2 | release | volk_32fc_32f_dot_prod_32fc_a per output as GNU Radio's interp_fir_filter_ccf calls it |
 | `fir_interpolate_short_fallback` | 9.75 | 18.21 | 0.54 | 9.87 | 17.74 | 0.56 | 143.1 / 143.0 | release | CMSIS-DSP 1.18.0 arm_fir_interpolate_f32 by 8 (80 taps), generic C (-O3 -ffp-contract=off, LOOPUNROLL, avx512) |
 | `resample` | 13.83 | 71.87 | 0.19 | 12.45 | 102.76 | 0.12 | 142.3 / 141.9 | release | volk_32fc_32f_dot_prod_32fc_a per output as GNU Radio's rational_resampler_ccf calls it |
-| `resample_cq15` | 16.34 | 83.91 | 0.19 | 19.02 | 88.93 | 0.21 | exact / exact | info | own (information): sdrk fallback |
-| `resample_cq15_fallback` | 83.91 | 136.08 | 0.62 | 88.93 | 136.22 | 0.65 | exact / 78.2 | info | CMSIS-DSP 1.18.0 arm_fir_interpolate_q15 by 3, the same outputs per sample (no rational resampler), generic C (-O3 -ffp-contract=off, LOOPUNROLL, avx512) |
-| `resample_fallback` | 60.93 | 297.46 | 0.20 | 55.29 | 282.83 | 0.20 | 136.5 / 136.4 | release | liquid-dsp 1.8.3 rresamp_crcf_create(3, 2, 32, h) and rresamp_crcf_execute_block (firpfb of 3 branches of 64 taps, portable dot product, benches/refs/liquid-rresamp.c, -O3 -ffp-contract=off; 4095 of the 4096 outputs) |
+| `resample_cq15` | 16.34 | 84.07 | 0.19 | 19.02 | 89.14 | 0.21 | exact / exact | info | own (information): sdrk fallback |
+| `resample_cq15_fallback` | 84.07 | 136.08 | 0.62 | 89.14 | 136.22 | 0.65 | exact / 78.2 | info | CMSIS-DSP 1.18.0 arm_fir_interpolate_q15 by 3, the same outputs per sample (no rational resampler), generic C (-O3 -ffp-contract=off, LOOPUNROLL, avx512) |
+| `resample_fallback` | 60.85 | 297.46 | 0.20 | 55.21 | 282.83 | 0.20 | 136.5 / 136.4 | release | liquid-dsp 1.8.3 rresamp_crcf_create(3, 2, 32, h) and rresamp_crcf_execute_block (firpfb of 3 branches of 64 taps, portable dot product, benches/refs/liquid-rresamp.c, -O3 -ffp-contract=off; 4095 of the 4096 outputs) |
 | `resample_real` | 9.25 | 82.64 | 0.11 | 8.96 | 119.58 | 0.07 | 142.3 / 139.6 | release | volk_32f_x2_dot_prod_32f_a per output as GNU Radio's rational_resampler_fff calls it |
 | `resample_real_fallback` | 40.82 | 229.54 | 0.18 | 243.35 | 221.85 | 1.10 | 136.5 / 136.7 | release | liquid-dsp 1.8.3 rresamp_rrrf_create(3, 2, 32, h) and rresamp_rrrf_execute_block (firpfb of 3 branches of 64 taps, portable dot product, benches/refs/liquid-rresamp.c, -O3 -ffp-contract=off; 4095 of the 4096 outputs) |
 | `resample_real_q15` | 15.10 | 100.30 | 0.15 | 13.26 | 85.30 | 0.16 | exact / exact | info | own (information): sdrk fallback |
@@ -1832,7 +1832,7 @@ Reference model `znver4`, counter-model `sapphirerapids`, mode `whole-loop`; exe
 | `halfband_decimate_real_fallback` | 8.91 | 78.71 | 0.11 | 8.78 | 52.09 | 0.17 | 142.5 / 142.0 | release | liquid-dsp 1.8.3 resamp2_rrrf_decim_execute (dotprod_rrrf) with its portable dot product (-O3 -ffp-contract=off, avx512) |
 | `halfband_decimate_real_q15` | 3.82 | 11.68 | 0.33 | 4.51 | 12.40 | 0.36 | exact / exact | info | own (information): sdrk fallback |
 | `halfband_decimate_real_q15_fallback` | 11.68 | 15.19 | 0.77 | 12.40 | 16.66 | 0.74 | exact / 82.6 | release | CMSIS-DSP 1.18.0 arm_fir_q15 (24 taps) on the even samples, arm_scale_q15 (centre tap) on the odd samples and arm_add_q15 (a composition: CMSIS-DSP has no halfband decimator), generic C (-O3 -ffp-contract=off, LOOPUNROLL, avx512) |
-| `halfband_ref_fir_decimate` | 7.56 | 20.88 | 0.36 | 7.77 | 19.01 | 0.41 | 144.5 / 139.9 | info | own (information): sdrk fallback |
+| `halfband_ref_fir_decimate` | 7.56 | 20.87 | 0.36 | 7.77 | 18.96 | 0.41 | 144.5 / 139.9 | info | own (information): sdrk fallback |
 | `halfband_ref_fir_decimate_cq15` | 8.00 | 30.66 | 0.26 | 9.36 | 12.52 | 0.75 | exact / exact | info | own (information): sdrk fallback |
 | `halfband_ref_shifted` | 4.95 | 63.16 | 0.08 | 5.89 | 15.45 | 0.38 | 150.0 / 142.9 | info | own (information): sdrk fallback |
 | `halfband_ref_shifted_cq15` | 9.93 | 14.74 | 0.67 | 11.61 | 16.34 | 0.71 | exact / exact | info | own (information): sdrk fallback |
@@ -1963,12 +1963,12 @@ Reference model `cortex-a72`, counter-model `cortex-a76`, mode `whole-loop`; exe
 | `fir_decimate` | 9.89 | 20.50 | 0.48 | 9.08 | 16.88 | 0.54 | 141.8 / 138.5 | release | volk_32fc_32f_dot_prod_32fc_a as GNU Radio's fir_filter_ccf (filterNdec) calls it |
 | `fir_decimate_cq15` | 14.98 | 14.98 | 1.00 | 12.05 | 14.63 | 0.82 | exact / exact | info | own (information): sdrk fallback |
 | `fir_decimate_cq15_fallback` | 14.98 | 16.40 | 0.91 | 14.63 | 16.90 | 0.87 | exact / 82.2 | release | CMSIS-DSP 1.18.0 arm_fir_decimate_q15 (block 4090 of 4096), generic C (-O3 -ffp-contract=off, LOOPUNROLL, neon) |
-| `fir_decimate_fallback` | 32.77 | 34.10 | 0.96 | 25.72 | 41.23 | 0.62 | 133.3 / 134.3 | release | CMSIS-DSP 1.18.0 arm_fir_decimate_f32 (block 4090 of 4096), generic C (-O3 -ffp-contract=off, LOOPUNROLL, neon) |
-| `fir_fallback` | 121.49 | 132.43 | 0.92 | 81.36 | 133.90 | 0.61 | 136.3 / 136.4 | release | CMSIS-DSP 1.18.0 arm_fir_f32, generic C (-O3 -ffp-contract=off, LOOPUNROLL, neon) |
+| `fir_decimate_fallback` | 32.76 | 34.10 | 0.96 | 25.71 | 41.23 | 0.62 | 133.3 / 134.3 | release | CMSIS-DSP 1.18.0 arm_fir_decimate_f32 (block 4090 of 4096), generic C (-O3 -ffp-contract=off, LOOPUNROLL, neon) |
+| `fir_fallback` | 121.24 | 132.43 | 0.92 | 81.11 | 133.90 | 0.61 | 136.3 / 136.4 | release | CMSIS-DSP 1.18.0 arm_fir_f32, generic C (-O3 -ffp-contract=off, LOOPUNROLL, neon) |
 | `fir_interpolate` | 42.73 | 138.57 | 0.31 | 28.61 | 113.64 | 0.25 | 141.8 / 141.2 | release | volk_32fc_32f_dot_prod_32fc_a per output as GNU Radio's interp_fir_filter_ccf calls it |
 | `fir_interpolate_cq15` | 82.71 | 127.87 | 0.65 | 68.10 | 145.97 | 0.47 | exact / exact | info | own (information): sdrk fallback |
 | `fir_interpolate_cq15_fallback` | 127.87 | 141.59 | 0.90 | 145.97 | 141.30 | 1.03 | exact / 80.1 | release | CMSIS-DSP 1.18.0 arm_fir_interpolate_q15 by 2, generic C (-O3 -ffp-contract=off, LOOPUNROLL, neon) |
-| `fir_interpolate_fallback` | 139.37 | 135.30 | 1.03 | 95.97 | 152.44 | 0.63 | 136.3 / 136.5 | release | CMSIS-DSP 1.18.0 arm_fir_interpolate_f32 by 2, generic C (-O3 -ffp-contract=off, LOOPUNROLL, neon) |
+| `fir_interpolate_fallback` | 139.05 | 135.30 | 1.03 | 95.77 | 152.44 | 0.63 | 136.3 / 136.5 | release | CMSIS-DSP 1.18.0 arm_fir_interpolate_f32 by 2, generic C (-O3 -ffp-contract=off, LOOPUNROLL, neon) |
 | `fir_interpolate_real` | 23.66 | 107.89 | 0.22 | 23.25 | 85.10 | 0.27 | 141.8 / 142.3 | release | volk_32f_x2_dot_prod_32f_a per output as GNU Radio's interp_fir_filter_fff calls it |
 | `fir_interpolate_real_fallback` | 61.15 | 67.65 | 0.90 | 39.12 | 76.22 | 0.51 | 136.5 / 136.4 | release | CMSIS-DSP 1.18.0 arm_fir_interpolate_f32 by 2, generic C (-O3 -ffp-contract=off, LOOPUNROLL, neon) |
 | `fir_interpolate_real_q15` | 35.27 | 73.09 | 0.48 | 35.95 | 73.97 | 0.49 | exact / exact | info | own (information): sdrk fallback |
@@ -1976,9 +1976,9 @@ Reference model `cortex-a72`, counter-model `cortex-a76`, mode `whole-loop`; exe
 | `fir_interpolate_short` | 11.77 | 66.29 | 0.18 | 10.87 | 63.78 | 0.17 | 145.1 / 143.9 | release | volk_32fc_32f_dot_prod_32fc_a per output as GNU Radio's interp_fir_filter_ccf calls it |
 | `fir_interpolate_short_fallback` | 22.91 | 27.28 | 0.84 | 15.55 | 29.90 | 0.52 | 143.1 / 143.0 | release | CMSIS-DSP 1.18.0 arm_fir_interpolate_f32 by 8 (80 taps), generic C (-O3 -ffp-contract=off, LOOPUNROLL, neon) |
 | `resample` | 55.27 | 140.12 | 0.39 | 50.97 | 114.43 | 0.45 | 142.2 / 140.8 | release | volk_32fc_32f_dot_prod_32fc_a per output as GNU Radio's rational_resampler_ccf calls it |
-| `resample_cq15` | 80.68 | 193.63 | 0.42 | 65.77 | 184.81 | 0.36 | exact / exact | info | own (information): sdrk fallback |
-| `resample_cq15_fallback` | 193.63 | 140.28 | 1.38 | 184.81 | 139.74 | 1.32 | exact / 78.2 | info | CMSIS-DSP 1.18.0 arm_fir_interpolate_q15 by 3, the same outputs per sample (no rational resampler), generic C (-O3 -ffp-contract=off, LOOPUNROLL, neon) |
-| `resample_fallback` | 176.47 | 382.87 | 0.46 | 142.87 | 257.49 | 0.55 | 136.5 / 136.4 | release | liquid-dsp 1.8.3 rresamp_crcf_create(3, 2, 32, h) and rresamp_crcf_execute_block (firpfb of 3 branches of 64 taps, portable dot product, benches/refs/liquid-rresamp.c, -O3 -ffp-contract=off; 4095 of the 4096 outputs) |
+| `resample_cq15` | 80.68 | 193.64 | 0.42 | 65.77 | 184.59 | 0.36 | exact / exact | info | own (information): sdrk fallback |
+| `resample_cq15_fallback` | 193.64 | 140.28 | 1.38 | 184.59 | 139.74 | 1.32 | exact / 78.2 | info | CMSIS-DSP 1.18.0 arm_fir_interpolate_q15 by 3, the same outputs per sample (no rational resampler), generic C (-O3 -ffp-contract=off, LOOPUNROLL, neon) |
+| `resample_fallback` | 176.20 | 382.87 | 0.46 | 142.46 | 257.49 | 0.55 | 136.5 / 136.4 | release | liquid-dsp 1.8.3 rresamp_crcf_create(3, 2, 32, h) and rresamp_crcf_execute_block (firpfb of 3 branches of 64 taps, portable dot product, benches/refs/liquid-rresamp.c, -O3 -ffp-contract=off; 4095 of the 4096 outputs) |
 | `resample_real` | 32.36 | 109.41 | 0.30 | 29.37 | 85.87 | 0.34 | 142.3 / 142.1 | release | volk_32f_x2_dot_prod_32f_a per output as GNU Radio's rational_resampler_fff calls it |
 | `resample_real_fallback` | 139.63 | 316.67 | 0.44 | 121.32 | 189.52 | 0.64 | 136.5 / 136.7 | release | liquid-dsp 1.8.3 rresamp_rrrf_create(3, 2, 32, h) and rresamp_rrrf_execute_block (firpfb of 3 branches of 64 taps, portable dot product, benches/refs/liquid-rresamp.c, -O3 -ffp-contract=off; 4095 of the 4096 outputs) |
 | `resample_real_q15` | 34.38 | 113.74 | 0.30 | 34.89 | 107.82 | 0.32 | exact / exact | info | own (information): sdrk fallback |
@@ -2146,7 +2146,7 @@ Reference model `cortex-a72`, counter-model `cortex-a76`, mode `whole-loop`; exe
 | `halfband_decimate_real_fallback` | 25.66 | 78.52 | 0.33 | 21.30 | 58.40 | 0.36 | 142.5 / 142.0 | release | liquid-dsp 1.8.3 resamp2_rrrf_decim_execute (dotprod_rrrf) with its portable dot product (-O3 -ffp-contract=off, neon) |
 | `halfband_decimate_real_q15` | 7.60 | 22.82 | 0.33 | 6.44 | 21.15 | 0.30 | exact / exact | info | own (information): sdrk fallback |
 | `halfband_decimate_real_q15_fallback` | 22.82 | 19.75 | 1.16 | 21.15 | 20.11 | 1.05 | exact / 82.6 (accuracy trade) | release | CMSIS-DSP 1.18.0 arm_fir_q15 (24 taps) on the even samples, arm_scale_q15 (centre tap) on the odd samples and arm_add_q15 (a composition: CMSIS-DSP has no halfband decimator), generic C (-O3 -ffp-contract=off, LOOPUNROLL, neon) |
-| `halfband_ref_fir_decimate` | 19.74 | 64.12 | 0.31 | 17.93 | 51.09 | 0.35 | 144.2 / 139.9 | info | own (information): sdrk fallback |
+| `halfband_ref_fir_decimate` | 19.74 | 64.06 | 0.31 | 17.93 | 51.06 | 0.35 | 144.2 / 139.9 | info | own (information): sdrk fallback |
 | `halfband_ref_fir_decimate_cq15` | 30.13 | 41.39 | 0.73 | 24.38 | 39.76 | 0.61 | exact / exact | info | own (information): sdrk fallback |
 | `halfband_ref_shifted` | 18.85 | 41.31 | 0.46 | 19.09 | 33.38 | 0.57 | 150.0 / 142.9 | info | own (information): sdrk fallback |
 | `halfband_ref_shifted_cq15` | 23.42 | 36.10 | 0.65 | 21.76 | 32.32 | 0.67 | exact / exact | info | own (information): sdrk fallback |
@@ -2278,17 +2278,17 @@ Instructions per sample (wasmtime fuel, differential) of our kernel divided by t
 | `scramble_cq15_b8` | 29.82 | 50.15 | 0.59 | 92.2 / 72.1 | info | CMSIS-DSP 1.18.0 phasor lookup into a buffer of 256 + arm_cmplx_mult_cmplx_q15 (3.13 output), generic C (-O3 -ffp-contract=off, LOOPUNROLL, simd128) |
 | `scramble_cq15_b8_fallback` | 26.79 | 50.15 | 0.53 | 92.2 / 72.1 | info | CMSIS-DSP 1.18.0 phasor lookup into a buffer of 256 + arm_cmplx_mult_cmplx_q15 (3.13 output), generic C (-O3 -ffp-contract=off, LOOPUNROLL, simd128) |
 | `fir` | 209.40 | 1980.03 | 0.11 | 141.3 / 136.4 | info | volk_32fc_32f_dot_prod_32fc_a as GNU Radio's fir_filter_ccf calls it |
-| `fir_cq15` | 321.72 | 899.10 | 0.36 | exact / exact | info | own (information): sdrk fallback |
-| `fir_cq15_fallback` | 899.10 | 785.69 | 1.14 | exact / 83.1 | dev | CMSIS-DSP 1.18.0 arm_fir_q15, generic C (-O3 -ffp-contract=off, LOOPUNROLL, simd128) |
+| `fir_cq15` | 321.72 | 897.87 | 0.36 | exact / exact | info | own (information): sdrk fallback |
+| `fir_cq15_fallback` | 897.87 | 785.69 | 1.14 | exact / 83.1 | dev | CMSIS-DSP 1.18.0 arm_fir_q15, generic C (-O3 -ffp-contract=off, LOOPUNROLL, simd128) |
 | `fir_decimate` | 55.44 | 383.41 | 0.14 | 141.0 / 134.3 | info | volk_32fc_32f_dot_prod_32fc_a as GNU Radio's fir_filter_ccf (filterNdec) calls it |
-| `fir_decimate_cq15` | 58.53 | 205.44 | 0.28 | exact / exact | info | own (information): sdrk fallback |
-| `fir_decimate_cq15_fallback` | 205.44 | 321.21 | 0.64 | exact / 82.2 | release | CMSIS-DSP 1.18.0 arm_fir_decimate_q15 (block 4090 of 4096), generic C (-O3 -ffp-contract=off, LOOPUNROLL, simd128) |
-| `fir_decimate_fallback` | 147.75 | 138.12 | 1.07 | 133.3 / 134.3 | release waived | CMSIS-DSP 1.18.0 arm_fir_decimate_f32 (block 4090 of 4096), generic C (-O3 -ffp-contract=off, LOOPUNROLL, simd128) |
-| `fir_fallback` | 480.55 | 676.70 | 0.71 | 136.3 / 136.4 | release | CMSIS-DSP 1.18.0 arm_fir_f32, generic C (-O3 -ffp-contract=off, LOOPUNROLL, simd128) |
+| `fir_decimate_cq15` | 58.53 | 205.33 | 0.29 | exact / exact | info | own (information): sdrk fallback |
+| `fir_decimate_cq15_fallback` | 205.33 | 321.21 | 0.64 | exact / 82.2 | release | CMSIS-DSP 1.18.0 arm_fir_decimate_q15 (block 4090 of 4096), generic C (-O3 -ffp-contract=off, LOOPUNROLL, simd128) |
+| `fir_decimate_fallback` | 147.65 | 138.12 | 1.07 | 133.3 / 134.3 | release waived | CMSIS-DSP 1.18.0 arm_fir_decimate_f32 (block 4090 of 4096), generic C (-O3 -ffp-contract=off, LOOPUNROLL, simd128) |
+| `fir_fallback` | 479.32 | 676.70 | 0.71 | 136.3 / 136.4 | release | CMSIS-DSP 1.18.0 arm_fir_f32, generic C (-O3 -ffp-contract=off, LOOPUNROLL, simd128) |
 | `fir_interpolate` | 236.37 | 2024.03 | 0.12 | 141.2 / 136.5 | info | volk_32fc_32f_dot_prod_32fc_a per output as GNU Radio's interp_fir_filter_ccf calls it |
 | `fir_interpolate_cq15` | 326.14 | 638.42 | 0.51 | exact / exact | info | own (information): sdrk fallback |
 | `fir_interpolate_cq15_fallback` | 638.42 | 1183.72 | 0.54 | exact / 80.1 | release | CMSIS-DSP 1.18.0 arm_fir_interpolate_q15 by 2, generic C (-O3 -ffp-contract=off, LOOPUNROLL, simd128) |
-| `fir_interpolate_fallback` | 543.52 | 592.97 | 0.92 | 136.3 / 136.5 | release | CMSIS-DSP 1.18.0 arm_fir_interpolate_f32 by 2, generic C (-O3 -ffp-contract=off, LOOPUNROLL, simd128) |
+| `fir_interpolate_fallback` | 542.79 | 592.97 | 0.92 | 136.3 / 136.5 | release | CMSIS-DSP 1.18.0 arm_fir_interpolate_f32 by 2, generic C (-O3 -ffp-contract=off, LOOPUNROLL, simd128) |
 | `fir_interpolate_real` | 147.92 | 947.03 | 0.16 | 141.4 / 136.4 | info | volk_32f_x2_dot_prod_32f_a per output as GNU Radio's interp_fir_filter_fff calls it |
 | `fir_interpolate_real_fallback` | 292.07 | 296.50 | 0.99 | 136.5 / 136.4 | release | CMSIS-DSP 1.18.0 arm_fir_interpolate_f32 by 2, generic C (-O3 -ffp-contract=off, LOOPUNROLL, simd128) |
 | `fir_interpolate_real_q15` | 285.55 | 451.84 | 0.63 | exact / exact | info | own (information): sdrk fallback |
@@ -2296,9 +2296,9 @@ Instructions per sample (wasmtime fuel, differential) of our kernel divided by t
 | `fir_interpolate_short` | 81.43 | 426.53 | 0.19 | 144.0 / 143.0 | info | volk_32fc_32f_dot_prod_32fc_a per output as GNU Radio's interp_fir_filter_ccf calls it |
 | `fir_interpolate_short_fallback` | 134.51 | 127.10 | 1.06 | 143.1 / 143.0 | release | CMSIS-DSP 1.18.0 arm_fir_interpolate_f32 by 8 (80 taps), generic C (-O3 -ffp-contract=off, LOOPUNROLL, simd128) |
 | `resample` | 309.31 | 2026.03 | 0.15 | 141.6 / 136.3 | info | volk_32fc_32f_dot_prod_32fc_a per output as GNU Radio's rational_resampler_ccf calls it |
-| `resample_cq15` | 333.51 | 1075.28 | 0.31 | exact / exact | info | own (information): sdrk fallback |
-| `resample_cq15_fallback` | 1075.28 | 1180.20 | 0.91 | exact / 78.2 | info | CMSIS-DSP 1.18.0 arm_fir_interpolate_q15 by 3, the same outputs per sample (no rational resampler), generic C (-O3 -ffp-contract=off, LOOPUNROLL, simd128) |
-| `resample_fallback` | 781.32 | 1888.88 | 0.41 | 136.5 / 136.4 | release | liquid-dsp 1.8.3 rresamp_crcf_create(3, 2, 32, h) and rresamp_crcf_execute_block (firpfb of 3 branches of 64 taps, portable dot product, benches/refs/liquid-rresamp.c, -O3 -ffp-contract=off; 4095 of the 4096 outputs) |
+| `resample_cq15` | 333.51 | 1075.64 | 0.31 | exact / exact | info | own (information): sdrk fallback |
+| `resample_cq15_fallback` | 1075.64 | 1180.20 | 0.91 | exact / 78.2 | info | CMSIS-DSP 1.18.0 arm_fir_interpolate_q15 by 3, the same outputs per sample (no rational resampler), generic C (-O3 -ffp-contract=off, LOOPUNROLL, simd128) |
+| `resample_fallback` | 781.36 | 1888.88 | 0.41 | 136.5 / 136.4 | release | liquid-dsp 1.8.3 rresamp_crcf_create(3, 2, 32, h) and rresamp_crcf_execute_block (firpfb of 3 branches of 64 taps, portable dot product, benches/refs/liquid-rresamp.c, -O3 -ffp-contract=off; 4095 of the 4096 outputs) |
 | `resample_real` | 180.01 | 949.03 | 0.19 | 141.8 / 136.7 | info | volk_32f_x2_dot_prod_32f_a per output as GNU Radio's rational_resampler_fff calls it |
 | `resample_real_fallback` | 687.96 | 1048.73 | 0.66 | 136.5 / 136.7 | release | liquid-dsp 1.8.3 rresamp_rrrf_create(3, 2, 32, h) and rresamp_rrrf_execute_block (firpfb of 3 branches of 64 taps, portable dot product, benches/refs/liquid-rresamp.c, -O3 -ffp-contract=off; 4095 of the 4096 outputs) |
 | `resample_real_q15` | 282.40 | 875.62 | 0.32 | exact / exact | info | own (information): sdrk fallback |
@@ -2466,8 +2466,8 @@ Instructions per sample (wasmtime fuel, differential) of our kernel divided by t
 | `halfband_decimate_real_fallback` | 86.29 | 263.59 | 0.33 | 142.5 / 142.0 | release | liquid-dsp 1.8.3 resamp2_rrrf_decim_execute (dotprod_rrrf) with its portable dot product (-O3 -ffp-contract=off, simd128) |
 | `halfband_decimate_real_q15` | 54.95 | 100.16 | 0.55 | exact / exact | info | own (information): sdrk fallback |
 | `halfband_decimate_real_q15_fallback` | 100.16 | 94.37 | 1.06 | exact / 82.6 | release | CMSIS-DSP 1.18.0 arm_fir_q15 (24 taps) on the even samples, arm_scale_q15 (centre tap) on the odd samples and arm_add_q15 (a composition: CMSIS-DSP has no halfband decimator), generic C (-O3 -ffp-contract=off, LOOPUNROLL, simd128) |
-| `halfband_ref_fir_decimate` | 102.07 | 268.96 | 0.38 | 143.9 / 139.9 | info | own (information): sdrk fallback |
-| `halfband_ref_fir_decimate_cq15` | 139.08 | 376.89 | 0.37 | exact / exact | info | own (information): sdrk fallback |
+| `halfband_ref_fir_decimate` | 102.07 | 268.40 | 0.38 | 143.9 / 139.9 | info | own (information): sdrk fallback |
+| `halfband_ref_fir_decimate_cq15` | 139.08 | 376.34 | 0.37 | exact / exact | info | own (information): sdrk fallback |
 | `halfband_ref_shifted` | 127.98 | 158.39 | 0.81 | 148.5 / 142.9 | info | own (information): sdrk fallback |
 | `halfband_ref_shifted_cq15` | 164.15 | 177.74 | 0.92 | exact / exact | info | own (information): sdrk fallback |
 | `iq_offset_block` | 40.77 | 40.77 | 1.00 | exact / exact | info | own (information): sdrk fallback |

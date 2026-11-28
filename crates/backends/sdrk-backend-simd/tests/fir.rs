@@ -564,3 +564,157 @@ fn cq15_filters_are_bit_exact_in_blocks_at_full_scale() {
         }
     }
 }
+
+/// The taps of one window (`len` taps, oldest sample first) whose lanes of the planar form
+/// (decision D3100: the positions `m` with `(m / 2) % 4 = l` in lane `l`) each sum to exactly
+/// `bound` in magnitude, lanes 0 and 1 negative and lanes 2 and 3 positive (so the output of a
+/// constant `-32768` input is 0 when every lane is exact), in window order.
+fn lane_bound_window(len: usize, bound: u32) -> Vec<i16> {
+    let mut w = vec![0i16; len];
+    for lane in 0..4 {
+        let at: Vec<usize> = (0..len).filter(|m| (m / 2) % 4 == lane).collect();
+        if at.is_empty() {
+            continue;
+        }
+        let (each, rest) = (bound / at.len() as u32, bound % at.len() as u32);
+        let sign = if lane < 2 { -1 } else { 1 };
+        for (k, &m) in at.iter().enumerate() {
+            let mag = each + u32::from((k as u32) < rest);
+            w[m] = (sign * mag.min(32767) as i32) as i16;
+        }
+    }
+    w
+}
+
+/// The filter taps `h` whose branches (factor `up`) have the windows of [`lane_bound_window`]:
+/// tap `m` of the window of branch `p` (of `t` taps) is `h[p + up (t - 1 - m)]`.
+fn lane_bound_taps(n: usize, up: usize, bound: u32) -> Vec<Q15> {
+    let mut h = vec![Q15(0); n];
+    for p in 0..up.min(n) {
+        let t = (n - p).div_ceil(up);
+        for (m, v) in lane_bound_window(t, bound).into_iter().enumerate() {
+            h[p + up * (t - 1 - m)] = Q15(v);
+        }
+    }
+    h
+}
+
+#[test]
+fn cq15_filters_are_bit_exact_at_the_bound_of_the_planar_form() {
+    // The planar progressions (decision D3100) take full taps when every lane of a window sums
+    // to at most 65535 in magnitude, and the split taps above: lanes at the bound and one above
+    // it, with constant full-scale samples (the largest lane sums, every lane exact or the
+    // output far from 0), noise, and the small taps of usual filters with long windows, in
+    // calls of every size.
+    let mut rng = Rng::new(43);
+    for bound in [65_535u32, 65_536, 30_000] {
+        for &n in &[8usize, 31, 64, 127, 256, 384] {
+            let taps = lane_bound_taps(n, 1, bound);
+            for kind in 0..2 {
+                let x = if kind == 0 {
+                    vec![cq(-32768, -32768); 900]
+                } else {
+                    cq15_noise(&mut rng, 900)
+                };
+                let mut a =
+                    FirState::<CQ15, _, _>::new(taps.clone(), vec![cq(0, 0); n - 1]).unwrap();
+                let mut b = a.clone();
+                let mut at = 0;
+                while at < x.len() {
+                    let len = (1 + rng.below(400)).min(x.len() - at);
+                    let (mut want, mut got) = (vec![cq(0, 0); len], vec![cq(0, 0); len]);
+                    Fallback.fir(&mut a, &x[at..at + len], &mut want).unwrap();
+                    Simd.fir(&mut b, &x[at..at + len], &mut got).unwrap();
+                    assert_eq!(want, got, "fir bound={bound} taps={n} at={at}");
+                    at += len;
+                }
+                for factor in [1usize, 3, 10] {
+                    let mut a = FirDecimState::<CQ15, _, _>::new(
+                        taps.clone(),
+                        vec![cq(0, 0); n - 1],
+                        factor,
+                    )
+                    .unwrap();
+                    let mut b = a.clone();
+                    let mut at = 0;
+                    while at < x.len() {
+                        let len = (1 + rng.below(400)).min(x.len() - at);
+                        let room = 1 + rng.below(len / factor + 3);
+                        let (mut want, mut got) = (vec![cq(0, 0); room], vec![cq(0, 0); room]);
+                        let pw = Fallback
+                            .fir_decimate(&mut a, &x[at..at + len], &mut want)
+                            .unwrap();
+                        let pg = Simd
+                            .fir_decimate(&mut b, &x[at..at + len], &mut got)
+                            .unwrap();
+                        assert_eq!(pw, pg);
+                        assert_eq!(want, got, "decimate bound={bound} taps={n} m={factor}");
+                        at += pw.consumed;
+                    }
+                }
+            }
+        }
+        for &(up, down, n) in &[
+            (2usize, 1usize, 128usize),
+            (3, 2, 192),
+            (8, 1, 80),
+            (5, 7, 64),
+            (4, 3, 255),
+            (1, 1, 384),
+        ] {
+            let taps = lane_bound_taps(n, up, bound);
+            for kind in 0..2 {
+                let x = if kind == 0 {
+                    vec![cq(-32768, -32768); 700]
+                } else {
+                    cq15_noise(&mut rng, 700)
+                };
+                let mut a = ResampleState::<CQ15, _, _>::new(
+                    taps.clone(),
+                    vec![cq(0, 0); n.div_ceil(up)],
+                    up,
+                    down,
+                )
+                .unwrap();
+                let mut b = a.clone();
+                let mut at = 0;
+                while at < x.len() {
+                    let len = (1 + rng.below(300)).min(x.len() - at);
+                    let room = 1 + rng.below(up * len / down + 8);
+                    let (mut want, mut got) = (vec![cq(0, 0); room], vec![cq(0, 0); room]);
+                    let pw = Fallback
+                        .resample(&mut a, &x[at..at + len], &mut want)
+                        .unwrap();
+                    let pg = Simd.resample(&mut b, &x[at..at + len], &mut got).unwrap();
+                    assert_eq!(pw, pg);
+                    assert_eq!(want, got, "resample bound={bound} L={up} M={down} taps={n}");
+                    at += pw.consumed;
+                }
+                if down == 1 {
+                    let mut a = FirInterpState::<CQ15, _, _>::new(
+                        taps.clone(),
+                        vec![cq(0, 0); n.div_ceil(up)],
+                        up,
+                    )
+                    .unwrap();
+                    let mut b = a.clone();
+                    let mut at = 0;
+                    while at < x.len() {
+                        let len = (1 + rng.below(300)).min(x.len() - at);
+                        let room = 1 + rng.below(up * len + 8);
+                        let (mut want, mut got) = (vec![cq(0, 0); room], vec![cq(0, 0); room]);
+                        let pw = Fallback
+                            .fir_interpolate(&mut a, &x[at..at + len], &mut want)
+                            .unwrap();
+                        let pg = Simd
+                            .fir_interpolate(&mut b, &x[at..at + len], &mut got)
+                            .unwrap();
+                        assert_eq!(pw, pg);
+                        assert_eq!(want, got, "interpolate bound={bound} L={up} taps={n}");
+                        at += pw.consumed;
+                    }
+                }
+            }
+        }
+    }
+}

@@ -41,11 +41,6 @@ pub mod window;
 
 pub use error::{Error, Result};
 pub use fallback::Fallback;
-// The run-time dispatch of `sdrk-backend-simd` (decision D2840): not part of the public API,
-// hidden from the documentation; `Target` has a contract (`hot` runs an `#[inline(always)]`
-// closure, `NATIVE` means `hot` is never called) that only that backend's target keeps.
-#[doc(hidden)]
-pub use fallback::{FallbackAt, Native, Target};
 #[cfg(feature = "reference")]
 pub use reference::{REFERENCE_IN_PLACE_MAX, Reference};
 pub use timing::*;

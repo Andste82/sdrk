@@ -516,6 +516,11 @@ fn progression_at<'a, B: Target, T: FbMac + 'a, const G: usize>(
     // magnitudes (at most 2^30 each) stays below 2^63, so for fewer than 2^32 taps.
     let grouped = u32::try_from(len).is_ok();
     let mut t = 0;
+    if grouped && seen < len {
+        t = head_groups::<B, T, G>(
+            target, branch, l, len, hist, input, seen, s, count, &mut dst,
+        )?;
+    }
     while t < count {
         let at = seen + t * s;
         if grouped && at >= len && t + G <= count {
@@ -532,6 +537,71 @@ fn progression_at<'a, B: Target, T: FbMac + 'a, const G: usize>(
         }
     }
     Ok(())
+}
+
+/// Samples of the stack copy of [`head_groups`]: below 2 KiB for `C32` (a zeroed array of
+/// 2 KiB or more is a `memset` that glibc runs as `rep stosb` from AVX2 on, which `llvm-mca`
+/// takes as about 100 cycles per byte on the AMD models, D3007).
+const HEAD_COPY: usize = 240;
+
+/// The first outputs of a progression whose windows reach into the history, in groups of `G`
+/// (D3104): the end of the history and the start of the input are copied once into a stack
+/// buffer, in which the windows of these groups are contiguous, and [`group`] computes them as
+/// it computes the groups inside the input, so with the same sums in the same order as
+/// [`single`] (each output its own accumulator, ascending taps). One output alone is a chain of
+/// dependent additions (on `cortex-a72` five cycles per tap of `f32`), so the groups take a
+/// fraction of the time. Returns the number of outputs written (whole groups; 0 when the copy
+/// does not fit [`HEAD_COPY`]).
+#[allow(clippy::too_many_arguments)]
+#[allow(
+    clippy::inline_always,
+    reason = "the group size and the strides must be constants in the hot loops"
+)]
+#[inline(always)]
+fn head_groups<'a, B: Target, T: FbMac + 'a, const G: usize>(
+    target: B,
+    branch: &[T::Tap],
+    l: usize,
+    len: usize,
+    hist: &[T],
+    input: &[T],
+    seen: usize,
+    s: usize,
+    count: usize,
+    dst: &mut impl Iterator<Item = &'a mut T>,
+) -> Result<usize> {
+    let internal = || Error::Internal("filter progression");
+    let groups = (len - seen).div_ceil(s).div_ceil(G).min(count / G);
+    if groups == 0 {
+        return Ok(0);
+    }
+    // Output `t` has the window of the `len` samples before `seen + t s`: in the copy
+    // `hist[.. len - seen from its end] ++ input[..end]` it begins at `t s`.
+    let old = len - seen;
+    let end = seen + (groups * G - 1) * s;
+    let (Some(first), Some(from), Some(new)) =
+        (input.first(), hist.len().checked_sub(old), input.get(..end))
+    else {
+        return Ok(0);
+    };
+    if old + end > HEAD_COPY {
+        return Ok(0);
+    }
+    let mut copy = [*first; HEAD_COPY];
+    let (ch, ci) = copy
+        .get_mut(..old + end)
+        .ok_or_else(internal)?
+        .split_at_mut(old);
+    ch.copy_from_slice(hist.get(from..).ok_or_else(internal)?);
+    ci.copy_from_slice(new);
+    for g in 0..groups {
+        let at = g * G * s;
+        let w = copy.get(at..at + len + (G - 1) * s).ok_or_else(internal)?;
+        for y in group::<B, T, G>(target, branch, l, len, w, s)? {
+            *dst.next().ok_or_else(internal)? = y;
+        }
+    }
+    Ok(groups * G)
 }
 
 /// [`progression_of`] with the group size of `T`.

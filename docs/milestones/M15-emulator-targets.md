@@ -7,7 +7,7 @@
 Complete on Linux x86-64: all deliverables and all acceptance criteria below were met locally (see "Status of the acceptance criteria" at the end of this file for the details and run times).
 
 - Fully completed: the five targets (`qemu-cortex-m4`, `qemu-cortex-m55`, `qemu-riscv32`, `esp32p4`, `esp32s3`) with the shared `targets/common`; `cargo xtask emu` (`--install`, `--skip-missing`, `--list`, `--judge`, quick and full profiles, timeouts, logs); the `test-all` extension; the protocol parser and its negative tests; the `inject-failure` self-check; the 256 KiB arena host test; the Cortex-M4 instruction-count report; `docs/embedded.md`; the CI job definitions; the changelog and the decisions log. Quick and full profiles pass for every target; R1.2 commands, `cargo xtask check` and `cargo xtask bare-metal` pass.
-- Partial / open (tracked in [`docs/open-items.md`](../open-items.md)): M15-1 (CI jobs written but not run here), M15-2 (arm64 and Windows hosts untested), M15-3 (the `hardware` feature of the ESP32-S3 target calls `esp_hal::init`; it is compile-checked only, not run on a board), M15-4 (long-term availability of the binary-only emulators and the long ESP32-P4 full run).
+- Partial / open (M15-2 to M15-4 parked in [`BACKLOG.md`](BACKLOG.md#parked-open-items) since 2026-11-28, D3150, with the ESP32 targets paused by D201): M15-1 (CI jobs written but not run here), M15-2 (arm64 and Windows hosts untested), M15-3 (the `hardware` feature of the ESP32-S3 target calls `esp_hal::init`; it is compile-checked only, not run on a board), M15-4 (long-term availability of the binary-only emulators and the long ESP32-P4 full run).
 
 ## Goal
 

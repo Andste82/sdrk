@@ -206,7 +206,7 @@ The f64 golden is the mathematical optimum and the first target; an established 
 | Part | State |
 | --- | --- |
 | Simulated cycles and efficiency | reported by `cargo measure` at `sse2`, `sse4.2` and `avx512` (SDE), `avx2` and `avx2-runtime` (callgrind) and `neon` (QEMU), D68; committed in `benches/results/cycles` (D2704) and gated by `cargo xtask check cycles` (D321, D2708) |
-| Release gate in cycles, every entry re-judged | done (D2708, D2746): every entry re-judged on the full CI measurement of D2745; the entries over their cap are `dev` with open items I13.1-7, I13.1-8 and I24-3; `avx2-runtime` re-judged against the library (D2764, D2765) |
+| Release gate in cycles, every entry re-judged | done (D2708, D2746): every entry re-judged on the full CI measurement of D2745; the entries over their cap went `dev` with open items I13.1-7, I13.1-8 and I24-3 (worked on by O1 and O2, what is left is in the items IO1-n and IO2-n; the three are removed, D3150); `avx2-runtime` re-judged against the library (D2764, D2765) |
 | Instructions per sample | only `simd128` and Cortex-M4 (D2700); `count accuracy` stays the accuracy check of the `simd128` counts |
 | Fair references for every entry | partly: an entry compared with our own fallback is `info` (information only, D2764, D2767), and the entries without a like-with-like library of their level are `info` (D2768, D2769); the kernels without a SIMD branch are listed in issue #20 (groups A to D) |
 | Mispredictions per sample of data-dependent branches (D1611) | `cargo measure --branches` at `sse2`, `sse4.2` and `avx2` with the penalties of D1612 (D1613); `avx512` not branch-simulated, treated as `neon` (D1616), the `cortex-a72` penalty measured (D1628), the `cortex-a76` penalty provisional (open item I44-15) |
@@ -2740,8 +2740,8 @@ Note that the M4F has a single-precision FPU only: `convert_out_cs16` rounds in 
 The open items of the measurement are in [open-items.md](open-items.md); the ones that decide how far the numbers above can be trusted or are still above a gate:
 
 - **I13.1-1:** the profiles of `cargo measure` are not bit-reproducible from run to run; with the address space fixed in CI (D2710) the spread is below 1.7e-05 relative, not zero (D2747).
-- **I13.1-7, I13.1-8, I24-3:** the entries over their cap in cycles after the re-judgement of D2746 and of `avx2-runtime` against the library (D2765), `dev` with their numbers: 30 fallback entries and levels against their library reference (I13.1-7; three more of D2746 are `release` again by the accuracy trade of D2760, D2762: `fft_cq15_1024_default_fallback` at `sse2`, `halfband_decimate_real_q15_fallback` at `neon`, `quad_demod_cq15_fallback` at `avx512`), 14 SIMD entries and levels (I13.1-8, three of them at `avx2-runtime`) and `stereo_matrix_fallback` (I24-3).
+- **IO1-7, IO1-8, IO2-17, IO2-19, IO2-27 to IO2-29:** what the rounds O1 and O2 left of the entries over their cap in cycles after the re-judgement of D2746 (I13.1-7, I13.1-8 and I24-3 of that time, removed by D3150); each entry above 1.10 states its reason or its waiver in `benches/limits.json` (D3021).
 - **I13.1-12:** `fft_cq15_1024` and `fft_cq15_1024_full_scale` at `neon` above 1.10 of Ne10 on cortex-a72 (1.320 and 1.227), `dev` since D2783.
-- **I44-15, I44-16:** the `cortex-a76` misprediction penalty is provisional; `avx512` cannot be branch-simulated.
+- **I44-15** (parked in [BACKLOG.md](milestones/BACKLOG.md#parked-open-items) until a measurement on a Raspberry Pi 5): the `cortex-a76` misprediction penalty is provisional; `avx512` is not branch-simulated and is treated as `neon` (D1616).
 - **Issue #20** (fair references, groups A to D), **#134** (`Q15` fallbacks above CMSIS-DSP's cycles), **#169** (new references).
 - **Planned:** the `avx512` build and KFR at `x86-64-v4` instead of `sapphirerapids`; SNR regression guards ([kernels.md](kernels.md#accuracy-policy)); the instruction counts of ESP32-P4 and RISC-V when M16 and M17 come.

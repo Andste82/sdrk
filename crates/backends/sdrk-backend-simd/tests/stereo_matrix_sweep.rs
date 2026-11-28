@@ -1,8 +1,8 @@
 //! `stereo_matrix` `CQ15` over every `(s, d)` pair of 16-bit values (2^32 pairs, ignored, run
 //! with `--release -- --ignored`; nightly in CI), against the integer rule `sat16(s +- 2 d)`
 //! itself, and a fast test of the boundary values in the normal run. The level paths (the
-//! exact 32-bit sums of x86; NEON and SIMD128 run the fallback) equal the rule for every pair,
-//! which is the proof of the argument in `stereo.rs`.
+//! exact 32-bit sums of x86, the saturating chains of NEON; SIMD128 runs the fallback) equal
+//! the rule for every pair, which is the proof of the argument in `stereo.rs`.
 #![allow(
     clippy::indexing_slicing,
     clippy::unwrap_used,

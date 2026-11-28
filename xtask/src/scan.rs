@@ -664,8 +664,91 @@ pub fn scan_core_std(
     findings
 }
 
-/// [`scan_core_std`] over every `.rs` file under `src_dir` (the `src` of a core-layer crate;
-/// `exception` for `sdrk-core`), with the test exemption of out-of-line modules.
+/// The file and the module of `sdrk-core` that may hold `unsafe` code (decision D3005): the x86
+/// shuffle intrinsics of the `C32` stereo matrix fallback.
+const CORE_UNSAFE_FILE: &str = "fallback/stereo.rs";
+/// The declaration line of that module.
+const CORE_UNSAFE_MODULE: &str = "mod matrix_x86 {";
+
+/// The line numbers of the module [`CORE_UNSAFE_MODULE`] (declaration to closing brace) and of
+/// the attributes right above it (up to the first line without code: its doc comment).
+fn core_unsafe_module_lines(lines: &[Line]) -> Vec<usize> {
+    let Some(start) = lines
+        .iter()
+        .position(|l| l.code.trim() == CORE_UNSAFE_MODULE)
+    else {
+        return Vec::new();
+    };
+    let mut allowed = Vec::new();
+    for line in lines.get(..start).unwrap_or_default().iter().rev() {
+        let code = line.code.trim();
+        if code.is_empty() || code.ends_with('}') || code.ends_with(';') {
+            break;
+        }
+        allowed.push(line.number);
+    }
+    let mut depth = 0usize;
+    for line in lines.get(start..).unwrap_or_default() {
+        allowed.push(line.number);
+        for ch in line.code.chars() {
+            match ch {
+                '{' => depth += 1,
+                '}' => depth = depth.saturating_sub(1),
+                _ => {}
+            }
+        }
+        if depth == 0 {
+            break;
+        }
+    }
+    allowed
+}
+
+/// Scans one file of a core-layer crate for `unsafe` (decision D3005: `sdrk-core` is
+/// `#![deny(unsafe_code)]`, and only the module `matrix_x86` of `fallback/stereo.rs` allows it).
+/// `file` is the path relative to `src`; `exception` is set for `sdrk-core`. Every `unsafe`
+/// token (a block, a function, an `allow(unsafe_code)`) outside that module is a finding, test
+/// code included; the crate attributes `#![deny(unsafe_code)]` / `#![forbid(unsafe_code)]` of
+/// `lib.rs` are not.
+#[must_use]
+pub fn scan_core_unsafe(file: &str, source: &str, exception: bool) -> Vec<(usize, String)> {
+    let ann = annotate(source, StdPolicy::Forbidden);
+    let allowed = if exception && file == CORE_UNSAFE_FILE {
+        core_unsafe_module_lines(&ann.lines)
+    } else {
+        Vec::new()
+    };
+    let mut findings = Vec::new();
+    for line in &ann.lines {
+        if allowed.contains(&line.number) {
+            continue;
+        }
+        let compact: String = line.code.chars().filter(|c| !c.is_whitespace()).collect();
+        if file == "lib.rs"
+            && (compact == "#![deny(unsafe_code)]" || compact == "#![forbid(unsafe_code)]")
+        {
+            continue;
+        }
+        let code = &line.code;
+        if code
+            .match_indices("unsafe")
+            .any(|(pos, _)| boundary_before(code, pos, &[]))
+        {
+            findings.push((
+                line.number,
+                "`unsafe` in the core layer outside the module `matrix_x86` of \
+                 `sdrk_core::fallback::stereo` (D3005): more unsafe code in the core layer needs \
+                 a maintainer decision"
+                    .to_string(),
+            ));
+        }
+    }
+    findings
+}
+
+/// [`scan_core_std`] and [`scan_core_unsafe`] over every `.rs` file under `src_dir` (the `src`
+/// of a core-layer crate; `exception` for `sdrk-core`), with the test exemption of out-of-line
+/// modules for `std`.
 ///
 /// # Errors
 /// Fails if a file cannot be read.
@@ -699,7 +782,11 @@ pub fn scan_core_std_crate(src_dir: &Path, exception: bool) -> anyhow::Result<Ve
             .unwrap_or(path)
             .to_string_lossy()
             .replace('\\', "/");
-        for (line, message) in scan_core_std(&rel, source, inherited, exception) {
+        let unsafe_findings = scan_core_unsafe(&rel, source, exception);
+        for (line, message) in scan_core_std(&rel, source, inherited, exception)
+            .into_iter()
+            .chain(unsafe_findings)
+        {
             findings.push(Finding {
                 path: path.clone(),
                 line,
@@ -964,6 +1051,48 @@ mod tests {
             .into_iter()
             .map(|(l, _)| l)
             .collect()
+    }
+
+    const CORE_STEREO: &str = "fn plain() {}\n\n/// The shuffles.\n#[cfg(all(\n    target_arch = \"x86_64\",\n    target_feature = \"sse2\"\n))]\n#[allow(\n    unsafe_code,\n    reason = \"D3005\"\n)]\nmod matrix_x86 {\n    pub fn f() {\n        // SAFETY: sse2.\n        let _ = unsafe { g() };\n    }\n    unsafe fn g() {}\n}\n";
+
+    #[test]
+    fn core_unsafe_allows_only_the_stereo_matrix_module() {
+        assert_eq!(
+            scan_core_unsafe("fallback/stereo.rs", CORE_STEREO, true),
+            []
+        );
+        assert_eq!(
+            scan_core_unsafe(
+                "lib.rs",
+                "#![no_std]\n#![deny(unsafe_code)]\n// unsafe\n",
+                true
+            ),
+            []
+        );
+        // The same module in another file, or in another crate of the core layer.
+        assert_eq!(
+            scan_core_unsafe("fallback/mix.rs", CORE_STEREO, true).len(),
+            3
+        );
+        assert_eq!(
+            scan_core_unsafe("fallback/stereo.rs", CORE_STEREO, false).len(),
+            3
+        );
+    }
+
+    #[test]
+    fn core_unsafe_rejects_unsafe_outside_the_module() {
+        let block = format!("{CORE_STEREO}fn h() {{\n    let _ = unsafe {{ 1 }};\n}}\n");
+        let found = scan_core_unsafe("fallback/stereo.rs", &block, true);
+        assert_eq!(found.len(), 1);
+        assert_eq!(found[0].0, 20);
+        assert!(found[0].1.contains("D3005"));
+        let allow = "#[allow(unsafe_code)]\nfn h() {}\n";
+        assert_eq!(scan_core_unsafe("num.rs", allow, true).len(), 1);
+        let crate_allow = "#![allow(unsafe_code)]\n";
+        assert_eq!(scan_core_unsafe("lib.rs", crate_allow, true).len(), 1);
+        let test_code = "#[cfg(test)]\nmod tests {\n    fn t() { let _ = unsafe { 1 }; }\n}\n";
+        assert_eq!(scan_core_unsafe("fir.rs", test_code, true).len(), 1);
     }
 
     #[test]

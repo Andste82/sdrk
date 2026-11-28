@@ -7,6 +7,12 @@ rust-version.workspace = true
 license.workspace = true
 repository.workspace = true
 
+[features]
+# Forwards `sdrk/std`: run-time CPU detection in the SIMD backend (and the standard-library square
+# roots of the fallback, D67) for a crate that depends on `sdrk-blocks` alone. The crate itself
+# stays `no_std`; the feature only forwards (D3163).
+std = ["sdrk/std"]
+
 [dependencies]
 sdrk = { path = "../../facade/sdrk" }
 sdrk-core = { path = "../../core/sdrk-core" }

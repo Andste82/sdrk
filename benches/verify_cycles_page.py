@@ -3,21 +3,27 @@ benches/cycles_page.py and benches/cycle_tables.py.
 
 Usage: python3 -I benches/verify_cycles_page.py [--repo DIR] [--doc] PAGE.html
 
-Reads `benches/results/cycles/*.json`, `benches/results/wasm32.json` and `benches/limits.json` of
-DIR (default: the checkout of this script) and the table of PAGE.html, and compares every row:
+Reads `benches/results/cycles/*.json`, `benches/results/wasm32.json`, `benches/limits.json` and the
+VOLK dispatch tables of `xtask/src/bench.rs` of DIR (default: the checkout of this script) and the
+table of PAGE.html, and compares:
 
-- one row per simulated record of every level and per record of `simd128`, and no other row; the
-  entries without numbers are listed in the notes;
-- the status (limits.json), the trade mark, the `simd128` verdict, the kernel name (without
-  `_fallback`, a second opponent under its base entry) and the full entry name, the level label;
-- ours, the opponent and the ratio on both models as shown (at `avx2-runtime` the opponent of the
-  `avx2` record and the ratio recomputed, our own `avx2` build as information), the SNR of both
-  sides and their difference;
-- the colour class of every ratio and of the SNR cells, the band of the row and `data-judged`;
-- the opponent text and the `own (information)` mark, the justification texts;
-- no judged row (`release`, `dev`) compares with our own code.
+- one block per kernel, sorted by name, its header row the kernel name; in a block the levels in
+  the fixed order, each SIMD row before its fallback row (`↳ fallback`); a second opponent of an
+  entry in the block of that entry;
+- one row per simulated record of every level and per record of `simd128`, and no other row;
+- per row: the status (limits.json), the trade mark, the `simd128` verdict, the level label and its
+  tooltip (the entry and the CPUs), ours and the opponent on both models (at `avx2-runtime` the
+  opponent of the `avx2` record), the ratio and its colour, the ratio's tooltip (the SIMD entry
+  against its own fallback, at `avx2-runtime` against our own `avx2` build), the SNR difference,
+  its tooltip (both SNR values) and colour, the band, `data-judged` and `data-little` (a SIMD entry
+  above 0.80 of its fallback on a model), the opponent (the full `compared_with` as the tooltip, the
+  library named, the VOLK protokernel of the level, the `own (information)` mark) and the
+  justification texts;
+- no judged row (`release`, `dev`) compares with our own code;
+- the notes list exactly the entries without numbers at a level that the plan measures;
+- the header names the tools of the results files and no placeholder.
 
-`--doc` also checks the cycle tables and the `simd128` table of docs/performance.md the same way.
+`--doc` also checks the cycle tables and the `simd128` table of docs/performance.md.
 Prints every difference and the total; exits 1 on any difference.
 """
 import html.parser
@@ -29,6 +35,10 @@ import sys
 EXACT = 999.0
 JUDGED = {"release", "dev"}
 LEVELS = ["sse2", "sse4.2", "avx2", "avx2-runtime", "avx512", "neon", "simd128"]
+COLOURS = ("g", "y", "r", "lb")
+CPU_NAMES = {"skylake": "Skylake", "znver2": "Zen 2", "znver3": "Zen 3", "znver4": "Zen 4",
+             "alderlake": "Alder Lake", "sapphirerapids": "Sapphire Rapids",
+             "cortex-a72": "Cortex-A72", "cortex-a76": "Cortex-A76"}
 REASONS = [("accuracy_trade", "accuracy trade"), ("contract_trade", "contract trade"),
            ("waiver", "waiver"), ("accuracy_waiver", "accuracy waiver"), ("cycle_waiver", "cycle waiver")]
 
@@ -97,7 +107,7 @@ def snr_colour(o, c, judged):
 def load(repo):
     with open(os.path.join(repo, "benches", "limits.json")) as fh:
         limits = json.load(fh)
-    cyc = {}
+    cyc, tools = {}, set()
     d = os.path.join(repo, "benches", "results", "cycles")
     for f in sorted(os.listdir(d)):
         if f.endswith(".json"):
@@ -105,12 +115,14 @@ def load(repo):
                 doc = json.load(fh)
             for level, lv in doc["levels"].items():
                 cyc[level] = lv
+            if doc.get("tools", {}).get("llvm-mca"):
+                tools.add(doc["tools"]["llvm-mca"])
     wp = os.path.join(repo, "benches", "results", "wasm32.json")
     wasm = {}
     if os.path.exists(wp):
         with open(wp) as fh:
             wasm = json.load(fh)["levels"]["simd128"]["kernels"]
-    return limits, cyc, wasm
+    return limits, cyc, wasm, sorted(tools)
 
 
 def ours_figures(cyc, wasm):
@@ -144,10 +156,54 @@ def second_map(cyc, wasm):
     return out
 
 
-def expected(limits, cyc, wasm, ck):
-    """{(level, entry): the expected cells}, and the notes {(level, entry)}."""
+def volk_of(repo):
+    """{level: {function: (aligned, unaligned)}} and the VOLK dispatch names, read from the tables
+    of `xtask/src/bench.rs` (the pinned `volk_config` per level)."""
+    path = os.path.join(repo, "xtask", "src", "bench.rs")
+    if not os.path.exists(path):
+        return {}, []
+    with open(path, encoding="utf-8") as fh:
+        src = fh.read()
+    tables = {}
+    for m in re.finditer(r'const (VOLK_\w+): &str = "\\\n(.*?)";', src, re.S):
+        rows = {}
+        for line in m.group(2).splitlines():
+            parts = line.split()
+            if len(parts) == 3:
+                rows[parts[0]] = (parts[1], parts[2])
+        tables[m.group(1)] = rows
+    config = {pin: const for pin, const in re.findall(r"Self::(\w+) => (VOLK_\w+),", src)}
+    m = re.search(r"VolkPin::Default => (VOLK_\w+),", src)
+    config["Default"] = m.group(1) if m else ""
+    m = re.search(r"VOLK_FUNCTIONS: \[&str; \d+\] = \[(.*?)\];", src, re.S)
+    functions = re.findall(r'"(\w+)"', m.group(1)) if m else []
+    out = {}
+    for m in re.finditer(r'level: "([^"]+)",(.*?)volk_pin: VolkPin::(\w+),', src, re.S):
+        level, body, pin = m.groups()
+        if pin == "Default" and 'refs: "wasm32"' in body:
+            out[level] = {f: ("generic", "generic") for f in functions}
+        else:
+            out[level] = tables.get(config.get(pin, ""), {})
+    return out, functions
+
+
+def protokernels(cw, level, volk):
+    """[(the call as written, the protokernel)] of the VOLK dispatch calls in `cw` at `level`."""
+    table, functions = volk[0].get(level, {}), volk[1]
+    out = []
+    for f in functions:
+        for m in re.finditer(re.escape(f) + r"(\w*)", cw):
+            if m.group(1) in ("", "_a", "_u") and f in table:
+                out.append((m.group(0), table[f][1] if m.group(1) == "_u" else table[f][0]))
+    return out
+
+
+def expected(limits, cyc, wasm, ck, volk=({}, [])):
+    """{(level, entry): the expected cells}, and the real gaps {(level, entry)}: the entries
+    without numbers at a level that the plan measures (not `not measured at the level`)."""
     second = second_map(cyc, wasm)
     rows, notes = {}, set()
+    cpu = {lvl: (lv["reference_model"], lv["counter_model"]) for lvl, lv in cyc.items()}
 
     def entry_of(name, level):
         e = limits.get(name, {}).get(level)
@@ -169,27 +225,29 @@ def expected(limits, cyc, wasm, ck):
         kernel = second.get(simd, simd)
         so, sc = (snr or {}).get("ours"), (snr or {}).get("comparison", (snr or {}).get("other"))
         fmt = (lambda x: f"{x:.2f}") if unit == "instructions" else (lambda x: f"{x:.3f}")
-        tail = " instr" if unit == "instructions" else ""
         classes = [colour(x, jl, trade) for x in ratio]
         rank = ["", "g", "y", "lb", "r"]
         rows[(level, name)] = {
-            "status": status, "trade": trade, "verdict": verdict, "kernel": kernel,
-            "title_entry": f"entry {name}", "level": f"fallback ({level})" if fb else level,
-            "ours": " / ".join(f2(x) for x in ours) + tail, "opp": " / ".join(f2(x) for x in opp) + tail,
-            "snr_o": db(so), "snr_c": db(sc), "delta": delta(so, sc),
+            "status": status, "trade": trade, "verdict": verdict, "kernel": kernel, "fallback": fb,
+            "level": f"{kernel} ↳ fallback ({level})" if fb else f"{kernel} {level}",
+            "ours_v": ours, "ours": " / ".join(f2(x) for x in ours), "opp": " / ".join(f2(x) for x in opp),
+            "snr_title": f"SNR ours {dbu(so)} / opponent {dbu(sc)}", "delta": delta(so, sc),
             "ratio": [fmt(x) for x in ratio], "ratio_classes": classes,
             "snr_class": snr_colour(so, sc, jl), "band": max(classes, key=rank.index),
-            "judged": "1" if jl else "0", "own": own, "opponent": cw,
-            "own_build": None if own_build is None else f"ours / own avx2 build {own_build[0]:.3f} / {own_build[1]:.3f} (information)",
+            "judged": "1" if jl else "0", "own": own, "compared_with": cw,
+            "protokernels": protokernels(cw, level, volk),
+            "own_build": None if own_build is None else
+            "ours / own avx2 build " + " / ".join(f"{x:.2f}" for x in own_build) + " (information)",
             "reasons": [f"{label}: {e[key]}" for key, label in REASONS if isinstance(e.get(key), str) and e[key]],
-            "variant": "fallback" if fb else "simd",
+            "variant": "fallback" if fb else "simd", "cpus": cpu.get(level),
         }
 
     for level, lv in cyc.items():
         lib = cyc.get("avx2", {}).get("entries", {}) if level == "avx2-runtime" else None
         for name, v in lv["entries"].items():
             if "reference_model" not in v:
-                notes.add((level, name))
+                if not (v.get("note") or "").startswith("not simulated: not measured at"):
+                    notes.add((level, name))
                 continue
             r, c = v["reference_model"], v["counter_model"]
             ours = (r["ours"]["cycles_per_sample"], c["ours"]["cycles_per_sample"])
@@ -219,17 +277,35 @@ def expected(limits, cyc, wasm, ck):
         base("simd128", name, e, k.get("comparison_kind"), k["compared_with"], (k["ours_instr_per_sample"],),
              (k["other_instr_per_sample"],), (k["ratio"],), k.get("snr_db"), "instructions",
              verdict={"waived": "waived", "fail": "fail"}.get(k["verdict"], ""))
+    # Our SIMD entry against our own fallback of the level (information) and "brings little".
+    for (level, name), e in rows.items():
+        e.setdefault("little", "0")
+        f = rows.get((level, name + "_fallback"))
+        e["ratio_title"] = e["own_build"]
+        if not e["fallback"] and f is not None:
+            q = [a / b for a, b in zip(e["ours_v"], f["ours_v"])]
+            e["ratio_title"] = "SIMD / own fallback " + " / ".join(f"{x:.2f}" for x in q) + " (information)"
+            if any(round(x, 2) > 0.80 for x in q):
+                e["little"] = f["little"] = "1"
     return rows, notes
 
 
+def dbu(x):
+    return "–" if x is None else ("exact" if x >= EXACT else f"{x:.1f} dB")
+
+
+LEVEL_RANK = {lvl: i for i, lvl in enumerate(LEVELS)}
+
+
 class Page(html.parser.HTMLParser):
-    """The rows of the table: attributes, and per cell its classes, text and marked spans."""
+    """The rows of the table (kernel header rows and data rows) and the notes; per cell its
+    classes, title, text and marked spans. The ellipsis of a closed text is no text."""
 
     def __init__(self):
         super().__init__(convert_charrefs=True)
-        self.rows, self.notes = [], []
+        self.rows, self.notes, self.meta = [], [], ""
         self.stack = []
-        self.in_body = self.in_notes = False
+        self.in_body = self.in_notes = self.in_meta = False
         self.row = self.cell = self.note = None
 
     def handle_starttag(self, tag, attrs):
@@ -237,18 +313,18 @@ class Page(html.parser.HTMLParser):
         cls = (a.get("class") or "").split()
         if tag == "tbody":
             self.in_body = True
+        elif tag == "div" and "meta" in cls:
+            self.in_meta = True
         elif tag == "ul" and a.get("id") == "notes":
             self.in_notes = True
         elif tag == "li" and self.in_notes:
             self.note = ""
         elif tag == "tr" and self.in_body:
-            self.row = {"attrs": a, "cells": []}
-        elif tag == "td" and self.row is not None:
-            self.cell = {"cls": cls, "text": "", "spans": [], "divs": [], "title": None}
+            self.row = {"attrs": a, "cls": cls, "cells": []}
+        elif tag in ("td", "th") and self.row is not None:
+            self.cell = {"cls": cls, "text": "", "spans": [], "divs": [], "title": a.get("title")}
             self.row["cells"].append(self.cell)
         elif self.cell is not None:
-            if tag == "code" and a.get("title"):
-                self.cell["title"] = a["title"]
             if tag == "span" and ("st" in cls or "v" in cls):
                 self.cell["spans"].append({"cls": cls, "text": ""})
             if tag == "div":
@@ -263,6 +339,8 @@ class Page(html.parser.HTMLParser):
                 break
         if tag == "tbody":
             self.in_body = False
+        elif tag == "div" and self.in_meta:
+            self.in_meta = False
         elif tag == "ul":
             self.in_notes = False
         elif tag == "li" and self.note is not None:
@@ -271,32 +349,41 @@ class Page(html.parser.HTMLParser):
         elif tag == "tr" and self.row is not None:
             self.rows.append(self.row)
             self.row = None
-        elif tag == "td":
+        elif tag in ("td", "th"):
             self.cell = None
 
     def handle_data(self, data):
+        if self.in_meta:
+            self.meta += data
         if self.note is not None:
             self.note += data
-        if self.cell is None:
+        if self.cell is None or any(t == "span" and "m" in cls for t, cls in self.stack):
             return
-        if any(t == "span" and "m" in cls for t, cls in self.stack):
-            return  # the ellipsis of a closed cell is no text of the page
         self.cell["text"] += data
-        tags = [t for t, _ in self.stack]
         if any(t == "span" and ("st" in cls or "v" in cls) for t, cls in self.stack) and self.cell["spans"]:
             self.cell["spans"][-1]["text"] += data
-        if "div" in tags and self.cell["divs"]:
+        if any(t == "div" for t, _ in self.stack) and self.cell["divs"]:
             self.cell["divs"][-1]["text"] += data
 
 
-def check_page(page_path, limits, cyc, wasm, ck):
-    exp, notes = expected(limits, cyc, wasm, ck)
+def check_page(page_path, limits, cyc, wasm, ck, volk=({}, []), tools=()):
+    exp, notes = expected(limits, cyc, wasm, ck, volk)
     p = Page()
     with open(page_path, encoding="utf-8") as fh:
         p.feed(fh.read())
-    seen = set()
+    for t in tools:
+        if t not in p.meta:
+            ck.diff("page header", "tool of the results files", p.meta, t)
+    if "unknown" in p.meta or "not recorded" in p.meta:
+        ck.diff("page header", "text", p.meta, "the commit and the recorded tools only")
+    seen, order, block, blocks = set(), [], None, []
     for row in p.rows:
         a = row["attrs"]
+        if "kh" in row["cls"]:
+            block = a.get("data-kernel")
+            blocks.append(block)
+            ck.same(f"page block {block}", "header", row["cells"][0]["text"].strip() if row["cells"] else None, block)
+            continue
         key = (a.get("data-level"), a.get("data-entry"))
         where = f"page {key[0]} {key[1]}"
         if key in seen:
@@ -307,55 +394,60 @@ def check_page(page_path, limits, cyc, wasm, ck):
             ck.diff(where, "row", "present", "no record")
             continue
         ck.checked["rows"] += 1
+        ck.same(where, "block", block, e["kernel"])
+        order.append((e["kernel"], LEVEL_RANK.get(key[0], 99), e["fallback"]))
         cells = row["cells"]
-        if len(cells) != 11:
-            ck.diff(where, "cells", len(cells), 11)
+        if len(cells) != 8:
+            ck.diff(where, "cells", len(cells), 8)
             continue
-        st, kern, lvl, ours, opp, so, sc, ratio, dl, oppn, why = cells
-        ck.same(where, "data-status", a.get("data-status"), e["status"])
-        ck.same(where, "data-trade", a.get("data-trade"), e["trade"])
-        ck.same(where, "data-band", a.get("data-band"), e["band"])
-        ck.same(where, "data-judged", a.get("data-judged"), e["judged"])
-        ck.same(where, "data-kernel", a.get("data-kernel"), e["kernel"])
-        ck.same(where, "data-variant", a.get("data-variant"), e["variant"])
-        marks = [s["text"] for s in st["spans"]]
-        ck.same(where, "status", marks, [e["status"]] + [x for x in (e["trade"], e["verdict"]) if x])
-        ck.same(where, "kernel", kern["text"].strip(), e["kernel"])
-        ck.same(where, "kernel title", (kern["title"] or "").split(" (")[0], e["title_entry"])
-        ck.same(where, "level", lvl["text"].strip(), e["level"])
+        lvl, st, ours, opp, ratio, dl, oppn, why = cells
+        for attr, want in (("data-status", e["status"]), ("data-trade", e["trade"]), ("data-band", e["band"]),
+                           ("data-judged", e["judged"]), ("data-kernel", e["kernel"]),
+                           ("data-variant", e["variant"]), ("data-little", e["little"])):
+            ck.same(where, attr, a.get(attr), want)
+        ck.same(where, "child row", "child" in row["cls"],
+                e["fallback"] and (key[0], key[1][: -len("_fallback")]) in exp)
+        ck.same(where, "status", [s["text"] for s in st["spans"]],
+                [e["status"]] + [x for x in (e["trade"], e["verdict"]) if x])
+        ck.same(where, "level", re.sub(r"\s+", " ", lvl["text"]).strip(), e["level"])
+        cpus = "instructions per sample, no CPU model" if e["cpus"] is None else \
+            " / ".join(CPU_NAMES.get(x, x) for x in e["cpus"])
+        ck.same(where, "level tooltip", lvl["title"], f"entry {key[1]} at {key[0]}: {cpus}")
         ck.same(where, "cycles ours", ours["text"].strip(), e["ours"])
         ck.same(where, "cycles opponent", opp["text"].strip(), e["opp"])
-        ck.same(where, "SNR ours", so["text"].strip(), e["snr_o"])
-        ck.same(where, "SNR opponent", sc["text"].strip(), e["snr_c"])
-        ck.same(where, "SNR delta", dl["text"].strip(), e["delta"])
-        for name, c in (("SNR ours", so), ("SNR opponent", sc), ("SNR delta", dl)):
-            got = [x for x in c["cls"] if x in ("g", "y", "r", "lb")]
-            ck.same(where, f"{name} colour", got, [e["snr_class"]] if e["snr_class"] else [])
         vals = [s for s in ratio["spans"] if "v" in s["cls"]]
         ck.same(where, "ratio", [s["text"] for s in vals], e["ratio"])
-        got = [next((x for x in s["cls"] if x in ("g", "y", "r", "lb")), "") for s in vals]
-        ck.same(where, "ratio colour", got, e["ratio_classes"])
+        ck.same(where, "ratio colour", [next((x for x in s["cls"] if x in COLOURS), "") for s in vals],
+                e["ratio_classes"])
+        ck.same(where, "ratio tooltip", ratio["title"], e["ratio_title"])
+        ck.same(where, "SNR delta", dl["text"].strip(), e["delta"])
+        ck.same(where, "SNR delta tooltip", dl["title"], e["snr_title"])
+        ck.same(where, "SNR colour", [x for x in dl["cls"] if x in COLOURS], [e["snr_class"]] if e["snr_class"] else [])
         own_mark = any(s["text"] == "own (information)" for s in oppn["spans"])
         ck.same(where, "own (information) mark", own_mark, e["own"])
-        text = oppn["text"]
-        sub = oppn["divs"][0]["text"] if oppn["divs"] else None
-        if sub:
-            text = text[: len(text) - len(sub)]
-        text = text.replace("own (information) ", "", 1) if own_mark else text
-        ck.same(where, "opponent", text, e["opponent"])
-        ck.same(where, "own avx2 build", sub, e["own_build"])
+        ck.same(where, "opponent tooltip", oppn["title"], e["compared_with"])
+        short = oppn["text"].replace("own (information) ", "", 1) if own_mark else oppn["text"]
+        for written, pk in e["protokernels"]:
+            if written in short:
+                ck.same(where, f"protokernel of {written}", f"{written} ({pk})" in short, True)
+        head = e["compared_with"].split()[0] if e["compared_with"] else ""
+        ck.same(where, "opponent names the library", head.startswith("volk_") or head in short, True)
         ck.same(where, "justification", [d["text"] for d in why["divs"]], e["reasons"])
-        if e["judged"] == "1" and (own_mark or own_name(text)):
-            ck.diff(where, "judged against our own code", text, "a library")
+        if e["judged"] == "1" and (own_mark or own_name(e["compared_with"])):
+            ck.diff(where, "judged against our own code", e["compared_with"], "a library")
     for key in sorted(set(exp) - seen):
         ck.diff(f"page {key[0]} {key[1]}", "row", "missing", "present")
+    if blocks != sorted(blocks) or len(blocks) != len(set(blocks)):
+        ck.diff("page", "blocks", "unsorted or repeated", "one block per kernel, sorted by name")
+    if order != sorted(order):
+        ck.diff("page", "row order", "not by kernel, level, SIMD before fallback", "the block order")
     shown = set()
     for n in p.notes:
         m = re.match(r"^(\S+) (\S+): ", n)
         if m:
             shown.add((m.group(1), m.group(2)))
     for key in sorted(notes ^ shown):
-        ck.diff(f"notes {key[0]} {key[1]}", "note", key in shown, key in notes)
+        ck.diff(f"notes {key[0]} {key[1]}", "listed", key in shown, key in notes)
 
 
 def snr_cell(snr, trade):
@@ -392,7 +484,7 @@ def check_doc(repo, limits, cyc, wasm, ck):
         for name in sorted(want_rows & set(shown)):
             e, cells = exp[(level, name)], shown[name]
             ck.checked["doc_rows"] += 1
-            cw = e["opponent"].replace("|", "\\|")
+            cw = e["compared_with"].replace("|", "\\|")
             cmp_cell = f"own (information): {cw}" if e["own"] else cw
             if level == "simd128":
                 k = wasm[name]
@@ -438,8 +530,8 @@ def main(argv=None):
     if page is None:
         sys.exit("usage: verify_cycles_page.py [--repo DIR] [--doc] PAGE.html")
     ck = Checker()
-    limits, cyc, wasm = load(repo)
-    check_page(page, limits, cyc, wasm, ck)
+    limits, cyc, wasm, tools = load(repo)
+    check_page(page, limits, cyc, wasm, ck, volk_of(repo), tools)
     if doc:
         check_doc(repo, limits, cyc, wasm, ck)
     for d in ck.diffs:

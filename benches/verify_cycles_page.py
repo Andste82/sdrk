@@ -74,17 +74,21 @@ def db(x):
     return "–" if x is None else ("exact" if x >= EXACT else f"{x:.1f}")
 
 
+BIT_EXACT = "bit-exact: output identical to the f64 reference, no error"
+
+
 def delta(o, c):
+    """The SNR difference cell and its tooltip; bit-exact (999) is infinite."""
     if o is None or c is None:
-        return "–"
+        return "–", "no SNR"
     if o >= EXACT and c >= EXACT:
-        return "0.0"
+        return "0", f"both bit-exact ({BIT_EXACT})"
     if o >= EXACT:
-        return "ours exact"
+        return "+∞", f"SNR ours ∞ ({BIT_EXACT}) / opponent {c:.1f} dB"
     if c >= EXACT:
-        return "opponent exact"
+        return "−∞", f"SNR ours {o:.1f} dB / opponent ∞ ({BIT_EXACT})"
     d = round(o - c, 1)
-    return "0.0" if d == 0 else f"{d:+.1f}"
+    return ("0.0" if d == 0 else f"{d:+.1f}"), f"SNR ours {o:.1f} dB / opponent {c:.1f} dB"
 
 
 def colour(x, judged, trade):
@@ -231,7 +235,7 @@ def expected(limits, cyc, wasm, ck, volk=({}, [])):
             "status": status, "trade": trade, "verdict": verdict, "kernel": kernel, "fallback": fb,
             "level": f"{kernel} ↳ fallback ({level})" if fb else f"{kernel} {level}",
             "ours_v": ours, "ours": " / ".join(f2(x) for x in ours), "opp": " / ".join(f2(x) for x in opp),
-            "snr_title": f"SNR ours {dbu(so)} / opponent {dbu(sc)}", "delta": delta(so, sc),
+            "snr_title": delta(so, sc)[1], "delta": delta(so, sc)[0],
             "ratio": [fmt(x) for x in ratio], "ratio_classes": classes,
             "snr_class": snr_colour(so, sc, jl), "band": max(classes, key=rank.index),
             "judged": "1" if jl else "0", "own": own, "compared_with": cw,
@@ -288,10 +292,6 @@ def expected(limits, cyc, wasm, ck, volk=({}, [])):
             if any(round(x, 2) > 0.80 for x in q):
                 e["little"] = f["little"] = "1"
     return rows, notes
-
-
-def dbu(x):
-    return "–" if x is None else ("exact" if x >= EXACT else f"{x:.1f} dB")
 
 
 LEVEL_RANK = {lvl: i for i, lvl in enumerate(LEVELS)}
@@ -417,8 +417,10 @@ def check_page(page_path, limits, cyc, wasm, ck, volk=({}, []), tools=()):
         ck.same(where, "cycles opponent", opp["text"].strip(), e["opp"])
         vals = [s for s in ratio["spans"] if "v" in s["cls"]]
         ck.same(where, "ratio", [s["text"] for s in vals], e["ratio"])
-        ck.same(where, "ratio colour", [next((x for x in s["cls"] if x in COLOURS), "") for s in vals],
-                e["ratio_classes"])
+        ck.same(where, "ratio colour", [next((x[2:] for x in s["cls"] if x[2:] in COLOURS and x[:2] == "t-"), "")
+                                        for s in vals], e["ratio_classes"])
+        ck.same(where, "ratio inner background", [x for s in vals for x in s["cls"] if x in COLOURS], [])
+        ck.same(where, "ratio cell colour", [x for x in ratio["cls"] if x in COLOURS], [e["band"]] if e["band"] else [])
         ck.same(where, "ratio tooltip", ratio["title"], e["ratio_title"])
         ck.same(where, "SNR delta", dl["text"].strip(), e["delta"])
         ck.same(where, "SNR delta tooltip", dl["title"], e["snr_title"])

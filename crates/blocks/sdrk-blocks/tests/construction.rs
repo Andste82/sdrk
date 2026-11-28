@@ -665,8 +665,7 @@ fn no_block_is_larger_than_512_bytes() {
     check::<ResampleRealBlock<Q15, A<'static>>>("ResampleRealBlock<Q15>");
     check::<ResampleRealBlock<Q15, sdrk_testkit::VecStorage>>("ResampleRealBlock<Q15, Vec>");
     // Every other primitive block (the building blocks of the composites among them: `equalize`,
-    // `interpolate`, `frame_encode`, `frame_decode`, `bit_scramble`, `bit_descramble`), except `MorseDecodeBlock` (648 bytes on
-    // `main` since M47, found by this list; open item I44.1-6 for the maintainer).
+    // `interpolate`, `frame_encode`, `frame_decode`, `bit_scramble`, `bit_descramble`).
     macro_rules! complex {
         ($($b:ident),*) => {$(
             check::<sdrk_blocks::$b<C32, A<'static>>>(concat!(stringify!($b), "<C32>"));
@@ -737,6 +736,7 @@ fn no_block_is_larger_than_512_bytes() {
         FskModBlock,
         HdlcDecodeBlock,
         HdlcEncodeBlock,
+        MorseDecodeBlock,
         MorseEncodeBlock,
         OokModBlock,
         PulseKeyBlock,

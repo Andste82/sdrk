@@ -2,11 +2,11 @@
 
 > Plan: [M13.1](M13.1-cycles-only.md) (cycles per sample, the like-with-like statuses of D2764 to D2779) · Previous round: [O2](O2-cycle-optimisation.md) (with O2b and O2c) · Open items it works on: IO2-28, IO2-29, IO1-7 ([open-items.md](../open-items.md)), issue #203 (the kernel gap inventory) · Next: [BACKLOG](BACKLOG.md)
 
-> **Status: STATUS_LINE**
+> **Status: ready for review (2026-11-28)**: items 1 to 3 done but for `fir_cq15_fallback` (1.14) and `fft_4096_fallback` (1.11) at `simd128` (IO2-29); item 4 judged, not made faster (IO3-1); IO1-7, IO2-28 (a) and I44-10 closed. Branch `opt-round-3a-2` (rebased on `main` 747797d6), decisions D3100 to D3108, open items IO3-1 and IO3-2**
 
 ## Goal
 
-The maintainer's order of 2026-11-28 ("#209 mergen, dann O3a starten (vergiss den rest nicht!)"), with the scope he approved as "prio 1: optimisations that are necessary (red, SIMD slower than its own fallback)" plus item 14 of the O2c list, on the branch `opt-round-3a` from `main` d05a65e6 (PR #209 merged):
+The maintainer's order of 2026-11-28 ("#209 mergen, dann O3a starten (vergiss den rest nicht!)"), with the scope he approved as "prio 1: optimisations that are necessary (red, SIMD slower than its own fallback)" plus item 14 of the O2c list, on the branch `opt-round-3a` from `main` d05a65e6 (PR #209 merged), rebased as `opt-round-3a-2` on `main` 747797d6:
 
 1. **SIMD slower than its own fallback (IO2-28):** `fir_decimate_cq15` and `fir_interpolate_cq15` at `sse2` (1.22 / 1.23 and 1.12 / 1.15 of the `pmaddwd` fallbacks of D3017) and at `sse4.2` (about 1.00): at most 0.80 of the fallback on both models, bit-identical, the `cycle_waiver`s removed.
 2. **Red without a reason** (`dev` above 1.10 of the library with only a waiver): `dot_cq15_fallback` at `sse2` and `sse4.2`, `mag_sq_fallback` at `avx512`, `fir_interpolate_real_fallback` and `fir_interpolate_short_fallback` at `neon`, `deinterleave_cq15_fallback` at `avx2`: at most 1.10 on both models, then `release`.

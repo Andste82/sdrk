@@ -189,6 +189,20 @@ fn heap_rejects_vec_in_heap_free_crate() {
 }
 
 #[test]
+fn heap_rejects_unsafe_in_the_core_crate_outside_the_stereo_module() {
+    let clean = workspace(&[core(
+        "",
+        "#![no_std]\n#![deny(unsafe_code)]\npub fn f() {}\n",
+    )]);
+    assert_eq!(check_heap(clean.path()).expect("run"), []);
+    let dirty = workspace(&[core(
+        "",
+        "#![no_std]\n#![deny(unsafe_code)]\n#[allow(unsafe_code)]\npub fn f() -> u8 {\n    unsafe { 1 }\n}\n",
+    )]);
+    assert_eq!(check_heap(dirty.path()).expect("run").len(), 2);
+}
+
+#[test]
 fn heap_allows_vec_in_pipeline_crate() {
     let pipeline = Krate {
         dir: "crates/pipeline/sdrk-pipeline",

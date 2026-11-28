@@ -85,6 +85,7 @@ Up to M25.1 the milestones are strictly sequential: each depends on all previous
 | M54 | [M54-code-track.md](M54-code-track.md) | 10 | Kernel `code_track` (`C32`): delay-locked loop (early/prompt/late, normalised E−L discriminator with unit slope), correlate-then-interpolate once per period with a fixed-point code position, prompt equals `despread` at zero bandwidth; SIMD for the lag sums and the per-period combination; `CQ15` a backlog item (revised 2026-11-17) |
 | M55 | [M55-pilot-equalize.md](M55-pilot-equalize.md) | 10 | Kernel `pilot_equalize` (`C32`): OFDM pilot-based LS channel estimate, frequency interpolation, time smoothing, one-tap equalization by reciprocals, common-phase correction against the previous smoothed estimate, a defined zero threshold; SIMD on every level; `CQ15` a backlog item (revised 2026-11-17) |
 | M56 | [M56-fwht.md](M56-fwht.md) | 10 | Kernel `fwht` (`C32`/`CQ15`): fast Walsh–Hadamard transform (Sylvester ordering), the spreading transform of MC-CDMA; `CQ15` per-stage rounding shift as the M07 FFT (scalings `Unscaled`/`Fixed`/`BlockFloat`, §C.2), reference in butterfly order; SIMD on every level; last of the DSSS/OFDM kernel series (revised 2026-11-17) |
+| M57 | [M57-tetra-bsch.md](M57-tetra-bsch.md) | 10 | Planned (2026-11-28). TETRA downlink synchronization: the generic kernel `viterbi` (K 3 to 9, 2 to 4 outputs, `i16` modulo metrics, SIMD) with `conv_encode`, the bit helpers `Lfsr`, `MultiplicativeInterleaver`, `IndexPuncture` and `crc_bits` in `sdrk-proto`, `sdrk_proto::tetra`, the composite `tetra_bsch_decode` (frequency correction field search on phase steps, BSCH decoding), `tetra_parse` (SYNC PDU as JSON), flow `tetra_bsch_receiver` |
 | — | [BACKLOG.md](BACKLOG.md) | 7–10, later | Remaining backends, optional C/Python bindings, extensions, stabilization |
 
 ```text
@@ -142,6 +143,7 @@ From M26 on, the dependencies (the *Depends on* line of each file; dependencies 
 | M54 `code_track` | M38, M52 | everything after M52 |
 | M55 `pilot_equalize` | M07, M45 | everything after M45 |
 | M56 `fwht` | M29 | everything after M29 |
+| M57 TETRA BSCH, `viterbi` | M13, M37, M38, M39.1, M40.1, M44.1.1 | everything after M44.1.1 |
 | M16 → M17 → M18 Backends | M15 (scheduled after M29, so the primitive blocks are covered) | everything after M29 |
 
 ## How to work on a milestone
@@ -231,10 +233,11 @@ Every golden case has a fixed seed; ranges keep cases independent so that adding
 | 880–889 | M44.2: the bit scramblers `bit_scramble` / `bit_descramble` (the maintainer's decision on I44.2-6; moved from 870–873 by the decision on I44.2-11, D1544: 880 and 881 the golden cases, 882 the cut plans, 883 the error propagation and the quarter turns; their round trip and self-synchronization use 838 and 839 of the range of M44.2) |
 | 890–899 | M44.3 (the equalizer switch) |
 | 900–909 | M44.4 (SNR estimate, restart, dense blind start) |
-| 910–999 | free, for backlog milestones |
+| 910–929 | M57 (TETRA BSCH, `viterbi`) |
+| 930–999 | free, for backlog milestones |
 | 1000+ | benchmark inputs (M13, M16) — not golden vectors |
 
 ## Files in this directory
 
-- `M00-…` to `M56-…`: the milestones (each contains the full ground rules; from M26 on with the changed rule R1.1, from M37 on with `sdrk-proto` in R2). M48 to M56 are the DSSS/OFDM kernel series (one kernel per milestone with its primitive block and pipeline kind, for spread-spectrum and multicarrier work; the composite blocks and the flows follow in later milestones).
+- `M00-…` to `M57-…`: the milestones (each contains the full ground rules; from M26 on with the changed rule R1.1, from M37 on with `sdrk-proto` in R2). M48 to M56 are the DSSS/OFDM kernel series (one kernel per milestone with its primitive block and pipeline kind, for spread-spectrum and multicarrier work; the composite blocks and the flows follow in later milestones).
 - `BACKLOG.md`: work after M18 and M44.

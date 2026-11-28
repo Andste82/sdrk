@@ -33,9 +33,8 @@
 //! 16-bit addition (`paddsw`, `sqadd`, `i16x8.add_sat_s`) is `sat16` of the sum. The samples
 //! `(re, 0)` are the zero extension of `re` to 32 bits: `punpcklwd` / `punpckhwd` with zero
 //! (SSE2, SSE4.2), `vpmovzxwd` of each half (AVX2), `zip1` / `zip2` with zero (NEON),
-//! `i32x4.extend_low/high_i16x8_u` (SIMD128). The rest of the call, shorter than one vector, and
-//! SSE2 (no rounding high multiplication) run the `i32` loop of the fallback at the level of the
-//! dispatch.
+//! `i32x4.extend_low/high_i16x8_u` (SIMD128). The rest of the call, shorter than one vector, runs
+//! the `i32` loop of the fallback at the level of the dispatch.
 
 use fearless_simd::Simd as SimdToken;
 use sdrk_core::kernels::modulate::AmMod;

@@ -474,13 +474,11 @@
   "fir_decimate_cq15": {
     "sse2": {
       "status": "info",
-      "waiver": "no established library has a SIMD `CQ15` FIR with real `Q15` taps on our levels (VOLK's `volk_16ic_x2_dot_prod_16ic` takes complex taps and saturates its 16-bit sums, GNU Radio has no 16-bit FIR); the comparison is our own fallback, reported as information, and the branch is judged by its efficiency (D32)",
-      "cycle_waiver": "the SIMD progression of D3007 is slower than the `pmaddwd` fallback of D3017 that replaced the compiled exact lanes: 10.79 / 11.33 against 8.85 / 9.23 cycles per sample on `skylake` / `znver2` (CI run 46134940482, 1.22 / 1.23); the progression takes the fallback's form next; open item IO2-28"
+      "waiver": "no established library has a SIMD `CQ15` FIR with real `Q15` taps on our levels (VOLK's `volk_16ic_x2_dot_prod_16ic` takes complex taps and saturates its 16-bit sums, GNU Radio has no 16-bit FIR); the comparison is our own fallback, reported as information, and the branch is judged by its efficiency (D32)"
     },
     "sse4.2": {
       "status": "info",
-      "waiver": "no established library has a SIMD `CQ15` FIR with real `Q15` taps on our levels (VOLK's `volk_16ic_x2_dot_prod_16ic` takes complex taps and saturates its 16-bit sums, GNU Radio has no 16-bit FIR); the comparison is our own fallback, reported as information, and the branch is judged by its efficiency (D32)",
-      "cycle_waiver": "as at `sse2`: 8.84 / 9.30 against 8.84 / 9.21 cycles per sample on `skylake` / `znver2` (CI run 46134940482, 1.00 / 1.01); open item IO2-28"
+      "waiver": "no established library has a SIMD `CQ15` FIR with real `Q15` taps on our levels (VOLK's `volk_16ic_x2_dot_prod_16ic` takes complex taps and saturates its 16-bit sums, GNU Radio has no 16-bit FIR); the comparison is our own fallback, reported as information, and the branch is judged by its efficiency (D32)"
     },
     "avx2": {
       "status": "info",
@@ -554,13 +552,11 @@
   "fir_interpolate_cq15": {
     "sse2": {
       "status": "info",
-      "waiver": "no established library has a SIMD `CQ15` FIR with real `Q15` taps on our levels (VOLK's `volk_16ic_x2_dot_prod_16ic` takes complex taps and saturates its 16-bit sums, GNU Radio has no 16-bit FIR); the comparison is our own fallback, reported as information, and the branch is judged by its efficiency (D32)",
-      "cycle_waiver": "the SIMD progression of D3007 is slower than the `pmaddwd` interpolator of the fallback (D3017): 66.64 / 70.02 against 59.70 / 60.72 cycles per sample on `skylake` / `znver2` (CI run 46126247106, 1.12 / 1.15); the progression takes the fallback's form next; open item IO2-28"
+      "waiver": "no established library has a SIMD `CQ15` FIR with real `Q15` taps on our levels (VOLK's `volk_16ic_x2_dot_prod_16ic` takes complex taps and saturates its 16-bit sums, GNU Radio has no 16-bit FIR); the comparison is our own fallback, reported as information, and the branch is judged by its efficiency (D32)"
     },
     "sse4.2": {
       "status": "info",
-      "waiver": "no established library has a SIMD `CQ15` FIR with real `Q15` taps on our levels (VOLK's `volk_16ic_x2_dot_prod_16ic` takes complex taps and saturates its 16-bit sums, GNU Radio has no 16-bit FIR); the comparison is our own fallback, reported as information, and the branch is judged by its efficiency (D32)",
-      "cycle_waiver": "as at `sse2`: 51.53 / 53.49 against 51.42 / 53.93 cycles per sample on `skylake` / `znver2` (CI run 46126247106, 1.00 / 0.99); open item IO2-28"
+      "waiver": "no established library has a SIMD `CQ15` FIR with real `Q15` taps on our levels (VOLK's `volk_16ic_x2_dot_prod_16ic` takes complex taps and saturates its 16-bit sums, GNU Radio has no 16-bit FIR); the comparison is our own fallback, reported as information, and the branch is judged by its efficiency (D32)"
     },
     "avx2": {
       "status": "info",
@@ -915,8 +911,7 @@
       "status": "release"
     },
     "avx512": {
-      "status": "dev",
-      "waiver": "not faster yet, no reason in the work or the accuracy: 0.37 / 0.26 against 0.31 / 0.27 cycles per sample of CMSIS-DSP on `znver4` / `sapphirerapids` (1.21 / 0.94): the compiler gives the loop 512-bit permutations of two sources; blocks of 8 and 16 samples (IO1-7) and the 256-bit form of the AVX2 build in `core::arch` (D3017, 0.840 / 1.405, slower on `sapphirerapids`) were tried; open item IO1-7"
+      "status": "release"
     },
     "neon": {
       "status": "release"
@@ -1952,7 +1947,7 @@
     },
     "simd128": {
       "status": "dev",
-      "waiver": "1.19 times the instructions of CMSIS-DSP at this level, within the `dev` limit; the simulated cycles of the shared code at `avx2` are below CMSIS-DSP's (D37); the gap in simulated cycles is tracked in issue #134 (the `simd128` instruction gap of the grouped fallback)"
+      "waiver": "not faster yet, no reason in the work or the accuracy: 897.87 against 785.69 instructions per sample of CMSIS-DSP's `arm_fir_q15` at this level (1.14, was 1.19 before the head groups of D3104; CI run 46157162937); the simulated cycles of the shared code at `avx2` are below CMSIS-DSP's (D37); open item IO2-29"
     }
   },
   "fir_decimate_fallback": {
@@ -2035,12 +2030,10 @@
       "status": "release"
     },
     "neon": {
-      "status": "dev",
-      "waiver": "not faster yet, no reason in the work or the accuracy: 1.13 / 0.79 of CMSIS-DSP's `arm_fir_interpolate_f32` on `cortex-a72` / `cortex-a76`, not analysed yet (IO1-7); open item IO1-7"
+      "status": "release"
     },
     "simd128": {
-      "status": "dev",
-      "waiver": "open item I44-10: the short-branch form of `fir_interpolate` in the fallback (D1420, bit-exact with the one-at-a-time sum) counts 176.00 against 127.10 instructions per output sample of CMSIS-DSP's `arm_fir_interpolate_f32` by 8 compiled for `simd128` (1.38), within the `dev` limit. The maintainer decides on a form of the fallback that the compiler vectorizes better (I44-10)"
+      "status": "release"
     }
   },
   "fir_interpolate_cq15_fallback": {
@@ -2123,12 +2116,10 @@
       "status": "release"
     },
     "neon": {
-      "status": "dev",
-      "waiver": "not faster yet, no reason in the work or the accuracy: 1.22 / 0.82 of CMSIS-DSP's `arm_fir_interpolate_f32` on `cortex-a72` / `cortex-a76`, not analysed yet (IO1-7); open item IO1-7"
+      "status": "release"
     },
     "simd128": {
-      "status": "dev",
-      "waiver": "1.18 times the instructions of CMSIS-DSP at this level, within the `dev` limit; the simulated cycles of the shared code at `avx2` are below CMSIS-DSP's (D37); the gap in simulated cycles is tracked in issue #134 (the `simd128` instruction gap of the grouped fallback)"
+      "status": "release"
     }
   },
   "fir_interpolate_real_q15_fallback": {
@@ -2546,28 +2537,28 @@
   },
   "fft_cq15_1024_fallback": {
     "sse2": {
-      "status": "info",
-      "waiver": "`arm_cfft_q15` has no block floating point (fixed 1/N scaling with truncating shifts, no search for the largest magnitude) and is a lower accuracy class: 41.8 dB on the measured input against 68.0 dB of our block-float fallback, which rounds every butterfly as the contract prescribes. Not the same work and not the same accuracy (D34): information only, the fallback is judged by its simulated cycles at avx2"
+      "status": "dev",
+      "waiver": "judged against CMSIS-DSP since D3107 and above the dev limit of 1.50: more accurate (block floating point (the largest magnitude searched after every stage and the shift chosen by it) and every butterfly rounded as the contract prescribes, 68.03 dB against 41.76 dB of `arm_cfft_q15` (26.27 dB more), which scales by 1/N with truncating shifts and searches nothing; 83.13 / 91.71 against 44.75 / 56.34 cycles per sample of CMSIS-DSP on `skylake` / `znver2` (1.858 / 1.628), above the 1.20 of an accuracy trade (D2760)); the scalar stages were not made faster in O3a; awaiting the maintainer's decision; open item IO3-1"
     },
     "sse4.2": {
-      "status": "info",
-      "waiver": "`arm_cfft_q15` has no block floating point (fixed 1/N scaling with truncating shifts, no search for the largest magnitude) and is a lower accuracy class: 41.8 dB on the measured input against 68.0 dB of our block-float fallback, which rounds every butterfly as the contract prescribes. Not the same work and not the same accuracy (D34): information only, the fallback is judged by its simulated cycles at avx2"
+      "status": "dev",
+      "waiver": "judged against CMSIS-DSP since D3107 and above the dev limit of 1.50: more accurate (block floating point (the largest magnitude searched after every stage and the shift chosen by it) and every butterfly rounded as the contract prescribes, 68.03 dB against 41.76 dB of `arm_cfft_q15` (26.27 dB more), which scales by 1/N with truncating shifts and searches nothing; 76.35 / 77.17 against 44.80 / 56.34 cycles per sample of CMSIS-DSP on `skylake` / `znver2` (1.704 / 1.370), above the 1.20 of an accuracy trade (D2760)); the scalar stages were not made faster in O3a; awaiting the maintainer's decision; open item IO3-1"
     },
     "avx2": {
-      "status": "info",
-      "waiver": "`arm_cfft_q15` has no block floating point (fixed 1/N scaling with truncating shifts, no search for the largest magnitude) and is a lower accuracy class: 41.8 dB on the measured input against 68.0 dB of our block-float fallback, which rounds every butterfly as the contract prescribes. Not the same work and not the same accuracy (D34): information only, the fallback is judged by its simulated cycles at avx2"
+      "status": "dev",
+      "slower_because": "more accurate: block floating point (the largest magnitude searched after every stage and the shift chosen by it) and every butterfly rounded as the contract prescribes, 68.03 dB against 41.76 dB of `arm_cfft_q15` (26.27 dB more), which scales by 1/N with truncating shifts and searches nothing; 46.25 / 51.39 against 37.69 / 38.63 cycles per sample of CMSIS-DSP on `znver3` / `alderlake` (1.227 / 1.330), above the 1.20 of an accuracy trade (D2760), so `dev` (judged against CMSIS-DSP since D3107); open item IO3-1"
     },
     "avx512": {
-      "status": "info",
-      "waiver": "`arm_cfft_q15` has no block floating point (fixed 1/N scaling with truncating shifts, no search for the largest magnitude) and is a lower accuracy class: 41.8 dB on the measured input against 68.0 dB of our block-float fallback, which rounds every butterfly as the contract prescribes. Not the same work and not the same accuracy (D34): information only, the fallback is judged by its simulated cycles at avx2"
+      "status": "dev",
+      "slower_because": "more accurate: block floating point (the largest magnitude searched after every stage and the shift chosen by it) and every butterfly rounded as the contract prescribes, 68.03 dB against 41.76 dB of `arm_cfft_q15` (26.27 dB more), which scales by 1/N with truncating shifts and searches nothing; 42.83 / 50.08 against 37.40 / 39.49 cycles per sample of CMSIS-DSP on `znver4` / `sapphirerapids` (1.145 / 1.268), above the 1.20 of an accuracy trade (D2760), so `dev` (judged against CMSIS-DSP since D3107); open item IO3-1"
     },
     "neon": {
-      "status": "info",
-      "waiver": "`arm_cfft_q15` has no block floating point (fixed 1/N scaling with truncating shifts, no search for the largest magnitude) and is a lower accuracy class: 41.8 dB on the measured input against 68.0 dB of our block-float fallback, which rounds every butterfly as the contract prescribes. Not the same work and not the same accuracy (D34): information only, the fallback is judged by its simulated cycles at avx2"
+      "status": "dev",
+      "waiver": "judged against CMSIS-DSP since D3107 and above the dev limit of 1.50: more accurate (block floating point (the largest magnitude searched after every stage and the shift chosen by it) and every butterfly rounded as the contract prescribes, 68.03 dB against 41.76 dB of `arm_cfft_q15` (26.27 dB more), which scales by 1/N with truncating shifts and searches nothing; 120.91 / 100.37 against 64.42 / 52.33 cycles per sample of CMSIS-DSP on `cortex-a72` / `cortex-a76` (1.877 / 1.918), above the 1.20 of an accuracy trade (D2760)); the scalar stages were not made faster in O3a; awaiting the maintainer's decision; open item IO3-1"
     },
     "simd128": {
-      "status": "info",
-      "waiver": "`arm_cfft_q15` has no block floating point (fixed 1/N scaling with truncating shifts, no search for the largest magnitude) and is a lower accuracy class: 41.8 dB on the measured input against 68.0 dB of our block-float fallback, which rounds every butterfly as the contract prescribes. Not the same work and not the same accuracy (D34): information only, the fallback is judged by its simulated cycles at avx2"
+      "status": "dev",
+      "slower_because": "more accurate: block floating point (the largest magnitude searched after every stage and the shift chosen by it) and every butterfly rounded as the contract prescribes, 68.03 dB against 41.76 dB of `arm_cfft_q15` (26.27 dB more), which scales by 1/N with truncating shifts and searches nothing; 537.22 against 378.19 instructions per sample (1.42), above the 1.20 of an accuracy trade (D2760), so `dev` (judged against CMSIS-DSP since D3107); open item IO3-1"
     }
   },
   "fft_cq15_1024_default_fallback": {
@@ -2877,12 +2868,10 @@
   },
   "dot_cq15_fallback": {
     "sse2": {
-      "status": "dev",
-      "waiver": "not faster yet, no reason in the work or the accuracy: 2.20 / 2.53 against 1.78 / 2.03 cycles per sample of CMSIS-DSP on `skylake` / `znver2` (1.23 / 1.24); the exact lanes with the taps duplicated simulate no faster (IO1-7); a `pmaddwd` form in the x86 module of D3017 is the next step; open item IO1-7"
+      "status": "release"
     },
     "sse4.2": {
-      "status": "dev",
-      "waiver": "not faster yet, no reason in the work or the accuracy: 2.03 / 1.72 against 2.04 / 1.49 cycles per sample of CMSIS-DSP on `skylake` / `znver2` (1.00 / 1.15); see `sse2`; open item IO1-7"
+      "status": "release"
     },
     "avx2": {
       "status": "release"
@@ -2954,8 +2943,7 @@
       "status": "release"
     },
     "simd128": {
-      "status": "dev",
-      "waiver": "not faster yet, no reason in the work or the accuracy: 6.16 against 5.40 instructions per sample of CMSIS-DSP's `arm_scale_f32` on the `2 n` floats (1.14), the same accuracy; not analysed yet; open item IO2-29"
+      "status": "release"
     }
   },
   "scale_cq15_fallback": {
@@ -4055,8 +4043,7 @@
       "status": "release"
     },
     "avx2": {
-      "status": "dev",
-      "waiver": "not faster yet, no reason in the work or the accuracy: 0.23 / 0.23 against 0.20 / 0.26 cycles per sample of VOLK's `generic` `volk_16ic_deinterleave_16i_x2` on `znver3` / `alderlake` (1.14 / 0.86); blocks of 8 to 32 samples and the 32-bit word form were tried and were slower (IO1-7); open item IO1-7"
+      "status": "release"
     },
     "avx512": {
       "status": "release"

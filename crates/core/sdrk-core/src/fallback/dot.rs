@@ -24,9 +24,11 @@
 //! `256 sum_h + sum_l` to the `i64` run sum. From AVX2 the two sums take one pass each (one sum
 //! per loop, which the compiler turns into `pmaddwd` of adjacent pairs), at SSE2 one pass for
 //! both; slices shorter than one block keep the widening form, which has no fixed cost per
-//! block. The values are the same. SSE4.2 (`pmovsxwq`, `pmuldq`), `dot` `CQ15` (where the split
-//! simulated slower on one core model of every x86 level) and the other targets keep the
-//! widening form.
+//! block. The values are the same. SSE4.2 (`pmovsxwq`, `pmuldq`) and the other targets keep the
+//! widening form. `dot` `CQ15` below AVX2 sums whole blocks of eight samples by `pmaddwd` in the
+//! module `q15_x86` (the taps split once per block, D3101); from AVX2 and on the other targets
+//! it keeps the widening form (the compiled byte split simulated slower on one core model of
+//! every x86 level).
 //!
 //! The `f32` sum of `dot_real` on x86-64 from AVX2, on AArch64 and on wasm32 forms the products
 //! of eight samples first (independent, so the compiler computes them in one vector) and adds
@@ -138,6 +140,20 @@ const Q15_FORM: Q15Form = if cfg!(target_feature = "avx2") {
 /// The exact sums `(sum re * h, sum im * h)` of one run.
 #[inline]
 fn run_cq15(x: &[CQ15], taps: &[Q15]) -> (i64, i64) {
+    // Below AVX2 the whole blocks of eight samples take `pmaddwd` (D3101), the rest the
+    // widening form.
+    #[cfg(all(target_arch = "x86_64", not(target_feature = "avx2")))]
+    let (mut re, mut im, x, taps) = {
+        let (re, im, done) =
+            super::q15_x86::dot_cq15(bytemuck::cast_slice(x), bytemuck::cast_slice(taps));
+        (
+            re,
+            im,
+            x.get(done..).unwrap_or(&[]),
+            taps.get(done..).unwrap_or(&[]),
+        )
+    };
+    #[cfg(not(all(target_arch = "x86_64", not(target_feature = "avx2"))))]
     let (mut re, mut im) = (0i64, 0i64);
     for (s, h) in x.iter().zip(taps) {
         let h = i32::from(h.0);

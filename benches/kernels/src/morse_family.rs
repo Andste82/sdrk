@@ -154,12 +154,14 @@ impl MorseDecodeBlockK {
         while env.len() < period + layout.n {
             env.extend_from_within(..period);
         }
-        let block = MorseDecodeBlock::new(
-            &MorseDecodeConfig::default(),
-            Rate::hz(FS).expect("rate"),
-            &mut ArenaStorage::new(&mut []),
-        )
-        .expect("morse_decode");
+        // The word buffer lives in the storage since D3161.
+        let config = MorseDecodeConfig::default();
+        let rate = Rate::hz(FS).expect("rate");
+        let bytes = MorseDecodeBlock::<ArenaStorage<'static>>::storage_bytes(&config, rate)
+            .expect("morse_decode storage");
+        let memory: &'static mut [u8] = Box::leak(vec![0u8; bytes + 64].into_boxed_slice());
+        let block = MorseDecodeBlock::new(&config, rate, &mut ArenaStorage::new(memory))
+            .expect("morse_decode");
         MorseDecodeBlockK {
             block,
             env,

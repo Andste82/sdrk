@@ -1,9 +1,11 @@
 //! The one x86-64 module of `core::arch` for the `Q15` / `CQ15` fallbacks (the maintainer's
 //! decision D3017 on IO2-23, extending D3005): `pmaddwd` (`_mm_madd_epi16`) for the exact
 //! sums of the FIR fallbacks (IO1-5 `fir_decimate` `CQ15`, IO1-6 the `Q15` / `CQ15`
-//! interpolators) and `vpmulhrsw` for `mul_real` `Q15` with AVX2 (IO1-7). The compiler forms
-//! neither instruction from the portable code (O1, O2b), so the fallbacks name them here. The
-//! 256-bit form of `mag_sq` `C32` with AVX-512 (IO1-7) was measured and not taken: CI run
+//! interpolators) and of `dot` `CQ15` below AVX2 (D3101), `vpmulhrsw` for `mul_real` `Q15` with
+//! AVX2 (IO1-7), the blends and packs of `deinterleave` `CQ15` with AVX2 (D3103), and the one
+//! `C32` form of IO1-7, `mag_sq` with AVX-512 (the squares first, then two `vpermt2ps`, D3102).
+//! The compiler forms none of them from the portable code (O1, O2b, O3a), so the fallbacks name
+//! them here. The 256-bit form of `mag_sq` with AVX-512 was measured and not taken: CI run
 //! 46126247106 gave 0.26 / 0.39 cycles per sample on `znver4` / `sapphirerapids` against 0.37 /
 //! 0.26 of the compiled loop (0.840 / 1.405 of CMSIS-DSP against 1.210 / 0.942).
 //!
@@ -153,6 +155,54 @@ pub(super) fn sums_complex<const N: usize>(
     Some(out)
 }
 
+/// Samples per segment of [`dot_cq15`]: a lane adds two pair sums per block of eight samples,
+/// each below `2 * 2^15 * 255 < 2^24` in magnitude, so 64 of them stay below `2^30`.
+#[cfg(not(target_feature = "avx2"))]
+const DOT_SEGMENT: usize = 256;
+
+/// `dot` `CQ15` below AVX2 (the maintainer's decision D3017, extended by D3101): the exact sums
+/// `(sum re_k t_k, sum im_k t_k)` of the first `8 b` samples of `x` (interleaved `re, im`) with
+/// `taps`, `b` the whole blocks of eight samples, and `8 b`. Per block the samples are paired
+/// (`[r0, r1, i0, i1 | r2, r3, i2, i3]`, as in [`sums_complex`]), the eight taps are split into
+/// `256 h + l` once and `pshufd` puts each part in the order `[t0, t1, t0, t1, t2, t3, t2, t3]`
+/// of the pairs, so that four `pmaddwd` give the pair sums of both parts and both components.
+/// The lanes are summed in `i64` after every segment of [`DOT_SEGMENT`] samples, below `2^31`.
+#[cfg(not(target_feature = "avx2"))]
+#[inline]
+pub(super) fn dot_cq15(x: &[i16], taps: &[i16]) -> (i64, i64, usize) {
+    use core::arch::x86_64::{_mm_and_si128, _mm_set1_epi16, _mm_shuffle_epi32, _mm_srai_epi16};
+    let done = (x.len() / 2).min(taps.len()) / 8 * 8;
+    let (mut re, mut im) = (0i64, 0i64);
+    // SAFETY: SSE2 is part of x86-64; every load reads 16 bytes inside `taps` or `x`: the taps
+    // `at..at + 8` and the samples `at..at + 8` (`x[2 at..2 at + 16]`) with `at + 8 <= done`,
+    // and `done <= taps.len()`, `2 done <= x.len()`.
+    unsafe {
+        let mask = _mm_set1_epi16(0xFF);
+        let mut at = 0;
+        while at < done {
+            let end = (at + DOT_SEGMENT).min(done);
+            let (mut ah, mut al) = (_mm_setzero_si128(), _mm_setzero_si128());
+            while at < end {
+                let t = _mm_loadu_si128(taps.as_ptr().add(at).cast());
+                let x0 = _mm_loadu_si128(x.as_ptr().add(2 * at).cast());
+                let x1 = _mm_loadu_si128(x.as_ptr().add(2 * at + 8).cast());
+                let x0 = _mm_shufflehi_epi16::<0xD8>(_mm_shufflelo_epi16::<0xD8>(x0));
+                let x1 = _mm_shufflehi_epi16::<0xD8>(_mm_shufflelo_epi16::<0xD8>(x1));
+                let (h, l) = (_mm_srai_epi16::<8>(t), _mm_and_si128(t, mask));
+                ah = _mm_add_epi32(ah, _mm_madd_epi16(x0, _mm_shuffle_epi32::<0x50>(h)));
+                al = _mm_add_epi32(al, _mm_madd_epi16(x0, _mm_shuffle_epi32::<0x50>(l)));
+                ah = _mm_add_epi32(ah, _mm_madd_epi16(x1, _mm_shuffle_epi32::<0xFA>(h)));
+                al = _mm_add_epi32(al, _mm_madd_epi16(x1, _mm_shuffle_epi32::<0xFA>(l)));
+                at += 8;
+            }
+            let (h, l) = (lanes(ah), lanes(al));
+            re += join(h, l, [0, 2]);
+            im += join(h, l, [1, 3]);
+        }
+    }
+    (re, im, done)
+}
+
 /// `mul_real` `Q15` with AVX2: `q15_mul` of the pairs of `a` and `b` into `out`, sixteen values
 /// per step; returns the number of values done (the rest runs the portable loop).
 #[cfg(target_feature = "avx2")]
@@ -175,6 +225,88 @@ pub(super) fn mul_real_q15(lhs: &[i16], rhs: &[i16], out: &mut [i16]) -> usize {
             let prod = _mm256_mulhrs_epi16(va, vb);
             let prod = _mm256_xor_si256(prod, _mm256_cmpeq_epi16(prod, min));
             _mm256_storeu_si256(out.as_mut_ptr().add(at).cast(), prod);
+            at += 16;
+        }
+    }
+    done
+}
+
+/// `deinterleave` `CQ15` with AVX2 into both parts (D3103, IO1-7): per sixteen samples the
+/// real parts by a blend with zero (each 32-bit lane the real part, zero-extended) and the
+/// imaginary parts by a shift right by 16, each pair of vectors packed with unsigned
+/// saturation (`vpackusdw`, exact for values below `2^16`) and put in order by `vpermq`: four
+/// shuffles per sixteen samples, where the compiler's form of the portable loop takes seven
+/// (`vpshufb`, `vshufps`, `vpermq`). Returns the number of samples done (the rest runs the
+/// portable loop). Copies, so the same bits.
+#[cfg(target_feature = "avx2")]
+#[inline]
+pub(super) fn deinterleave_cq15(x: &[i16], re: &mut [i16], im: &mut [i16]) -> usize {
+    use core::arch::x86_64::{
+        _mm256_blend_epi16, _mm256_loadu_si256, _mm256_packus_epi32, _mm256_permute4x64_epi64,
+        _mm256_setzero_si256, _mm256_srli_epi32, _mm256_storeu_si256,
+    };
+    let done = (x.len() / 2).min(re.len()).min(im.len()) / 16 * 16;
+    // SAFETY: AVX2 is enabled for the build (`cfg(target_feature)`); every load reads 32 bytes
+    // of `x[2 at..2 at + 32]`, every store writes the 32 bytes of `re[at..at + 16]` or
+    // `im[at..at + 16]`, with `at + 16 <= done`, `2 done <= x.len()`, `done <= re.len()` and
+    // `done <= im.len()`.
+    unsafe {
+        let zero = _mm256_setzero_si256();
+        let mut at = 0;
+        while at < done {
+            let lo = _mm256_loadu_si256(x.as_ptr().add(2 * at).cast());
+            let hi = _mm256_loadu_si256(x.as_ptr().add(2 * at + 16).cast());
+            let real = _mm256_packus_epi32(
+                _mm256_blend_epi16::<0xAA>(lo, zero),
+                _mm256_blend_epi16::<0xAA>(hi, zero),
+            );
+            let imag =
+                _mm256_packus_epi32(_mm256_srli_epi32::<16>(lo), _mm256_srli_epi32::<16>(hi));
+            _mm256_storeu_si256(
+                re.as_mut_ptr().add(at).cast(),
+                _mm256_permute4x64_epi64::<0xD8>(real),
+            );
+            _mm256_storeu_si256(
+                im.as_mut_ptr().add(at).cast(),
+                _mm256_permute4x64_epi64::<0xD8>(imag),
+            );
+            at += 16;
+        }
+    }
+    done
+}
+
+/// `mag_sq` `C32` with AVX-512 (D3102, IO1-7): the squares of the interleaved values of sixteen
+/// samples in two 512-bit multiplies, then the squares of the real parts and of the imaginary
+/// parts gathered by two `vpermt2ps` of the two vectors and added, `re^2 + im^2` with the
+/// roundings of the portable form (each square rounded, then the sum); returns the number of
+/// samples done (the rest runs the portable loop). The compiler gives the portable loop two
+/// one-source permutations per eight samples before the multiplies (0.37 / 0.26 cycles per
+/// sample on `znver4` / `sapphirerapids`); this form needs one two-source permutation per
+/// eight samples after them (0.28 / 0.16 in a loop simulated by `llvm-mca`).
+#[cfg(target_feature = "avx512f")]
+#[inline]
+pub(super) fn mag_sq_c32(x: &[f32], out: &mut [f32]) -> usize {
+    use core::arch::x86_64::{
+        _mm512_add_ps, _mm512_loadu_ps, _mm512_mul_ps, _mm512_permutex2var_ps, _mm512_setr_epi32,
+        _mm512_storeu_ps,
+    };
+    let done = (x.len() / 2).min(out.len()) / 16 * 16;
+    // SAFETY: AVX-512 F is enabled for the build (`cfg(target_feature)`); every load reads the
+    // 64 bytes of `x[2 at..2 at + 16]` or `x[2 at + 16..2 at + 32]`, every store writes the 64
+    // bytes of `out[at..at + 16]`, with `at + 16 <= done`, `2 done <= x.len()` and
+    // `done <= out.len()`.
+    unsafe {
+        let even = _mm512_setr_epi32(0, 2, 4, 6, 8, 10, 12, 14, 16, 18, 20, 22, 24, 26, 28, 30);
+        let odd = _mm512_setr_epi32(1, 3, 5, 7, 9, 11, 13, 15, 17, 19, 21, 23, 25, 27, 29, 31);
+        let mut at = 0;
+        while at < done {
+            let a = _mm512_loadu_ps(x.as_ptr().add(2 * at));
+            let b = _mm512_loadu_ps(x.as_ptr().add(2 * at + 16));
+            let (a, b) = (_mm512_mul_ps(a, a), _mm512_mul_ps(b, b));
+            let re = _mm512_permutex2var_ps(a, even, b);
+            let im = _mm512_permutex2var_ps(a, odd, b);
+            _mm512_storeu_ps(out.as_mut_ptr().add(at), _mm512_add_ps(re, im));
             at += 16;
         }
     }
@@ -297,6 +429,67 @@ mod tests {
         for i in 0..done {
             let want = crate::num::q15_mul(crate::Q15(a[i]), crate::Q15(b[i])).0;
             assert_eq!(out[i], want, "{} * {}", a[i], b[i]);
+        }
+    }
+
+    #[cfg(target_feature = "avx2")]
+    #[test]
+    fn deinterleave_cq15_copies_the_parts() {
+        let mut seed = 3;
+        for n in [0usize, 1, 15, 16, 17, 33, 100] {
+            let x = values(&mut seed, 2 * n);
+            let (mut re, mut im) = (vec_of(n), vec_of(n));
+            let done = super::deinterleave_cq15(&x, &mut re, &mut im);
+            assert_eq!(done, n / 16 * 16);
+            for k in 0..done {
+                assert_eq!(
+                    (re[k], im[k]),
+                    (x[2 * k], x[2 * k + 1]),
+                    "sample {k} of {n}"
+                );
+            }
+        }
+    }
+
+    #[cfg(target_feature = "avx512f")]
+    #[test]
+    fn mag_sq_c32_is_the_portable_form() {
+        let mut seed = 5;
+        let special = [
+            0.0f32,
+            -0.0,
+            1.0,
+            -3.5,
+            f32::MAX,
+            f32::MIN_POSITIVE,
+            1e-40,
+            f32::INFINITY,
+            f32::NEG_INFINITY,
+            f32::NAN,
+            1e19,
+            -1e-20,
+        ];
+        for n in [0usize, 1, 15, 16, 17, 31, 32, 33, 100] {
+            let x: Vec<f32> = (0..2 * n)
+                .map(|i| {
+                    if i % 3 == 0 {
+                        special[(i / 3) % special.len()]
+                    } else {
+                        f32::from(next(&mut seed)) / 1024.0
+                    }
+                })
+                .collect();
+            let mut out = std::vec![0.0f32; n];
+            let done = super::mag_sq_c32(&x, &mut out);
+            assert_eq!(done, n / 16 * 16);
+            for (k, o) in out.iter().enumerate().take(done) {
+                let (re, im) = (x[2 * k], x[2 * k + 1]);
+                let want = re * re + im * im;
+                assert!(
+                    o.to_bits() == want.to_bits() || (o.is_nan() && want.is_nan()),
+                    "{re} {im}: {o} against {want}"
+                );
+            }
         }
     }
 

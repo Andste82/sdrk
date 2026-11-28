@@ -117,6 +117,10 @@ const SHORT_LANES: usize = 4;
     reason = "clippy counts the temporary of every `?` separately; the real frame is the 256 \
               bytes of the window and the two columns"
 )]
+#[allow(
+    clippy::too_many_lines,
+    reason = "the one-column loop of x86-64 stays inline as it was (D3105)"
+)]
 fn short_interpolate(
     taps: &[f32],
     l: usize,
@@ -168,6 +172,26 @@ fn short_interpolate(
             wb.first().copied().unwrap_or_default(),
         );
         let mut c = 0;
+        // On AArch64 and wasm32 two columns per pass where they fit (D3105): eight independent
+        // vector sums instead of four, so that `cortex-a72` (five cycles per `f32` addition) is
+        // no longer bound by the chains of the rows, and the four broadcast samples of a row
+        // serve both columns (fewer instructions at `simd128`).
+        #[cfg(any(
+            target_arch = "aarch64",
+            all(target_arch = "wasm32", target_feature = "simd128")
+        ))]
+        while c + 2 * SHORT_LANES <= l {
+            short_columns::<{ 2 * SHORT_LANES }>(
+                taps,
+                l,
+                c,
+                (full, rem),
+                (wa, wb),
+                (la, lb),
+                (&mut *ya, yb.as_deref_mut()),
+            )?;
+            c += 2 * SHORT_LANES;
+        }
         while c + SHORT_LANES <= l {
             let mut sums = [[0.0f32; SHORT_LANES]; 4];
             let [ra, ia, rb, ib] = &mut sums;
@@ -225,6 +249,83 @@ fn short_interpolate(
     }
     Ok(())
 }
+
+/// The outputs `c .. c + W` of the samples `a` and `b` of [`short_interpolate`] (`W` a multiple
+/// of [`SHORT_LANES`]): `full` rows of `L` taps and the last row of `rem` taps over the windows
+/// `wa` and `wb` (oldest first, `la` and `lb` their oldest samples), rows ascending, into `ya`
+/// and `yb`.
+#[cfg(any(
+    target_arch = "aarch64",
+    all(target_arch = "wasm32", target_feature = "simd128")
+))]
+#[allow(
+    clippy::inline_always,
+    reason = "the width must be a constant in the hot loop of its caller"
+)]
+#[allow(
+    clippy::large_stack_frames,
+    reason = "clippy counts the temporary of every `?` separately; the real frame is the four \
+              rows of sums in registers"
+)]
+#[inline(always)]
+fn short_columns<const W: usize>(
+    taps: &[f32],
+    l: usize,
+    c: usize,
+    (full, rem): (usize, usize),
+    (wa, wb): (&[C32], &[C32]),
+    (la, lb): (C32, C32),
+    (ya, yb): (&mut [C32], Option<&mut [C32]>),
+) -> Result<()> {
+    let internal = || Error::Internal("interpolator window");
+    let mut sums = [[0.0f32; W]; 4];
+    let [ra, ia, rb, ib] = &mut sums;
+    for ((r, x), y) in (0..full).zip(wa.iter().rev()).zip(wb.iter().rev()) {
+        let t: &[f32; W] = taps
+            .get(r * l + c..r * l + c + W)
+            .and_then(|t| t.try_into().ok())
+            .ok_or_else(internal)?;
+        for (((a, b), (d, e)), t) in ra
+            .iter_mut()
+            .zip(ia.iter_mut())
+            .zip(rb.iter_mut().zip(ib.iter_mut()))
+            .zip(t)
+        {
+            *a += t * x.re;
+            *b += t * x.im;
+            *d += t * y.re;
+            *e += t * y.im;
+        }
+    }
+    let tail = taps
+        .get(full * l + c..)
+        .unwrap_or_default()
+        .iter()
+        .take(rem.saturating_sub(c).min(W));
+    for (((a, b), (d, e)), t) in ra
+        .iter_mut()
+        .zip(ia.iter_mut())
+        .zip(rb.iter_mut().zip(ib.iter_mut()))
+        .zip(tail)
+    {
+        *a += t * la.re;
+        *b += t * la.im;
+        *d += t * lb.re;
+        *e += t * lb.im;
+    }
+    let col = ya.get_mut(c..c + W).ok_or_else(internal)?;
+    for (o, (a, b)) in col.iter_mut().zip(ra.iter().zip(ia.iter())) {
+        *o = C32::new(*a, *b);
+    }
+    if let Some(yb) = yb {
+        let col = yb.get_mut(c..c + W).ok_or_else(internal)?;
+        for (o, (a, b)) in col.iter_mut().zip(rb.iter().zip(ib.iter())) {
+            *o = C32::new(*a, *b);
+        }
+    }
+    Ok(())
+}
+
 /// The outputs `y[c..]` of the short-branch form one at a time, the window `w` (oldest
 /// first), rows ascending.
 fn short_rest(taps: &[f32], l: usize, w: &[C32], y: &mut [C32], c: usize) {

@@ -1650,6 +1650,39 @@ fn expand<const C: usize>(level: prog::Split, s: &mut [i16], chunks: usize) {
     }
 }
 
+/// Lanes of the full taps of one window of the planar progressions (decision D3100): the
+/// longest window of a planar call, 1 KiB of storage.
+#[cfg(any(
+    target_arch = "x86_64",
+    all(target_arch = "wasm32", target_feature = "simd128")
+))]
+const FULL_TAPS: usize = 512;
+
+/// Whether the prepared full taps `td` (tap `td[m]` with sample `m` of a window, chunks of 8, 16
+/// or 32 lanes) keep every 32-bit sum of the planar progressions exact (decision D3100).
+/// `pmaddwd` (`vpdpwssd`, `i32x4.dot_i16x8_s`) adds the products of the lanes `2 i` and
+/// `2 i + 1`, and the sums of a window are folded to four 32-bit lanes, so lane `l` of the folded
+/// sum holds the products of the taps at the positions `m` with `(m / 2) % 4 = l`. With
+/// `|x| <= 2^15` such a sum is at most `2^15 L` in magnitude, `L` the sum of the magnitudes of
+/// its taps; for `L <= 65535` that is below `2^31`. The arithmetic wraps modulo `2^32` (the one
+/// pair sum that does not fit, `2 (-2^15)^2 = 2^31`, wraps to `-2^31`, the same residue), so a
+/// lane holds its exact sum, and `sum of the four lanes` in `i64` is the exact sum of the window,
+/// the bits of the split form and of the fallback. Taps above the bound take the split form.
+#[cfg(any(
+    target_arch = "x86_64",
+    all(target_arch = "wasm32", target_feature = "simd128")
+))]
+#[inline(always)]
+fn full_taps_fit(td: &[i16]) -> bool {
+    let mut l1 = [0u32; 4];
+    for (m, &t) in td.iter().enumerate() {
+        if let Some(s) = l1.get_mut((m / 2) % 4) {
+            *s += u32::from(t.unsigned_abs());
+        }
+    }
+    l1.iter().all(|&s| s <= 65_535)
+}
+
 /// `fir` `CQ15` (`step = 1`) and `fir_decimate` `CQ15` in progressions: outputs `j = 0..count`
 /// with the window of output `j` at sample `first + j step` (decisions D340 and D3007).
 #[cfg(any(
@@ -1669,6 +1702,40 @@ fn contiguous_split(
     step: usize,
     count: usize,
 ) {
+    #[cfg(any(
+        target_arch = "x86_64",
+        all(target_arch = "wasm32", target_feature = "simd128")
+    ))]
+    {
+        let w = level.lanes();
+        let chunks = taps.len().div_ceil(w);
+        let mut full = [0i16; FULL_TAPS];
+        if let Some(td) = full.get_mut(..chunks * w)
+            && chunks * w <= prog::PLANE
+        {
+            for (d, &h) in td.iter_mut().zip(taps.iter().rev()) {
+                *d = h;
+            }
+            if full_taps_fit(td) {
+                prog::planar(
+                    level,
+                    prog::Planar {
+                        hist,
+                        input,
+                        taps: td,
+                        chunks,
+                        first,
+                        stride: step,
+                        n: count,
+                        out,
+                        o0: 0,
+                        ostride: 1,
+                    },
+                );
+                return;
+            }
+        }
+    }
     let chunks = (2 * taps.len()).div_ceil(level.lanes());
     with_split(chunks * level.lanes(), |s| {
         let half = s.len() / 2;
@@ -1726,6 +1793,13 @@ fn polyphase_split<const C: usize>(
         return Err(window_err());
     }
     let up = geom.up;
+    #[cfg(any(
+        target_arch = "x86_64",
+        all(target_arch = "wasm32", target_feature = "simd128")
+    ))]
+    if C == 2 && polyphase_planar(level, taps, hist, input, out, up, down, q, produced)? {
+        return Ok(());
+    }
     let need = geom.offset(up.min(geom.n));
     with_split(need, |s| {
         let half = s.len() / 2;
@@ -1756,6 +1830,97 @@ fn polyphase_split<const C: usize>(
         }
         Ok(())
     })
+}
+
+/// The full taps of the branch `phase` of a polyphase filter of `taps` with the factor `up`
+/// (`h[phase + up i]`, the newest sample last) in `full`, padded with zeros to whole chunks of
+/// `w` lanes; the number of chunks, or `None` if they do not fit `full` or a plane.
+#[cfg(any(
+    target_arch = "x86_64",
+    all(target_arch = "wasm32", target_feature = "simd128")
+))]
+#[inline(always)]
+fn branch_full_taps(
+    taps: &[i16],
+    up: usize,
+    phase: usize,
+    w: usize,
+    full: &mut [i16; FULL_TAPS],
+) -> Option<usize> {
+    let t = if phase < taps.len() {
+        (taps.len() - phase).div_ceil(up)
+    } else {
+        0
+    };
+    let chunks = t.div_ceil(w);
+    if chunks * w > prog::PLANE {
+        return None;
+    }
+    let td = full.get_mut(..chunks * w)?;
+    td.fill(0);
+    for (m, d) in td.iter_mut().take(t).enumerate() {
+        *d = taps.get(phase + up * (t - 1 - m)).copied().unwrap_or(0);
+    }
+    Some(chunks)
+}
+
+/// `resample` and `fir_interpolate` `CQ15` in planar progressions (decision D3100), one per
+/// branch as in [`polyphase_split`]; `false` (nothing written) if a branch does not fit the
+/// storage or its taps do not pass [`full_taps_fit`].
+#[cfg(any(
+    target_arch = "x86_64",
+    all(target_arch = "wasm32", target_feature = "simd128")
+))]
+#[allow(clippy::too_many_arguments)]
+#[inline(always)]
+fn polyphase_planar(
+    level: prog::Split,
+    taps: &[i16],
+    hist: &[i16],
+    input: &[i16],
+    out: &mut [i16],
+    up: usize,
+    down: usize,
+    q: i64,
+    produced: usize,
+) -> Result<bool> {
+    let window_err = || internal("resampler window");
+    let w = level.lanes();
+    let mut full = [0i16; FULL_TAPS];
+    for phase in 0..up.min(taps.len()) {
+        match branch_full_taps(taps, up, phase, w, &mut full) {
+            Some(chunks) if full.get(..chunks * w).is_some_and(full_taps_fit) => {}
+            _ => return Ok(false),
+        }
+    }
+    let l = i128::try_from(up).map_err(|_| window_err())?;
+    let hist_len = hist.len() / 2;
+    for r in 0..up.min(produced) {
+        // `usize` to `i128` is lossless.
+        let (c, phase) = polyphase_output(i128::from(q) + r as i128 * down as i128, l)?;
+        let chunks = branch_full_taps(taps, up, phase, w, &mut full).ok_or_else(window_err)?;
+        let count = if phase < taps.len() {
+            (taps.len() - phase).div_ceil(up)
+        } else {
+            0
+        };
+        prog::planar(
+            level,
+            prog::Planar {
+                hist,
+                input,
+                taps: &full,
+                chunks,
+                first: (hist_len + c).checked_sub(count).ok_or_else(window_err)?,
+                stride: down,
+                n: (produced - r).div_ceil(up),
+                out: &mut *out,
+                o0: r,
+                ostride: up,
+            },
+        );
+    }
+    Ok(true)
 }
 
 #[cfg(any(
@@ -2200,6 +2365,256 @@ mod prog {
     wasm!(wasm_c1, 1);
     #[cfg(target_arch = "wasm32")]
     wasm!(wasm_c2, 2);
+
+    /// Samples of each plane of [`planar!`]: a multiple of 32 below 1024, so that the zeroing
+    /// of each plane stays below the 2 KiB from which glibc's `memset` runs `rep stosb` (see
+    /// [`super::with_split`]).
+    #[cfg(any(target_arch = "x86_64", target_arch = "wasm32"))]
+    pub(super) const PLANE: usize = 896;
+
+    /// One progression of `CQ15` outputs on full taps (decision D3100): output `j < n` has the
+    /// window that begins at sample `first + j stride` of `hist ++ input` and goes to the output
+    /// with index `o0 + j ostride`; `taps` holds `chunks` chunks of the level's width of the
+    /// prepared taps (sample `m` of the window with tap `taps[m]`, zeros after the last tap),
+    /// whose lanes pass [`super::full_taps_fit`].
+    #[cfg(any(target_arch = "x86_64", target_arch = "wasm32"))]
+    pub(super) struct Planar<'a> {
+        pub(super) hist: &'a [i16],
+        pub(super) input: &'a [i16],
+        pub(super) taps: &'a [i16],
+        pub(super) chunks: usize,
+        pub(super) first: usize,
+        pub(super) stride: usize,
+        pub(super) n: usize,
+        pub(super) out: &'a mut [i16],
+        pub(super) o0: usize,
+        pub(super) ostride: usize,
+    }
+
+    /// Runs the planar progression `p` at `level`.
+    #[cfg(any(target_arch = "x86_64", target_arch = "wasm32"))]
+    #[inline(always)]
+    pub(super) fn planar(level: Split, p: Planar<'_>) {
+        match level {
+            #[cfg(target_arch = "x86_64")]
+            Split::Sse2(t) => sse2_planar(t, p),
+            #[cfg(target_arch = "x86_64")]
+            Split::Sse4_2(t) => sse4_2_planar(t, p),
+            #[cfg(target_arch = "x86_64")]
+            Split::Avx2(t) => avx2_planar(t, p),
+            #[cfg(target_arch = "x86_64")]
+            Split::Avx512(t) => avx512_planar(t, p),
+            #[cfg(target_arch = "wasm32")]
+            Split::Wasm(t) => wasm_planar(t, p),
+        }
+    }
+
+    /// The real and the imaginary parts of the samples `a .. b` of `hist ++ input` (interleaved)
+    /// at the start of `re` and `im`, as far as they exist (the rest is untouched).
+    #[cfg(any(target_arch = "x86_64", target_arch = "wasm32"))]
+    #[inline(always)]
+    fn fill_planes(
+        hist: &[i16],
+        input: &[i16],
+        a: usize,
+        b: usize,
+        re: &mut [i16],
+        im: &mut [i16],
+    ) {
+        let deinterleave = |src: &[i16], re: &mut [i16], im: &mut [i16]| {
+            for ((s, r), i) in src.as_chunks::<2>().0.iter().zip(re).zip(im) {
+                (*r, *i) = (s[0], s[1]);
+            }
+        };
+        let (h, len) = (hist.len() / 2, input.len() / 2);
+        if a < h {
+            let e = b.min(h);
+            if let (Some(src), Some(r), Some(i)) = (
+                hist.get(2 * a..2 * e),
+                re.get_mut(..e - a),
+                im.get_mut(..e - a),
+            ) {
+                deinterleave(src, r, i);
+            }
+        }
+        let (from, to) = (a.max(h), b.min(h + len));
+        if from < to
+            && let (Some(src), Some(r), Some(i)) = (
+                input.get(2 * (from - h)..2 * (to - h)),
+                re.get_mut(from - a..to - a),
+                im.get_mut(from - a..to - a),
+            )
+        {
+            deinterleave(src, r, i);
+        }
+    }
+
+    /// The `span` lanes of `plane` from `at` on in chunks of `W` (empty if they do not fit).
+    #[cfg(any(target_arch = "x86_64", target_arch = "wasm32"))]
+    #[inline(always)]
+    fn plane_window<const W: usize>(plane: &[i16], at: usize, span: usize) -> &[[i16; W]] {
+        plane.get(at..at + span).unwrap_or(&[]).as_chunks::<W>().0
+    }
+
+    /// Writes the complex output with index `k` from the folded sums of its real and imaginary
+    /// parts (four exact `i32` lanes each, decision D3100).
+    #[cfg(any(target_arch = "x86_64", target_arch = "wasm32"))]
+    #[inline(always)]
+    fn store_planar(out: &mut [i16], k: usize, re: &[i32], im: &[i32]) {
+        let sum = |v: &[i32]| v.iter().map(|&x| i64::from(x)).sum::<i64>();
+        if let Some([r, i]) = out.get_mut(2 * k..2 * k + 2) {
+            *r = Acc64(sum(re)).finish().0;
+            *i = Acc64(sum(im)).finish().0;
+        }
+    }
+
+    /// A planar progression function `$name` at the level `$token` with vectors `$v` of `$w`
+    /// lanes (decision D3100): the samples of a batch of outputs are split into a plane of real
+    /// and a plane of imaginary parts, so that one multiply-add of a vector of samples with a
+    /// vector of full taps (no split, no pairing shuffle) gives the pair sums of eight products
+    /// of one component. [`GROUP`] outputs share each vector of taps, eight independent sums.
+    #[cfg(any(target_arch = "x86_64", target_arch = "wasm32"))]
+    macro_rules! planar {
+        (
+            $name:ident, $token:ident, $w:literal, $v:ty, $vec:ident,
+            zero: $zero:expr, mac: $mac:expr, fold: $fold:expr $(,)?
+        ) => {
+            fearless_simd::kernel!(
+                #[allow(
+                    clippy::large_stack_frames,
+                    reason = "the two planes of 1792 bytes each; the lint also counts the \
+                              vector temporaries of the inlined steps before optimization"
+                )]
+                #[inline(always)]
+                fn $name(t: $token, p: Planar<'_>) {
+                    let Planar {
+                        hist,
+                        input,
+                        taps,
+                        chunks,
+                        first,
+                        stride,
+                        n,
+                        out,
+                        o0,
+                        ostride,
+                    } = p;
+                    let mac = $mac;
+                    let fold = $fold;
+                    let load = |s: &[i16; $w]| -> $v { $vec::from_slice(t, s).into() };
+                    let span = $w * chunks;
+                    let (taps, _) = taps.get(..span).unwrap_or(&[]).as_chunks::<$w>();
+                    let zero: $v = $zero;
+                    let lanes_of = |v: $v| i32x4::simd_from(t, fold(v));
+                    if span > PLANE || stride == 0 {
+                        return;
+                    }
+                    let (mut re, mut im) = ([0i16; PLANE], [0i16; PLANE]);
+                    let per = (PLANE - span) / stride + 1;
+                    let mut j = 0;
+                    while j < n {
+                        let m = per.min(n - j);
+                        let a = first + j * stride;
+                        fill_planes(hist, input, a, a + (m - 1) * stride + span, &mut re, &mut im);
+                        let mut g = 0;
+                        while g + GROUP <= m {
+                            let mut acc = [zero; 2 * GROUP];
+                            let [r0, i0, r1, i1, r2, i2, r3, i3] = &mut acc;
+                            for ((((((((tk, a0), b0), a1), b1), a2), b2), a3), b3) in taps
+                                .iter()
+                                .zip(plane_window::<$w>(&re, g * stride, span))
+                                .zip(plane_window::<$w>(&im, g * stride, span))
+                                .zip(plane_window::<$w>(&re, (g + 1) * stride, span))
+                                .zip(plane_window::<$w>(&im, (g + 1) * stride, span))
+                                .zip(plane_window::<$w>(&re, (g + 2) * stride, span))
+                                .zip(plane_window::<$w>(&im, (g + 2) * stride, span))
+                                .zip(plane_window::<$w>(&re, (g + 3) * stride, span))
+                                .zip(plane_window::<$w>(&im, (g + 3) * stride, span))
+                            {
+                                let tv = load(tk);
+                                *r0 = mac(*r0, load(a0), tv);
+                                *i0 = mac(*i0, load(b0), tv);
+                                *r1 = mac(*r1, load(a1), tv);
+                                *i1 = mac(*i1, load(b1), tv);
+                                *r2 = mac(*r2, load(a2), tv);
+                                *i2 = mac(*i2, load(b2), tv);
+                                *r3 = mac(*r3, load(a3), tv);
+                                *i3 = mac(*i3, load(b3), tv);
+                            }
+                            for (q, [sr, si]) in acc.as_chunks::<2>().0.iter().enumerate() {
+                                store_planar(
+                                    out,
+                                    o0 + (j + g + q) * ostride,
+                                    lanes_of(*sr).as_slice(),
+                                    lanes_of(*si).as_slice(),
+                                );
+                            }
+                            g += GROUP;
+                        }
+                        while g < m {
+                            let (mut sr, mut si) = (zero, zero);
+                            for ((tk, a0), b0) in
+                                taps.iter().zip(plane_window::<$w>(&re, g * stride, span)).zip(plane_window::<$w>(&im, g * stride, span))
+                            {
+                                let tv = load(tk);
+                                sr = mac(sr, load(a0), tv);
+                                si = mac(si, load(b0), tv);
+                            }
+                            store_planar(
+                                out,
+                                o0 + (j + g) * ostride,
+                                lanes_of(sr).as_slice(),
+                                lanes_of(si).as_slice(),
+                            );
+                            g += 1;
+                        }
+                        j += m;
+                    }
+                }
+            );
+        };
+    }
+
+    #[cfg(target_arch = "x86_64")]
+    planar!(
+        sse2_planar, Sse2, 8, __m128i, i16x8,
+        zero: _mm_setzero_si128(),
+        mac: |acc: __m128i, d: __m128i, t: __m128i| _mm_add_epi32(acc, _mm_madd_epi16(d, t)),
+        fold: |v: __m128i| v,
+    );
+    #[cfg(target_arch = "x86_64")]
+    planar!(
+        sse4_2_planar, Sse4_2, 8, __m128i, i16x8,
+        zero: _mm_setzero_si128(),
+        mac: |acc: __m128i, d: __m128i, t: __m128i| _mm_add_epi32(acc, _mm_madd_epi16(d, t)),
+        fold: |v: __m128i| v,
+    );
+    #[cfg(target_arch = "x86_64")]
+    planar!(
+        avx2_planar, Avx2, 16, __m256i, i16x16,
+        zero: _mm256_setzero_si256(),
+        mac: |acc: __m256i, d: __m256i, t: __m256i| _mm256_add_epi32(acc, _mm256_madd_epi16(d, t)),
+        fold: |v: __m256i| {
+            _mm_add_epi32(_mm256_castsi256_si128(v), _mm256_extracti128_si256::<1>(v))
+        },
+    );
+    #[cfg(target_arch = "x86_64")]
+    planar!(
+        avx512_planar, Avx512, 32, __m512i, i16x32,
+        zero: _mm512_setzero_si512(),
+        mac: |acc: __m512i, d: __m512i, t: __m512i| _mm512_dpwssd_epi32(acc, d, t),
+        fold: |v: __m512i| {
+            let a = _mm256_add_epi32(_mm512_castsi512_si256(v), _mm512_extracti64x4_epi64::<1>(v));
+            _mm_add_epi32(_mm256_castsi256_si128(a), _mm256_extracti128_si256::<1>(a))
+        },
+    );
+    #[cfg(target_arch = "wasm32")]
+    planar!(
+        wasm_planar, WasmSimd128, 8, v128, i16x8,
+        zero: u64x2_splat(0),
+        mac: |acc: v128, d: v128, t: v128| i32x4_add(acc, i32x4_dot_i16x8(d, t)),
+        fold: |v: v128| v,
+    );
 
     /// The NEON progression `$name` for `$c` components: the taps are not split (one vector per
     /// chunk), `smull` and `smull2` form the exact products and `sadalp` adds adjacent ones into

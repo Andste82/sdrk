@@ -409,6 +409,26 @@ impl Interleave<CQ15> for Fallback {
             }
             (re, im, _) => (re, im),
         };
+        // With AVX2 both parts of whole groups of sixteen samples by blends, shifts and packs
+        // (D3103), the rest by the plain loop.
+        #[cfg(all(target_arch = "x86_64", target_feature = "avx2"))]
+        let (re, im) = match (re, im) {
+            (Some(re), Some(im)) => {
+                check_len(input.len(), re.len())?;
+                check_len(input.len(), im.len())?;
+                let done = super::q15_x86::deinterleave_cq15(
+                    bytemuck::cast_slice(input),
+                    bytemuck::cast_slice_mut(re),
+                    bytemuck::cast_slice_mut(im),
+                );
+                return deinterleave_impl(
+                    input.get(done..).unwrap_or(&[]),
+                    re.get_mut(done..),
+                    im.get_mut(done..),
+                );
+            }
+            (re, im) => (re, im),
+        };
         deinterleave_impl(input, re, im)
     }
 }

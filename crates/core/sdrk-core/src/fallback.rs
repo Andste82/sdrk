@@ -11,9 +11,10 @@ pub struct Fallback;
 
 impl Scale<C32> for Fallback {
     fn scale(&self, input: &[C32], output: &mut [C32], gain: f32) -> Result<()> {
-        // wasm32: blocks of 16 floats, so that one update of the pointers and the counter serves
-        // four `f32x4.mul` (the compiler's own loop updates them for every two vectors: 6.53
-        // instead of 5.5 instructions per sample with `simd128`). The same products.
+        // wasm32: blocks of 32 floats, so that one update of the pointers and the counter serves
+        // eight `f32x4.mul` (the compiler's own loop updates them for every two vectors: 6.53
+        // instructions per sample with `simd128`, blocks of 16 floats 6.16 against 5.40 of
+        // CMSIS-DSP, IO2-29, D3106). The same products.
         #[cfg(target_arch = "wasm32")]
         {
             if output.len() != input.len() {
@@ -24,8 +25,8 @@ impl Scale<C32> for Fallback {
             }
             let x: &[f32] = bytemuck::cast_slice(input);
             let y: &mut [f32] = bytemuck::cast_slice_mut(output);
-            let (xc, xr) = x.as_chunks::<16>();
-            let (yc, yr) = y.as_chunks_mut::<16>();
+            let (xc, xr) = x.as_chunks::<32>();
+            let (yc, yr) = y.as_chunks_mut::<32>();
             for (o, i) in yc.iter_mut().zip(xc) {
                 for (o, &v) in o.iter_mut().zip(i) {
                     *o = v * gain;
@@ -122,8 +123,9 @@ pub(crate) mod modulate;
 mod noise;
 mod noise_blank;
 mod preemph_limit;
-/// `core::arch` for the `Q15` / `CQ15` fallbacks on x86-64 (`pmaddwd`, `vpmulhrsw`; the
-/// maintainer's decision D3017).
+/// `core::arch` for the `Q15` / `CQ15` fallbacks on x86-64 (`pmaddwd`, `vpmulhrsw`, the packs of
+/// `deinterleave`) and the AVX-512 `mag_sq` of IO1-7 (the maintainer's decision D3017; D3101 to
+/// D3103).
 #[cfg(target_arch = "x86_64")]
 #[allow(unsafe_code, reason = "x86 intrinsics of the Q15 fallbacks, D3017")]
 mod q15_x86;

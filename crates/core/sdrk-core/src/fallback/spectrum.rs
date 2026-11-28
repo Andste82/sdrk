@@ -94,6 +94,15 @@ impl Window<CQ15> for Fallback {
 impl MagSq<C32> for Fallback {
     fn mag_sq(&self, input: &[C32], output: &mut [f32]) -> Result<()> {
         check_len(input.len(), output.len())?;
+        // With AVX-512 the whole groups of sixteen samples take the squares first (D3102).
+        #[cfg(all(target_arch = "x86_64", target_feature = "avx512f"))]
+        let (input, output) = {
+            let done = super::q15_x86::mag_sq_c32(bytemuck::cast_slice(input), output);
+            (
+                input.get(done..).unwrap_or(&[]),
+                output.get_mut(done..).unwrap_or(&mut []),
+            )
+        };
         for (o, x) in output.iter_mut().zip(input) {
             *o = x.re * x.re + x.im * x.im;
         }

@@ -2,7 +2,7 @@
 
 > Plan: [M13.1](M13.1-cycles-only.md) (cycles per sample, the like-with-like statuses of D2764 to D2779) · Previous round: [O1](O1-cycle-optimisation.md) · Open items it works on: IO1-1 to IO1-9, I13.1-9, I13.1-12, I13.1-13, I13.1-14 ([open-items.md](../open-items.md)), issue #203 (the kernel gap inventory) · Next: [BACKLOG](BACKLOG.md)
 
-> **Status: ready for review (2026-11-26), group 3a not done**: groups 0, 1, 3b and 5 done; groups 2 and 4 done as far as possible without the maintainer (open items IO2-1 to IO2-3, IO2-15 to IO2-18); group 3a not done (planned 2026-11-25 on the maintainer's order of the same day, after O1 was merged; branch `opt-round-2` from `main` 05ff2d25). Decision numbers D2950 to D2999, open items IO2-1 to IO2-n. No seeds.
+> **Status: ready for review (2026-11-26), group 3a not done**: groups 0, 1, 3b and 5 done; groups 2 and 4 done as far as possible without the maintainer (open items IO2-1 to IO2-3, IO2-15 to IO2-18); group 3a not done (planned 2026-11-25 on the maintainer's order of the same day, after O1 was merged; branch `opt-round-2` from `main` 05ff2d25). Decision numbers D2950 to D2999, open items IO2-1 to IO2-n. No seeds. O2b (branch `opt-round-2b`, in progress, 2026-11-28): items (1) to (6) and group 3a of item (7) done (D3000 to D3008; open items IO2-19 to IO2-22); the rest of item (7) and the update of issue #203 follow.
 
 ## Goal
 
@@ -526,9 +526,9 @@ None of the three remaining gaps can be closed without changing a numeric contra
 
 SNR against the f64 model, CI run 45641571494, every level the same. `am_mod_fallback` at `neon` is settled by group 1 (D2954: 150.8 dB on both sides). The accuracy waivers of the three entries stay as they are (I13.1-13 for `oscillate`).
 
-## Group 3a: the Q15 / CQ15 FIR family (not done)
+## Group 3a: the Q15 / CQ15 FIR family (not done in O2; done in O2b, item (7))
 
-The grouped split-tap progressions for x86-64 were written but are not committed, measured or tested at every level; the `runs_fallback` switch of D65 and the route of D2840 are unchanged on the branch, and the SSE2 forms of the `Q15` kernels without a SIMD branch are not started. D2956 to D2969 and IO2-4 to IO2-9 stay free for this group.
+The grouped split-tap progressions for x86-64 were written but are not committed, measured or tested at every level; the `runs_fallback` switch of D65 and the route of D2840 are unchanged on the branch, and the SSE2 forms of the `Q15` kernels without a SIMD branch are not started. D2956 to D2969 and IO2-4 to IO2-9 stay free for this group. O2b did it under D3007 and D3008 (section "O2b item (7)" below).
 
 ## Group 3b: SIMD entries no faster than their fallback (done, with open items)
 
@@ -656,6 +656,61 @@ Models: `sse2`, `sse4.2` skylake / znver2; `avx2` znver3 / alderlake; `avx512` z
 - Slower than before on x86-64, all within their status: `oscillate` SIMD at every x86-64 level but `avx2` on `znver3` and at `neon` (the step costs two more operations per sine than the interpolation; at most 0.381 of SLEEF), `oscillate_fallback` at `sse2` and `sse4.2`, `rotate_fallback` at `sse4.2`, `stereo_encode_rds` at `avx2` on `znver3`, both encoders at `avx512` on `znver4` (`info`, own fallback). On `simd128` the encoders take 22 % and 23 % more instructions (the step; `info`).
 - Not run on this branch: the full test tree. The SIMD tests ran locally at `x86-64` and `x86-64-v3`, on AArch64 under QEMU and on wasm32 under wasmtime; the `avx512` path (SDE) and the embedded QEMU suites run on the pull request and the nightly run (the `m4` QEMU suite of CI run 46062107651 passed on b791247a, whose embedded code is the final one).
 
+### O2b item (7), group 3a: the grouped `Q15` / `CQ15` FIR branches and the `Q15` kernels at `sse2` (D3007, D3008)
+
+The six FIR kernels run the progressions of D340 on every level (four outputs per pass of the taps; x86-64 and SIMD128 with taps split for `pmaddwd` / `i32x4.dot_i16x8_s`, NEON with `smull` and `sadalp`); the switch of D65 and the `FallbackAt` route of D2840 are removed, except `fir_decimate` `CQ15` on AArch64 (IO2-22). The first measurement (CI run 46085100312 on 92e63372) showed `avx2` and `avx512` 2 to 5 times slower than the fallback on `znver3` and `znver4` only: a 3 KiB zeroing of the split taps per call ran glibc's `rep stosb`, which `llvm-mca` takes as 100 cycles per byte on the AMD models; the storage now has three sizes (D3007). Measured in CI run 46093881387 on a70ef4ba (`measure_only`, the FIR family and `mul_real` at `sse2`, `sse4.2`, `avx2`, `avx2-runtime`, `avx512`, `neon`), with `scale`, `mul` and `am_mod` from CI run 46085100312:
+
+| Entry | Level | Ours (cycles per sample, ref. / counter) | Own fallback (cycles per sample, ref. / counter) | Ours / own fallback (ref. / counter) | Was (ours / own fallback) | Models (ref. / counter) |
+| --- | --- | --- | --- | --- | --- | --- |
+| `fir_cq15` | `sse2` | 62.86 / 65.40 | 142.26 / 188.05 | 0.442 / 0.348 | 1.000 / 1.000 (fallback) | skylake / znver2 |
+| `fir_cq15` | `avx2` | 20.87 / 26.17 | 40.45 / 60.95 | 0.516 / 0.429 | 1.000 / 1.000 (fallback) | znver3 / alderlake |
+| `fir_cq15` | `avx512` | 25.43 / 18.14 | 40.37 / 45.20 | 0.630 / 0.401 | 1.000 / 1.000 (fallback) | znver4 / sapphirerapids |
+| `fir_cq15` | `neon` | 77.37 / 62.15 | 107.54 / 97.99 | 0.719 / 0.634 | 0.987 / 0.944 | cortex-a72 / cortex-a76 |
+| `fir_decimate_cq15` | `sse2` | 10.79 / 11.33 | 28.57 / 34.29 | 0.378 / 0.331 | 1.000 / 1.000 (fallback) | skylake / znver2 |
+| `fir_decimate_cq15` | `avx2` | 3.65 / 4.49 | 21.61 / 22.05 | 0.169 / 0.204 | 1.000 / 1.000 (fallback) | znver3 / alderlake |
+| `fir_decimate_cq15` | `avx512` | 4.44 / 2.94 | 16.80 / 18.22 | 0.265 / 0.161 | 0.689 / 0.613 | znver4 / sapphirerapids |
+| `fir_decimate_cq15` | `neon` | 14.98 / 12.05 (the progression; the fallback runs, IO2-22) | 14.98 / 14.64 | 1.000 / 0.823 | 1.000 / 1.000 (fallback) | cortex-a72 / cortex-a76 |
+| `fir_interpolate_cq15` | `sse2` | 66.64 / 70.02 | 137.49 / 207.96 | 0.485 / 0.337 | 1.000 / 1.000 (fallback) | skylake / znver2 |
+| `fir_interpolate_cq15` | `avx2` | 23.29 / 28.27 | 52.53 / 71.44 | 0.443 / 0.396 | 1.000 / 1.000 (fallback) | znver3 / alderlake |
+| `fir_interpolate_cq15` | `avx512` | 27.22 / 19.66 | 54.43 / 63.07 | 0.500 / 0.312 | 1.000 / 1.000 (fallback) | znver4 / sapphirerapids |
+| `fir_interpolate_cq15` | `neon` | 82.71 / 68.10 | 127.87 / 145.97 | 0.647 / 0.467 | 0.593 / 0.521 (D336) | cortex-a72 / cortex-a76 |
+| `resample_cq15` | `sse2` | 65.33 / 68.39 | 168.72 / 240.51 | 0.387 / 0.284 | 1.000 / 1.000 (fallback) | skylake / znver2 |
+| `resample_cq15` | `avx2` | 22.50 / 27.59 | 117.51 / 113.18 | 0.191 / 0.244 | 1.000 / 1.000 (fallback) | znver3 / alderlake |
+| `resample_cq15` | `avx512` | 26.69 / 19.25 | 84.14 / 88.98 | 0.317 / 0.216 | 0.788 / 0.773 | znver4 / sapphirerapids |
+| `resample_cq15` | `neon` | 80.68 / 65.77 | 193.78 / 184.91 | 0.416 / 0.356 | 0.752 / 0.641 | cortex-a72 / cortex-a76 |
+| `fir_interpolate_real_q15` | `sse2` | 27.51 / 34.99 | 70.71 / 101.24 | 0.389 / 0.346 | 1.000 / 1.000 (fallback) | skylake / znver2 |
+| `fir_interpolate_real_q15` | `avx2` | 15.81 / 15.82 | 42.12 / 38.06 | 0.375 / 0.416 | 1.000 / 1.000 (fallback) | znver3 / alderlake |
+| `fir_interpolate_real_q15` | `avx512` | 15.59 / 13.61 | 22.72 / 29.26 | 0.686 / 0.465 | 1.000 / 1.000 (fallback) | znver4 / sapphirerapids |
+| `fir_interpolate_real_q15` | `neon` | 35.27 / 35.95 | 73.09 / 73.97 | 0.483 / 0.486 | 1.000 / 1.000 (fallback) | cortex-a72 / cortex-a76 |
+| `resample_real_q15` | `sse2` | 26.84 / 34.18 | 103.67 / 144.16 | 0.259 / 0.237 | 1.000 / 1.000 (fallback) | skylake / znver2 |
+| `resample_real_q15` | `avx2` | 15.23 / 15.41 | 112.73 / 99.45 | 0.135 / 0.155 | 0.539 / 0.671 | znver3 / alderlake |
+| `resample_real_q15` | `avx512` | 15.10 / 13.26 | 100.33 / 85.43 | 0.151 / 0.155 | 0.332 / 0.425 | znver4 / sapphirerapids |
+| `resample_real_q15` | `neon` | 34.38 / 34.89 | 113.65 / 107.66 | 0.302 / 0.324 | 0.860 / 0.729 | cortex-a72 / cortex-a76 |
+
+`sse4.2` is unchanged (0.252 to 0.380 / 0.215 to 0.331). `avx2-runtime` runs the same progressions as the fixed `avx2` build (0.997 to 1.003 / 0.986 to 1.019 of it; the D2840 route is gone). `fir_interpolate_cq15` at `neon` is 9 % slower on `cortex-a72` than the branch-by-branch form of D336 (82.71 against 75.80) and 10 % faster on `cortex-a76` (68.10 against 76.00), within the target on both.
+
+`simd128` (instructions per sample, CI run 46085100312 on 92e63372; the final count follows from the full run):
+
+| Entry | Ours (instructions per sample) | Own fallback (instructions per sample) | Ours / own fallback | Was |
+| --- | --- | --- | --- | --- |
+| `fir_cq15` | 479.92 | 934.94 | 0.51 | 0.90 |
+| `fir_decimate_cq15` | 93.50 | 205.53 | 0.45 | 0.90 |
+| `fir_interpolate_cq15` | 503.41 | 638.42 | 0.79 | 1.00 (fallback) |
+| `resample_cq15` | 495.03 | 1075.66 | 0.46 | 0.91 |
+| `fir_interpolate_real_q15` | 285.02 | 451.84 | 0.63 | 1.00 (fallback) |
+| `resample_real_q15` | 281.39 | 875.80 | 0.32 | 0.68 |
+
+The `Q15` kernels at `sse2` (D3008): `pmulhrsw` in six SSE2 instructions (`mulhrs_sse2!`), and `q15_mul` itself with saturating additions (`q15_mul_sse2!`) for `mul_real`; `mul` `CQ15` with `pshuflw`/`pshufhw` and `punpcklwd` for the two `pshufb`. Bit-identical with the fallback.
+
+| Entry | Ours at `sse2` (cycles per sample, skylake / znver2) | Own fallback (cycles per sample, skylake / znver2) | Ours / own fallback | Was |
+| --- | --- | --- | --- | --- |
+| `scale_cq15` | 1.51 / 1.52 | 2.03 / 2.11 | 0.741 / 0.722 | 1.000 / 1.000 (fallback) |
+| `am_mod_cq15` | 2.08 / 2.09 | 2.62 / 3.12 | 0.794 / 0.669 | 1.000 / 1.000 (fallback) |
+| `mul_cq15` | 1.84 / 1.71 | 5.03 / 3.90 | 0.366 / 0.439 | 1.000 / 1.000 (fallback) |
+| `mul_real_q15` | 0.38 / 0.41 | 0.97 / 1.02 | 0.389 / 0.402 | 1.000 / 1.000 (fallback) |
+| `biquad_cq15`, `biquad_real_q15` | the fallback | — | 1.000 / 1.000 | unchanged, IO2-21 |
+
+
 ## Status
 
 - 2026-11-25: planned; group 0 inventory above; the maintainer's decisions recorded (D2950 to D2953).
@@ -669,3 +724,4 @@ Models: `sse2`, `sse4.2` skylake / znver2; `avx2` znver3 / alderlake; `avx512` z
 - 2026-11-26: final measurement on e0f7d81f (CI run 45731948390, `am_mod`, `am_mod_fallback`, `interleave`, `deinterleave`, `stereo_matrix`, `mul`, `convert_out`, `convert_out_real` at `sse2`, `sse4.2`, `avx2`, `avx2-runtime`, `avx512`, `neon`, plus `count_wasm32`): 216 records merged, only noise of the branch counts (no status changed, the `neon` records are identical, the `simd128` counts equal the committed ones apart from the host name); `cargo xtask check` passes with 23 remarks (before 25). The full tree of CI run 45727543928 on f5ba91cc (embedded QEMU `m4`, `m55` and `rv32`, the SDE `avx512` jobs, `wasm32`, `arm64`) passed, which verifies the fixed sum order of the `Reference` product (D2951, D2974) on the embedded targets and under SDE. Issue #203 re-run on the final records (A: 57 kernel entries at 322 entry-levels without a foreign reference, B: 64 SIMD entries at 224 levels above 0.80 of their fallback, 83 of those levels run the fallback). Not done: group 3a (the FIR family and the `sse2` `Q15` branches) and the groups 2 and 4 parts that wait for the maintainer (IO2-1 to IO2-3, IO2-15 to IO2-18). The unfinished work is kept in two local branches of the working copy only (`o2-wip-g3a-fir`, `o2-wip-g2-oscillate`, not pushed).
 - 2026-11-27: O2b items (1), (3), (4), (5), (6) done (D3000 to D3005; CI run 46050916654 on 5d831289): the contract trade in `cargo xtask check cycles`; `convert_out_cu8` and `convert_out_real_ru8` judged against VOLK (contract trades at `sse4.2`, `avx2`, `avx2-runtime`, `ru8` at `neon`; `dev` at `sse2`, IO2-19; KFR stays judged at `avx512`, IO2-20); IO2-2, IO2-3, IO2-10 to IO2-14 closed as the maintainer's decisions; `mul` at `avx512` in the 256-bit form, faster than its fallback on both models (IO2-15 closed); the x86 shuffle module of the `stereo_matrix` fallback, `release` at `sse2`, `sse4.2` and `avx2` (IO1-4, IO2-16 closed).
 - 2026-11-27: O2b item (2) done (D3006; CI runs 46062107651, 46068881482 and the full run 46077838791 on 241b93d8, whose records replace the result files after the toolchain moved to rustc 1.100.1): the Taylor step of the `C32` oscillator, 150.56 dB at every level against 141.71 dB of SLEEF, the accuracy waivers of `oscillate` and `oscillate_fallback` removed, I13.1-13 and IO2-1 closed; `stereo_encode` and `stereo_encode_rds` following with their golden files regenerated; the AArch64 fallbacks faster, the Cortex-M4 count of `rotate` unchanged.
+- 2026-11-28: O2b item (7), group 3a, done with open items (D3007, D3008; CI runs 46085100312 on 92e63372 and 46093881387 on a70ef4ba): the six `Q15` / `CQ15` FIR kernels in grouped progressions on every level, at most 0.719 / 0.634 of the fallback (`simd128` at most 0.79 of its instructions); the switch of D65 and the route of D2840 removed except `fir_decimate` `CQ15` on AArch64 (1.000 / 0.823, IO2-22); the split taps in storage of three sizes (the `rep stosb` of a 3 KiB zeroing simulated 100 cycles per byte on `znver3` and `znver4`); `scale`, `am_mod`, `mul` `CQ15` and `mul_real` `Q15` at `sse2` with `pmulhrsw` / `q15_mul` in SSE2 instructions (0.366 to 0.794 of the fallback); the two biquads at `sse2` not done (IO2-21).

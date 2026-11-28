@@ -156,7 +156,7 @@ impl<T: RealSample> StereoPllState<T> {
     /// The coefficients are computed in f64 (`kd = pilot_level / 2`, damping `1 / sqrt 2`,
     /// `wn = 2 pi natural_hz / fs`, `kp = 2 zeta wn / (kd 2 pi)`, `ki = wn^2 / (kd 2 pi)`,
     /// `step0 = floor(pilot_hz / fs 2^32 + 0.5)`, `imax = 50 / fs`,
-    /// `beta = 1 - exp(-1 / (fs 0.05))`, `on = 0.4 kd`, `off = 0.3 kd`). The `f32` variant
+    /// `beta = 1 - exp(-1 / (fs 0.05))`, `on = 0.6 kd`, `off = 0.3 kd`; the margin of `on` over noise, D3160). The `f32` variant
     /// also needs finite non-zero `f32` values of `kp`, `ki`, `beta`, `on` and `off`. The
     /// `Q15` variant returns `InvalidParameter` when `kp_q 2^30 + imax_q` or
     /// `ki_q 2^30 + imax_q` does not fit in `i64`, or when `ki_q` or the Q31 lock coefficient
@@ -195,7 +195,9 @@ impl<T: RealSample> StereoPllState<T> {
         let ki = wn * wn / (kd * two_pi);
         let imax = IMAX_HZ / fs;
         let beta = 1.0 - libm::exp(-1.0 / (fs * LOCK_TAU_S));
-        let (on, off) = (0.4 * kd, 0.3 * kd);
+        // `on` 0.6 kd: noise of sigma 0.3 without a carrier lifts the lock level to at most
+        // 0.475 kd (80 noise runs of 1 s), a locked pilot passes 0.6 kd within 50 ms (D3160).
+        let (on, off) = (0.6 * kd, 0.3 * kd);
         let step0 = libm::floor(pilot_hz / fs * TURN + 0.5) as u32;
         let coef = StereoPllCoefficients {
             kp,

@@ -77,3 +77,22 @@ fn noise_without_a_carrier_never_reports_stereo() {
     let m = run15(RATE as usize, &StereoSignal::NOISE);
     check_mono("e2e_fm_stereo_noise", &m).unwrap();
 }
+
+/// Open item I24-2 (D3160): the noise seeds that reached the old threshold `on = 0.4 kd` within
+/// 1.0 s (in `f32` or Q15; the largest lock level 0.475 kd, the longest run above 0.4 kd
+/// 16.7 ms) never report stereo with `on = 0.6 kd`.
+#[test]
+fn noise_that_reached_the_old_threshold_never_reports_stereo() {
+    for seed in [4, 5, 8, 22, 25, 29, 31, 36, 37] {
+        let signal = StereoSignal {
+            seed,
+            ..StereoSignal::NOISE
+        };
+        let m = run32(RATE as usize, &signal);
+        assert_eq!(m.first_lock_s, None, "f32 seed {seed}");
+        check_mono("e2e_fm_stereo_noise", &m).unwrap();
+        let m = run15(RATE as usize, &signal);
+        assert_eq!(m.first_lock_s, None, "q15 seed {seed}");
+        check_mono("e2e_fm_stereo_noise", &m).unwrap();
+    }
+}

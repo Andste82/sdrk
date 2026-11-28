@@ -105,7 +105,8 @@ fn a_new_state_is_not_stereo_and_enabled() {
         (19_000.0 / 480_000.0 * 4_294_967_296.0 + 0.5) as u32
     );
     assert_eq!(c.imax, 50.0 / 480_000.0);
-    assert!((c.on / c.off - 4.0 / 3.0).abs() < 1e-12);
+    // `on` 0.6 kd, `off` 0.3 kd (D3160).
+    assert!((c.on / c.off - 2.0).abs() < 1e-12);
 }
 
 #[test]

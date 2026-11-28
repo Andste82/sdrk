@@ -42,6 +42,8 @@ use sdrk_core::Reference;
 use sdrk_device::{Align, Container, Endian, Layout as DataLayout, SampleFormat, formats};
 use volk_sys::{lv_16sc_t, lv_32fc_t};
 
+#[cfg(all(target_os = "linux", any(target_arch = "x86_64", target_arch = "aarch64")))]
+pub mod pmu;
 mod am_family;
 mod bit_scramble_family;
 mod channelize_family;

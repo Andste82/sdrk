@@ -1517,15 +1517,14 @@ pub const KFR_AT_SSE2: [&str; 8] = [
 /// `volk_8i_convert_16i` and `volk_16i_x2_add_saturated_16i` are in no machine of VOLK 3.3.0), or
 /// whose comparison is VOLK's `u_avx` protokernel without FMA: at `avx512` KFR's element-wise
 /// expressions compiled for the level are the judged comparison, VOLK information (the
-/// maintainer's order of 2026-11-24, D2900).
-pub const KFR_AT_AVX512: [&str; 20] = [
+/// maintainer's order of 2026-11-24, D2900). `convert_out_cu8` and `convert_out_real_ru8` left
+/// the list by D3014: VOLK's AVX2 protokernel is judged for them ([`VOLK_BELOW_LEVEL_JUDGED`]).
+pub const KFR_AT_AVX512: [&str; 18] = [
     "add",
     "add_cq15",
     "add_real_q15",
     "convert_cq15_cs8",
     "convert_cq15_cu8",
-    "convert_out_cu8",
-    "convert_out_real_ru8",
     "deinterleave_cq15",
     "dot_complex",
     "interleave",
@@ -1539,6 +1538,17 @@ pub const KFR_AT_AVX512: [&str; 20] = [
     "scramble_c32_b8",
     "stereo_matrix",
     "window",
+];
+
+/// The entries and levels whose judged comparison is VOLK although VOLK's machine of the level
+/// runs a protokernel of a lower SIMD level (`a_avx2_fma` of `volk_32f_s32f_x2_convert_8u` at
+/// `avx512`): the maintainer's decision D3014 on IO2-20, a stated, narrow exception to D2900,
+/// because VOLK's AVX2 code is the faster opponent (KFR's same-work expression, 10 to 25 times
+/// slower, is information). `check_volk_protokernels` accepts the lower protokernel for these
+/// pairs only; `generic` protokernels stay findings.
+pub const VOLK_BELOW_LEVEL_JUDGED: [(&str, &str); 2] = [
+    ("convert_out_cu8", "avx512"),
+    ("convert_out_real_ru8", "avx512"),
 ];
 
 /// The comparisons of the library audit of 2026-11-24 (the maintainer's order, D2900 to D2907)
@@ -1574,8 +1584,9 @@ pub const KFR_AT_AVX512: [&str; 20] = [
 ///   or the open item of the entry; KFR's expression of the contract (`NaN` as 0 by a select,
 ///   the `f64` formula `rint(x 128 + 127.5)`, clamped; 10 to 25 times slower, it stores byte by
 ///   byte) as information (the maintainer's decision D3001, superseding D2955). At `avx512`
-///   VOLK's machine runs its AVX2 protokernel, a lower level (D2900), so KFR stays the judged
-///   comparison there and VOLK information ([`KFR_AT_AVX512`]).
+///   VOLK's machine runs its AVX2 protokernel, a lower level, which D2900 does not judge; the
+///   maintainer's decision D3014 (IO2-20) makes it the judged opponent there all the same, a
+///   stated exception to D2900 for these two entries only ([`VOLK_BELOW_LEVEL_JUDGED`]).
 fn audit_comparisons(plan: &LevelPlan, spec: &KernelSpec) -> Option<(Reference, Vec<Reference>)> {
     let wasm = plan.refs == "wasm32";
     Some(match spec.name {
@@ -3098,25 +3109,22 @@ mod tests {
 
     #[test]
     fn the_cu8_outputs_are_judged_against_the_stronger_opponent() {
-        // VOLK of the level (less work, the faster opponent) where its machine runs a
-        // protokernel of the level, KFR's expression of the `CU8` contract (NaN rule, `f64`
-        // rounding) as information (D3001); at `avx512` VOLK's protokernel is AVX2, so KFR is
-        // judged there (D2900).
+        // VOLK of the level (less work, the faster opponent), KFR's expression of the `CU8`
+        // contract (NaN rule, `f64` rounding) as information (D3001); at `avx512` VOLK's
+        // protokernel is AVX2, judged all the same by the exception of D3014.
         let plan = |l: &str| PLANS.iter().find(|p| p.level == l).unwrap();
         let kernel = |k: &str| KERNELS.iter().find(|s| s.name == k).unwrap();
         for k in ["convert_out_cu8", "convert_out_real_ru8"] {
-            for level in ["sse2", "sse4.2", "avx2", "neon"] {
+            // At `avx512` too: VOLK's AVX2 protokernel there is the stated exception to D2900
+            // (D3014).
+            for level in ["sse2", "sse4.2", "avx2", "avx512", "neon"] {
                 assert_eq!(
                     comparisons(plan(level), kernel(k)),
                     (Reference::Volk, vec![Reference::Kfr]),
                     "{k} at {level}"
                 );
             }
-            assert_eq!(
-                comparisons(plan("avx512"), kernel(k)),
-                (Reference::Kfr, vec![Reference::Volk]),
-                "{k} at avx512"
-            );
+            assert!(VOLK_BELOW_LEVEL_JUDGED.contains(&(k, "avx512")), "{k}");
         }
     }
 

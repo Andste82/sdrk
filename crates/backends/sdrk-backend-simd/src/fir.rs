@@ -2369,6 +2369,7 @@ mod prog {
     /// Samples of each plane of [`planar!`]: a multiple of 32 below 1024, so that the zeroing
     /// of each plane stays below the 2 KiB from which glibc's `memset` runs `rep stosb` (see
     /// [`super::with_split`]).
+    #[cfg(any(target_arch = "x86_64", target_arch = "wasm32"))]
     pub(super) const PLANE: usize = 896;
 
     /// One progression of `CQ15` outputs on full taps (decision D3100): output `j < n` has the

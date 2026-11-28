@@ -66,6 +66,27 @@ macro_rules! mulhrs_sse2 {
 #[cfg(target_arch = "x86_64")]
 pub(crate) use mulhrs_sse2;
 
+/// `q15_mul` of the `__m128i` values `$a` and `$b` in SSE2 instructions, bit for bit: the
+/// sequence of [`mulhrs_sse2!`] with saturating additions (`paddsw`), so that the one product
+/// outside the 16-bit range, `-32768 * -32768`, gives 32767 instead of wrapping (decision
+/// D3008). `2 hi` saturates only for that product (`hi = 16384`, the low half and its term 0);
+/// every other result `2 hi + t` is in range, so the saturating additions change nothing else.
+#[cfg(target_arch = "x86_64")]
+macro_rules! q15_mul_sse2 {
+    ($a:expr, $b:expr $(,)?) => {{
+        let (a, b): (core::arch::x86_64::__m128i, core::arch::x86_64::__m128i) = ($a, $b);
+        let hi = core::arch::x86_64::_mm_mulhi_epi16(a, b);
+        let lo =
+            core::arch::x86_64::_mm_srli_epi16::<14>(core::arch::x86_64::_mm_mullo_epi16(a, b));
+        core::arch::x86_64::_mm_adds_epi16(
+            core::arch::x86_64::_mm_adds_epi16(hi, hi),
+            core::arch::x86_64::_mm_avg_epu16(lo, core::arch::x86_64::_mm_setzero_si128()),
+        )
+    }};
+}
+#[cfg(target_arch = "x86_64")]
+pub(crate) use q15_mul_sse2;
+
 #[cfg(all(test, target_arch = "x86_64"))]
 mod tests {
     use core::arch::x86_64::{_mm_mulhrs_epi16, _mm_set1_epi16, _mm_setr_epi16};
@@ -91,6 +112,34 @@ mod tests {
             }
         }
     );
+
+    fearless_simd::kernel!(
+        /// [`q15_mul_sse2!`] against `q15_mul` of `sdrk-core` for every `a` and the `b` of
+        /// [`compare`].
+        fn compare_q15_mul(t: Sse2) {
+            let bs = (0..=65_535i32)
+                .step_by(251)
+                .map(|v| (v - 32_768) as i16)
+                .chain([i16::MIN, -1, 0, 1, i16::MAX]);
+            for b in bs {
+                for a in (i16::MIN..=i16::MAX).step_by(8) {
+                    let x = _mm_setr_epi16(a, a + 1, a + 2, a + 3, a + 4, a + 5, a + 6, a + 7);
+                    let got = i16x8::simd_from(t, q15_mul_sse2!(x, _mm_set1_epi16(b)));
+                    let want: [i16; 8] = core::array::from_fn(|k| {
+                        sdrk_core::num::q15_mul(sdrk_core::Q15(a + k as i16), sdrk_core::Q15(b)).0
+                    });
+                    assert_eq!(got.as_slice(), want.as_slice(), "{a} {b}");
+                }
+            }
+        }
+    );
+
+    #[test]
+    fn q15_mul_sse2_is_q15_mul() {
+        if let Some(t) = crate::level::current().as_sse2() {
+            compare_q15_mul(t);
+        }
+    }
 
     #[test]
     fn mulhrs_sse2_is_pmulhrsw() {

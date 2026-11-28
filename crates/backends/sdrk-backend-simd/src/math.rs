@@ -21,8 +21,9 @@
 //! `Q15`, products of real streams: the rounding high multiplication (`pmulhrsw`, `sqrdmulh`,
 //! `i16x8.q15mulr_sat`) as in `scale`; `pmulhrsw` wraps `-32768 * -32768` to `-32768`, which is
 //! the only lane that gives `0x8000`, so a compare and an exclusive or (a masked blend on
-//! AVX-512) turn it into `32767`. SSE2 has no rounding high multiplication and computes the one
-//! of `pmulhrsw` in six SSE2 instructions (`crate::util::mulhrs_sse2!`, the same bits, D3008).
+//! AVX-512) turn it into `32767`. SSE2 has no rounding high multiplication and computes `q15_mul`
+//! in six SSE2 instructions (`crate::util::q15_mul_sse2!`: `pmulhw`, `pmullw`, `psrlw`, `pavgw`
+//! and two saturating `paddsw`, so no fix-up; D3008).
 //!
 //! `CQ15` complex product, whose sums of two products reach 2^31:
 //!
@@ -698,7 +699,7 @@ mod x86 {
     use fearless_simd::{f32x4, f32x8, i16x8, i16x16, i16x32};
 
     use super::{mul_cq15_sample, mul_q15, whole_zip_token};
-    use crate::util::mulhrs_sse2;
+    use crate::util::q15_mul_sse2;
 
     fearless_simd::kernel!(
         /// The `C32` product of AVX2 on the interleaved floats, four samples per vector:
@@ -787,22 +788,21 @@ mod x86 {
     );
 
     fearless_simd::kernel!(
-        /// [`mul_real_sse4_2`] with `pmulhrsw` in SSE2 instructions ([`mulhrs_sse2!`], the same
-        /// bits, so the same fix-up; D3008).
+        /// [`mul_real_sse4_2`] in SSE2 instructions: `q15_mul` itself ([`q15_mul_sse2!`], the
+        /// rounding high multiplication with saturating additions, so no fix-up; D3008).
         #[inline]
         pub(super) fn mul_real_sse2(t: Sse2, a: &[i16], b: &[i16], out: &mut [i16]) {
-            let min = _mm_set1_epi16(i16::MIN);
             whole_zip_token(
                 8,
                 a,
                 b,
                 out,
                 |a, b, o| {
-                    let r = mulhrs_sse2!(
+                    let r = q15_mul_sse2!(
                         i16x8::from_slice(t, a).into(),
                         i16x8::from_slice(t, b).into(),
                     );
-                    i16x8::simd_from(t, _mm_xor_si128(r, _mm_cmpeq_epi16(r, min))).store_slice(o);
+                    i16x8::simd_from(t, r).store_slice(o);
                 },
                 mul_q15,
             );

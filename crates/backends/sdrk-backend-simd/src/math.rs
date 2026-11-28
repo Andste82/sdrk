@@ -44,8 +44,7 @@
 //!
 //! `interleave` and `deinterleave`: the paths of `split_x86`, `split_neon` and `split_wasm` do the
 //! whole call (an overlapping last step; calls shorter than one step run the plain loops of the
-//! fallback) on every level; at AVX2 `interleave` and `deinterleave` of `f32` and `interleave`
-//! of `i16` are the plain loops of the fallback, which LLVM vectorizes alike (O2, D2971). With one stream absent the zips and unzips of the token run, and
+//! fallback) on every level. With one stream absent the zips and unzips of the token run, and
 //! the rest of the call the plain loops of the fallback, inside the dispatched function.
 //!
 //! The element-wise sums and products and the entries of `interleave` and `deinterleave` are
@@ -1162,40 +1161,29 @@ macro_rules! whole_deint {
 
 /// The x86 paths of `interleave` and `deinterleave`: the in-lane unpacks and shuffles of the
 /// level, with the cross-lane permutation of AVX2 where the lanes of 128 bits have to be put
-/// in order (`deinterleave` of `i16`); on AVX-512 one two-source permutation per output vector
-/// (`vpermt2ps`, `vpermt2w`). Each function does the whole call ([`whole_int`],
-/// [`whole_deint`]); a level without a function here runs the generic code of the token. At
-/// AVX2, `interleave` of both types and `deinterleave` of `f32` run the plain loop of the
-/// fallback ([`plain_int`], [`plain_deint`], O2, D2971).
+/// in order (`vperm2f128`/`vperm2i128` of two vectors for `interleave`, `vpermpd` of one for
+/// `deinterleave`); on AVX-512 one two-source permutation per output vector (`vpermt2ps`,
+/// `vpermt2w`). Each function does the whole call ([`whole_int`], [`whole_deint`]); a level
+/// without a function here runs the generic code of the token. The AVX2 paths of `interleave`
+/// (`f32`, `i16`) and `deinterleave` (`f32`) tie the fallback's loop, which LLVM vectorizes
+/// with the same instructions (0.99 to 1.01 of it, O2, D2971); they stay as the explicit form,
+/// which keeps the speed independent of the compiler's auto-vectorisation (D3019, restored by
+/// D3020).
 #[cfg(target_arch = "x86_64")]
 mod split_x86 {
     use core::arch::x86_64::{
         __m128i, _mm_madd_epi16, _mm_packs_epi32, _mm_set1_epi32, _mm_setr_epi8, _mm_shuffle_epi8,
         _mm_shuffle_ps, _mm_srai_epi32, _mm_unpackhi_epi16, _mm_unpackhi_epi64, _mm_unpackhi_ps,
         _mm_unpacklo_epi16, _mm_unpacklo_epi64, _mm_unpacklo_ps, _mm256_blend_epi32,
-        _mm256_permute4x64_epi64, _mm256_setr_epi8, _mm256_shuffle_epi8, _mm512_permutex2var_epi16,
-        _mm512_permutex2var_ps,
+        _mm256_castpd_ps, _mm256_castps_pd, _mm256_permute2f128_ps, _mm256_permute2x128_si256,
+        _mm256_permute4x64_epi64, _mm256_permute4x64_pd, _mm256_setr_epi8, _mm256_shuffle_epi8,
+        _mm256_shuffle_ps, _mm256_unpackhi_epi16, _mm256_unpackhi_ps, _mm256_unpacklo_epi16,
+        _mm256_unpacklo_ps, _mm512_permutex2var_epi16, _mm512_permutex2var_ps,
     };
     use fearless_simd::prelude::*;
-    use fearless_simd::{f32x4, f32x16, i16x8, i16x16, i16x32, i32x16};
+    use fearless_simd::{f32x4, f32x8, f32x16, i16x8, i16x16, i16x32, i32x16};
 
     use super::split_scalar;
-
-    /// AVX2 `interleave` (`f32` and `i16`): the plain loop of the fallback, compiled at the
-    /// level of the dispatch. LLVM vectorizes it as it does the fallback (the in-lane unpacks
-    /// and the lane permutation of two sources), and a path of its own with the same
-    /// instructions was no faster (1.00 of the fallback, the stores are the bound; O2, D2971).
-    #[inline(always)]
-    pub(super) fn plain_int<T, E: Copy>(_t: T, re: &[E], im: &[E], out: &mut [E]) {
-        split_scalar::int(re, im, out);
-    }
-
-    /// AVX2 `deinterleave` of `f32`: the plain loop of the fallback at the level of the
-    /// dispatch, for the reason of [`plain_int`] (O2, D2971).
-    #[inline(always)]
-    pub(super) fn plain_deint<T, E: Copy>(_t: T, input: &[E], re: &mut [E], im: &mut [E]) {
-        split_scalar::deint(input, re, im);
-    }
 
     pub(super) mod int_f32 {
         #[allow(
@@ -1203,6 +1191,29 @@ mod split_x86 {
             reason = "the intrinsics and vector types of the parent"
         )]
         use super::*;
+
+        fearless_simd::kernel!(
+            pub(crate) fn avx2(t: Avx2, re: &[f32], im: &[f32], out: &mut [f32]) {
+                whole_int!(
+                    re,
+                    im,
+                    out,
+                    8,
+                    16,
+                    |r: &[f32; 8], i: &[f32; 8], o: &mut [f32; 16]| {
+                        let r = f32x8::from_slice(t, r).into();
+                        let i = f32x8::from_slice(t, i).into();
+                        // The in-lane unpacks give samples 0, 1 | 4, 5 and 2, 3 | 6, 7; the lane
+                        // permutation of two sources puts them in order (`vperm2f128`, which the
+                        // `znver3` model runs faster than a `vpermpd` of each input).
+                        let (lo, hi) = (_mm256_unpacklo_ps(r, i), _mm256_unpackhi_ps(r, i));
+                        let (o0, o1) = o.split_at_mut(8);
+                        f32x8::simd_from(t, _mm256_permute2f128_ps::<0x20>(lo, hi)).store_slice(o0);
+                        f32x8::simd_from(t, _mm256_permute2f128_ps::<0x31>(lo, hi)).store_slice(o1);
+                    }
+                );
+            }
+        );
 
         fearless_simd::kernel!(
             pub(crate) fn sse2(t: Sse2, re: &[f32], im: &[f32], out: &mut [f32]) {
@@ -1408,6 +1419,32 @@ mod split_x86 {
         use super::*;
 
         fearless_simd::kernel!(
+            pub(crate) fn avx2(t: Avx2, input: &[f32], re: &mut [f32], im: &mut [f32]) {
+                whole_deint!(
+                    input,
+                    re,
+                    im,
+                    8,
+                    16,
+                    |c: &[f32; 16], r: &mut [f32; 8], i: &mut [f32; 8]| {
+                        let (a, b) = c.split_at(8);
+                        let a = f32x8::from_slice(t, a).into();
+                        let b = f32x8::from_slice(t, b).into();
+                        // Samples 0, 1, 4, 5 | 2, 3, 6, 7, then the lanes in order.
+                        let lo = _mm256_shuffle_ps::<0x88>(a, b);
+                        let hi = _mm256_shuffle_ps::<0xDD>(a, b);
+                        let lo =
+                            _mm256_castpd_ps(_mm256_permute4x64_pd::<0xD8>(_mm256_castps_pd(lo)));
+                        let hi =
+                            _mm256_castpd_ps(_mm256_permute4x64_pd::<0xD8>(_mm256_castps_pd(hi)));
+                        f32x8::simd_from(t, lo).store_slice(r);
+                        f32x8::simd_from(t, hi).store_slice(i);
+                    }
+                );
+            }
+        );
+
+        fearless_simd::kernel!(
             pub(crate) fn sse2(t: Sse2, input: &[f32], re: &mut [f32], im: &mut [f32]) {
                 whole_deint!(
                     input,
@@ -1433,6 +1470,29 @@ mod split_x86 {
             reason = "the intrinsics and vector types of the parent"
         )]
         use super::*;
+
+        fearless_simd::kernel!(
+            pub(crate) fn avx2(t: Avx2, re: &[i16], im: &[i16], out: &mut [i16]) {
+                whole_int!(
+                    re,
+                    im,
+                    out,
+                    16,
+                    32,
+                    |r: &[i16; 16], i: &[i16; 16], o: &mut [i16; 32]| {
+                        let r = i16x16::from_slice(t, r).into();
+                        let i = i16x16::from_slice(t, i).into();
+                        // As `int_f32`: the in-lane unpacks, then `vperm2i128`.
+                        let (lo, hi) = (_mm256_unpacklo_epi16(r, i), _mm256_unpackhi_epi16(r, i));
+                        let (o0, o1) = o.split_at_mut(16);
+                        i16x16::simd_from(t, _mm256_permute2x128_si256::<0x20>(lo, hi))
+                            .store_slice(o0);
+                        i16x16::simd_from(t, _mm256_permute2x128_si256::<0x31>(lo, hi))
+                            .store_slice(o1);
+                    }
+                );
+            }
+        );
 
         fearless_simd::kernel!(
             pub(crate) fn sse2(t: Sse2, re: &[i16], im: &[i16], out: &mut [i16]) {
@@ -1906,12 +1966,12 @@ level_paths!(
     int_f32_level, deint_f32_level, f32,
     x86_int: [
         as_avx512 => split_x86::int_f32_512::avx512,
-        as_avx2 => split_x86::plain_int,
+        as_avx2 => split_x86::int_f32::avx2,
         as_sse2 => split_x86::int_f32::sse2
     ],
     x86_deint: [
         as_avx512 => split_x86::deint_f32_512::avx512,
-        as_avx2 => split_x86::plain_deint,
+        as_avx2 => split_x86::deint_f32::avx2,
         as_sse2 => split_x86::deint_f32::sse2
     ],
     neon: split_neon::int_f32, split_neon::deint_f32,
@@ -1921,7 +1981,7 @@ level_paths!(
     int_i16_level, deint_i16_level, i16,
     x86_int: [
         as_avx512 => split_x86::int_i16_512::avx512,
-        as_avx2 => split_x86::plain_int,
+        as_avx2 => split_x86::int_i16::avx2,
         as_sse2 => split_x86::int_i16::sse2
     ],
     x86_deint: [

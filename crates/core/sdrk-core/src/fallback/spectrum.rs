@@ -94,16 +94,6 @@ impl Window<CQ15> for Fallback {
 impl MagSq<C32> for Fallback {
     fn mag_sq(&self, input: &[C32], output: &mut [f32]) -> Result<()> {
         check_len(input.len(), output.len())?;
-        // With AVX-512 the 256-bit form of the AVX2 build (D3017, IO1-7): the compiler gives
-        // the loop 512-bit permutations of two sources there.
-        #[cfg(all(target_arch = "x86_64", target_feature = "avx512f"))]
-        let (input, output) = {
-            let done = super::q15_x86::mag_sq(bytemuck::cast_slice(input), output);
-            (
-                input.get(done..).unwrap_or_default(),
-                output.get_mut(done..).unwrap_or_default(),
-            )
-        };
         for (o, x) in output.iter_mut().zip(input) {
             *o = x.re * x.re + x.im * x.im;
         }

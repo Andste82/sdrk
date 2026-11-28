@@ -227,7 +227,7 @@ fn through_blocks(
 ) -> Vec<Packet> {
     let rate = Rate::hz(8000).unwrap();
     let mut e = MorseEncodeBlock::new(enc, rate, &mut ArenaStorage::new(&mut [])).unwrap();
-    let mut d = MorseDecodeBlock::new(dec, rate, &mut ArenaStorage::new(&mut [])).unwrap();
+    let mut d = MorseDecodeBlock::new(dec, rate, &mut sdrk_testkit::VecStorage).unwrap();
     let mut keys = vec![0f32; 4_000_000];
     let p = e.process(packets, &mut keys).unwrap();
     assert_eq!(p.consumed, packets.len());

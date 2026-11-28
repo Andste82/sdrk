@@ -1,8 +1,6 @@
 //! `morse_decode`: the envelope of a keyed carrier or tone to text packets, with an adaptive
 //! threshold and a decoder that estimates the speed.
 
-use core::marker::PhantomData;
-
 use sdrk::{Delay, Progress, Rate, Ratio, RatioKind};
 use sdrk_proto::morse::{Decoder, Emit};
 use sdrk_proto::{MAX_PACKET_BYTES, Packet, PacketFlags};
@@ -227,13 +225,15 @@ impl MorseDecodeConfig {
 }
 
 /// Morse decoder: the key envelope in (`f32`), [`Packets`] of text out, one per word. The
-/// block needs no storage.
+/// word in progress is in the storage (`MAX_PACKET_BYTES`, 256 bytes), so the block stays
+/// within the 512 bytes of a primitive block (D1573).
 ///
 /// ```
 /// use sdrk::Rate;
 /// use sdrk_blocks::{ArenaStorage, Block, MorseDecodeBlock, MorseDecodeConfig, Packet};
-/// let mut arena = ArenaStorage::new(&mut []);
 /// let cfg = MorseDecodeConfig::default();
+/// let mut mem = vec![0u8; MorseDecodeBlock::<ArenaStorage<'_>>::storage_bytes(&cfg, Rate::hz(1000)?)?];
+/// let mut arena = ArenaStorage::new(&mut mem);
 /// let mut dec = MorseDecodeBlock::new(&cfg, Rate::hz(1000)?, &mut arena)?;
 /// // "K" (-.-) at 20 wpm and 1000 Hz: units of 60 samples, then silence for the word gap.
 /// let mut env = vec![0.0f32; 240];
@@ -248,7 +248,6 @@ impl MorseDecodeConfig {
 /// ```
 // The flags are independent states of the detector and the noise blocks.
 #[allow(clippy::struct_excessive_bools)]
-#[derive(Debug)]
 pub struct MorseDecodeBlock<S: Storage> {
     config: MorseDecodeConfig,
     /// The input sample rate in Hz.
@@ -315,25 +314,37 @@ pub struct MorseDecodeBlock<S: Storage> {
     pending: u32,
     /// Samples given to the decoder (the index of the next one).
     fed: u64,
-    /// The word in progress.
-    word: [u8; MAX_PACKET_BYTES],
+    /// The word in progress (`MAX_PACKET_BYTES` bytes of the storage).
+    word: S::Buf<u8>,
     wlen: usize,
     wstart: u64,
     /// Input samples since construction or reset.
     count: u64,
     /// At most one packet per this many input samples.
     max_per_input: Ratio,
-    _storage: PhantomData<fn() -> S>,
+}
+
+impl<S: Storage> core::fmt::Debug for MorseDecodeBlock<S> {
+    fn fmt(&self, f: &mut core::fmt::Formatter<'_>) -> core::fmt::Result {
+        f.debug_struct("MorseDecodeBlock")
+            .field("config", &self.config)
+            .field("rate_hz", &self.rate_hz)
+            .field("decoder", &self.decoder)
+            .field("word", &self.word.as_ref().get(..self.wlen))
+            .field("count", &self.count)
+            .finish_non_exhaustive()
+    }
 }
 
 impl<S: Storage> MorseDecodeBlock<S> {
-    /// Creates the block; it needs no storage.
+    /// Creates the block; the word in progress is in `storage` ([`Self::storage_bytes`]).
     ///
     /// # Errors
     /// `OutOfRange` for an invalid configuration or a rate with fewer than 8 samples per unit
-    /// at `wpm_max`.
-    pub fn new(config: &MorseDecodeConfig, rate_in: Rate, _storage: &mut S) -> Result<Self> {
+    /// at `wpm_max`, `Storage` if `storage` is too small.
+    pub fn new(config: &MorseDecodeConfig, rate_in: Rate, storage: &mut S) -> Result<Self> {
         config.validate(rate_in)?;
+        let word = storage.alloc::<u8>(MAX_PACKET_BYTES)?;
         let fs = hz(rate_in);
         let unit = fs * 1.2 / config.wpm;
         let settle = (4.0 * (1.0 + SMOOTH_UNITS * unit)) as u32;
@@ -378,23 +389,24 @@ impl<S: Storage> MorseDecodeBlock<S> {
             committed: false,
             pending: 0,
             fed: 0,
-            word: [0; MAX_PACKET_BYTES],
+            word,
             wlen: 0,
             wstart: 0,
             count: 0,
             // A word needs a key-down run of `glitch` samples and a gap of five of them.
             max_per_input: Ratio::new(1, 6 * u64::from(glitch))?,
-            _storage: PhantomData,
         })
     }
 
-    /// Exact bytes of storage the block needs (zero).
+    /// Exact bytes of storage the block needs: the word in progress, `MAX_PACKET_BYTES` bytes.
     ///
     /// # Errors
     /// `OutOfRange` for an invalid configuration.
     pub fn storage_bytes(config: &MorseDecodeConfig, rate_in: Rate) -> Result<usize> {
         config.validate(rate_in)?;
-        Ok(Plan::default().bytes())
+        let mut plan = Plan::default();
+        plan.add::<u8>(MAX_PACKET_BYTES)?;
+        Ok(plan.bytes())
     }
 
     /// Input samples consumed since construction or the last reset.
@@ -571,7 +583,7 @@ impl<S: Storage> MorseDecodeBlock<S> {
         if self.wlen == 0 {
             self.wstart = start;
         }
-        if let Some(cell) = self.word.get_mut(self.wlen) {
+        if let Some(cell) = self.word.as_mut().get_mut(self.wlen) {
             *cell = byte;
             self.wlen += 1;
         }
@@ -583,7 +595,7 @@ impl<S: Storage> MorseDecodeBlock<S> {
         if self.wlen == 0 {
             return false;
         }
-        let data = self.word.get(..self.wlen).unwrap_or(&[]);
+        let data = self.word.as_ref().get(..self.wlen).unwrap_or(&[]);
         self.wlen = 0;
         // The word has at most 256 bytes, so `new` cannot fail.
         match Packet::new(self.wstart, PacketFlags::NONE, data) {

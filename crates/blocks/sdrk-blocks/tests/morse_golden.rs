@@ -86,7 +86,7 @@ fn words_of(env: &[f32], wpm: f64, wpm_max: f64) -> Vec<String> {
         wpm_max,
         ..MorseDecodeConfig::default()
     };
-    let mut dec = MorseDecodeBlock::new(&cfg, rate(1000), &mut ArenaStorage::new(&mut [])).unwrap();
+    let mut dec = MorseDecodeBlock::new(&cfg, rate(1000), &mut sdrk_testkit::VecStorage).unwrap();
     let mut room = vec![Packet::default(); 4096];
     let p = dec.process(env, &mut room).unwrap();
     assert_eq!(p.consumed, env.len());

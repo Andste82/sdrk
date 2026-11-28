@@ -47,7 +47,7 @@ The same form makes the other `CQ15` FIR entries faster (ours, cycles per sample
 | `fir_interpolate_short_fallback` | `neon` | two columns per pass | 22.91 / 15.55 | 27.28 / 29.90 (CMSIS-DSP) | 0.840 / 0.520 | 1.133 / 0.789 | `release` (was `dev`) | D3105 |
 | `fir_interpolate_real_fallback` | `neon` | the head outputs in groups, groups of 32 | 61.15 / 39.12 | 67.65 / 76.22 (CMSIS-DSP) | 0.904 / 0.513 | 1.224 / 0.819 | `release` (was `dev`) | D3104, D3108 |
 
-`deinterleave_cq15_fallback` at `avx2` is 13 % faster on `znver3` and 15 % slower on `alderlake` than before (0.23 / 0.23), within 1.10 of VOLK on both. The head groups of D3104 also make the other fallbacks with windows one sample apart faster (`fir_fallback`, `fir_interpolate_fallback`, `fir_cq15_fallback`, `fir_interpolate_cq15_fallback` and the `f32` interpolator at every level, 2 % to 32 %); the progressions with windows more than one sample apart (`fir_decimate`, `resample`) keep the code of `main`: with the copy, `resample_real_fallback` at `avx512` was 0.3 % slower on `sapphirerapids` (1.1003 of liquid-dsp, CI run 46155369153) and `fir_decimate` 2.8 % more instructions on Cortex-M4 (CI run 46157162937), so the copy is a compile-time choice of the instantiations with windows one sample apart.
+`deinterleave_cq15_fallback` at `avx2` is 13 % faster on `znver3` and 15 % slower on `alderlake` than before (0.23 / 0.23), within 1.10 of VOLK on both. The head groups of D3104 also make the other fallbacks with windows one sample apart faster (`fir_fallback`, `fir_interpolate_fallback`, `fir_cq15_fallback`, `fir_interpolate_cq15_fallback` and the `f32` interpolator at every level, 2 % to 32 %); the progressions with windows more than one sample apart (`fir_decimate`, `resample`) keep the code of `main`: with the copy, `resample_real_fallback` at `avx512` was 0.3 % slower on `sapphirerapids` (1.1003 of liquid-dsp, CI run 46155369153) and `fir_decimate` 2.8 % and 4.2 % more instructions on Cortex-M4 (CI runs 46157162937 and 46161987773), so the copy is a compile-time choice of the instantiations with windows one sample apart and `fir_decimate` runs a progression without it, the code of `main`.
 
 ### Item 3: `simd128` (IO2-29, instructions per sample)
 
@@ -64,7 +64,7 @@ Judged opponent (D2953), count of `count_wasm32` of CI run 46157162937:
 
 The planar progressions of D3100 at `simd128` (information against our fallback): `fir_cq15` 479.46 → 321.72, `fir_decimate_cq15` 93.03 → 58.53, `fir_interpolate_cq15` 504.01 → 326.14, `resample_cq15` 496.32 → 333.51 instructions per sample.
 
-Cortex-M4 (instructions per sample, `count_m4_qemu`): `fir` 510.45 → 484.41 (the head groups); `fir_decimate` 112.28 → 115.44 in CI run 46157162937 with the copy present in the instantiations with windows more than one sample apart, which since 2a191736 keep the code of `main` (the final run below).
+Cortex-M4 (instructions per sample, `count_m4_qemu`): `fir` 510.45 → 484.41 (the head groups); `fir_decimate` 112.28 → 115.44 and 116.97 in CI runs 46157162937 and 46161987773 while its progression shared a function with the head groups; since the last commit it runs the progression of `main` again (a local count gives 112.28; the committed file stays that of `main` until the nightly artifact of the final run, M4_FINAL).
 
 ### Item 4: `fft_cq15_1024_fallback` against CMSIS-DSP (D3107, IO3-1)
 

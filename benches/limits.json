@@ -1947,7 +1947,7 @@
     },
     "simd128": {
       "status": "dev",
-      "waiver": "1.19 times the instructions of CMSIS-DSP at this level, within the `dev` limit; the simulated cycles of the shared code at `avx2` are below CMSIS-DSP's (D37); the gap in simulated cycles is tracked in issue #134 (the `simd128` instruction gap of the grouped fallback)"
+      "waiver": "not faster yet, no reason in the work or the accuracy: 899.10 against 785.69 instructions per sample of CMSIS-DSP's `arm_fir_q15` at this level (1.14, was 1.19 before the head groups of D3104; CI run 46157162937); the simulated cycles of the shared code at `avx2` are below CMSIS-DSP's (D37); open item IO2-29"
     }
   },
   "fir_decimate_fallback": {
@@ -2033,8 +2033,7 @@
       "status": "release"
     },
     "simd128": {
-      "status": "dev",
-      "waiver": "open item I44-10: the short-branch form of `fir_interpolate` in the fallback (D1420, bit-exact with the one-at-a-time sum) counts 176.00 against 127.10 instructions per output sample of CMSIS-DSP's `arm_fir_interpolate_f32` by 8 compiled for `simd128` (1.38), within the `dev` limit. The maintainer decides on a form of the fallback that the compiler vectorizes better (I44-10)"
+      "status": "release"
     }
   },
   "fir_interpolate_cq15_fallback": {
@@ -2117,12 +2116,10 @@
       "status": "release"
     },
     "neon": {
-      "status": "dev",
-      "waiver": "not faster yet, no reason in the work or the accuracy: 1.22 / 0.82 of CMSIS-DSP's `arm_fir_interpolate_f32` on `cortex-a72` / `cortex-a76`, not analysed yet (IO1-7); open item IO1-7"
+      "status": "release"
     },
     "simd128": {
-      "status": "dev",
-      "waiver": "1.18 times the instructions of CMSIS-DSP at this level, within the `dev` limit; the simulated cycles of the shared code at `avx2` are below CMSIS-DSP's (D37); the gap in simulated cycles is tracked in issue #134 (the `simd128` instruction gap of the grouped fallback)"
+      "status": "release"
     }
   },
   "fir_interpolate_real_q15_fallback": {
@@ -2946,8 +2943,7 @@
       "status": "release"
     },
     "simd128": {
-      "status": "dev",
-      "waiver": "not faster yet, no reason in the work or the accuracy: 6.16 against 5.40 instructions per sample of CMSIS-DSP's `arm_scale_f32` on the `2 n` floats (1.14), the same accuracy; not analysed yet; open item IO2-29"
+      "status": "release"
     }
   },
   "scale_cq15_fallback": {

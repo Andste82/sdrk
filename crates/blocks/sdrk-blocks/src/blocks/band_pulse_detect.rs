@@ -140,7 +140,7 @@ const WIDE_MIN_WIDTH: usize = 8;
 
 /// The fewest lanes that must be active in, and able to hear, a wideband block (D1029): lanes
 /// that learned a carrier as their noise cannot hear, so fewer than `WIDE_MIN_WIDTH` may decide
-/// (the margin of spec §3 is then smaller, open item I45.1-8).
+/// (the margin of spec §3 is then smaller, accepted by D3166, I45.1-8).
 const WIDE_MIN_HEAR: usize = 4;
 
 /// The names of the `modulation` choice, in index order.
@@ -2152,7 +2152,7 @@ impl<S: Storage> BandPulseDetectBlock<S> {
     /// two lanes (three for a wide FSK deviation): while `L` is at least 8 a wideband block
     /// needs 7 active lanes, so two transmissions (spec §3) are never wideband, and with 16
     /// lanes (14 of 16) four are not; with fewer hearing lanes (carriers in the band) the
-    /// margin is smaller (I45.1-8). Noise over the band lifts every lane at once (spec test 7).
+    /// margin is smaller (I45.1-8, D3166). Noise over the band lifts every lane at once (spec test 7).
     /// Wideband blocks at most 100 us (at least one block) apart form one event (D1029, D1031).
     #[inline(never)]
     fn close_block(&mut self) {

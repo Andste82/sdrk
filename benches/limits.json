@@ -1947,7 +1947,7 @@
     },
     "simd128": {
       "status": "dev",
-      "waiver": "not faster yet, no reason in the work or the accuracy: 899.10 against 785.69 instructions per sample of CMSIS-DSP's `arm_fir_q15` at this level (1.14, was 1.19 before the head groups of D3104; CI run 46157162937); the simulated cycles of the shared code at `avx2` are below CMSIS-DSP's (D37); open item IO2-29"
+      "waiver": "not faster yet, no reason in the work or the accuracy: 897.87 against 785.69 instructions per sample of CMSIS-DSP's `arm_fir_q15` at this level (1.14, was 1.19 before the head groups of D3104; CI run 46157162937); the simulated cycles of the shared code at `avx2` are below CMSIS-DSP's (D37); open item IO2-29"
     }
   },
   "fir_decimate_fallback": {

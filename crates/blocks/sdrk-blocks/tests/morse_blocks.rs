@@ -103,8 +103,8 @@ fn encoder(cfg: &MorseEncodeConfig, fs: u64) -> MorseEncodeBlock<ArenaStorage<'s
     MorseEncodeBlock::new(cfg, rate(fs), &mut ArenaStorage::new(&mut [])).unwrap()
 }
 
-fn decoder(cfg: &MorseDecodeConfig, fs: u64) -> MorseDecodeBlock<ArenaStorage<'static>> {
-    MorseDecodeBlock::new(cfg, rate(fs), &mut ArenaStorage::new(&mut [])).unwrap()
+fn decoder(cfg: &MorseDecodeConfig, fs: u64) -> MorseDecodeBlock<sdrk_testkit::VecStorage> {
+    MorseDecodeBlock::new(cfg, rate(fs), &mut sdrk_testkit::VecStorage).unwrap()
 }
 
 /// The envelope of `texts` (one packet each) at the rate `fs`, through the block.

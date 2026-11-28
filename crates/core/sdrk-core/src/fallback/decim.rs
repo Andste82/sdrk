@@ -904,9 +904,11 @@ mod exact {
         if len == 0 || len > MAX_TAPS || hist.len() + 1 != len || s == 0 {
             return None;
         }
-        // The split taps in storage of three sizes (x86-64): a zeroed array of the largest size
-        // per call is a `memset` that glibc runs as `rep stosb` from AVX2 on, which `llvm-mca`
-        // takes as about 100 cycles per byte on the AMD models (as in the SIMD backend, D3007).
+        // The split taps and the copy of the first windows in storage of four sizes (x86-64): a
+        // zeroed array of 2 KiB or more per call is a `memset` that glibc runs as `rep stosb`
+        // from AVX2 on, which `llvm-mca` takes as about 100 cycles per byte on the AMD models
+        // (as in the SIMD backend, D3007; CI runs 46131617832 and 46132833350 measured 56.63
+        // cycles per sample on `znver3` with 127 taps in the largest size).
         #[cfg(target_arch = "x86_64")]
         {
             let units = len.next_multiple_of(PAD) / PER_UNIT;
@@ -915,6 +917,8 @@ mod exact {
                 run::<8, 64>(taps, hist, input, seen, s, out)
             } else if units <= 16 {
                 run::<16, 128>(taps, hist, input, seen, s, out)
+            } else if units <= 32 {
+                run::<32, 256>(taps, hist, input, seen, s, out)
             } else {
                 run::<{ MAX_PADDED / PER_UNIT }, { 2 * MAX_PADDED }>(taps, hist, input, seen, s, out)
             })

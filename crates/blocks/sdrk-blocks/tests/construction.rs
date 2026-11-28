@@ -90,6 +90,23 @@ where
     }
 }
 
+/// `ConvertOutRealBlock` needs no storage, as `ConvertOutBlock` (D3164).
+#[test]
+fn convert_out_real_needs_no_storage() {
+    for format in [formats::RS16, formats::RF32] {
+        let cfg = ConvertOutConfig { format };
+        let r = rate(48_000);
+        let bytes = sdrk_blocks::ConvertOutRealBlock::<f32, A<'_>>::storage_bytes(&cfg, r).unwrap();
+        assert_eq!(bytes, 0);
+        check_exact_storage(bytes, |a| {
+            sdrk_blocks::ConvertOutRealBlock::<f32, _>::new(&cfg, r, a).map(|_| ())
+        });
+        check_exact_storage(bytes, |a| {
+            sdrk_blocks::ConvertOutRealBlock::<Q15, _>::new(&cfg, r, a).map(|_| ())
+        });
+    }
+}
+
 fn simple_exact<T: BlockSample>() {
     let r = rate(48_000);
     let cfg = ScaleConfig::default();
@@ -711,6 +728,7 @@ fn no_block_is_larger_than_512_bytes() {
     );
     real!(
         AddRealBlock,
+        ConvertOutRealBlock,
         ConvertRealBlock,
         DecimateRealBlock,
         DeemphasisRealBlock,

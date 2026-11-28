@@ -34,14 +34,14 @@ use sdrk_blocks::design::{
 use sdrk_blocks::{
     AmModBlock, AmModConfig, AutoNotchConfig, AutoNotchRealBlock, BiquadBlock, BiquadConfig,
     BiquadElem, BiquadRealBlock, Block, BlockReal, BlockSample, ConvertBlock, ConvertConfig,
-    ConvertOutBlock, ConvertOutConfig, DcBlockConfig, DcBlockRealBlock, DesignSpec, FirBlock,
-    FirConfig, FmModBlock, FmModConfig, FmStereoModBlock, FmStereoModConfig,
+    ConvertOutBlock, ConvertOutConfig, ConvertOutRealBlock, DcBlockConfig, DcBlockRealBlock,
+    DesignSpec, FirBlock, FirConfig, FmModBlock, FmModConfig, FmStereoModBlock, FmStereoModConfig,
     HalfbandDecimateConfig, NoiseBlankBlock, NoiseBlankConfig, ParamValue, PreemphLimitBlock,
     PreemphLimitConfig, RealToIqBlock, StreamElem,
 };
 use sdrk_core::kernels::auto_notch::{AutoNotch, AutoNotchState};
 use sdrk_core::kernels::biquad::{Biquad, BiquadReal, BiquadRealState, BiquadState};
-use sdrk_core::kernels::convert::{Convert, ConvertOut};
+use sdrk_core::kernels::convert::{Convert, ConvertOut, ConvertOutReal};
 use sdrk_core::kernels::demod::{DcBlockReal, DcBlockRealState};
 use sdrk_core::kernels::filter::{Fir, FirState};
 use sdrk_core::kernels::halfband::{RealToComplex, RealToComplexState};
@@ -599,6 +599,49 @@ fn convert_out_equals_the_kernel() {
     for (name, format) in FORMATS {
         convert_out_equals_kernel::<C32>(name, format, &c32);
         convert_out_equals_kernel::<CQ15>(name, format, &cq15);
+    }
+}
+
+/// `ConvertOutRealBlock` equals `convert_out_real` byte for byte (D3164, M10), on a tone with
+/// noise plus the corner values (full scale, beyond full scale, and for `f32` NaN and the
+/// infinities).
+fn convert_out_real_equals_kernel<R: BlockReal>(name: &str, format: SampleFormat, corners: &[R])
+where
+    Sdrk: ConvertOutReal<R>,
+{
+    let mut input = real_signal::<R>(2400, SEED, 0.01);
+    input[..corners.len()].copy_from_slice(corners);
+    let bytes = format.bytes_for_samples(input.len()).unwrap();
+    let mut want = vec![0u8; bytes];
+    let written =
+        <Sdrk as ConvertOutReal<R>>::convert_out_real(&Sdrk, &format, &input, &mut want).unwrap();
+    assert_eq!(written, bytes);
+    let cfg = ConvertOutConfig { format };
+    check_block(
+        &want,
+        &input,
+        SEED,
+        || ConvertOutRealBlock::<R, _>::new(&cfg, rate(48_000), &mut VecStorage).unwrap(),
+        &format!("convert_out {} to {name}", core::any::type_name::<R>()),
+    );
+}
+
+#[test]
+fn convert_out_real_equals_the_kernel() {
+    let f = [
+        1.0f32,
+        -1.0,
+        1.5,
+        -1.5,
+        f32::NAN,
+        f32::INFINITY,
+        f32::NEG_INFINITY,
+        0.5 / 32768.0,
+    ];
+    let q = [Q15(i16::MAX), Q15(i16::MIN), Q15(1), Q15(-1), Q15(0)];
+    for (name, format) in [("rs16", formats::RS16), ("rf32", formats::RF32)] {
+        convert_out_real_equals_kernel::<f32>(name, format, &f);
+        convert_out_real_equals_kernel::<Q15>(name, format, &q);
     }
 }
 

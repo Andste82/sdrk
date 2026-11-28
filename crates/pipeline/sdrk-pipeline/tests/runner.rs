@@ -330,6 +330,63 @@ fn a_raw_output_carries_converted_bytes() {
     ));
 }
 
+/// A real stream with a real raw format gets the real automatic `convert_out` node (D3164,
+/// M10): `f32` audio to `rs16` PCM, in `f32` and in a `Q15` pipeline, byte for byte the kernel
+/// `convert_out_real`.
+#[test]
+fn a_real_raw_output_carries_pcm_bytes() {
+    use sdrk_core::kernels::convert::ConvertOutReal;
+    for precision in ["f32", "q15"] {
+        let mut p = build(
+            &json!({
+                "sdrk": 1, "name": "pcm", "settings": { "precision": precision, "max_chunk": 64 },
+                "inputs": { "au": { "type": precision, "rate_hz": 48000 } },
+                "nodes": { "d": { "kind": "delay", "params": { "samples": 0 } } },
+                "edges": [ { "from": "au", "to": "d" }, { "from": "d", "to": "out" } ],
+                "outputs": { "out": { "type": "stream", "format": "rs16", "capacity": 64 } }
+            })
+            .to_string(),
+        );
+        let audio = [0.5f32, -0.5, 1.0, -1.5, 0.25];
+        if precision == "f32" {
+            p.push("au", InputData::F32(&audio)).unwrap();
+        } else {
+            let q: Vec<Q15> = audio
+                .iter()
+                .map(|&x| Q15((x * 32768.0).clamp(-32768.0, 32767.0) as i16))
+                .collect();
+            p.push("au", InputData::Q15(&q)).unwrap();
+        }
+        let mut want = [0u8; 10];
+        let mut q = [Q15(0); 5];
+        for (d, &x) in q.iter_mut().zip(&audio) {
+            *d = Q15((x * 32768.0).clamp(-32768.0, 32767.0) as i16);
+        }
+        let n = if precision == "f32" {
+            ConvertOutReal::<f32>::convert_out_real(
+                &sdrk::Sdrk,
+                &sdrk_device::formats::RS16,
+                &audio,
+                &mut want,
+            )
+        } else {
+            ConvertOutReal::<Q15>::convert_out_real(
+                &sdrk::Sdrk,
+                &sdrk_device::formats::RS16,
+                &q,
+                &mut want,
+            )
+        }
+        .unwrap();
+        assert_eq!(n, 10);
+        assert_eq!(p.available("out").unwrap(), 10, "{precision}");
+        let mut bytes = [0u8; 16];
+        assert_eq!(p.read_raw("out", &mut bytes).unwrap(), 10, "{precision}");
+        assert_eq!(bytes[..10], want, "{precision}");
+        assert_eq!(&bytes[..4], &[0x00, 0x40, 0x00, 0xC0], "{precision}");
+    }
+}
+
 #[test]
 fn the_q15_pipeline_runs_and_outputs_q15() {
     let json = flow("fm_receiver").replace("\"precision\": \"f32\"", "\"precision\": \"q15\"");

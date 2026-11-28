@@ -71,7 +71,7 @@ pub use blocks::bit_scramble::{BitPolynomial, BitScrambleBlock, BitScrambleConfi
 pub use blocks::channel_select::{ChannelSelectBlock, ChannelSelectConfig};
 pub use blocks::channelize::{ChannelizeBlock, ChannelizeConfig};
 pub use blocks::convert::{ConvertBlock, ConvertConfig, ConvertRealBlock};
-pub use blocks::convert_out::{ConvertOutBlock, ConvertOutConfig};
+pub use blocks::convert_out::{ConvertOutBlock, ConvertOutConfig, ConvertOutRealBlock};
 pub use blocks::correlate::{
     CORRELATE_MAX_SAMPLES_PER_CHIP, CorrelateBlock, CorrelateConfig, correlate_fft_size,
 };

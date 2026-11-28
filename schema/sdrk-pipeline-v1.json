@@ -1547,7 +1547,7 @@
           },
           {
             "additionalProperties": false,
-            "description": "Converts complex samples to raw device bytes in a sample format.",
+            "description": "Converts complex or real samples to raw device bytes in a sample format.",
             "properties": {
               "align": {
                 "$ref": "#/$defs/AlignMode"
@@ -1594,7 +1594,7 @@
                         "type": "object"
                       }
                     ],
-                    "description": "Sample format of the output bytes, given by name (for example cs8). Typical: cs8 for HackRF-class transmitters, cs16 for others. Build-time."
+                    "description": "Sample format of the output bytes, given by name (for example cs8). Typical: cs8 for HackRF-class transmitters, cs16 for others, rs16 for real PCM. Build-time."
                   }
                 },
                 "required": [

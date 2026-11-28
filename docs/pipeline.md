@@ -127,7 +127,7 @@ Every input port of a node and every output has exactly one incoming edge. Both 
 | Field | Type | Meaning |
 | --- | --- | --- |
 | `type` | `"stream"`, `"frames"` or `"packets"` | `"stream"` takes the output of a block, `"frames"` the output of a frame block (`spectrum`), `"packets"` the output of a decoder (`frame_decode`) or a packet input. The type must match what the source produces. |
-| `format` | name or object, optional | Stream outputs only: convert to raw bytes in this format (an automatic `convert_out` node). Only complex streams can be converted. |
+| `format` | name or object, optional | Stream outputs only: convert to raw bytes in this format (an automatic `convert_out` node). A complex stream needs an interleaved complex format, a real stream a format with a real layout (`rs16`, `rf32`); otherwise `invalid_value` at `outputs.<name>.format`. |
 | `capacity` | integer, optional | Stream outputs only: size of the output queue in samples (bytes for a raw output), 1 to 2^28. Default `4 * max_chunk`. |
 | `queue` | integer, optional | Frames and packets outputs only: length of the queue in frames, 1 to 65 536, default 4; or in packets, 1 to 65 536, default 64 (`DEFAULT_PACKET_QUEUE`). A packets output has no `format` and no `capacity` (`invalid_value`). |
 | `drop` | `"error"`, `"drop_oldest"`, `"drop_newest"`, optional | What happens when the output is full. Default `"error"`. |
@@ -225,7 +225,7 @@ The invalid-flow corpus in `crates/pipeline/sdrk-pipeline/tests/invalid` has one
 
 `Registry::build(&spec, &opts)` validates first and returns the report as the error if there are errors.
 
-- **Automatic nodes.** An input with a raw `format` gets a node `<input>__convert` (kind `convert`; the real variant for a format with a real layout), and every edge from that input reads the converted stream. A stream output with a `format` gets `<output>__convert_out` (kind `convert_out`). A node with two inputs whose paths differ in group delay gets `<node>__align` (kind `delay`) in front of the faster port. Automatic nodes appear in the report (`auto: true`) and in the statistics, but not in the readout of `config()`, which reproduces the user's description.
+- **Automatic nodes.** An input with a raw `format` gets a node `<input>__convert` (kind `convert`; the real variant for a format with a real layout), and every edge from that input reads the converted stream. A stream output with a `format` gets `<output>__convert_out` (kind `convert_out`; the real variant for a format with a real layout). A node with two inputs whose paths differ in group delay gets `<node>__align` (kind `delay`) in front of the faster port. Automatic nodes appear in the report (`auto: true`) and in the statistics, but not in the readout of `config()`, which reproduces the user's description.
 - **Order.** Topological order; ties are broken by the first appearance of a node in `edges`. The automatic input converters come first, the output converters last.
 - **Buffers.** One linear buffer per node output and per input, shared by all readers: each reader has its own position (zero-copy fan-out). The capacity of the buffer after node `k` is `ceil(max_chunk * R_k) + min_input + 64` elements, where `R_k` is the rate of the buffer divided by the rate of its input (exact; times the bytes per sample for a raw buffer) and `min_input` is the largest `min_input` of the readers; it is at least the smallest output of the writer plus 64 (`ceil(min_input R)` of the writer node, which only `correlate` with a block size above `max_chunk` reaches, D2617). The two ports of a node run at the same rate and come from the same input, so both buffers use the same `R_k`. A writer compacts the buffer (moves unread data to the front) when the free tail is smaller than what the node could write, so every block sees contiguous input. Every output has its own queue behind the buffer, which is where the drop policies apply.
 - **Lane buffers** (M45). A lane stream gets one buffer of `capacity_steps · width` values, with `capacity_steps` from the rule above in steps (the step rate, the `min_input` of the readers in steps); all readers share it. The memory estimate counts `width` values per step. The runner views it in whole steps (`NodeInput::Lanes { data, width }`, `NodeOutput::Lanes`), so no allocation happens after `build`.
@@ -295,7 +295,7 @@ The cost is an estimate, in multiply-accumulates (a complex tap counts like the 
 
 | Kind | Cost |
 | --- | --- |
-| `convert`, `convert_out` | 2 |
+| `convert`, `convert_out` | 2 (1 for a format with a real layout) |
 | `scale` | 1 |
 | `dc_block` (complex or real input), `squelch` | 3 |
 | `agc` | 6 |

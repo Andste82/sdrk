@@ -29,6 +29,37 @@ use crate::cycle_gate::{Pair, Results};
 /// SIMD entry is reported (O2 group 5, the target of the round).
 pub const SIMD_SHARE: f64 = 0.80;
 
+/// The explicit SIMD paths at about 1.00 of their fallback that the maintainer's rule D3019
+/// accepts (entry, level): the report names them, marked [`ACCEPTED`], because a path of its own
+/// keeps the speed independent of the compiler's auto-vectorisation of the fallback; such a
+/// path is preferred over a switch to the fallback and is never deleted as a duplicate. The
+/// AVX2 paths of `interleave`, `interleave_cq15` and `deinterleave` and the NEON paths of
+/// `stereo_matrix` and `stereo_matrix_cq15` (removed by D2971 and D2972, restored by D3020),
+/// `stereo_matrix` at `avx2` (D3011), the SSE2 paths of the two `Q15` biquads (D3015), `mag` at
+/// `avx512` and `neon` (IO2-11) and `mul` at `sse2` (IO2-12).
+pub const EXPLICIT_FORM: [(&str, &str); 11] = [
+    ("biquad_cq15", "sse2"),
+    ("biquad_real_q15", "sse2"),
+    ("deinterleave", "avx2"),
+    ("interleave", "avx2"),
+    ("interleave_cq15", "avx2"),
+    ("mag", "avx512"),
+    ("mag", "neon"),
+    ("mul", "sse2"),
+    ("stereo_matrix", "avx2"),
+    ("stereo_matrix", "neon"),
+    ("stereo_matrix_cq15", "neon"),
+];
+
+/// The mark of an entry of [`EXPLICIT_FORM`] in the report.
+pub const ACCEPTED: &str = "accepted: explicit form, compiler-independent";
+
+/// Whether `entry` at `level` is an accepted explicit form ([`EXPLICIT_FORM`]).
+#[must_use]
+pub fn accepted(entry: &str, level: &str) -> bool {
+    EXPLICIT_FORM.contains(&(entry, level))
+}
+
 /// The level that is left out of the inventory without a foreign reference (D2764).
 const RUNTIME_LEVEL: &str = "avx2-runtime";
 /// The suffix of the fallback entry of a kernel.
@@ -137,6 +168,10 @@ impl Share {
         };
         if self.delegated {
             s.push_str(" (runs the fallback)");
+        } else if accepted(&self.entry, &self.level) {
+            s.push_str(" (");
+            s.push_str(ACCEPTED);
+            s.push(')');
         }
         s
     }
@@ -237,8 +272,12 @@ pub fn print(shares: &[Share], unreferenced: &BTreeMap<String, Vec<String>>) {
         e.len()
     };
     let delegated = shares.iter().filter(|s| s.delegated).count();
+    let explicit = shares
+        .iter()
+        .filter(|s| !s.delegated && accepted(&s.entry, &s.level))
+        .count();
     println!(
-        "check cycles (report, no failure): {} SIMD entries at {} levels need more than {SIMD_SHARE:.2} of the cycles per sample of their own fallback on a model ({delegated} of the levels run the fallback; at `simd128` instructions per sample); share of the fallback, reference / counter model (O2 group 5, issue #203 B)",
+        "check cycles (report, no failure): {} SIMD entries at {} levels need more than {SIMD_SHARE:.2} of the cycles per sample of their own fallback on a model ({delegated} of the levels run the fallback, {explicit} are marked `{ACCEPTED}` (D3019); at `simd128` instructions per sample); share of the fallback, reference / counter model (O2 group 5, issue #203 B)",
         entries(shares),
         shares.len(),
     );
@@ -357,6 +396,44 @@ mod tests {
         assert!(s[1].delegated);
         assert_eq!(s[0].describe(), "`avx2` 0.50 / 0.90");
         assert_eq!(s[1].describe(), "`avx2` 1.00 / 1.00 (runs the fallback)");
+    }
+
+    #[test]
+    fn an_accepted_explicit_form_is_marked_and_a_delegation_is_not() {
+        // D3019: an explicit path at about 1.00 of its fallback is reported and marked; the
+        // same entry and level running the fallback is marked as such.
+        let r = results(
+            "avx2",
+            vec![
+                ("interleave", lib((1.00, 1.00))),
+                ("interleave_fallback", lib((1.00, 1.00))),
+                ("deinterleave", own((1.00, 1.00))),
+                ("deinterleave_fallback", lib((1.00, 1.00))),
+                ("add", lib((1.00, 1.00))),
+                ("add_fallback", lib((1.00, 1.00))),
+            ],
+        );
+        let s = simd_shares(&pairs(&r), &Counts::new(), &any);
+        let d: Vec<String> = s.iter().map(Share::describe).collect();
+        assert_eq!(
+            d,
+            [
+                "`avx2` 1.00 / 1.00",
+                "`avx2` 1.00 / 1.00 (runs the fallback)",
+                "`avx2` 1.00 / 1.00 (accepted: explicit form, compiler-independent)",
+            ]
+        );
+        assert!(accepted("stereo_matrix_cq15", "neon"));
+        assert!(!accepted("stereo_matrix_cq15", "avx2"));
+        // Every listed entry is a SIMD entry of the plan at a level it is measured at.
+        for (entry, level) in EXPLICIT_FORM {
+            let spec = crate::bench::KERNELS.iter().find(|k| k.name == entry);
+            let plan = PLANS.iter().find(|p| p.level == level);
+            assert!(
+                spec.zip(plan).is_some_and(|(k, p)| k.family.measured_at(p)),
+                "{entry} at {level}"
+            );
+        }
     }
 
     #[test]

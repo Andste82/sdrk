@@ -39,8 +39,13 @@ use crate::suite::Failure;
 
 /// Sample rate of the kernel cases (the pilot is below `fs / 4`).
 const FS: u64 = 80_000;
-/// Length of the pilot signals: the lock detector (50 ms) needs about 2000 samples to switch on.
-const N: usize = 2800;
+/// Length of the pilot signals: the lock detector (50 ms) needs about 3700 samples to pass
+/// `on = 0.6 kd` (D3160).
+const N: usize = 4600;
+/// Output samples per call when the reference and the chunk plans are compared with the
+/// fallback piece by piece (the plans cut at most 500 samples), so that the case needs no second
+/// output buffer of `N` samples and fits the 80 KiB arena of the quick tier.
+const PIECE: usize = 512;
 /// Length of the matrix signals.
 const NM: usize = 1500;
 /// Chunk plans per type.
@@ -105,29 +110,34 @@ fn split_mut<X>(s: &mut [X], n: usize) -> Result<(&mut [X], &mut [X]), Failure> 
 }
 
 /// Runs the facade over the signal in the chunks of `plan`.
-fn pll_chunked<T: RealSample>(
+/// Runs `kernel` over `mpx` and `pilot` in pieces of the sizes `sizes` (each at most
+/// `scratch.len()`) and compares every piece of the output with `want`; true when all are
+/// bit-exact.
+fn pll_pieces<T: RealSample, K: StereoPll<T>>(
+    kernel: &K,
     st: &mut StereoPllState<T>,
     mpx: &[T],
     pilot: &[T],
-    out: &mut [T::Complex],
-    plan: ChunkPlan,
-) -> Result<(), Failure>
-where
-    Sdrk: StereoPll<T>,
-{
-    let (mut m, mut p, mut o) = (mpx, pilot, out);
-    for size in plan.sizes() {
+    want: &[T::Complex],
+    scratch: &mut [T::Complex],
+    sizes: impl Iterator<Item = usize>,
+) -> Result<bool, Failure> {
+    let (mut m, mut p, mut w) = (mpx, pilot, want);
+    let mut same = true;
+    for size in sizes {
         if m.is_empty() {
             break;
         }
-        let n = size.min(m.len());
+        let n = size.min(m.len()).min(scratch.len());
         let (mh, mt) = split(m, n)?;
         let (ph, pt) = split(p, n)?;
-        let (oh, ot) = split_mut(o, n)?;
-        StereoPll::<T>::stereo_pll(&Sdrk, st, mh, ph, oh)?;
-        (m, p, o) = (mt, pt, ot);
+        let (wh, wt) = split(w, n)?;
+        let (oh, _) = split_mut(scratch, n)?;
+        kernel.stereo_pll(st, mh, ph, oh)?;
+        same &= bit_exact(wh, oh).is_none();
+        (m, p, w) = (mt, pt, wt);
     }
-    Ok(())
+    Ok(same)
 }
 
 /// Fallback and Reference agree bit for bit (output and state), the loop locked and switched
@@ -142,12 +152,20 @@ where
     let mpx = c.take::<T>(N)?;
     let pilot = c.take::<T>(N)?;
     let fb = c.take::<T::Complex>(N)?;
-    let rf = c.take::<T::Complex>(N)?;
+    let piece = c.take::<T::Complex>(PIECE)?;
     fill(mpx, pilot);
     let (mut a, mut b) = (state::<T>()?, state::<T>()?);
     StereoPll::<T>::stereo_pll(&Fallback, &mut a, mpx, pilot, fb)?;
-    StereoPll::<T>::stereo_pll(&Reference, &mut b, mpx, pilot, rf)?;
-    ensure(bit_exact(fb, rf).is_none(), || {
+    let same = pll_pieces(
+        &Reference,
+        &mut b,
+        mpx,
+        pilot,
+        fb,
+        piece,
+        core::iter::repeat(PIECE),
+    )?;
+    ensure(same, || {
         Failure::new(case, "reference differs from the fallback")
     })?;
     ensure(a == b, || Failure::new(case, "final state differs"))?;
@@ -162,8 +180,8 @@ where
     for seed in 0..PLANS {
         let plan = ChunkPlan::new(4300 + seed, 1 + (seed as usize * 37) % 500);
         let mut st = state::<T>()?;
-        pll_chunked(&mut st, mpx, pilot, rf, plan)?;
-        ensure(bit_exact(fb, rf).is_none() && st == a, || {
+        let same = pll_pieces(&Sdrk, &mut st, mpx, pilot, fb, piece, plan.sizes())?;
+        ensure(same && st == a, || {
             Failure::new(case, "output depends on the block size")
         })?;
     }

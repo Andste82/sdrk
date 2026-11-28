@@ -260,12 +260,13 @@ fn the_lock_follows_the_documented_positions() {
     let Array::U8(flags) = case.array("stereo").unwrap() else {
         panic!("u8 flags expected");
     };
-    // Off at the start, on after the 50 ms detector has passed 0.4 kd (about 5000 samples),
-    // and still on at the end: the pilot has vanished only 4096 samples before (see D112).
-    assert!(flags[..4000].iter().all(|&f| f == 0));
-    assert!(flags[6000..12_000].iter().all(|&f| f == 1));
+    // Off at the start, on after the 50 ms detector has passed 0.6 kd (about 9300 samples, in
+    // the fade of the pilot that starts at 8192; D3160), and still on at the end: the pilot has
+    // vanished only 4096 samples before (see D112).
+    assert!(flags[..8800].iter().all(|&f| f == 0));
+    assert!(flags[9800..].iter().all(|&f| f == 1));
     let first_on = flags.iter().position(|&f| f == 1).unwrap();
-    assert!((4500..5500).contains(&first_on), "locked at {first_on}");
+    assert!((8800..9800).contains(&first_on), "locked at {first_on}");
     // The difference channel is zero exactly while the flag is off.
     let Array::CF32(out) = case.array("expected").unwrap() else {
         panic!("cf32 expected");
@@ -279,7 +280,7 @@ fn the_lock_follows_the_documented_positions() {
 
 #[test]
 fn disabling_zeroes_the_difference_channel_from_the_listed_sample() {
-    // The case of the milestone disables before the lock (about sample 5000): the difference
+    // The case of the milestone disables before the lock (sample 4096): the difference
     // channel is zero throughout.
     let case = golden::load("stereo_pll", "disable_f32_8192").unwrap();
     let at = usize::try_from(case.param_u64("disable_at").unwrap()).unwrap();

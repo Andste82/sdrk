@@ -24,9 +24,11 @@
 //! `256 sum_h + sum_l` to the `i64` run sum. From AVX2 the two sums take one pass each (one sum
 //! per loop, which the compiler turns into `pmaddwd` of adjacent pairs), at SSE2 one pass for
 //! both; slices shorter than one block keep the widening form, which has no fixed cost per
-//! block. The values are the same. SSE4.2 (`pmovsxwq`, `pmuldq`), `dot` `CQ15` (where the split
-//! simulated slower on one core model of every x86 level) and the other targets keep the
-//! widening form.
+//! block. The values are the same. SSE4.2 (`pmovsxwq`, `pmuldq`) and the other targets keep the
+//! widening form. `dot` `CQ15` below AVX2 sums whole blocks of eight samples by `pmaddwd` in the
+//! module `q15_x86` (the taps split once per block, D3101); from AVX2 and on the other targets
+//! it keeps the widening form (the compiled byte split simulated slower on one core model of
+//! every x86 level).
 //!
 //! The `f32` sum of `dot_real` on x86-64 from AVX2, on AArch64 and on wasm32 forms the products
 //! of eight samples first (independent, so the compiler computes them in one vector) and adds

@@ -1,9 +1,11 @@
 //! The one x86-64 module of `core::arch` for the `Q15` / `CQ15` fallbacks (the maintainer's
 //! decision D3017 on IO2-23, extending D3005): `pmaddwd` (`_mm_madd_epi16`) for the exact
 //! sums of the FIR fallbacks (IO1-5 `fir_decimate` `CQ15`, IO1-6 the `Q15` / `CQ15`
-//! interpolators) and `vpmulhrsw` for `mul_real` `Q15` with AVX2 (IO1-7). The compiler forms
-//! neither instruction from the portable code (O1, O2b), so the fallbacks name them here. The
-//! 256-bit form of `mag_sq` `C32` with AVX-512 (IO1-7) was measured and not taken: CI run
+//! interpolators) and of `dot` `CQ15` below AVX2 (D3101), `vpmulhrsw` for `mul_real` `Q15` with
+//! AVX2 (IO1-7), the blends and packs of `deinterleave` `CQ15` with AVX2 (D3103), and the one
+//! `C32` form of IO1-7, `mag_sq` with AVX-512 (the squares first, then two `vpermt2ps`, D3102).
+//! The compiler forms none of them from the portable code (O1, O2b, O3a), so the fallbacks name
+//! them here. The 256-bit form of `mag_sq` with AVX-512 was measured and not taken: CI run
 //! 46126247106 gave 0.26 / 0.39 cycles per sample on `znver4` / `sapphirerapids` against 0.37 /
 //! 0.26 of the compiled loop (0.840 / 1.405 of CMSIS-DSP against 1.210 / 0.942).
 //!

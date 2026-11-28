@@ -123,8 +123,9 @@ pub(crate) mod modulate;
 mod noise;
 mod noise_blank;
 mod preemph_limit;
-/// `core::arch` for the `Q15` / `CQ15` fallbacks on x86-64 (`pmaddwd`, `vpmulhrsw`; the
-/// maintainer's decision D3017).
+/// `core::arch` for the `Q15` / `CQ15` fallbacks on x86-64 (`pmaddwd`, `vpmulhrsw`, the packs of
+/// `deinterleave`) and the AVX-512 `mag_sq` of IO1-7 (the maintainer's decision D3017; D3101 to
+/// D3103).
 #[cfg(target_arch = "x86_64")]
 #[allow(unsafe_code, reason = "x86 intrinsics of the Q15 fallbacks, D3017")]
 mod q15_x86;

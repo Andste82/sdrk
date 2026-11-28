@@ -2030,8 +2030,7 @@
       "status": "release"
     },
     "neon": {
-      "status": "dev",
-      "waiver": "not faster yet, no reason in the work or the accuracy: 1.13 / 0.79 of CMSIS-DSP's `arm_fir_interpolate_f32` on `cortex-a72` / `cortex-a76`, not analysed yet (IO1-7); open item IO1-7"
+      "status": "release"
     },
     "simd128": {
       "status": "dev",
@@ -4048,8 +4047,7 @@
       "status": "release"
     },
     "avx2": {
-      "status": "dev",
-      "waiver": "not faster yet, no reason in the work or the accuracy: 0.23 / 0.23 against 0.20 / 0.26 cycles per sample of VOLK's `generic` `volk_16ic_deinterleave_16i_x2` on `znver3` / `alderlake` (1.14 / 0.86); blocks of 8 to 32 samples and the 32-bit word form were tried and were slower (IO1-7); open item IO1-7"
+      "status": "release"
     },
     "avx512": {
       "status": "release"

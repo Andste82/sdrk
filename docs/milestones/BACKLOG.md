@@ -63,6 +63,15 @@ The RISC-V Vector backend is milestone [M17](M17-rvv-backend.md), the Arm DSP-ex
 - **Optional:** GStreamer-style shorthand for flows (`rf ! ddc frequency_hz=600e3 ! fm_demod ! out`) compiled to the JSON model; compiling a JSON flow into heap-free Rust code for MCUs.
 - **Release work:** check that `sdrk` is free on crates.io and npm, crates.io publishing in the order given in CONTRIBUTING.md, npm package name.
 
+## Parked open items
+
+Moved here from [`docs/open-items.md`](../open-items.md) on 2026-11-28 by the maintainer's review (D3150): each waits for an input that is not in sight, not for a decision. The ids stay, so the references in the milestones and the decisions log still lead here.
+
+- **M14-1, the npm package (from M14):** `sdrk-wasm` is not published and the name is not reserved (`npm view sdrk-wasm` answered 404 on 2026-10-19). `cargo xtask wasm-pkg` makes the tarball. Open: the final name (unscoped `sdrk-wasm` or a scope), who publishes and when (with the crates.io release of the release work above); re-check the name right before the first `npm publish`.
+- **M15-2 to M15-4, the ESP32 targets and the emulators (from M15; paused in CI since 2026-11-01, D201):** M15-2: `xtask emu` and the pinned archives for Linux arm64 and Windows x86-64 have never run (only Linux x86-64 here). M15-3: the `hardware` build of the ESP32-S3 target (`esp_hal::init`) has never run on a board (confirm `SDRK-SUITE END` on UART0 and whether `CPENABLE` is set). M15-4: `esp-emu` (Beta, binaries only) and the Espressif QEMU fork are pinned with SHA-256 checksums, but their upstream availability is not assured. Taken up when the ESP32 work resumes.
+- **I44-15, the misprediction penalty of `cortex-a76` (from M44, D1612):** 11 cycles is provisional (Arm's disclosure of the core; the Cortex-A76 Software Optimization Guide is withdrawn). It stays until the measurement of D1628 (20 cycles on a Raspberry Pi 4, `cortex-a72`) is repeated on a Raspberry Pi 5. It matters at `neon` only for a form whose AArch64 assembly branches on the data (D1611).
+- **I46-3, `bresser_3ch` (from M46, D1119):** (a) the number of identical frames in normal operation (the family description says about 15 every 60 s; the TX-button bursts of the maintainer's sensor had 20 to 24; the decoder needs one frame); (b) the product name of the label "AS2-WS-6B, type 60109". Needs a recording of a real `bresser_3ch` in its normal 60 s cycle, or the vendor of the label.
+
 ## Later (prepared, not scheduled)
 
 - Multi-threaded runner that sleeps when idle, using node groups (M11) as the partitioning unit; node groups on MCU cores.

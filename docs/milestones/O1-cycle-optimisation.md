@@ -2,7 +2,7 @@
 
 > Plan: [M13.1](M13.1-cycles-only.md) (cycles per sample as the speed measure, the like-with-like statuses of D2764 to D2779) · Open items it works on: I13.1-7, I13.1-8, I13.1-9, I13.1-10, I24-3 ([open-items.md](../open-items.md)) · Next: [BACKLOG](BACKLOG.md)
 
-> **Status: done, in review** (planned 2026-11-24 on the maintainer's order of the same day; branch `opt-round-cycles` from `main` 6274f880, rebased onto `main` 4abc79a9 as `opt-round-cycles-r`, D2860). Open for the maintainer: IO1-2 to IO1-9, I13.1-9 (the 7 % of `fir_interpolate_real_q15`). Decision numbers D2800 to D2899, open items IO1-1 to IO1-n. No seeds.
+> **Status: done** (merged 2026-11-25, PR #204; planned 2026-11-24 on the maintainer's order of the same day; branch `opt-round-cycles` from `main` 6274f880, rebased onto `main` 4abc79a9 as `opt-round-cycles-r`, D2860). Open: IO1-7 and IO1-8; IO1-1 to IO1-6 and IO1-9 are closed by O2 (D2954, D2955, D3005, D3017, D2974) or removed (IO1-1, I13.1-9, D3150). Decision numbers D2800 to D2899, open items IO1-1 to IO1-n. No seeds.
 
 ## Goal
 

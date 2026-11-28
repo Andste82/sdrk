@@ -122,8 +122,8 @@ pub fn parse_cachegrind(text: &str) -> anyhow::Result<Branches> {
 ///   length, and a slope of 19.61 over a random share of 0 to 100 %. Arm's Cortex-A72 software
 ///   optimization guide (UAN 0016A) gives no figure.
 /// - `cortex-a76`: 11, provisional: the Cortex-A76 software optimization guide could not be
-///   obtained; the value is Arm's own microarchitecture disclosure, to be confirmed (open item
-///   I44-15).
+///   obtained; the value is Arm's own microarchitecture disclosure, to be confirmed by a
+///   measurement on a Raspberry Pi 5 (I44-15, parked in `docs/milestones/BACKLOG.md`).
 #[must_use]
 pub fn penalty(cpu: &str) -> Option<f64> {
     match cpu {

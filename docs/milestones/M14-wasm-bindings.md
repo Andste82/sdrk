@@ -6,7 +6,7 @@
 
 Fully completed: the `sdrk-wasm` crate (cdylib + rlib) with JS loader, builder and TypeScript declarations; the two WASM builds (with and without SIMD128) selected at load time and the opt-in relaxed-SIMD build; `cargo xtask wasm-pkg` (including `--relaxed`) and the packed tarball; tests in Node, headless Chrome and headless Firefox plus `node --test` on the packed tarball; `docs/wasm.md`. All R1.2 commands pass locally.
 
-Partial / open (tracked in [`docs/open-items.md`](../open-items.md)): M14-1 (npm package name and publishing are a maintainer decision). The CI jobs `wasm-bindings` and `wasm-package` run on the repository and `wasm-bindings` is green. Judgement calls are in [`docs/decisions-log.md`](../decisions-log.md).
+Partial / open (parked in [`BACKLOG.md`](BACKLOG.md#parked-open-items) since 2026-11-28, D3150): M14-1 (npm package name and publishing are a maintainer decision). The CI jobs `wasm-bindings` and `wasm-package` run on the repository and `wasm-bindings` is green. Judgement calls are in [`docs/decisions-log.md`](../decisions-log.md).
 
 ## Goal
 

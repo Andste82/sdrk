@@ -494,7 +494,7 @@ fn progression_of<'a, T: FbMac + 'a, const G: usize>(
     count: usize,
     dst: impl Iterator<Item = &'a mut T>,
 ) -> Result<()> {
-    progression_at::<Native, T, G>(Native, taps, l, hist, input, phase, seen, s, count, dst)
+    progression_at::<Native, T, G, false>(Native, taps, l, hist, input, phase, seen, s, count, dst)
 }
 
 /// [`progression_of`] with the groups compiled for the target `B`.
@@ -504,7 +504,7 @@ fn progression_of<'a, T: FbMac + 'a, const G: usize>(
     reason = "the group size and the strides must be constants in the hot loops"
 )]
 #[inline(always)]
-fn progression_at<'a, B: Target, T: FbMac + 'a, const G: usize>(
+fn progression_at<'a, B: Target, T: FbMac + 'a, const G: usize, const HEAD: bool>(
     target: B,
     taps: &[T::Tap],
     l: usize,
@@ -523,9 +523,11 @@ fn progression_at<'a, B: Target, T: FbMac + 'a, const G: usize>(
     // magnitudes (at most 2^30 each) stays below 2^63, so for fewer than 2^32 taps.
     let grouped = u32::try_from(len).is_ok();
     let mut t = 0;
-    // Only for windows one sample apart (`fir`, `fir_interpolate`): with `s > 1` the copy
-    // moved a `resample_real` record on `sapphirerapids` past its limit (CI run 46155369153).
-    if grouped && s == 1 && seen < len {
+    // Only for windows one sample apart (`fir`, `fir_interpolate`; `HEAD` is set by the callers
+    // of those): with `s > 1` the copy moved a `resample_real` record on `sapphirerapids` past
+    // its limit (CI run 46155369153), and the instantiations without it keep their code (the
+    // Cortex-M4 count of `fir_decimate`, CI run 46157162937).
+    if HEAD && grouped && s == 1 && seen < len {
         t = head_groups::<B, T, G>(
             target, branch, l, len, hist, input, seen, s, count, &mut dst,
         )?;
@@ -651,11 +653,19 @@ fn progression_with<'a, B: Target, T: FbMac + 'a>(
 ) -> Result<()> {
     // Windows `s > 1` samples apart take one slice per output: 16 of them spilled.
     if T::WIDE && T::LONG && s == 1 {
-        progression_at::<B, T, LONG_GROUP>(target, taps, l, hist, input, phase, seen, s, count, dst)
+        progression_at::<B, T, LONG_GROUP, true>(
+            target, taps, l, hist, input, phase, seen, s, count, dst,
+        )
     } else if T::WIDE && s == 1 {
-        progression_at::<B, T, WIDE_GROUP>(target, taps, l, hist, input, phase, seen, s, count, dst)
+        progression_at::<B, T, WIDE_GROUP, true>(
+            target, taps, l, hist, input, phase, seen, s, count, dst,
+        )
+    } else if s == 1 {
+        progression_at::<B, T, NARROW_GROUP, true>(
+            target, taps, l, hist, input, phase, seen, s, count, dst,
+        )
     } else {
-        progression_at::<B, T, NARROW_GROUP>(
+        progression_at::<B, T, NARROW_GROUP, false>(
             target, taps, l, hist, input, phase, seen, s, count, dst,
         )
     }

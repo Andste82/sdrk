@@ -117,6 +117,10 @@ const SHORT_LANES: usize = 4;
     reason = "clippy counts the temporary of every `?` separately; the real frame is the 256 \
               bytes of the window and the two columns"
 )]
+#[allow(
+    clippy::too_many_lines,
+    reason = "the one-column loop of x86-64 stays inline as it was (D3105)"
+)]
 fn short_interpolate(
     taps: &[f32],
     l: usize,
@@ -189,15 +193,51 @@ fn short_interpolate(
             c += 2 * SHORT_LANES;
         }
         while c + SHORT_LANES <= l {
-            short_columns::<SHORT_LANES>(
-                taps,
-                l,
-                c,
-                (full, rem),
-                (wa, wb),
-                (la, lb),
-                (&mut *ya, yb.as_deref_mut()),
-            )?;
+            let mut sums = [[0.0f32; SHORT_LANES]; 4];
+            let [ra, ia, rb, ib] = &mut sums;
+            for ((r, x), y) in (0..full).zip(wa.iter().rev()).zip(wb.iter().rev()) {
+                let t: &[f32; SHORT_LANES] = taps
+                    .get(r * l + c..r * l + c + SHORT_LANES)
+                    .and_then(|t| t.try_into().ok())
+                    .ok_or_else(internal)?;
+                for (((a, b), (d, e)), t) in ra
+                    .iter_mut()
+                    .zip(ia.iter_mut())
+                    .zip(rb.iter_mut().zip(ib.iter_mut()))
+                    .zip(t)
+                {
+                    *a += t * x.re;
+                    *b += t * x.im;
+                    *d += t * y.re;
+                    *e += t * y.im;
+                }
+            }
+            let tail = taps
+                .get(full * l + c..)
+                .unwrap_or_default()
+                .iter()
+                .take(rem.saturating_sub(c).min(SHORT_LANES));
+            for (((a, b), (d, e)), t) in ra
+                .iter_mut()
+                .zip(ia.iter_mut())
+                .zip(rb.iter_mut().zip(ib.iter_mut()))
+                .zip(tail)
+            {
+                *a += t * la.re;
+                *b += t * la.im;
+                *d += t * lb.re;
+                *e += t * lb.im;
+            }
+            let col = ya.get_mut(c..c + SHORT_LANES).ok_or_else(internal)?;
+            for (o, (a, b)) in col.iter_mut().zip(ra.iter().zip(ia.iter())) {
+                *o = C32::new(*a, *b);
+            }
+            if let Some(yb) = yb.as_deref_mut() {
+                let col = yb.get_mut(c..c + SHORT_LANES).ok_or_else(internal)?;
+                for (o, (a, b)) in col.iter_mut().zip(rb.iter().zip(ib.iter())) {
+                    *o = C32::new(*a, *b);
+                }
+            }
             c += SHORT_LANES;
         }
         // The outputs beyond the last whole column (`L` not a multiple of `SHORT_LANES`).
@@ -209,10 +249,15 @@ fn short_interpolate(
     }
     Ok(())
 }
+
 /// The outputs `c .. c + W` of the samples `a` and `b` of [`short_interpolate`] (`W` a multiple
 /// of [`SHORT_LANES`]): `full` rows of `L` taps and the last row of `rem` taps over the windows
 /// `wa` and `wb` (oldest first, `la` and `lb` their oldest samples), rows ascending, into `ya`
 /// and `yb`.
+#[cfg(any(
+    target_arch = "aarch64",
+    all(target_arch = "wasm32", target_feature = "simd128")
+))]
 #[allow(
     clippy::inline_always,
     reason = "the width must be a constant in the hot loop of its caller"

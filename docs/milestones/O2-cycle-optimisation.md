@@ -603,7 +603,7 @@ The maintainer's order of 2026-11-27 ("ja, wie vorgeschlagen die punkte erledige
 | `convert_out_real_ru8` | `avx2-runtime` | judged against VOLK of `avx2` | 0.27 / 0.34 | 0.28 / 0.30 (VOLK) | 0.989 / 1.118 | znver3 / alderlake | `release`, contract trade | D3000, D3001 |
 | `convert_out_real_ru8` | `avx512` | none (as `cu8`) | 0.27 / 0.25 | 4.83 / 3.96 (KFR) | 0.057 / 0.064 | znver4 / sapphirerapids | `release` | D3001, IO2-20 |
 | `convert_out_real_ru8` | `neon` | judged against VOLK | 1.47 / 1.06 | 1.34 / 1.08 (VOLK) | 1.102 / 0.985 | cortex-a72 / cortex-a76 | `release`, contract trade | D3000, D3001 |
-| `mul` | `avx512` | the fused 256-bit form of `avx2` instead of the split `zmm` form | 0.45 / 0.51 (was 0.58 / 0.39) | 0.71 / 0.53 (KFR) | 0.638 / 0.974 | znver4 / sapphirerapids | `release`, `cycle_waiver` removed (0.856 / 0.947 of the fallback) | D3004, IO2-15 closed |
+| `mul` | `avx512` | the fused 256-bit form of `avx2` instead of the split `zmm` form | 0.45 / 0.51 (was 0.58 / 0.39) | 0.71 / 0.53 (KFR) | 0.638 / 0.974 | znver4 / sapphirerapids | `release`, `cycle_waiver` removed (0.856 / 0.947 of the fallback); `sapphirerapids` 33 % slower than the old `zmm` form | D3004, IO2-15 closed, IO2-24 |
 | `stereo_matrix_fallback` | `sse2` | the x86 shuffle module (`unsafe` under `cfg(target_feature)`) | 1.03 / 1.09 (was 1.55 / 1.67) | 1.07 / 1.38 (CMSIS-DSP) | 0.963 / 0.790 | skylake / znver2 | `release` (was `dev`) | D3005, IO1-4, IO2-16 closed |
 | `stereo_matrix_fallback` | `sse4.2` | the same | 1.03 / 1.09 (was 1.19 / 1.34) | 1.07 / 1.38 (CMSIS-DSP) | 0.963 / 0.790 | skylake / znver2 | `release` (was `dev`) | D3005 |
 | `stereo_matrix_fallback` | `avx2` | the same, 256-bit | 0.32 / 0.45 (was 0.44 / 0.65) | 0.60 / 0.53 (CMSIS-DSP) | 0.536 / 0.844 | znver3 / alderlake | `release` (was `dev`) | D3005 |
@@ -687,7 +687,7 @@ The six FIR kernels run the progressions of D340 on every level (four outputs pe
 | `resample_real_q15` | `avx512` | 15.10 / 13.26 | 100.33 / 85.43 | 0.151 / 0.155 | 0.332 / 0.425 | znver4 / sapphirerapids |
 | `resample_real_q15` | `neon` | 34.38 / 34.89 | 113.65 / 107.66 | 0.302 / 0.324 | 0.860 / 0.729 | cortex-a72 / cortex-a76 |
 
-The committed record of `fir_decimate_cq15` at `neon` is the fallback again (14.98 / 14.64, 1.000 / 1.000, CI run 46095841119 on 09e396c5). `sse4.2` is unchanged (0.252 to 0.380 / 0.215 to 0.331). `avx2-runtime` runs the same progressions as the fixed `avx2` build (0.997 to 1.003 / 0.986 to 1.019 of it; the D2840 route is gone). `fir_interpolate_cq15` at `neon` is 9 % slower on `cortex-a72` than the branch-by-branch form of D336 (82.71 against 75.80) and 10 % faster on `cortex-a76` (68.10 against 76.00), within the target on both.
+The committed record of `fir_decimate_cq15` at `neon` is the fallback again (14.98 / 14.64, 1.000 / 1.000, CI run 46095841119 on 09e396c5). `sse4.2` keeps the progressions of D340 (0.252 to 0.380 / 0.215 to 0.331 of the fallback); `fir_interpolate_real_q15` and `resample_real_q15` are 1.0 % to 2.7 % slower there than on `main`, the `CQ15` kernels within 0.5 % (IO2-26). `avx2-runtime` runs the same progressions as the fixed `avx2` build (0.997 to 1.003 / 0.986 to 1.019 of it; the D2840 route is gone). `fir_interpolate_cq15` at `neon` is 9 % slower on `cortex-a72` than the branch-by-branch form of D336 (82.71 against 75.80) and 10 % faster on `cortex-a76` (68.10 against 76.00), within the target on both.
 
 `simd128` (instructions per sample, job `count_wasm32` of the full CI run 46095841119 on 09e396c5):
 

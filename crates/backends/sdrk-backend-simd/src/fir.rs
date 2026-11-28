@@ -1501,17 +1501,38 @@ fn drive_polyphase<S: SimdToken, const C: usize>(
 // CQ15 and Q15 progressions: split taps and `pmaddwd` (x86-64, SIMD128), `smull` and `sadalp`
 // (NEON)
 
-/// Storage for the taps of the progressions of the module `prog`: on x86-64 and SIMD128 per
-/// chunk of `W` lanes of the prepared taps (`W` the `i16` lanes of the level's vector) the `W`
-/// high parts and then the `W` low parts ([`split_in_place`]), on NEON the prepared taps in the
-/// order of the paired samples ([`pair_in_place`]). The upper half holds the prepared taps
-/// before the expansion.
+/// Runs `f` on zeroed storage for the taps of the progressions of the module `prog`, of the
+/// smallest of three sizes whose upper half holds `need` lanes of prepared taps: on x86-64 and
+/// SIMD128 per chunk of `W` lanes of the prepared taps (`W` the `i16` lanes of the level's
+/// vector) the `W` high parts and then the `W` low parts ([`split_in_place`]), on NEON the
+/// prepared taps in the order of the paired samples ([`pair_in_place`]). The upper half holds
+/// the prepared taps before the expansion. The sizes keep the zeroing of the usual filters
+/// below 2 KiB (half sizes of 256 and 448 lanes, 1 KiB and 1792 bytes; the largest, `2 CAPACITY`
+/// lanes, 3 KiB): from 2 KiB the `memset` of glibc runs `rep stosb`, which the core models of
+/// `llvm-mca` take as one microcoded instruction per byte (100 cycles on `znver3` and `znver4`,
+/// 8 on `alderlake`), so a 3 KiB zeroing per call of 4096 samples simulated about 70 cycles
+/// per sample on `znver3` (CI run 46085100312, decision D3007). Every half size is a multiple of
+/// 32 lanes, the widest chunk.
 #[cfg(any(
     target_arch = "x86_64",
     target_arch = "aarch64",
     all(target_arch = "wasm32", target_feature = "simd128")
 ))]
-type SplitStorage = [i16; 4 * CAPACITY];
+#[allow(
+    clippy::large_stack_frames,
+    reason = "the lint adds the three arrays of the branches; one of them is live, at most 3072 \
+              bytes"
+)]
+#[inline(always)]
+fn with_split<R>(need: usize, f: impl FnOnce(&mut [i16]) -> R) -> R {
+    if need <= 256 {
+        f(&mut [0i16; 512])
+    } else if need <= 448 {
+        f(&mut [0i16; 896])
+    } else {
+        f(&mut [0i16; 4 * CAPACITY])
+    }
+}
 
 /// The level of `simd` for the progressions of the module `prog`: every x86-64 level from SSE2
 /// on, NEON and SIMD128 (decisions D340 and D3007).
@@ -1550,18 +1571,18 @@ fn split_level<S: SimdToken>(simd: S) -> Option<prog::Split> {
 /// (`h0 h1 h0 h1 h2 h3 h2 h3`, the effect of [`pair_in_place`]). A tap `t` becomes `256 hi + lo` with `lo` the low byte as a
 /// signed value (`-128..=127`) and `hi = (t - lo) / 256` (`-128..=128`). Chunk `k` is read
 /// before it is written, and its `2 W` lanes end at or before the chunks not read yet
-/// (`2 W (k + 1) <= 2 CAPACITY + W (k + 1)` for `k < 2 CAPACITY / W`), so the expansion runs in
-/// place.
+/// (`2 W (k + 1) <= H + W (k + 1)` for `k < H / W`, `H` the half of `s`), so the expansion runs
+/// in place.
 #[cfg(any(
     target_arch = "x86_64",
     all(target_arch = "wasm32", target_feature = "simd128")
 ))]
 #[inline(always)]
-fn split_in_place<const C: usize, const W: usize>(s: &mut SplitStorage, chunks: usize) {
-    const HALF: usize = 2 * CAPACITY;
-    for k in 0..chunks.min(HALF / W) {
+fn split_in_place<const C: usize, const W: usize>(s: &mut [i16], chunks: usize) {
+    let half = s.len() / 2;
+    for k in 0..chunks.min(half / W) {
         let mut v = [0i16; W];
-        if let Some(src) = s.get(HALF + W * k..HALF + W * k + W) {
+        if let Some(src) = s.get(half + W * k..half + W * k + W) {
             v.copy_from_slice(src);
         }
         if C == 2 {
@@ -1588,11 +1609,11 @@ fn split_in_place<const C: usize, const W: usize>(s: &mut SplitStorage, chunks: 
 /// its source, so the move runs in place.
 #[cfg(target_arch = "aarch64")]
 #[inline(always)]
-fn pair_in_place<const C: usize>(s: &mut SplitStorage, chunks: usize) {
-    const HALF: usize = 2 * CAPACITY;
-    for k in 0..chunks.min(HALF / 8) {
+fn pair_in_place<const C: usize>(s: &mut [i16], chunks: usize) {
+    let half = s.len() / 2;
+    for k in 0..chunks.min(half / 8) {
         let mut v = [0i16; 8];
-        if let Some(src) = s.get(HALF + 8 * k..HALF + 8 * k + 8) {
+        if let Some(src) = s.get(half + 8 * k..half + 8 * k + 8) {
             v.copy_from_slice(src);
         }
         if C == 2
@@ -1614,7 +1635,7 @@ fn pair_in_place<const C: usize>(s: &mut SplitStorage, chunks: usize) {
     all(target_arch = "wasm32", target_feature = "simd128")
 ))]
 #[inline(always)]
-fn expand<const C: usize>(level: prog::Split, s: &mut SplitStorage, chunks: usize) {
+fn expand<const C: usize>(level: prog::Split, s: &mut [i16], chunks: usize) {
     #[cfg(target_arch = "aarch64")]
     {
         let _ = level;
@@ -1647,27 +1668,29 @@ fn contiguous_split(
     step: usize,
     count: usize,
 ) {
-    let mut s: SplitStorage = [0; 4 * CAPACITY];
-    if let Some(td) = s.get_mut(2 * CAPACITY..) {
-        prepare_taps::<2>(taps, td);
-    }
     let chunks = (2 * taps.len()).div_ceil(level.lanes());
-    expand::<2>(level, &mut s, chunks);
-    prog::progression::<2>(
-        level,
-        prog::Progression {
-            hist,
-            input,
-            split: &s,
-            chunks,
-            first,
-            stride: step,
-            n: count,
-            out,
-            o0: 0,
-            ostride: 1,
-        },
-    );
+    with_split(chunks * level.lanes(), |s| {
+        let half = s.len() / 2;
+        if let Some(td) = s.get_mut(half..) {
+            prepare_taps::<2>(taps, td);
+        }
+        expand::<2>(level, s, chunks);
+        prog::progression::<2>(
+            level,
+            prog::Progression {
+                hist,
+                input,
+                split: s,
+                chunks,
+                first,
+                stride: step,
+                n: count,
+                out,
+                o0: 0,
+                ostride: 1,
+            },
+        );
+    });
 }
 
 /// `resample` and `fir_interpolate` `CQ15` (`C = 2`), `resample_real` and `fir_interpolate_real`
@@ -1683,7 +1706,7 @@ fn contiguous_split(
 #[allow(
     clippy::large_stack_frames,
     reason = "the lint counts the temporaries of the inlined progressions before optimization; \
-              the one array is the split taps (3072 bytes)"
+              the one array is the split taps (at most 3072 bytes)"
 )]
 #[inline(always)]
 fn polyphase_split<const C: usize>(
@@ -1701,33 +1724,37 @@ fn polyphase_split<const C: usize>(
     if geom.g * C != level.lanes() {
         return Err(window_err());
     }
-    let mut s: SplitStorage = [0; 4 * CAPACITY];
-    if let Some(td) = s.get_mut(2 * CAPACITY..) {
-        prepare_branch_taps(taps, geom, td);
-    }
     let up = geom.up;
-    expand::<C>(level, &mut s, geom.offset(up.min(geom.n)) / level.lanes());
-    let l = i128::try_from(up).map_err(|_| window_err())?;
-    let hist_len = hist.len() / C;
-    for r in 0..up.min(produced) {
-        // `usize` to `i128` is lossless.
-        let (c, phase) = polyphase_output(i128::from(q) + r as i128 * down as i128, l)?;
-        let count = geom.len(phase);
-        let p = prog::Progression {
-            hist,
-            input,
-            split: s.get(prog::PARTS * geom.offset(phase)..).unwrap_or(&[]),
-            chunks: geom.padded(count) / geom.g,
-            first: (hist_len + c).checked_sub(count).ok_or_else(window_err)?,
-            stride: down,
-            n: (produced - r).div_ceil(up),
-            out: &mut *out,
-            o0: r,
-            ostride: up,
-        };
-        prog::progression::<C>(level, p);
-    }
-    Ok(())
+    let need = geom.offset(up.min(geom.n));
+    with_split(need, |s| {
+        let half = s.len() / 2;
+        if let Some(td) = s.get_mut(half..) {
+            prepare_branch_taps(taps, geom, td);
+        }
+        expand::<C>(level, s, need / level.lanes());
+        let s: &[i16] = s;
+        let l = i128::try_from(up).map_err(|_| window_err())?;
+        let hist_len = hist.len() / C;
+        for r in 0..up.min(produced) {
+            // `usize` to `i128` is lossless.
+            let (c, phase) = polyphase_output(i128::from(q) + r as i128 * down as i128, l)?;
+            let count = geom.len(phase);
+            let p = prog::Progression {
+                hist,
+                input,
+                split: s.get(prog::PARTS * geom.offset(phase)..).unwrap_or(&[]),
+                chunks: geom.padded(count) / geom.g,
+                first: (hist_len + c).checked_sub(count).ok_or_else(window_err)?,
+                stride: down,
+                n: (produced - r).div_ceil(up),
+                out: &mut *out,
+                o0: r,
+                ostride: up,
+            };
+            prog::progression::<C>(level, p);
+        }
+        Ok(())
+    })
 }
 
 #[cfg(any(

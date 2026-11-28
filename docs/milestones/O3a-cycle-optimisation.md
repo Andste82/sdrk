@@ -64,7 +64,7 @@ Judged opponent (D2953), count of `count_wasm32` of CI run 46157162937:
 
 The planar progressions of D3100 at `simd128` (information against our fallback): `fir_cq15` 479.46 → 321.72, `fir_decimate_cq15` 93.03 → 58.53, `fir_interpolate_cq15` 504.01 → 326.14, `resample_cq15` 496.32 → 333.51 instructions per sample.
 
-Cortex-M4 (instructions per sample, `count_m4_qemu`): `fir` 510.45 → 484.41 (the head groups); `fir_decimate` 112.28 → 115.44 and 116.97 in CI runs 46157162937 and 46161987773 while its progression shared a function with the head groups; since the last commit it runs the progression of `main` again (a local count gives 112.28; the committed file stays that of `main` until the nightly artifact of the final run, M4_FINAL).
+Cortex-M4 (instructions per sample, `count_m4_qemu`): `fir` 510.45 → 481.59 (the head groups); `fir_decimate` 112.28 → 115.44 and 116.97 in CI runs 46157162937 and 46161987773 while its progression shared a function with the head groups; it runs the progression of `main` again: 112.28 in the final run 46173572651, whose artifact is the committed file (`fir` 481.59, every other kernel unchanged).
 
 ### Item 4: `fft_cq15_1024_fallback` against CMSIS-DSP (D3107, IO3-1)
 

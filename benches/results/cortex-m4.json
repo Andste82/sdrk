@@ -91,7 +91,7 @@
     },
     "fir": {
       "implementation": "fallback",
-      "instructions_per_sample": 510.45
+      "instructions_per_sample": 481.59
     },
     "fir_decimate": {
       "implementation": "fallback",

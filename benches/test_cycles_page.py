@@ -161,16 +161,21 @@ class PageTest(unittest.TestCase):
         self.assertEqual(c[1], '<span class="st">release</span>')
         self.assertEqual(c[2], "2.10 / 2.10")
         self.assertEqual(c[3], "2.00 / 2.00")
-        self.assertEqual(c[4], '<span class="v y">1.050</span> / <span class="v y">1.050</span>')
-        self.assertEqual(c[5], "opponent exact")
+        self.assertEqual(c[4], '<span class="v t-y">1.050</span> / <span class="v t-y">1.050</span>')
+        self.assertEqual(c[5], "−∞")
         self.assertEqual(c[6], "lib 1.0 kernel")
         row = self.tr("avx2", "mag_fallback")
-        self.assertIn('title="SNR ours 120.0 dB / opponent exact"', row)
+        self.assertIn('title="SNR ours 120.0 dB / opponent ∞ (bit-exact: output identical to the f64 reference, '
+                      'no error)"', row)
+        self.assertIn('<td class="n c-ratio y"', row)
+        self.assertIn('<td class="n c-delta r" data-v="-Infinity"', row)
         self.assertIn('title="entry mag_fallback at avx2: Zen 3 / Alder Lake"', row)
         simd = self.cells("simd128", "mag")
         self.assertEqual(simd[2], "3.00")
         self.assertIn('<span class="st vd">waived</span>', simd[1])
-        self.assertEqual(simd[4], '<span class="v r">1.20</span>')
+        self.assertEqual(simd[4], '<span class="v t-r">1.20</span>')
+        self.assertIn('<td class="n c-delta" data-v="0.0" title="both bit-exact', self.tr("simd128", "mag"))
+        self.assertEqual(simd[5], "0")
         self.assertIn("instructions per sample, no CPU model", self.tr("simd128", "mag"))
 
     def test_the_opponent_names_the_volk_protokernel_of_the_level(self):
@@ -266,9 +271,26 @@ class PageTest(unittest.TestCase):
 
     def test_the_checker_finds_a_wrong_colour(self):
         old = self.tr("avx2", "mag_sq")
-        code, out = self.broken(old, old.replace('class="v lb"', 'class="v r"'))
+        code, out = self.broken(old, old.replace('class="v t-lb"', 'class="v t-r"'))
         self.assertEqual(code, 1)
         self.assertIn("page avx2 mag_sq: ratio colour", out)
+
+    def test_a_cell_has_the_colour_of_its_worse_number(self):
+        r = cp.rows_of({"x86_64": self.cycles}, self.wasm, self.limits)[0]
+        self.assertEqual(cp.band_of(["g", "r"]), "r")
+        self.assertEqual(cp.band_of(["lb", "y"]), "lb")
+        self.assertEqual(cp.band_of(["g", "y"]), "y")
+        self.assertTrue(all("c-ratio" in self.tr(x["level"], x["name"]) for x in r))
+        self.assertNotRegex(self.html, r'class="v (g|y|r|lb)"')  # no inner background boxes
+        self.assertEqual(cp.snr_delta(999.0, 50.0)[:2], ("+∞", "Infinity"))
+        self.assertIn("∞ = bit-exact: the output is bit-identical to the f64 reference, so the SNR is infinite.",
+                      self.html)
+
+    def test_the_checker_finds_a_wrong_cell_colour(self):
+        old = self.tr("avx2", "mag_sq_fallback")
+        code, out = self.broken(old, old.replace('<td class="n c-ratio r"', '<td class="n c-ratio y"'))
+        self.assertEqual(code, 1)
+        self.assertIn("page avx2 mag_sq_fallback: ratio cell colour", out)
 
     def test_the_checker_finds_a_changed_justification(self):
         code, out = self.broken("open item I1-1", "accepted")

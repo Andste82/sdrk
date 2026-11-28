@@ -169,21 +169,27 @@ def snr_class(ours, opp, judged):
     return ""
 
 
+BIT_EXACT = "bit-exact: output identical to the f64 reference, no error"
+
+
 def db(x):
-    return "–" if x is None else ("exact" if x >= ct.EXACT else f"{x:.1f} dB")
+    """An SNR for the tooltip: `∞` for a bit-exact result (999 in the records), else dB."""
+    return "–" if x is None else ("∞" if x >= ct.EXACT else f"{x:.1f} dB")
 
 
 def snr_delta(ours, opp):
+    """The SNR difference: (text, sort value, tooltip). Bit-exact is infinite: `+∞` when only ours
+    is bit-exact, `−∞` when only the opponent is, `0` when both are."""
     if ours is None or opp is None:
-        return "–", None
+        return "–", None, "no SNR"
     if ours >= ct.EXACT and opp >= ct.EXACT:
-        return "0.0", 0.0
+        return "0", 0.0, f"both bit-exact ({BIT_EXACT})"
     if ours >= ct.EXACT:
-        return "ours exact", ct.EXACT
+        return "+∞", "Infinity", f"SNR ours ∞ ({BIT_EXACT}) / opponent {db(opp)}"
     if opp >= ct.EXACT:
-        return "opponent exact", -ct.EXACT
+        return "−∞", "-Infinity", f"SNR ours {db(ours)} / opponent ∞ ({BIT_EXACT})"
     d = round(ours - opp, 1)
-    return ("0.0" if d == 0 else f"{d:+.1f}"), d
+    return ("0.0" if d == 0 else f"{d:+.1f}"), d, f"SNR ours {db(ours)} / opponent {db(opp)}"
 
 
 def reasons_of(limits, name, level):
@@ -446,7 +452,7 @@ def row_html(r, models):
         marks.append(f'<span class="st vd">{esc(r["verdict"])}</span>')
     label = (f'↳ fallback<span class="lv"> ({esc(r["level"])})</span>' if r["fallback"] else esc(r["level"]))
     level_title = f'entry {r["name"]} at {r["level"]}: {cpus(r["level"], models)}'
-    ratios = " / ".join(f'<span class="v {c}">{ratio_text(x, r["unit"])}</span>'
+    ratios = " / ".join(f'<span class="v{" t-" + c if c else ""}">{ratio_text(x, r["unit"])}</span>'
                         for x, c in zip(r["ratio"], r["classes"]))
     info = ""
     if r["vs_fallback"]:
@@ -454,8 +460,7 @@ def row_html(r, models):
     elif r["own_build"]:
         info = "ours / own avx2 build " + " / ".join(f"{x:.2f}" for x in r["own_build"]) + " (information)"
     info_attr = f' title="{esc(info)}"' if info else ""
-    dtext, dval = snr_delta(*r["snr"])
-    snr_title = f"SNR ours {db(r['snr'][0])} / opponent {db(r['snr'][1])}"
+    dtext, dval, snr_title = snr_delta(*r["snr"])
     opp = ('<span class="st own">own (information)</span> ' if r["own"] else "") + esc(r["opponent"])
     why = "".join(f'<div class="why"><b>{esc(label_)}:</b> {clip(text)}</div>' for label_, text in r["reasons"])
     attrs = {"data-level": r["level"], "data-variant": "fallback" if r["fallback"] else "simd",
@@ -470,8 +475,8 @@ def row_html(r, models):
         f'<td class="l c-status">{" ".join(marks)}</td>',
         f'<td class="n c-ours" data-v="{r["ours"][0]!r}">{pair(r["ours"])}</td>',
         f'<td class="n c-opp" data-v="{r["opp"][0]!r}">{pair(r["opp"])}</td>',
-        f'<td class="n c-ratio" data-v="{max(r["ratio"])!r}"{info_attr}>{ratios}</td>',
-        f'<td class="n c-delta {r["snr_class"]}" data-v="{"" if dval is None else repr(dval)}" title="{esc(snr_title)}">{dtext}</td>',
+        f'<td class="n c-ratio{" " + r["band"] if r["band"] else ""}" data-v="{max(r["ratio"])!r}"{info_attr}>{ratios}</td>',
+        f'<td class="n c-delta{" " + r["snr_class"] if r["snr_class"] else ""}" data-v="{"" if dval is None else dval if isinstance(dval, str) else repr(dval)}" title="{esc(snr_title)}">{dtext}</td>',
         f'<td class="l c-opponent" title="{esc(r["compared_with"])}">{opp}</td>',
         f'<td class="l c-why x">{why}</td>',
     ]
@@ -608,7 +613,8 @@ td.x .t{display:none}td.x.open .t{display:inline}td.x.open .m{display:none}
 .why b{color:var(--fg);font-weight:600}
 th .sub{font-weight:400;font-size:11px}
 .g{background:var(--g);color:var(--gf)}.y{background:var(--y);color:var(--yf)}.r{background:var(--r);color:var(--rf)}.lb{background:var(--lb);color:var(--lbf)}
-.v{padding:0 3px;border-radius:3px}
+.t-g{color:var(--gf)}.t-y{color:var(--yf)}.t-r{color:var(--rf)}.t-lb{color:var(--lbf)}
+td.n .v{font-weight:600}
 .st{font-size:11px;border:1px solid var(--line);border-radius:4px;padding:0 5px;color:var(--mut)}
 .st.tr{border-color:var(--acc);color:var(--acc)}
 .st.vd{border-color:var(--rf);color:var(--rf)}
@@ -621,9 +627,9 @@ footer{color:var(--mut);font-size:12px}
 <header>
 <h1>SDRk kernel cycles</h1>
 <div class="meta">@@HEADER@@</div>
-<p class="explain">Simulated cycles per sample of our entry and of its opponent (llvm-mca whole-loop on the execution counts of the counted calls). A cell <code>a / b</code> holds the two CPU models of the level, reference model / counter-model; ours and the opponent run on the same models. The ratio is ours / opponent, the SNR Δ ours minus the opponent in dB against the f64 reference (both values in the tooltip). The status is the entry of <code>benches/limits.json</code>: <code>release</code> at most 1.10 times the opponent on both models, <code>dev</code> at most 1.50, <code>info</code> not judged; an <span class="st tr">accuracy trade</span> (at least 3 dB more accurate than a library below 100 dB, D2760) or a <span class="st tr">contract trade</span> (the library provably does less work, D3000) keeps <code>release</code> up to 1.20. A comparison with our own code is marked <span class="st own">own (information)</span> and decides no status (D2767). The tooltip of the ratio of a SIMD row gives it against our own fallback of the level (information). Click a justification for its full text.</p>
+<p class="explain">Simulated cycles per sample of our entry and of its opponent (llvm-mca whole-loop on the execution counts of the counted calls). A cell <code>a / b</code> holds the two CPU models of the level, reference model / counter-model; ours and the opponent run on the same models. The ratio is ours / opponent, the SNR Δ ours minus the opponent in dB against the f64 reference (both values in the tooltip; <code>+∞</code> when only ours is bit-exact, <code>−∞</code> when only the opponent is, <code>0</code> when both are). The status is the entry of <code>benches/limits.json</code>: <code>release</code> at most 1.10 times the opponent on both models, <code>dev</code> at most 1.50, <code>info</code> not judged; an <span class="st tr">accuracy trade</span> (at least 3 dB more accurate than a library below 100 dB, D2760) or a <span class="st tr">contract trade</span> (the library provably does less work, D3000) keeps <code>release</code> up to 1.20. A comparison with our own code is marked <span class="st own">own (information)</span> and decides no status (D2767). The tooltip of the ratio of a SIMD row gives it against our own fallback of the level (information). Click a justification for its full text.</p>
 <div class="legend"><span>CPUs:</span>@@LEGEND@@</div>
-<div class="legend"><span>Ratio, judged rows only (<code>release</code>, <code>dev</code> against a library):</span><span><i class="g"></i>&le; 1.00</span><span><i class="y"></i>&le; 1.10</span><span><i class="lb"></i>justifiably slower: above 1.10 and at most 1.20 under an accuracy or contract trade (D3050)</span><span><i class="r"></i>above 1.10 otherwise (a waiver names an open item, D2779)</span><span>SNR Δ: <i class="r"></i>more than 1 dB below, <i class="g"></i>at least 3 dB above</span></div>
+<div class="legend"><span>Ratio, judged rows only (<code>release</code>, <code>dev</code> against a library):</span><span><i class="g"></i>&le; 1.00</span><span><i class="y"></i>&le; 1.10</span><span><i class="lb"></i>justifiably slower: above 1.10 and at most 1.20 under an accuracy or contract trade (D3050)</span><span><i class="r"></i>above 1.10 otherwise (a waiver names an open item, D2779)</span><span>SNR Δ: <i class="r"></i>more than 1 dB below, <i class="g"></i>at least 3 dB above</span><span>A coloured cell has the colour of its worse number (red &gt; light blue &gt; yellow &gt; green); each number keeps its own colour as its text colour.</span><span>∞ = bit-exact: the output is bit-identical to the f64 reference, so the SNR is infinite.</span></div>
 </header>
 <main>
 <div class="controls">

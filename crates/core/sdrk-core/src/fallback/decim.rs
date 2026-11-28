@@ -90,10 +90,7 @@ impl FbMac for CQ15 {
             im: acc.1.finish(),
         }
     }
-    #[cfg(any(
-        all(target_arch = "x86_64", not(target_feature = "avx2")),
-        target_arch = "aarch64"
-    ))]
+    #[cfg(any(target_arch = "x86_64", target_arch = "aarch64"))]
     #[inline]
     fn decimate_outputs(
         taps: &[Q15],
@@ -750,10 +747,10 @@ mod a64 {
     }
 }
 
-/// `fir_decimate` `CQ15` on x86-64 below AVX2 and on AArch64: every output as one exact dot
-/// product over its window, in vector lanes of 32-bit pair sums. From AVX2 the grouped engine
-/// stays: there the compiler vectorizes its groups, and the lanes measured 3.3 / 1.3 times
-/// slower (`avx2`, `znver3` / `alderlake`, CI run 45523722662).
+/// `fir_decimate` `CQ15` on x86-64 and AArch64: every output as one exact dot
+/// product over its window, in vector lanes of 32-bit pair sums. On x86-64 this holds from AVX2
+/// on as well since D3017 (the compiled lanes of O1 measured 3.3 / 1.3 times slower than the
+/// grouped engine there, CI run 45523722662; the `pmaddwd` form replaces them).
 ///
 /// The taps are reversed once per call (`r[k] = h[N - 1 - k]` against the samples of the
 /// window, oldest first) and padded with zero taps in front to a multiple of [`PAD`], so that
@@ -780,10 +777,7 @@ mod a64 {
 /// compiler proves the `u32` sums equal to `i64` sums and returns to scalar `i64` products
 /// (x86-64). The outputs whose windows reach into the history are computed in a stack copy of
 /// the zero padding, the history and the start of the input, as the others.
-#[cfg(any(
-    all(target_arch = "x86_64", not(target_feature = "avx2")),
-    target_arch = "aarch64"
-))]
+#[cfg(any(target_arch = "x86_64", target_arch = "aarch64"))]
 mod exact {
     use crate::error::{Error, Result};
     use crate::num::Acc64;
@@ -910,7 +904,22 @@ mod exact {
         if len == 0 || len > MAX_TAPS || hist.len() + 1 != len || s == 0 {
             return None;
         }
-        Some(run(taps, hist, input, seen, s, out))
+        // The split taps in storage of three sizes (x86-64): a zeroed array of the largest size
+        // per call is a `memset` that glibc runs as `rep stosb` from AVX2 on, which `llvm-mca`
+        // takes as about 100 cycles per byte on the AMD models (as in the SIMD backend, D3007).
+        #[cfg(target_arch = "x86_64")]
+        {
+            let units = len.next_multiple_of(PAD) / PER_UNIT;
+            Some(if units <= 8 {
+                run::<8>(taps, hist, input, seen, s, out)
+            } else if units <= 16 {
+                run::<16>(taps, hist, input, seen, s, out)
+            } else {
+                run::<{ MAX_PADDED / PER_UNIT }>(taps, hist, input, seen, s, out)
+            })
+        }
+        #[cfg(target_arch = "aarch64")]
+        Some(run::<0>(taps, hist, input, seen, s, out))
     }
 
     #[allow(
@@ -918,7 +927,7 @@ mod exact {
         reason = "clippy counts the temporary of every `?` separately; the real frame is the \
                   prepared taps (2 KiB of split taps on x86-64)"
     )]
-    fn run(
+    fn run<const U: usize>(
         taps: &[Q15],
         hist: &[CQ15],
         input: &[CQ15],
@@ -940,10 +949,7 @@ mod exact {
             }
         };
         #[cfg(target_arch = "x86_64")]
-        let (mut hi, mut lo) = (
-            [Unit::default(); MAX_PADDED / PER_UNIT],
-            [Unit::default(); MAX_PADDED / PER_UNIT],
-        );
+        let (mut hi, mut lo) = ([Unit::default(); U], [Unit::default(); U]);
         #[cfg(target_arch = "x86_64")]
         let prepared = {
             let hi = hi.get_mut(..padded / PER_UNIT).ok_or_else(internal)?;

@@ -1,9 +1,11 @@
 //! The one x86-64 module of `core::arch` for the `Q15` / `CQ15` fallbacks (the maintainer's
 //! decision D3017 on IO2-23, extending D3005): `pmaddwd` (`_mm_madd_epi16`) for the exact
 //! sums of the FIR fallbacks (IO1-5 `fir_decimate` `CQ15`, IO1-6 the `Q15` / `CQ15`
-//! interpolators), `vpmulhrsw` for `mul_real` `Q15` with AVX2, and the 256-bit form of
-//! `mag_sq` `C32` with AVX-512 (IO1-7). The compiler forms none of these instructions from the
-//! portable code (O1, O2b), so the fallbacks name them here.
+//! interpolators) and `vpmulhrsw` for `mul_real` `Q15` with AVX2 (IO1-7). The compiler forms
+//! neither instruction from the portable code (O1, O2b), so the fallbacks name them here. The
+//! 256-bit form of `mag_sq` `C32` with AVX-512 (IO1-7) was measured and not taken: CI run
+//! 46126247106 gave 0.26 / 0.39 cycles per sample on `znver4` / `sapphirerapids` against 0.37 /
+//! 0.26 of the compiled loop (0.840 / 1.405 of CMSIS-DSP against 1.210 / 0.942).
 //!
 //! Every function gives the bits of the portable form (the tests of each user compare them):
 //!
@@ -20,21 +22,16 @@
 //!   `round_shift(a b, 15)`; only `-32768 * -32768` gives `32768`, which the instruction wraps to
 //!   `-32768` and `sat16` makes `32767`: no other product rounds to `-32768`
 //!   (`-32768 * 32767` gives `-32767`), so a compare with `-32768` and an `xor` restore it.
-//! - **`mag_sq` `C32`.** `re * re + im * im` in this order without FMA, one rounding per
-//!   operation, as the loop: the squares of eight samples, `vshufps` to the planar halves, the
-//!   sum, and `vpermpd` for the order of the samples.
 //!
 //! `cargo xtask check heap` allows `unsafe` in the core layer only in this module and in the
 //! `matrix_x86` module of the `stereo_matrix` fallback (D3012, D3017).
 
-#[cfg(not(target_feature = "avx2"))]
 use core::arch::x86_64::{
     __m128i, _mm_add_epi32, _mm_loadu_si128, _mm_madd_epi16, _mm_setzero_si128,
     _mm_shufflehi_epi16, _mm_shufflelo_epi16, _mm_storeu_si128,
 };
 
 /// Taps split for `pmaddwd`: the high parts `h` and the low parts `l` of `t = 256 h + l`.
-#[cfg(not(target_feature = "avx2"))]
 #[inline(always)]
 #[allow(clippy::inline_always, reason = "the split runs inside the preparation loops")]
 pub(super) fn split(t: i16) -> (i16, i16) {
@@ -42,7 +39,6 @@ pub(super) fn split(t: i16) -> (i16, i16) {
 }
 
 /// The four `i32` lanes of `v`.
-#[cfg(not(target_feature = "avx2"))]
 #[inline(always)]
 #[allow(clippy::inline_always, reason = "a store of a register in the hot loops")]
 fn lanes(v: __m128i) -> [i32; 4] {
@@ -53,7 +49,6 @@ fn lanes(v: __m128i) -> [i32; 4] {
 }
 
 /// `256 H + L` of the lanes `idx` of `h` and `l`, in `i64`.
-#[cfg(not(target_feature = "avx2"))]
 #[inline(always)]
 #[allow(clippy::inline_always, reason = "the finish of every output")]
 fn join(high: [i32; 4], low: [i32; 4], idx: [usize; 2]) -> i64 {
@@ -110,7 +105,6 @@ pub(super) fn sums_real<const N: usize>(
 /// The exact sums `(re, im)` of `N` complex windows `x_j = x[j step..]` (interleaved `re, im`)
 /// of `4 c` samples each, `c = hi.len()`, with the split taps `hi` and `lo` in the blocks
 /// `[t0, t1, t0, t1, t2, t3, t2, t3]` of four consecutive taps. `None` if `x` is too short.
-#[cfg(not(target_feature = "avx2"))]
 #[inline(always)]
 #[allow(clippy::inline_always, reason = "the group size must be a constant in the hot loop")]
 pub(super) fn sums_complex<const N: usize>(
@@ -170,37 +164,6 @@ pub(super) fn mul_real_q15(lhs: &[i16], rhs: &[i16], out: &mut [i16]) -> usize {
             let prod = _mm256_xor_si256(prod, _mm256_cmpeq_epi16(prod, min));
             _mm256_storeu_si256(out.as_mut_ptr().add(at).cast(), prod);
             at += 16;
-        }
-    }
-    done
-}
-
-/// `mag_sq` `C32` with AVX-512 in the 256-bit form: `re * re + im * im` of the samples of
-/// `x` (interleaved) into `out`, eight per step; returns the number of samples done.
-#[cfg(target_feature = "avx512f")]
-#[inline]
-pub(super) fn mag_sq(input: &[f32], out: &mut [f32]) -> usize {
-    use core::arch::x86_64::{
-        _mm256_add_ps, _mm256_castpd_ps, _mm256_castps_pd, _mm256_loadu_ps, _mm256_mul_ps,
-        _mm256_permute4x64_pd, _mm256_shuffle_ps, _mm256_storeu_ps,
-    };
-    let done = (input.len() / 2).min(out.len()) / 8 * 8;
-    // SAFETY: AVX-512F (and with it AVX2) is enabled for the build; the loads read
-    // `input[2 at..2 at + 16]` and the store writes `out[at..at + 8]` with `at + 8 <= done`,
-    // within both.
-    unsafe {
-        let mut at = 0;
-        while at < done {
-            let lo = _mm256_loadu_ps(input.as_ptr().add(2 * at));
-            let hi = _mm256_loadu_ps(input.as_ptr().add(2 * at + 8));
-            let (lo, hi) = (_mm256_mul_ps(lo, lo), _mm256_mul_ps(hi, hi));
-            // Samples 0, 1, 4, 5 | 2, 3, 6, 7 of the squares of `re` and of `im`.
-            let re = _mm256_shuffle_ps::<0x88>(lo, hi);
-            let im = _mm256_shuffle_ps::<0xDD>(lo, hi);
-            let sum = _mm256_add_ps(re, im);
-            let sum = _mm256_castpd_ps(_mm256_permute4x64_pd::<0xD8>(_mm256_castps_pd(sum)));
-            _mm256_storeu_ps(out.as_mut_ptr().add(at), sum);
-            at += 8;
         }
     }
     done
@@ -320,32 +283,5 @@ mod tests {
     #[cfg(target_feature = "avx2")]
     fn vec_of(n: usize) -> Vec<i16> {
         std::vec![0; n]
-    }
-
-    #[cfg(target_feature = "avx512f")]
-    #[test]
-    fn mag_sq_is_the_loop() {
-        let mut seed = 13;
-        let mut x: Vec<f32> = (0..1000)
-            .map(|_| f32::from(next(&mut seed)) * 1.0e-3)
-            .collect();
-        x.extend([
-            f32::NAN,
-            1.0,
-            f32::INFINITY,
-            -0.0,
-            f32::MIN_POSITIVE,
-            1.0e-40,
-            f32::MAX,
-            2.0,
-        ]);
-        let mut out = std::vec![0f32; x.len() / 2];
-        let done = super::mag_sq(&x, &mut out);
-        assert_eq!(done, x.len() / 2 / 8 * 8);
-        for i in 0..done {
-            let (re, im) = (x[2 * i], x[2 * i + 1]);
-            let want = re * re + im * im;
-            assert_eq!(out[i].to_bits(), want.to_bits(), "sample {i}");
-        }
     }
 }

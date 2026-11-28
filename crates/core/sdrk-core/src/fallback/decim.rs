@@ -910,16 +910,17 @@ mod exact {
         #[cfg(target_arch = "x86_64")]
         {
             let units = len.next_multiple_of(PAD) / PER_UNIT;
+            // `C`, the stack copy of the first windows, holds `2 P` samples.
             Some(if units <= 8 {
-                run::<8>(taps, hist, input, seen, s, out)
+                run::<8, 64>(taps, hist, input, seen, s, out)
             } else if units <= 16 {
-                run::<16>(taps, hist, input, seen, s, out)
+                run::<16, 128>(taps, hist, input, seen, s, out)
             } else {
-                run::<{ MAX_PADDED / PER_UNIT }>(taps, hist, input, seen, s, out)
+                run::<{ MAX_PADDED / PER_UNIT }, { 2 * MAX_PADDED }>(taps, hist, input, seen, s, out)
             })
         }
         #[cfg(target_arch = "aarch64")]
-        Some(run::<0>(taps, hist, input, seen, s, out))
+        Some(run::<0, { 2 * MAX_PADDED }>(taps, hist, input, seen, s, out))
     }
 
     #[allow(
@@ -927,7 +928,7 @@ mod exact {
         reason = "clippy counts the temporary of every `?` separately; the real frame is the \
                   prepared taps (2 KiB of split taps on x86-64)"
     )]
-    fn run<const U: usize>(
+    fn run<const U: usize, const C: usize>(
         taps: &[Q15],
         hist: &[CQ15],
         input: &[CQ15],
@@ -991,7 +992,7 @@ mod exact {
         };
         let (oh, ob) = out.split_at_mut(n_head);
         if n_head > 0 {
-            head(&prepared, padded, hist, input, seen, s, oh)?;
+            head::<C>(&prepared, padded, hist, input, seen, s, oh)?;
         }
         let first = seen + n_head * s;
         #[cfg(target_arch = "x86_64")]
@@ -1019,7 +1020,7 @@ mod exact {
     /// The outputs whose windows reach into the history (`e < P`): in the stack copy
     /// `zeros(P - N) ++ history ++ input[..P - 1]` the window of `e` is `copy[e - 1..e - 1 + P]`.
     #[inline(never)]
-    fn head(
+    fn head<const C: usize>(
         prepared: &Taps<'_>,
         padded: usize,
         hist: &[CQ15],
@@ -1029,7 +1030,7 @@ mod exact {
         out: &mut [CQ15],
     ) -> Result<()> {
         let internal = || Error::Internal("decimation head");
-        let mut copy = [CQ15::default(); 2 * MAX_PADDED];
+        let mut copy = [CQ15::default(); C];
         let take = input.len().min(padded - 1);
         let copy = copy.get_mut(..padded - 1 + take).ok_or_else(internal)?;
         let (ch, ci) = copy.split_at_mut(padded - 1);

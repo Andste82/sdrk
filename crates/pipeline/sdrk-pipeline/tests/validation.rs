@@ -576,12 +576,31 @@ fn raw_formats_that_cannot_stream_are_rejected_at_the_input() {
         );
         assert!(!codes(&report).iter().any(|(_, p)| p == "inputs.rf.format"));
     }
-    // A real stream cannot get a raw output format either.
+    // A real stream gets a real raw output format (D3164, M10), and the layout of the format
+    // must match the stream: a complex format on a real stream and a real format on a complex
+    // stream are rejected at the format.
+    let real = |format: &str| {
+        json!({
+            "sdrk": 1, "name": "t",
+            "inputs": { "au": { "type": "f32", "rate_hz": 48000 } },
+            "nodes": { "r": { "kind": "resample", "params": { "rate_out_hz": 96000 } } },
+            "edges": [ { "from": "au", "to": "r" }, { "from": "r", "to": "out" } ],
+            "outputs": { "out": { "type": "stream", "format": format } }
+        })
+    };
+    for format in ["rs16", "rf32"] {
+        let report = validate_value(&real(format));
+        assert!(report.is_ok(), "{format}: {}", report.to_json());
+    }
+    assert!(
+        codes(&validate_value(&real("cs16")))
+            .contains(&("invalid_value".into(), "outputs.out.format".into()))
+    );
     let doc = json!({
         "sdrk": 1, "name": "t",
-        "inputs": { "au": { "type": "f32", "rate_hz": 48000 } },
-        "nodes": { "r": { "kind": "resample", "params": { "rate_out_hz": 96000 } } },
-        "edges": [ { "from": "au", "to": "r" }, { "from": "r", "to": "out" } ],
+        "inputs": { "rf": { "format": "cu8", "rate_hz": 48000 } },
+        "nodes": { "g": { "kind": "scale" } },
+        "edges": [ { "from": "rf", "to": "g" }, { "from": "g", "to": "out" } ],
         "outputs": { "out": { "type": "stream", "format": "rs16" } }
     });
     assert!(

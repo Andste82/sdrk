@@ -294,7 +294,7 @@ The tables below are generated: `cargo test -p sdrk-blocks --test describe -- --
 | Kind | Summary | Inputs | Outputs | Required |
 | --- | --- | --- | --- | --- |
 | `convert` | Converts raw device bytes in a sample format to complex or real samples. | `in`: raw | `out`: c32, cq15, f32, q15 | `format` |
-| `convert_out` | Converts complex samples to raw device bytes in a sample format. | `in`: c32, cq15 | `out`: raw | `format` |
+| `convert_out` | Converts complex or real samples to raw device bytes in a sample format. | `in`: c32, cq15, f32, q15 | `out`: raw | `format` |
 | `scale` | Multiplies a complex signal by a gain given in decibels. | `in`: c32, cq15 | `out`: c32, cq15 | - |
 | `dc_block` | Removes the DC offset of a complex or real signal with a one-pole high-pass. | `in`: c32, cq15, f32, q15 | `out`: c32, cq15, f32, q15 | - |
 | `fir` | Low-pass FIR filter designed from cutoff, transition width and attenuation. | `in`: c32, cq15 | `out`: c32, cq15 | `cutoff_hz`, `transition_hz` |
@@ -382,7 +382,7 @@ The tables below are generated: `cargo test -p sdrk-blocks --test describe -- --
 | Block | Parameter | Unit | When | Type, range, default | Typical |
 | --- | --- | --- | --- | --- | --- |
 | `convert` | `format` | - | build | sample format name, no default | cu8 for RTL-SDR, cs16 for HackRF-class devices |
-| `convert_out` | `format` | - | build | sample format name, no default | cs8 for HackRF-class transmitters, cs16 for others |
+| `convert_out` | `format` | - | build | sample format name, no default | cs8 for HackRF-class transmitters, cs16 for others, rs16 for real PCM |
 | `scale` | `gain_db` | dB | runtime | f64, -120 to 40, default 0 | 0 for unity gain, -6 to halve the amplitude |
 | `dc_block` | `cutoff_hz` | Hz | build | f64, 0.000001 to 1000000000000, default 10 | 10 for a 2.4 MHz receiver |
 | `fir` | `cutoff_hz` | Hz | build | f64, 0.000001 to 1000000000000, no default | 15e3 for an audio-bandwidth filter at 48 kHz |
@@ -745,7 +745,7 @@ The kinds that later milestones add have their names reserved here, so that ever
 
 ## The blocks
 
-- **`convert` / `convert_out`:** raw device bytes to `C32`/`CQ15` and back (all interleaved complex formats of [device.md](device.md)). The block works on whole packing groups only (for example 5 bytes for two 10-bit complex samples); `Progress` counts bytes on the raw side and samples on the other. `convert` also accepts the formats with `Layout::Real` (`rs16`, `rf32`, ...): `ConvertRealBlock<T>` (`f32`, `Q15`) calls `convert_real` and has the same parameter `format`; `ConvertBlock` refuses a real format and `ConvertRealBlock` a complex one, the pipeline kind and the automatic conversion of a raw input choose the block by the layout of the format (the port type of the node is then `f32`/`q15`). For a real format a packing group counts real samples (`rs16`: 2 bytes per sample). `convert_out` has no real variant. Planar formats cannot be streamed.
+- **`convert` / `convert_out`:** raw device bytes to `C32`/`CQ15` and back (all interleaved complex formats of [device.md](device.md)). The block works on whole packing groups only (for example 5 bytes for two 10-bit complex samples); `Progress` counts bytes on the raw side and samples on the other. `convert` also accepts the formats with `Layout::Real` (`rs16`, `rf32`, ...): `ConvertRealBlock<T>` (`f32`, `Q15`) calls `convert_real` and has the same parameter `format`; `ConvertBlock` refuses a real format and `ConvertRealBlock` a complex one, the pipeline kind and the automatic conversion of a raw input choose the block by the layout of the format (the port type of the node is then `f32`/`q15`). For a real format a packing group counts real samples (`rs16`: 2 bytes per sample). `convert_out` mirrors it (D3164, M10): `ConvertOutRealBlock<T>` (`f32`, `Q15`) calls `convert_out_real` for a format with `Layout::Real` (for example `rs16` for PCM audio), `ConvertOutBlock` refuses a real format and `ConvertOutRealBlock` a complex one, and the pipeline kind and the automatic conversion of a stream output choose the block by the layout of the format. Planar formats cannot be streamed.
 - **`scale`:** `gain_db` (runtime) as a real gain, `-120` to `+40` dB for `C32` and `-120` to `0` dB for `CQ15` (0 dB is the largest Q15 value, about -0.0003 dB).
 - **`dc_block`:** `r = exp(-2 pi cutoff / fs)` (rounded to Q15 for `CQ15` and `Q15`); complex input runs `DcBlockBlock` (kernel `dc_block`), real input `DcBlockRealBlock` (kernel `dc_block_real`) with the same pole.
 - **`fir`:** a Kaiser-window low-pass from `cutoff_hz`, `transition_hz`, `attenuation_db` (60) and `max_taps` (1023); `cutoff_hz` and `transition_hz` are required.

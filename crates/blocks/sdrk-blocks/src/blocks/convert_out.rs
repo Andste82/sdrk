@@ -1,35 +1,36 @@
-//! `convert_out`: complex samples to raw device bytes.
+//! `convert_out`: complex or real samples to raw device bytes.
 
 use core::marker::PhantomData;
 
 use sdrk::{Delay, Progress, Rate, Ratio, RatioKind, Sdrk};
-use sdrk_core::kernels::convert::ConvertOut;
-use sdrk_device::{SampleFormat, formats};
+use sdrk_core::kernels::convert::{ConvertOut, ConvertOutReal};
+use sdrk_device::{Layout, SampleFormat, formats};
 
-use super::convert::packing_group;
+use super::convert::{packing_group, stream_group};
 use super::{head, head_mut, unknown};
 use crate::block::{Block, BlockTiming, ParamValue};
 use crate::describe::{
     BlockDescription, Mutability, ParamDesc, ParamKind, PortDesc, PortType, Unit,
 };
 use crate::error::{Error, Result};
-use crate::sample::BlockSample;
+use crate::sample::{BlockReal, BlockSample};
 use crate::storage::{Plan, Storage};
 
 /// Description of the `convert_out` block.
 pub static DESCRIPTION: BlockDescription = BlockDescription {
     kind: "convert_out",
-    summary: "Converts complex samples to raw device bytes in a sample format.",
+    summary: "Converts complex or real samples to raw device bytes in a sample format.",
     details: "Writes C32 or CQ15 samples as interleaved bytes in any supported device format, \
-        rounding to the nearest integer (ties to even) and saturating at full scale. The output \
-        is bytes; the block only produces whole packing groups (for example two 12 bit samples \
-        in 3 bytes) and leaves the remaining input for the next call. Planar and real layouts \
-        cannot be streamed in arbitrary pieces and are rejected. The sample rate does not \
-        change.",
+        rounding to the nearest integer (ties to even) and saturating at full scale. A format \
+        with a real layout (for example rs16 for PCM audio) takes f32 or Q15 samples instead. \
+        The output is bytes; the block only produces whole packing groups (for example two 12 \
+        bit samples in 3 bytes) and leaves the remaining input for the next call. Planar \
+        layouts cannot be streamed in arbitrary pieces and are rejected. The sample rate does \
+        not change.",
     inputs: &[PortDesc {
         name: "in",
-        types: &[PortType::C32, PortType::CQ15],
-        description: "Complex samples.",
+        types: &[PortType::C32, PortType::CQ15, PortType::F32, PortType::Q15],
+        description: "Complex samples (real samples for a real format).",
     }],
     outputs: &[PortDesc {
         name: "out",
@@ -40,7 +41,7 @@ pub static DESCRIPTION: BlockDescription = BlockDescription {
         name: "format",
         unit: Unit::None,
         kind: ParamKind::Format,
-        typical: "cs8 for HackRF-class transmitters, cs16 for others",
+        typical: "cs8 for HackRF-class transmitters, cs16 for others, rs16 for real PCM",
         mutability: Mutability::Build,
         description: "Sample format of the output bytes, given by name (for example cs8).",
     }],
@@ -56,7 +57,7 @@ pub static DESCRIPTION: BlockDescription = BlockDescription {
 /// ```
 #[derive(Debug, Clone, Copy, PartialEq)]
 pub struct ConvertOutConfig {
-    /// Format of the output bytes (interleaved complex, not 1-bit).
+    /// Format of the output bytes (interleaved complex or real, not 1-bit).
     pub format: SampleFormat,
 }
 
@@ -71,7 +72,7 @@ impl Default for ConvertOutConfig {
 impl ConvertOutConfig {
     /// Checks the configuration.
     pub fn validate(&self, _rate_in: Rate) -> Result<()> {
-        packing_group(&self.format).map(|_| ())
+        stream_group(&self.format).map(|_| ())
     }
 
     /// Sets a parameter by its description name; checks kind and range.
@@ -122,6 +123,12 @@ impl<T: BlockSample, S: Storage> ConvertOutBlock<T, S> {
     /// Creates the block; it needs no storage.
     pub fn new(config: &ConvertOutConfig, rate_in: Rate, _storage: &mut S) -> Result<Self> {
         config.validate(rate_in)?;
+        if config.format.layout() == Layout::Real {
+            return Err(Error::InvalidParameter {
+                name: "format",
+                reason: "a real format needs ConvertOutRealBlock",
+            });
+        }
         let (group_samples, group_bytes) = packing_group(&config.format)?;
         Ok(Self {
             format: config.format,
@@ -164,6 +171,128 @@ where
         }
         let bytes = groups * self.group_bytes;
         let written = <Sdrk as ConvertOut<T>>::convert_out(
+            &Sdrk,
+            &self.format,
+            head(input, n)?,
+            head_mut(output, bytes)?,
+        )?;
+        Ok(Progress {
+            consumed: n,
+            produced: written,
+        })
+    }
+
+    fn timing(&self) -> BlockTiming {
+        let ratio =
+            Ratio::new(self.group_bytes as u64, self.group_samples as u64).unwrap_or(Ratio::ONE);
+        BlockTiming {
+            ratio,
+            kind: RatioKind::Constant,
+            delay: Delay::ZERO,
+        }
+    }
+
+    fn reset(&mut self) {}
+
+    fn set_param(&mut self, name: &str, _value: ParamValue) -> Result<()> {
+        if DESCRIPTION.param(name).is_some() {
+            Err(Error::ReadOnlyParameter)
+        } else {
+            unknown()
+        }
+    }
+
+    fn param(&self, name: &str) -> Result<ParamValue> {
+        match name {
+            "format" => Ok(ParamValue::Format(self.format)),
+            _ => unknown(),
+        }
+    }
+
+    fn min_input(&self) -> usize {
+        self.group_samples
+    }
+}
+
+/// `f32` or `Q15` to the raw bytes of a real format (for example `rs16`).
+///
+/// Like [`ConvertOutBlock`], `Progress` counts samples in and bytes out and the block needs no
+/// storage. The pipeline kind `convert_out` chooses this block for a format with a real
+/// layout, the inverse of [`ConvertRealBlock`](crate::ConvertRealBlock).
+///
+/// ```
+/// use sdrk_blocks::{ArenaStorage, Block, ConvertOutConfig, ConvertOutRealBlock};
+/// use sdrk::{Q15, Rate};
+/// use sdrk_device::formats;
+/// let mut arena = ArenaStorage::new(&mut []);
+/// let cfg = ConvertOutConfig { format: formats::RS16 };
+/// let mut block = ConvertOutRealBlock::<Q15, _>::new(&cfg, Rate::hz(48_000)?, &mut arena)?;
+/// let mut bytes = [0u8; 5]; // room for two samples and one byte
+/// let p = block.process(&[Q15(16384), Q15(-16384), Q15(1)], &mut bytes)?;
+/// assert_eq!((p.consumed, p.produced), (2, 4));
+/// assert_eq!(bytes[..4], [0x00, 0x40, 0x00, 0xC0]);
+/// # Ok::<(), Box<dyn std::error::Error>>(())
+/// ```
+#[derive(Debug)]
+pub struct ConvertOutRealBlock<R: BlockReal, S: Storage> {
+    format: SampleFormat,
+    group_samples: usize,
+    group_bytes: usize,
+    _marker: PhantomData<fn() -> (R, S)>,
+}
+
+impl<R: BlockReal, S: Storage> ConvertOutRealBlock<R, S> {
+    /// Creates the block; it needs no storage.
+    pub fn new(config: &ConvertOutConfig, rate_in: Rate, _storage: &mut S) -> Result<Self> {
+        config.validate(rate_in)?;
+        if config.format.layout() != Layout::Real {
+            return Err(Error::InvalidParameter {
+                name: "format",
+                reason: "ConvertOutRealBlock needs a format with a real layout",
+            });
+        }
+        let (group_samples, group_bytes) = stream_group(&config.format)?;
+        Ok(Self {
+            format: config.format,
+            group_samples,
+            group_bytes,
+            _marker: PhantomData,
+        })
+    }
+
+    /// Exact bytes of storage the block needs (zero).
+    pub fn storage_bytes(config: &ConvertOutConfig, rate_in: Rate) -> Result<usize> {
+        config.validate(rate_in)?;
+        Ok(Plan::default().bytes())
+    }
+
+    /// Output sample rate for the configuration (equal to the input rate).
+    pub fn rate_out(config: &ConvertOutConfig, rate_in: Rate) -> Result<Rate> {
+        config.validate(rate_in)?;
+        Ok(rate_in)
+    }
+}
+
+impl<R: BlockReal, S: Storage> Block for ConvertOutRealBlock<R, S>
+where
+    Sdrk: ConvertOutReal<R>,
+{
+    type In = R;
+    type Out = u8;
+
+    fn description(&self) -> &'static BlockDescription {
+        &DESCRIPTION
+    }
+
+    fn process(&mut self, input: &[R], output: &mut [u8]) -> Result<Progress> {
+        let room = self.format.samples_in_bytes(output.len());
+        let groups = input.len().min(room) / self.group_samples;
+        let n = groups * self.group_samples;
+        if n == 0 {
+            return Ok(Progress::default());
+        }
+        let bytes = groups * self.group_bytes;
+        let written = <Sdrk as ConvertOutReal<R>>::convert_out_real(
             &Sdrk,
             &self.format,
             head(input, n)?,

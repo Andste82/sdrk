@@ -17,34 +17,35 @@ use sdrk_blocks::{
     BiquadConfig, BiquadRealBlock, BitDescrambleBlock, BitScrambleBlock, BitScrambleConfig, Block,
     BlockDescription, BlockSample, ChannelSelectBlock, ChannelSelectConfig, ChannelizeBlock,
     ChannelizeConfig, ConvertBlock, ConvertConfig, ConvertOutBlock, ConvertOutConfig,
-    ConvertRealBlock, CorrelateBlock, CorrelateConfig, CostasBlock, CostasConfig, DcBlockBlock,
-    DcBlockConfig, DcBlockRealBlock, DdcBlock, DdcConfig, DecimateBlock, DecimateConfig,
-    DecimateRealBlock, DeemphasisBlock, DeemphasisConfig, DeemphasisRealBlock, DelayBlock,
-    DelayConfig, DelayRealBlock, DesignSpec, DucBlock, DucConfig, EqualizeBlock, EqualizeConfig,
-    FirBlock, FirConfig, FmDemodBlock, FmDemodConfig, FmModBlock, FmModConfig, FmStereoDemodBlock,
-    FmStereoDemodConfig, FmStereoModBlock, FmStereoModConfig, FmStereoRdsModBlock,
-    FmStereoRdsModConfig, FrameDecodeBlock, FrameDecodeConfig, FrameEncodeBlock, FrameEncodeConfig,
-    FrameRotations, FskDemodBlock, FskDemodConfig, FskModBlock, FskModConfig,
-    HalfbandDecimateBlock, HalfbandDecimateConfig, HalfbandDecimateRealBlock, HdlcDecodeBlock,
-    HdlcDecodeConfig, HdlcEncodeBlock, HdlcEncodeConfig, ImagPartBlock, InterpolateBlock,
-    InterpolateConfig, InterpolateRealBlock, IqOffsetBlock, IqOffsetConfig, MagBlock, MagConfig,
-    MakeComplexBlock, MorseDecodeBlock, MorseDecodeConfig, MorseEncodeBlock, MorseEncodeConfig,
-    MulBlock, MulRealBlock, NcoBlock, NcoConfig, NcoRealBlock, NoiseBlankBlock, NoiseBlankConfig,
-    NoiseBlock, NoiseConfig, NoiseRealBlock, OokDemodBlock, OokDemodConfig, OokModBlock,
-    OokModConfig, ParamValue, PortType, PreemphLimitBlock, PreemphLimitConfig, PskDemodBlock,
-    PskDemodConfig, PskModBlock, PskModConfig, PskVariant, PulseKeyBlock, PulseKeyConfig,
-    PulseMatchBlock, PulseMatchConfig, PulseShapeBlock, PulseShapeConfig, QamAcquireBlock,
-    QamAcquireConfig, QamDemodBlock, QamDemodConfig, QamFrameDecodeBlock, QamFrameDecodeConfig,
-    QamFrameEncodeBlock, QamFrameEncodeConfig, QamModBlock, QamModConfig, QuadDemodBlock,
-    QuadDemodConfig, RESAMPLE_TUNED_PHASES, RdsDecodeBlock, RdsDecodeConfig, RdsDemodBlock,
-    RdsDemodConfig, RdsEncodeBlock, RdsEncodeConfig, RealPartBlock, RealToIqBlock, ResampleBlock,
-    ResampleConfig, ResampleRealBlock, RotateBlock, RotateConfig, ScaleBlock, ScaleConfig,
-    ScrambleBlock, ScrambleConfig, Scrambler, SensorDecodeBlock, SensorDecodeConfig,
-    SensorEncodeBlock, SensorEncodeConfig, SnrEstimateBlock, SnrEstimateConfig, SpectrumBlock,
-    SpectrumConfig, SquelchBlock, SquelchConfig, SsbDemodBlock, SsbDemodConfig, SsbModBlock,
-    SsbModConfig, StereoMatrixBlock, StereoPllBlock, StereoPllConfig, SymbolDemapBlock,
-    SymbolDemapConfig, SymbolDemapConstellation, SymbolMapBlock, SymbolMapConfig,
-    SymbolMapConstellation, SymbolSyncBlock, SymbolSyncConfig, ToComplexBlock,
+    ConvertOutRealBlock, ConvertRealBlock, CorrelateBlock, CorrelateConfig, CostasBlock,
+    CostasConfig, DcBlockBlock, DcBlockConfig, DcBlockRealBlock, DdcBlock, DdcConfig,
+    DecimateBlock, DecimateConfig, DecimateRealBlock, DeemphasisBlock, DeemphasisConfig,
+    DeemphasisRealBlock, DelayBlock, DelayConfig, DelayRealBlock, DesignSpec, DucBlock, DucConfig,
+    EqualizeBlock, EqualizeConfig, FirBlock, FirConfig, FmDemodBlock, FmDemodConfig, FmModBlock,
+    FmModConfig, FmStereoDemodBlock, FmStereoDemodConfig, FmStereoModBlock, FmStereoModConfig,
+    FmStereoRdsModBlock, FmStereoRdsModConfig, FrameDecodeBlock, FrameDecodeConfig,
+    FrameEncodeBlock, FrameEncodeConfig, FrameRotations, FskDemodBlock, FskDemodConfig,
+    FskModBlock, FskModConfig, HalfbandDecimateBlock, HalfbandDecimateConfig,
+    HalfbandDecimateRealBlock, HdlcDecodeBlock, HdlcDecodeConfig, HdlcEncodeBlock,
+    HdlcEncodeConfig, ImagPartBlock, InterpolateBlock, InterpolateConfig, InterpolateRealBlock,
+    IqOffsetBlock, IqOffsetConfig, MagBlock, MagConfig, MakeComplexBlock, MorseDecodeBlock,
+    MorseDecodeConfig, MorseEncodeBlock, MorseEncodeConfig, MulBlock, MulRealBlock, NcoBlock,
+    NcoConfig, NcoRealBlock, NoiseBlankBlock, NoiseBlankConfig, NoiseBlock, NoiseConfig,
+    NoiseRealBlock, OokDemodBlock, OokDemodConfig, OokModBlock, OokModConfig, ParamValue, PortType,
+    PreemphLimitBlock, PreemphLimitConfig, PskDemodBlock, PskDemodConfig, PskModBlock,
+    PskModConfig, PskVariant, PulseKeyBlock, PulseKeyConfig, PulseMatchBlock, PulseMatchConfig,
+    PulseShapeBlock, PulseShapeConfig, QamAcquireBlock, QamAcquireConfig, QamDemodBlock,
+    QamDemodConfig, QamFrameDecodeBlock, QamFrameDecodeConfig, QamFrameEncodeBlock,
+    QamFrameEncodeConfig, QamModBlock, QamModConfig, QuadDemodBlock, QuadDemodConfig,
+    RESAMPLE_TUNED_PHASES, RdsDecodeBlock, RdsDecodeConfig, RdsDemodBlock, RdsDemodConfig,
+    RdsEncodeBlock, RdsEncodeConfig, RealPartBlock, RealToIqBlock, ResampleBlock, ResampleConfig,
+    ResampleRealBlock, RotateBlock, RotateConfig, ScaleBlock, ScaleConfig, ScrambleBlock,
+    ScrambleConfig, Scrambler, SensorDecodeBlock, SensorDecodeConfig, SensorEncodeBlock,
+    SensorEncodeConfig, SnrEstimateBlock, SnrEstimateConfig, SpectrumBlock, SpectrumConfig,
+    SquelchBlock, SquelchConfig, SsbDemodBlock, SsbDemodConfig, SsbModBlock, SsbModConfig,
+    StereoMatrixBlock, StereoPllBlock, StereoPllConfig, SymbolDemapBlock, SymbolDemapConfig,
+    SymbolDemapConstellation, SymbolMapBlock, SymbolMapConfig, SymbolMapConstellation,
+    SymbolSyncBlock, SymbolSyncConfig, ToComplexBlock,
 };
 use sdrk_device::Layout;
 use serde_json::{Map, Value};
@@ -462,15 +463,37 @@ impl Kind for ConvertOutKind {
         cfg: &ConvertOutConfig,
         input: PortType,
         rate: Rate,
-        _p: Precision,
+        p: Precision,
     ) -> BlockResult<Figures> {
-        if !is_complex(input) {
-            return Err(mismatch("convert_out needs complex samples"));
-        }
+        let (rate_out, memory_bytes, cost) = if cfg.format.layout() == Layout::Real {
+            if input != real_port(p) {
+                return Err(mismatch(
+                    "convert_out with a real format needs real samples",
+                ));
+            }
+            with_real!(
+                p,
+                R,
+                (
+                    ConvertOutRealBlock::<R, VecStorage>::rate_out(cfg, rate)?,
+                    ConvertOutRealBlock::<R, VecStorage>::storage_bytes(cfg, rate)?,
+                    1.0
+                )
+            )
+        } else {
+            if !is_complex(input) {
+                return Err(mismatch("convert_out needs complex samples"));
+            }
+            (
+                ConvertOutBlock::<C32, VecStorage>::rate_out(cfg, rate)?,
+                ConvertOutBlock::<C32, VecStorage>::storage_bytes(cfg, rate)?,
+                2.0,
+            )
+        };
         Ok(Figures {
-            rate_out: ConvertOutBlock::<C32, VecStorage>::rate_out(cfg, rate)?,
-            memory_bytes: ConvertOutBlock::<C32, VecStorage>::storage_bytes(cfg, rate)?,
-            cost: 2.0,
+            rate_out,
+            memory_bytes,
+            cost,
             taps: 0,
             delay: Delay::ZERO,
             min_input: packing_group(&cfg.format).0,
@@ -484,13 +507,23 @@ impl Kind for ConvertOutKind {
         p: Precision,
         st: &mut VecStorage,
     ) -> BlockResult<Box<dyn Node>> {
-        with_complex!(
-            p,
-            T,
-            Ok(Box::new(StreamNode::new(ConvertOutBlock::<T, _>::new(
-                cfg, rate, st
-            )?)))
-        )
+        if cfg.format.layout() == Layout::Real {
+            with_real!(
+                p,
+                R,
+                Ok(Box::new(StreamNode::new(ConvertOutRealBlock::<R, _>::new(
+                    cfg, rate, st
+                )?)))
+            )
+        } else {
+            with_complex!(
+                p,
+                T,
+                Ok(Box::new(StreamNode::new(ConvertOutBlock::<T, _>::new(
+                    cfg, rate, st
+                )?)))
+            )
+        }
     }
 }
 

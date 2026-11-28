@@ -36,8 +36,9 @@ pub const SIMD_SHARE: f64 = 0.80;
 /// AVX2 paths of `interleave`, `interleave_cq15` and `deinterleave` and the NEON paths of
 /// `stereo_matrix` and `stereo_matrix_cq15` (removed by D2971 and D2972, restored by D3020),
 /// `stereo_matrix` at `avx2` (D3011), the SSE2 paths of the two `Q15` biquads (D3015), `mag` at
-/// `avx512` and `neon` (IO2-11) and `mul` at `sse2` (IO2-12).
-pub const EXPLICIT_FORM: [(&str, &str); 11] = [
+/// `avx512` and `neon` (IO2-11), `mul` at `sse2` (IO2-12) and `mul_real_q15` at `avx2` (the same
+/// `vpmulhrsw` form as its fallback since D3017).
+pub const EXPLICIT_FORM: [(&str, &str); 12] = [
     ("biquad_cq15", "sse2"),
     ("biquad_real_q15", "sse2"),
     ("deinterleave", "avx2"),
@@ -46,6 +47,7 @@ pub const EXPLICIT_FORM: [(&str, &str); 11] = [
     ("mag", "avx512"),
     ("mag", "neon"),
     ("mul", "sse2"),
+    ("mul_real_q15", "avx2"),
     ("stereo_matrix", "avx2"),
     ("stereo_matrix", "neon"),
     ("stereo_matrix_cq15", "neon"),
@@ -166,12 +168,14 @@ impl Share {
             Some(c) => format!("`{}` {:.2} / {:.2}", self.level, self.reference, c),
             None => format!("`{}` {:.2} (instructions)", self.level, self.reference),
         };
-        if self.delegated {
-            s.push_str(" (runs the fallback)");
-        } else if accepted(&self.entry, &self.level) {
+        // An accepted explicit form at exactly 1.00 looks like a delegation in the records (the
+        // comparison is our fallback either way); the list decides.
+        if accepted(&self.entry, &self.level) {
             s.push_str(" (");
             s.push_str(ACCEPTED);
             s.push(')');
+        } else if self.delegated {
+            s.push_str(" (runs the fallback)");
         }
         s
     }
@@ -271,10 +275,13 @@ pub fn print(shares: &[Share], unreferenced: &BTreeMap<String, Vec<String>>) {
         e.dedup();
         e.len()
     };
-    let delegated = shares.iter().filter(|s| s.delegated).count();
     let explicit = shares
         .iter()
-        .filter(|s| !s.delegated && accepted(&s.entry, &s.level))
+        .filter(|s| accepted(&s.entry, &s.level))
+        .count();
+    let delegated = shares
+        .iter()
+        .filter(|s| s.delegated && !accepted(&s.entry, &s.level))
         .count();
     println!(
         "check cycles (report, no failure): {} SIMD entries at {} levels need more than {SIMD_SHARE:.2} of the cycles per sample of their own fallback on a model ({delegated} of the levels run the fallback, {explicit} are marked `{ACCEPTED}` (D3019); at `simd128` instructions per sample); share of the fallback, reference / counter model (O2 group 5, issue #203 B)",
@@ -400,8 +407,9 @@ mod tests {
 
     #[test]
     fn an_accepted_explicit_form_is_marked_and_a_delegation_is_not() {
-        // D3019: an explicit path at about 1.00 of its fallback is reported and marked; the
-        // same entry and level running the fallback is marked as such.
+        // D3019: an explicit path at about 1.00 of its fallback is reported and marked, also
+        // when its record reads like a delegation (`deinterleave`); an entry that is not listed
+        // and runs the fallback is marked as such (`add`).
         let r = results(
             "avx2",
             vec![
@@ -409,7 +417,7 @@ mod tests {
                 ("interleave_fallback", lib((1.00, 1.00))),
                 ("deinterleave", own((1.00, 1.00))),
                 ("deinterleave_fallback", lib((1.00, 1.00))),
-                ("add", lib((1.00, 1.00))),
+                ("add", own((1.00, 1.00))),
                 ("add_fallback", lib((1.00, 1.00))),
             ],
         );
@@ -418,8 +426,8 @@ mod tests {
         assert_eq!(
             d,
             [
-                "`avx2` 1.00 / 1.00",
                 "`avx2` 1.00 / 1.00 (runs the fallback)",
+                "`avx2` 1.00 / 1.00 (accepted: explicit form, compiler-independent)",
                 "`avx2` 1.00 / 1.00 (accepted: explicit form, compiler-independent)",
             ]
         );

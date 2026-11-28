@@ -117,16 +117,16 @@ mod fused;
 mod halfband;
 mod interp;
 mod math;
-/// `core::arch` for the `Q15` / `CQ15` fallbacks on x86-64 (`pmaddwd`, `vpmulhrsw`; the
-/// maintainer's decision D3017).
-#[cfg(target_arch = "x86_64")]
-#[allow(unsafe_code, reason = "x86 intrinsics of the Q15 fallbacks, D3017")]
-mod q15_x86;
 pub(crate) mod mix;
 pub(crate) mod modulate;
 mod noise;
 mod noise_blank;
 mod preemph_limit;
+/// `core::arch` for the `Q15` / `CQ15` fallbacks on x86-64 (`pmaddwd`, `vpmulhrsw`; the
+/// maintainer's decision D3017).
+#[cfg(target_arch = "x86_64")]
+#[allow(unsafe_code, reason = "x86 intrinsics of the Q15 fallbacks, D3017")]
+mod q15_x86;
 mod rds;
 mod scramble;
 mod spectrum;

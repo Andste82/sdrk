@@ -33,14 +33,20 @@ use core::arch::x86_64::{
 
 /// Taps split for `pmaddwd`: the high parts `h` and the low parts `l` of `t = 256 h + l`.
 #[inline(always)]
-#[allow(clippy::inline_always, reason = "the split runs inside the preparation loops")]
+#[allow(
+    clippy::inline_always,
+    reason = "the split runs inside the preparation loops"
+)]
 pub(super) fn split(t: i16) -> (i16, i16) {
     (t >> 8, t & 0xFF)
 }
 
 /// The four `i32` lanes of `v`.
 #[inline(always)]
-#[allow(clippy::inline_always, reason = "a store of a register in the hot loops")]
+#[allow(
+    clippy::inline_always,
+    reason = "a store of a register in the hot loops"
+)]
 fn lanes(v: __m128i) -> [i32; 4] {
     let mut out = [0i32; 4];
     // SAFETY: `out` is 16 bytes, which the unaligned store writes; SSE2 is part of x86-64.
@@ -67,7 +73,10 @@ fn join(high: [i32; 4], low: [i32; 4], idx: [usize; 2]) -> i64 {
 /// too short.
 #[cfg(not(target_feature = "avx2"))]
 #[inline(always)]
-#[allow(clippy::inline_always, reason = "the group size must be a constant in the hot loop")]
+#[allow(
+    clippy::inline_always,
+    reason = "the group size must be a constant in the hot loop"
+)]
 pub(super) fn sums_real<const N: usize>(
     hi: &[[i16; 8]],
     lo: &[[i16; 8]],
@@ -106,7 +115,10 @@ pub(super) fn sums_real<const N: usize>(
 /// of `4 c` samples each, `c = hi.len()`, with the split taps `hi` and `lo` in the blocks
 /// `[t0, t1, t0, t1, t2, t3, t2, t3]` of four consecutive taps. `None` if `x` is too short.
 #[inline(always)]
-#[allow(clippy::inline_always, reason = "the group size must be a constant in the hot loop")]
+#[allow(
+    clippy::inline_always,
+    reason = "the group size must be a constant in the hot loop"
+)]
 pub(super) fn sums_complex<const N: usize>(
     hi: &[[i16; 8]],
     lo: &[[i16; 8]],
@@ -170,7 +182,11 @@ pub(super) fn mul_real_q15(lhs: &[i16], rhs: &[i16], out: &mut [i16]) -> usize {
 }
 
 #[cfg(test)]
-#[allow(clippy::indexing_slicing, clippy::unwrap_used, clippy::cast_possible_truncation)]
+#[allow(
+    clippy::indexing_slicing,
+    clippy::unwrap_used,
+    clippy::cast_possible_truncation
+)]
 mod tests {
     //! Every function against the portable form it replaces, bit for bit, on the extremes and
     //! on random values.
@@ -250,7 +266,11 @@ mod tests {
                             .map(|(k, &t)| i64::from(t) * i64::from(w[2 * k + c]))
                             .sum()
                     };
-                    assert_eq!(*g, (comp(0), comp(1)), "complex, {blocks} blocks, window {j}");
+                    assert_eq!(
+                        *g,
+                        (comp(0), comp(1)),
+                        "complex, {blocks} blocks, window {j}"
+                    );
                 }
                 assert!(sums_complex::<4>(&hi, &lo, &x[..16 * blocks], 6).is_none());
             }

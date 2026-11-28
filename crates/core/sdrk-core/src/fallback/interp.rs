@@ -610,9 +610,7 @@ fn branch_x86<'a, T: Ring + 'a>(
         let from = hist.len().checked_sub(len - seen).ok_or_else(internal)?;
         let old = hist.get(from..).ok_or_else(internal)?;
         let new = input.get(..seen + in_head - 1).ok_or_else(internal)?;
-        let window = copy
-            .get_mut(..old.len() + new.len())
-            .ok_or_else(internal)?;
+        let window = copy.get_mut(..old.len() + new.len()).ok_or_else(internal)?;
         let (ch, ci) = window.split_at_mut(old.len());
         ch.copy_from_slice(old);
         ci.copy_from_slice(new);

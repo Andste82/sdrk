@@ -3425,8 +3425,9 @@ mod tests {
             let n = coefs.len();
             let mut sr =
                 BiquadRealState::<Q15, _, _>::new(coefs.clone(), vec![Q15(0); 4 * n]).unwrap();
-            let mut sc = BiquadState::<CQ15, _, _>::new(coefs.clone(), vec![CQ15::default(); 4 * n])
-                .unwrap();
+            let mut sc =
+                BiquadState::<CQ15, _, _>::new(coefs.clone(), vec![CQ15::default(); 4 * n])
+                    .unwrap();
             let (mut hr, mut hc) = (vec![Q15(0); 4 * n], vec![CQ15::default(); 4 * n]);
             let mut at = 0;
             for len in CALLS {

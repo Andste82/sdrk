@@ -920,11 +920,15 @@ mod exact {
             } else if units <= 32 {
                 run::<32, 256>(taps, hist, input, seen, s, out)
             } else {
-                run::<{ MAX_PADDED / PER_UNIT }, { 2 * MAX_PADDED }>(taps, hist, input, seen, s, out)
+                run::<{ MAX_PADDED / PER_UNIT }, { 2 * MAX_PADDED }>(
+                    taps, hist, input, seen, s, out,
+                )
             })
         }
         #[cfg(target_arch = "aarch64")]
-        Some(run::<0, { 2 * MAX_PADDED }>(taps, hist, input, seen, s, out))
+        Some(run::<0, { 2 * MAX_PADDED }>(
+            taps, hist, input, seen, s, out,
+        ))
     }
 
     #[allow(

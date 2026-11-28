@@ -44,7 +44,7 @@ pub(super) trait FbMac: Copy {
         out: &mut [Self],
     ) -> Result<()> {
         let count = out.len();
-        progression(taps, 1, hist, input, 0, seen, s, count, out.iter_mut())
+        decimation_progression(taps, hist, input, seen, s, count, out.iter_mut())
     }
 }
 
@@ -112,7 +112,7 @@ impl FbMac for CQ15 {
         #[cfg(not(target_arch = "aarch64"))]
         {
             let count = out.len();
-            progression(taps, 1, hist, input, 0, seen, s, count, out.iter_mut())
+            decimation_progression(taps, hist, input, seen, s, count, out.iter_mut())
         }
     }
 }
@@ -615,12 +615,42 @@ fn head_groups<'a, B: Target, T: FbMac + 'a, const G: usize>(
     Ok(groups * G)
 }
 
+/// The progression of `fir_decimate` (`l = 1`, phase 0): the groups of [`progression_with`]
+/// without the head groups of D3104, the code of the decimators before it (with the head groups
+/// in the same function the Cortex-M4 count of `fir_decimate` rose by 2.8 % to 4.2 %, CI runs
+/// 46157162937 and 46161987773).
+#[allow(
+    clippy::inline_always,
+    reason = "the same code as `progression_at` itself"
+)]
+#[inline(always)]
+fn decimation_progression<'a, T: FbMac + 'a>(
+    taps: &[T::Tap],
+    hist: &[T],
+    input: &[T],
+    seen: usize,
+    s: usize,
+    count: usize,
+    dst: impl Iterator<Item = &'a mut T>,
+) -> Result<()> {
+    if T::WIDE && s == 1 {
+        progression_at::<Native, T, WIDE_GROUP, false>(
+            Native, taps, 1, hist, input, 0, seen, s, count, dst,
+        )
+    } else {
+        progression_at::<Native, T, NARROW_GROUP, false>(
+            Native, taps, 1, hist, input, 0, seen, s, count, dst,
+        )
+    }
+}
+
 /// [`progression_of`] with the group size of `T`.
 #[allow(clippy::too_many_arguments)]
 #[allow(
     clippy::inline_always,
     reason = "the same code as `progression_with` itself"
 )]
+#[cfg(target_arch = "aarch64")]
 #[inline(always)]
 fn progression<'a, T: FbMac + 'a>(
     taps: &[T::Tap],

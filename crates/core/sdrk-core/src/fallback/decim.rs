@@ -1,5 +1,6 @@
 //! Fallback implementations of `fir_decimate` and `resample`.
 
+use super::target::{Native, Target};
 use crate::Fallback;
 use crate::error::{Error, Result};
 use crate::kernels::decim::{
@@ -247,9 +248,43 @@ fn add_consecutive<T: FbMac, const G: usize>(
 // The three forms of a group are separate functions, so that each hot loop is compiled on its
 // own (inlined into one function they changed each other's register allocation).
 
+// Each form is the out-of-line function of the build for [`Native`], and the same loop through
+// [`Target::hot`] for another target (D2840).
+
 /// The `G` outputs of contiguous taps (`fir`): output `t` has the window `w[t..t + taps.len()]`.
+#[allow(
+    clippy::inline_always,
+    reason = "the choice of the out-of-line function must vanish"
+)]
+#[inline(always)]
+fn group_unit<B: Target, T: FbMac, const G: usize>(
+    target: B,
+    taps: &[T::Tap],
+    w: &[T],
+) -> Result<[T; G]> {
+    if B::NATIVE {
+        group_unit_native::<T, G>(taps, w)
+    } else {
+        target.hot(
+            #[inline(always)]
+            move || group_unit_loop::<T, G>(taps, w),
+        )
+    }
+}
+
+/// [`group_unit`] in the build.
 #[inline(never)]
-fn group_unit<T: FbMac, const G: usize>(taps: &[T::Tap], w: &[T]) -> Result<[T; G]> {
+fn group_unit_native<T: FbMac, const G: usize>(taps: &[T::Tap], w: &[T]) -> Result<[T; G]> {
+    group_unit_loop::<T, G>(taps, w)
+}
+
+/// The loop of [`group_unit`].
+#[allow(
+    clippy::inline_always,
+    reason = "the loop is compiled in the function of its target"
+)]
+#[inline(always)]
+fn group_unit_loop<T: FbMac, const G: usize>(taps: &[T::Tap], w: &[T]) -> Result<[T; G]> {
     let mut acc = [T::zero(); G];
     // Tap `i` multiplies the consecutive samples `len - 1 - i .. len - 1 - i + G`.
     let w = w
@@ -263,8 +298,46 @@ fn group_unit<T: FbMac, const G: usize>(taps: &[T::Tap], w: &[T]) -> Result<[T; 
 
 /// The `G` outputs of a branch with the taps `branch[i l]` (`len` of them, `l > 1`), output `t`
 /// with the window `w[t..t + len]` (`fir_interpolate`).
+#[allow(
+    clippy::inline_always,
+    reason = "the choice of the out-of-line function must vanish"
+)]
+#[inline(always)]
+fn group_rows<B: Target, T: FbMac, const G: usize>(
+    target: B,
+    branch: &[T::Tap],
+    l: usize,
+    len: usize,
+    w: &[T],
+) -> Result<[T; G]> {
+    if B::NATIVE {
+        group_rows_native::<T, G>(branch, l, len, w)
+    } else {
+        target.hot(
+            #[inline(always)]
+            move || group_rows_loop::<T, G>(branch, l, len, w),
+        )
+    }
+}
+
+/// [`group_rows`] in the build.
 #[inline(never)]
-fn group_rows<T: FbMac, const G: usize>(
+fn group_rows_native<T: FbMac, const G: usize>(
+    branch: &[T::Tap],
+    l: usize,
+    len: usize,
+    w: &[T],
+) -> Result<[T; G]> {
+    group_rows_loop::<T, G>(branch, l, len, w)
+}
+
+/// The loop of [`group_rows`].
+#[allow(
+    clippy::inline_always,
+    reason = "the loop is compiled in the function of its target"
+)]
+#[inline(always)]
+fn group_rows_loop<T: FbMac, const G: usize>(
     branch: &[T::Tap],
     l: usize,
     len: usize,
@@ -288,8 +361,48 @@ fn group_rows<T: FbMac, const G: usize>(
 
 /// The `G` outputs of a branch with the taps `branch[i l]` (`len` of them), output `t` with the
 /// window `w[t s..t s + len]` (`fir_decimate`, `resample`).
+#[allow(
+    clippy::inline_always,
+    reason = "the choice of the out-of-line function must vanish"
+)]
+#[inline(always)]
+fn group_strided<B: Target, T: FbMac, const G: usize>(
+    target: B,
+    branch: &[T::Tap],
+    l: usize,
+    len: usize,
+    w: &[T],
+    s: usize,
+) -> Result<[T; G]> {
+    if B::NATIVE {
+        group_strided_native::<T, G>(branch, l, len, w, s)
+    } else {
+        target.hot(
+            #[inline(always)]
+            move || group_strided_loop::<T, G>(branch, l, len, w, s),
+        )
+    }
+}
+
+/// [`group_strided`] in the build.
 #[inline(never)]
-fn group_strided<T: FbMac, const G: usize>(
+fn group_strided_native<T: FbMac, const G: usize>(
+    branch: &[T::Tap],
+    l: usize,
+    len: usize,
+    w: &[T],
+    s: usize,
+) -> Result<[T; G]> {
+    group_strided_loop::<T, G>(branch, l, len, w, s)
+}
+
+/// The loop of [`group_strided`].
+#[allow(
+    clippy::inline_always,
+    reason = "the loop is compiled in the function of its target"
+)]
+#[inline(always)]
+fn group_strided_loop<T: FbMac, const G: usize>(
     branch: &[T::Tap],
     l: usize,
     len: usize,
@@ -341,7 +454,8 @@ fn add_strided<T: FbMac, const G: usize>(
     reason = "the group size and the strides must be constants in the hot loops"
 )]
 #[inline(always)]
-fn group<T: FbMac, const G: usize>(
+fn group<B: Target, T: FbMac, const G: usize>(
+    target: B,
     branch: &[T::Tap],
     l: usize,
     len: usize,
@@ -349,9 +463,9 @@ fn group<T: FbMac, const G: usize>(
     s: usize,
 ) -> Result<[T; G]> {
     match (l, s) {
-        (1, 1) => group_unit::<T, G>(branch.get(..len).unwrap_or_default(), w),
-        (_, 1) => group_rows::<T, G>(branch, l, len, w),
-        _ => group_strided::<T, G>(branch, l, len, w, s),
+        (1, 1) => group_unit::<B, T, G>(target, branch.get(..len).unwrap_or_default(), w),
+        (_, 1) => group_rows::<B, T, G>(target, branch, l, len, w),
+        _ => group_strided::<B, T, G>(target, branch, l, len, w, s),
     }
 }
 
@@ -363,8 +477,31 @@ fn group<T: FbMac, const G: usize>(
     clippy::inline_always,
     reason = "the group size and the strides must be constants in the hot loops"
 )]
+#[cfg(target_arch = "aarch64")]
 #[inline(always)]
 fn progression_of<'a, T: FbMac + 'a, const G: usize>(
+    taps: &[T::Tap],
+    l: usize,
+    hist: &[T],
+    input: &[T],
+    phase: usize,
+    seen: usize,
+    s: usize,
+    count: usize,
+    dst: impl Iterator<Item = &'a mut T>,
+) -> Result<()> {
+    progression_at::<Native, T, G>(Native, taps, l, hist, input, phase, seen, s, count, dst)
+}
+
+/// [`progression_of`] with the groups compiled for the target `B`.
+#[allow(clippy::too_many_arguments)]
+#[allow(
+    clippy::inline_always,
+    reason = "the group size and the strides must be constants in the hot loops"
+)]
+#[inline(always)]
+fn progression_at<'a, B: Target, T: FbMac + 'a, const G: usize>(
+    target: B,
     taps: &[T::Tap],
     l: usize,
     hist: &[T],
@@ -386,7 +523,7 @@ fn progression_of<'a, T: FbMac + 'a, const G: usize>(
         let at = seen + t * s;
         if grouped && at >= len && t + G <= count {
             let w = input.get(at - len..at + (G - 1) * s).ok_or_else(internal)?;
-            let ys = group::<T, G>(branch, l, len, w, s)?;
+            let ys = group::<B, T, G>(target, branch, l, len, w, s)?;
             for y in ys {
                 *dst.next().ok_or_else(internal)? = y;
             }
@@ -402,8 +539,30 @@ fn progression_of<'a, T: FbMac + 'a, const G: usize>(
 
 /// [`progression_of`] with the group size of `T`.
 #[allow(clippy::too_many_arguments)]
-#[inline]
+#[allow(
+    clippy::inline_always,
+    reason = "the same code as `progression_with` itself"
+)]
+#[inline(always)]
 fn progression<'a, T: FbMac + 'a>(
+    taps: &[T::Tap],
+    l: usize,
+    hist: &[T],
+    input: &[T],
+    phase: usize,
+    seen: usize,
+    s: usize,
+    count: usize,
+    dst: impl Iterator<Item = &'a mut T>,
+) -> Result<()> {
+    progression_with(Native, taps, l, hist, input, phase, seen, s, count, dst)
+}
+
+/// [`progression`] with the groups compiled for the target `B`.
+#[allow(clippy::too_many_arguments)]
+#[inline]
+fn progression_with<'a, B: Target, T: FbMac + 'a>(
+    target: B,
     taps: &[T::Tap],
     l: usize,
     hist: &[T],
@@ -416,14 +575,18 @@ fn progression<'a, T: FbMac + 'a>(
 ) -> Result<()> {
     // Windows `s > 1` samples apart take one slice per output: 16 of them spilled.
     if T::WIDE && s == 1 {
-        progression_of::<T, WIDE_GROUP>(taps, l, hist, input, phase, seen, s, count, dst)
+        progression_at::<B, T, WIDE_GROUP>(target, taps, l, hist, input, phase, seen, s, count, dst)
     } else {
-        progression_of::<T, NARROW_GROUP>(taps, l, hist, input, phase, seen, s, count, dst)
+        progression_at::<B, T, NARROW_GROUP>(
+            target, taps, l, hist, input, phase, seen, s, count, dst,
+        )
     }
 }
 
-/// `fir`: one output per input sample; the history holds the last `N - 1` samples.
-pub(super) fn fir<T: FbMac>(
+/// `fir`: one output per input sample; the history holds the last `N - 1` samples. The groups
+/// are compiled for the target `B`.
+pub(super) fn fir<B: Target, T: FbMac>(
+    target: B,
     taps: &[T::Tap],
     hist: &mut [T],
     input: &[T],
@@ -436,7 +599,18 @@ pub(super) fn fir<T: FbMac>(
         });
     }
     let len = input.len();
-    progression(taps, 1, hist, input, 0, 1, 1, len, output.iter_mut())?;
+    progression_with(
+        target,
+        taps,
+        1,
+        hist,
+        input,
+        0,
+        1,
+        1,
+        len,
+        output.iter_mut(),
+    )?;
     update_history(hist, input)
 }
 
@@ -810,7 +984,27 @@ fn gcd(mut a: usize, mut b: usize) -> usize {
 }
 
 #[allow(clippy::too_many_arguments)]
+#[allow(
+    clippy::inline_always,
+    reason = "the same code as `polyphase_at` itself"
+)]
+#[inline(always)]
 pub(super) fn polyphase<T: FbMac>(
+    taps: &[T::Tap],
+    hist: &mut [T],
+    up: usize,
+    down: usize,
+    q: &mut i64,
+    input: &[T],
+    output: &mut [T],
+) -> Result<Progress> {
+    polyphase_at(Native, taps, hist, up, down, q, input, output)
+}
+
+/// [`polyphase`] with the groups compiled for the target `B`.
+#[allow(clippy::too_many_arguments)]
+pub(super) fn polyphase_at<B: Target, T: FbMac>(
+    target: B,
     taps: &[T::Tap],
     hist: &mut [T],
     up: usize,
@@ -857,7 +1051,7 @@ pub(super) fn polyphase<T: FbMac>(
             .unwrap_or_default()
             .iter_mut()
             .step_by(lp);
-        progression(taps, up, hist, input, phase, seen, mp, count, dst)?;
+        progression_with(target, taps, up, hist, input, phase, seen, mp, count, dst)?;
     }
     update_history(hist, input.get(..consumed).ok_or_else(internal)?)?;
     Ok(Progress { consumed, produced })
@@ -1069,7 +1263,7 @@ mod tests {
             let mut out = vec![T::default(); room];
             let (consumed, produced) = match kind {
                 Kind::Fir => {
-                    fir(&taps, &mut hist, input, &mut out).unwrap();
+                    fir(super::Native, &taps, &mut hist, input, &mut out).unwrap();
                     (take, take)
                 }
                 Kind::Decimate(m) => {

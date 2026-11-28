@@ -70,9 +70,9 @@ use anyhow::{Context, anyhow, bail};
 use serde_json::Value;
 
 use crate::bench::{
-    ComparisonKind, KERNELS, KernelSpec, LevelPlan, PLANS, Reference, SimdLevel, VOLK_BELOW_LEVEL_JUDGED,
-    comparisons,
-    measured_level, reference_level, volk_functions_of, volk_protokernel, volk_protokernel_level,
+    ComparisonKind, KERNELS, KernelSpec, LevelPlan, PLANS, Reference, SimdLevel,
+    VOLK_BELOW_LEVEL_JUDGED, comparisons, measured_level, reference_level, volk_functions_of,
+    volk_protokernel, volk_protokernel_level,
 };
 use crate::count::{Caps, Limits, Status};
 use crate::scan::Finding;
@@ -601,6 +601,73 @@ fn valid_waiver(text: &str, open_items: &str) -> Result<(), String> {
     }
 }
 
+/// The kinds of a `slower_because` text (the maintainer's order of 2026-11-28, D3021): we do
+/// work the library does not (the NaN rule, exact rounding, block floating point), we are more
+/// accurate (a measured SNR gain), or more robust (a measured behaviour gain).
+pub const SLOWER_KINDS: [&str; 3] = ["more work", "more accurate", "more robust"];
+
+/// Whether a `slower_because` text has the form `<kind>: <text>` (a colon and a space) with a kind of
+/// [`SLOWER_KINDS`] and a text that is not empty. `Err` says what is wrong.
+///
+/// # Errors
+/// The kind is not one of [`SLOWER_KINDS`], or the text after it is empty.
+pub fn valid_slower_because(text: &str) -> Result<(), String> {
+    // The separator of the cycle page as well (`benches/cycles_page.py`, D3050): colon, space.
+    let Some((kind, rest)) = text.split_once(": ") else {
+        return Err(format!(
+            "a `slower_because` has the form `<kind>: <text>` with the kind one of {}",
+            SLOWER_KINDS.map(|k| format!("`{k}`")).join(", ")
+        ));
+    };
+    if !SLOWER_KINDS.contains(&kind) {
+        return Err(format!(
+            "the kind `{kind}` of a `slower_because` is not one of {}",
+            SLOWER_KINDS.map(|k| format!("`{k}`")).join(", ")
+        ));
+    }
+    if rest.trim().is_empty() {
+        return Err(format!(
+            "the text of the `slower_because` of kind `{kind}` is empty"
+        ));
+    }
+    Ok(())
+}
+
+/// Whether `limit` states why the entry may be above `_limits.release` on a model (D3021): a
+/// `slower_because`, an `accuracy_trade`, a `contract_trade`, a `waiver` or an
+/// `accuracy_waiver`.
+#[must_use]
+pub fn stated(limit: &crate::count::Limit) -> bool {
+    limit.slower_because.is_some()
+        || limit.accuracy_trade.is_some()
+        || limit.contract_trade.is_some()
+        || limit.waiver.is_some()
+        || limit.accuracy_waiver.is_some()
+}
+
+/// The `slower_because` of `limit` against its other fields (D3021): only on a `release` or
+/// `dev` entry, not beside a `waiver`, an `accuracy_trade` or a `contract_trade` (those state
+/// the reason already), and of the form of [`valid_slower_because`]. `Err` is the message.
+///
+/// # Errors
+/// One of the rules above does not hold.
+pub fn check_slower_because(limit: &crate::count::Limit) -> Result<(), String> {
+    let Some(t) = &limit.slower_because else {
+        return Ok(());
+    };
+    if limit.status == Status::Info {
+        return Err(format!(
+            "a `slower_because` is only for a `release` or `dev` entry against a library, not for an `info` entry (D3021; slower because: {t})"
+        ));
+    }
+    if limit.waiver.is_some() || limit.accuracy_trade.is_some() || limit.contract_trade.is_some() {
+        return Err(format!(
+            "an entry has one of `slower_because`, `waiver`, `accuracy_trade` and `contract_trade`, not several: a reason goes into `slower_because` or a trade, no reason into a `waiver` (D3021; slower because: {t})"
+        ));
+    }
+    valid_slower_because(t).map_err(|why| format!("{why} (D3021; slower because: {t})"))
+}
+
 /// Whether a `contract_trade` text states the three parts of D3000 ([`CONTRACT_TRADE_PARTS`]):
 /// `less work:`, `gain:` with at least one measured figure, and `attempts:`, each with a text of
 /// its own. `Err` names what is missing.
@@ -739,6 +806,9 @@ pub fn judge_record(
             ));
         }
     }
+    if let Err(why) = check_slower_because(limit) {
+        return Verdict::Fail(why);
+    }
     let cap = match limit.status {
         Status::Info => return Verdict::Info,
         Status::Release => caps.release,
@@ -798,7 +868,12 @@ pub fn judge_record(
                     ));
                 }
             }
-            (None, None, None) => failing.push(text),
+            (None, None, None) => match &limit.slower_because {
+                Some(t) => failing.push(format!(
+                    "{text}; a `slower_because` states a reason, it keeps no entry above its limit (D3021; slower because: {t})"
+                )),
+                None => failing.push(text),
+            },
             (None, None, Some(w)) => match (
                 crate::count::waiver_above_cap(caps, limit.status, worst, w),
                 valid_waiver(w, open_items),
@@ -811,7 +886,27 @@ pub fn judge_record(
             },
         }
     } else {
-        if let Some(w) = &limit.waiver {
+        if worst > caps.release && !stated(limit) {
+            failing.push(format!(
+                "ours / {against} {} is above {:.2}x on a model without a reason (`slower_because`, `accuracy_trade`, `contract_trade`) or a `waiver` that says why and names the open item (D3021)",
+                ratios(r, caps.release),
+                caps.release
+            ));
+        }
+        if let Some(t) = &limit.slower_because
+            && worst <= caps.release
+        {
+            notes.push(format!(
+                "{} is within {:.2}x: the `slower_because` is no longer needed ({t})",
+                ratios(r, caps.release),
+                caps.release
+            ));
+        }
+        // A `dev` entry between 1.10 and its limit keeps its waiver: it says why it is slower
+        // (D3021).
+        if let Some(w) = &limit.waiver
+            && worst <= caps.release
+        {
             notes.push(format!(
                 "{} is within the {status} limit of {cap:.2}x: the waiver is no longer needed ({w})",
                 ratios(r, cap)
@@ -1298,7 +1393,8 @@ pub fn check_volk_protokernels(results: &Results, limits: &Limits) -> Vec<Findin
                     )),
                     Some(p)
                         if volk_protokernel_level(p).rank() < measured.rank()
-                            && !VOLK_BELOW_LEVEL_JUDGED.contains(&(entry.as_str(), level.as_str())) =>
+                            && !VOLK_BELOW_LEVEL_JUDGED
+                                .contains(&(entry.as_str(), level.as_str())) =>
                     {
                         fail(format!(
                             "`{f}` runs its `{p}` protokernel in VOLK's machine of `{}`, {} code below the `{}` code the entry measures (D2900)",
@@ -1317,6 +1413,78 @@ pub fn check_volk_protokernels(results: &Results, limits: &Limits) -> Vec<Findin
         }
     }
     out
+}
+
+/// The reasons of the `simd128` entries (D3021): every `release` or `dev` record of the count
+/// results (`benches/results/wasm32.json`, instructions per sample) whose ratio to its library
+/// is above `_limits.release` needs a `slower_because`, a trade or a waiver in
+/// `benches/limits.json`, and a `slower_because` there has the form of
+/// [`valid_slower_because`]. The count judges the limits themselves (`cargo xtask count`).
+///
+/// # Errors
+/// Invalid JSON of the count results.
+pub fn check_counted_reasons(counts_json: &str, limits: &Limits) -> anyhow::Result<Vec<Finding>> {
+    let doc: serde_json::Value = serde_json::from_str(counts_json)?;
+    let mut out = Vec::new();
+    let levels = doc
+        .get("levels")
+        .and_then(serde_json::Value::as_object)
+        .into_iter()
+        .flatten();
+    for (level, l) in levels {
+        let rows = l
+            .get("kernels")
+            .and_then(serde_json::Value::as_object)
+            .into_iter()
+            .flatten();
+        for (entry, r) in rows {
+            let Some(limit) = limits.get(entry, level) else {
+                continue;
+            };
+            let mut fail = |message: String| {
+                out.push(Finding {
+                    path: PathBuf::from("benches/limits.json"),
+                    line: 0,
+                    message: format!("`{entry}` at `{level}`: {message}"),
+                });
+            };
+            if let Err(why) = check_slower_because(limit) {
+                fail(why);
+                continue;
+            }
+            let ratio = r.get("ratio").and_then(serde_json::Value::as_f64);
+            if matches!(limit.status, Status::Release | Status::Dev)
+                && r.get("comparison_kind").and_then(serde_json::Value::as_str) == Some("library")
+                && ratio.is_some_and(|x| x > limits.caps.release)
+                && !stated(limit)
+            {
+                fail(format!(
+                    "{} is `{}` at {:.2}x the instructions per sample of its library, above {:.2}x, without a reason (`slower_because`, `accuracy_trade`, `contract_trade`) or a `waiver` that says why and names the open item (D3021)",
+                    entry,
+                    status_name(limit.status),
+                    ratio.unwrap_or_default(),
+                    limits.caps.release
+                ));
+            }
+        }
+    }
+    Ok(out)
+}
+
+/// [`check_counted_reasons`] of the count results at `path` (none if the file is absent), with
+/// its line of the report.
+fn counted_reasons(path: &Path, limits: &Limits) -> anyhow::Result<Vec<Finding>> {
+    let findings = if path.exists() {
+        check_counted_reasons(&std::fs::read_to_string(path)?, limits)?
+    } else {
+        Vec::new()
+    };
+    println!(
+        "check cycles: every release and dev entry above {:.2}x of its library at `simd128` states a reason or a waiver: {} findings (D3021)",
+        limits.caps.release,
+        findings.len()
+    );
+    Ok(findings)
 }
 
 /// The comparison kinds of the records of `results` against the measurement plan (D2767): every
@@ -1516,6 +1684,7 @@ pub fn check(root: &Path, o: &Options) -> anyhow::Result<Vec<Finding>> {
     } else {
         crate::gap_report::Counts::new()
     };
+    let reason_findings = counted_reasons(&counts_path, &limits)?;
     let kernel = |e: &str| crate::bench::is_kernel_entry(e);
     crate::gap_report::print(
         &crate::gap_report::simd_shares(&pairs(&results), &counts, &kernel),
@@ -1525,6 +1694,7 @@ pub fn check(root: &Path, o: &Options) -> anyhow::Result<Vec<Finding>> {
     findings.extend(plan_findings);
     findings.extend(kind_findings);
     findings.extend(level_findings);
+    findings.extend(reason_findings);
     findings.extend(gate.findings);
     Ok(findings)
 }
@@ -1719,7 +1889,10 @@ mod tests {
 
     #[test]
     fn dev_is_judged_with_the_dev_limit_and_reported_when_ready_for_release() {
-        let l = limits_with(r#""k": {"sse2": {"status": "dev"}}"#);
+        // Above 1.10 a `dev` entry says why (D3021).
+        let l = limits_with(
+            r#""k": {"sse2": {"status": "dev", "slower_because": "more work: the NaN rule, open item I30-9"}}"#,
+        );
         let g = gate(&results(&[("k", 1.4, 1.0, 1.3, 1.0, "volk")], "sse2"), &l);
         assert_eq!(g.findings.len(), 0);
         assert!(g.warnings[0].contains("above 1.10x (dev limit 1.50x)"));
@@ -1812,7 +1985,7 @@ mod tests {
         assert!(!m.contains("our avx2 build"), "{m}");
         // `dev` with the dev limit, and the remark of an entry ready for release.
         let dev = limits_with(
-            r#""k": {"avx2": {"status": "release"}, "avx2-runtime": {"status": "dev"}}"#,
+            r#""k": {"avx2": {"status": "release"}, "avx2-runtime": {"status": "dev", "waiver": "not faster yet, open item I30-9"}}"#,
         );
         let g = gate(&run_time((1.4, 1.0), "volk"), &dev);
         assert_eq!(g.findings.len(), 0);
@@ -2130,6 +2303,114 @@ mod tests {
                 .iter()
                 .any(|f| f.message.contains("below the comparison"))
         );
+    }
+
+    #[test]
+    fn an_entry_above_the_release_limit_states_a_reason_or_a_waiver() {
+        // D3021: a `dev` entry within its limit but above 1.10 on a model needs a text.
+        let l =
+            |extra: &str| limits_with(&format!(r#""k": {{"sse2": {{"status": "dev"{extra}}}}}"#));
+        let rec = |reference: f64, counter: f64| {
+            with_snr(
+                results(&[("k", reference, 1.0, counter, 1.0, "VOLK")], "sse2"),
+                "sse2",
+                "k",
+                Some((47.27, 47.27)),
+            )
+        };
+        let bare = gate(&rec(1.0, 1.25), &l(""));
+        assert_eq!(bare.findings.len(), 1);
+        assert!(bare.findings[0].message.contains("without a reason"));
+        // At 1.10 itself and below: nothing needed.
+        assert_eq!(gate(&rec(1.10, 1.0), &l("")).findings, Vec::new());
+        // Every kind of reason, and a waiver, is a text.
+        for extra in [
+            r#", "slower_because": "more work: the NaN rule and the f64 rounding of the CU8 contract, open item IO2-19""#,
+            r#", "slower_because": "more accurate: 57.02 dB against 23.44 dB""#,
+            r#", "slower_because": "more robust: no overmodulation""#,
+            r#", "waiver": "not optimised yet, open item IO1-7""#,
+            r#", "accuracy_waiver": "the library is exact, open item IO1-7""#,
+        ] {
+            let g = gate(&rec(1.0, 1.25), &l(extra));
+            assert!(
+                g.findings
+                    .iter()
+                    .all(|f| !f.message.contains("without a reason")),
+                "{extra}: {:?}",
+                g.findings
+            );
+        }
+        // The form of `slower_because`: a known kind, a colon, a text.
+        for (text, why) in [
+            ("slower because of the NaN rule", "has the form"),
+            ("more precise: 3 dB", "is not one of"),
+            ("more work:  ", "is empty"),
+            ("more work:the NaN rule", "has the form"),
+        ] {
+            let g = gate(
+                &rec(1.0, 1.25),
+                &l(&format!(r#", "slower_because": "{text}""#)),
+            );
+            assert_eq!(g.findings.len(), 1, "{text}");
+            assert!(
+                g.findings[0].message.contains(why),
+                "{text}: {:?}",
+                g.findings
+            );
+        }
+        // Not beside a waiver or a trade, and not on an `info` entry.
+        let both = gate(
+            &rec(1.0, 1.25),
+            &l(r#", "slower_because": "more work: x", "waiver": "open item IO1-7""#),
+        );
+        assert!(both.findings[0].message.contains("not several"));
+        let info = gate(
+            &rec(1.0, 1.25),
+            &limits_with(r#""k": {"sse2": {"status": "info", "slower_because": "more work: x"}}"#),
+        );
+        assert!(info.findings[0].message.contains("not for an `info` entry"));
+        // Above the `dev` limit a reason keeps nothing.
+        let above = gate(
+            &rec(1.6, 1.0),
+            &l(r#", "slower_because": "more work: the NaN rule""#),
+        );
+        assert!(
+            above.findings[0]
+                .message
+                .contains("keeps no entry above its limit")
+        );
+        // Within 1.10 a reason is a remark.
+        let fine = gate(&rec(1.0, 1.0), &l(r#", "slower_because": "more work: x""#));
+        assert_eq!(fine.findings, Vec::new());
+        assert!(fine.warnings.iter().any(|w| w.contains("no longer needed")));
+    }
+
+    #[test]
+    fn a_counted_entry_above_the_release_limit_states_a_reason_or_a_waiver() {
+        // D3021 at `simd128`, from the count results.
+        let counts = r#"{"levels": {"simd128": {"kernels": {
+            "a": {"comparison_kind": "library", "ratio": 1.31},
+            "b": {"comparison_kind": "library", "ratio": 1.31},
+            "c": {"comparison_kind": "library", "ratio": 1.05},
+            "d": {"comparison_kind": "own_fallback", "ratio": 1.4}
+        }}}}"#;
+        let limits = Limits::parse(
+            r#"{"_limits": {"release": 1.10, "dev": 1.50, "warn": 1.10, "goal": 1.00},
+            "a": {"simd128": {"status": "dev"}},
+            "b": {"simd128": {"status": "dev", "slower_because": "more accurate: 57.02 dB against 23.44 dB"}},
+            "c": {"simd128": {"status": "dev"}},
+            "d": {"simd128": {"status": "info"}}}"#,
+        )
+        .unwrap();
+        let f = check_counted_reasons(counts, &limits).unwrap();
+        assert_eq!(f.len(), 1, "{f:?}");
+        assert!(f[0].message.starts_with("`a` at `simd128`"));
+        let bad = Limits::parse(
+            r#"{"_limits": {"release": 1.10, "dev": 1.50, "warn": 1.10, "goal": 1.00},
+            "c": {"simd128": {"status": "dev", "slower_because": "faster soon"}}}"#,
+        )
+        .unwrap();
+        assert_eq!(check_counted_reasons(counts, &bad).unwrap().len(), 1);
     }
 
     #[test]
@@ -2661,7 +2942,10 @@ mod tests {
         );
         assert_eq!(
             VOLK_BELOW_LEVEL_JUDGED,
-            [("convert_out_cu8", "avx512"), ("convert_out_real_ru8", "avx512")]
+            [
+                ("convert_out_cu8", "avx512"),
+                ("convert_out_real_ru8", "avx512")
+            ]
         );
     }
 

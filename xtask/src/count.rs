@@ -108,6 +108,13 @@ pub struct Limit {
     /// less work of the library, the measured gain and the attempts to make the extra work
     /// cheaper ([`crate::cycle_gate::CONTRACT_TRADE_PARTS`]). Not used by the count of `simd128`.
     pub contract_trade: Option<String>,
+    /// Why a `release` or `dev` entry is slower than its library, when it is slower for a
+    /// reason (the maintainer's order of 2026-11-28, D3021): `"<kind>: <text>"` with the kind
+    /// `more work`, `more accurate` or `more robust` ([`crate::cycle_gate::SLOWER_KINDS`]); the
+    /// text states what we do more, the measured gain and the open item. It decides no status:
+    /// the entry stays within its limit (a `dev` entry within `_limits.dev`), and an entry above
+    /// 1.10 without a reason has a `waiver` that says so instead.
+    pub slower_because: Option<String>,
 }
 
 #[cfg(test)]
@@ -121,6 +128,7 @@ impl Limit {
             accuracy_waiver: None,
             accuracy_trade: None,
             contract_trade: None,
+            slower_because: None,
         }
     }
 }
@@ -136,7 +144,8 @@ pub struct Limits {
 impl Limits {
     /// Parses the file: `{ "_limits": { "release": 1.10, ... }, "<kernel>": { "<level>": {
     /// "status": "release" | "dev" | "info", "waiver": "<text>", "accuracy_waiver": "<text>",
-    /// "accuracy_trade": "<text>", "contract_trade": "<text>" } } }`.
+    /// "accuracy_trade": "<text>", "contract_trade": "<text>", "slower_because": "<kind>: <text>"
+    /// } } }`.
     /// Other keys starting with `_` are comments.
     ///
     /// # Errors
@@ -197,6 +206,7 @@ impl Limits {
                         accuracy_waiver: text("accuracy_waiver"),
                         accuracy_trade: text("accuracy_trade"),
                         contract_trade: text("contract_trade"),
+                        slower_because: text("slower_because"),
                     },
                 );
             }
@@ -1617,6 +1627,7 @@ mod tests {
             accuracy_waiver: accuracy.map(Into::into),
             accuracy_trade: None,
             contract_trade: None,
+            slower_because: None,
         }
     }
 

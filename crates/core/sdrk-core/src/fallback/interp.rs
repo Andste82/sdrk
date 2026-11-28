@@ -460,6 +460,12 @@ fn branch<'a, B: Target, T: Ring + 'a, const G: usize>(
     let internal = || Error::Internal("interpolator branch");
     let len = branch_len(taps.len(), l, phase);
     let branch = taps.get(phase..).unwrap_or(&[]);
+    // x86-64 below AVX2: `pmaddwd` on the split taps (D3017).
+    #[cfg(all(target_arch = "x86_64", not(target_feature = "avx2")))]
+    if (1..=TAP_COPY).contains(&len) {
+        let _ = target;
+        return branch_x86::<T>(branch, l, len, hist, input, seen, count, dst);
+    }
     // The groups and `single_exact` sum `Q15` products in an `i64` without saturation: exact
     // while the sum of their magnitudes (at most 2^30 each) stays below 2^63, so for fewer than
     // 2^32 taps. An empty branch (`L > N`) gives zeros.
@@ -522,6 +528,106 @@ fn branch<'a, B: Target, T: Ring + 'a, const G: usize>(
     Ok(())
 }
 
+/// [`branch`] on x86-64 below AVX2 for a branch of `1..=TAP_COPY` taps (the maintainer's
+/// decision D3017 on IO1-6): the reversed taps split into `256 h + l` in the blocks of
+/// [`Ring::SLOTS`], the sums of the blocks by `pmaddwd` in the module `q15_x86` (exact `i32`
+/// lanes, see there), four outputs per pass of the taps, the taps after the last whole block
+/// added one by one. Every output is the exact `i64` sum of its products, as in [`groups`] and
+/// [`single_exact`], so the bits are the same. The windows that reach into the history come
+/// from a stack copy of the end of the history and the start of the input.
+#[cfg(all(target_arch = "x86_64", not(target_feature = "avx2")))]
+#[allow(clippy::too_many_arguments)]
+#[allow(
+    clippy::large_stack_frames,
+    reason = "clippy counts the temporary of every `?` separately; the real frame is the 256 \
+              bytes of the reversed taps, the 1 KiB of the split ones and the window copy"
+)]
+fn branch_x86<'a, T: Ring + 'a>(
+    branch: &[Q15],
+    l: usize,
+    len: usize,
+    hist: &[T],
+    input: &[T],
+    seen: usize,
+    count: usize,
+    mut dst: impl Iterator<Item = &'a mut T>,
+) -> Result<()> {
+    /// Outputs per pass of the taps.
+    const N: usize = 4;
+    let internal = || Error::Internal("interpolator branch");
+    // The reversed taps: `r[k] = branch[(len - 1 - k) l]` multiplies the sample `k` of the
+    // window (oldest first).
+    let mut r = [0i16; TAP_COPY];
+    for (k, t) in branch.iter().step_by(l).take(len).enumerate() {
+        *r.get_mut(len - 1 - k).ok_or_else(internal)? = t.0;
+    }
+    let blocks = len / T::BLOCK;
+    let main = blocks * T::BLOCK;
+    let (mut hi, mut lo) = ([[0i16; 8]; TAP_COPY / 4], [[0i16; 8]; TAP_COPY / 4]);
+    for (b, (h, lw)) in hi.iter_mut().zip(lo.iter_mut()).take(blocks).enumerate() {
+        for ((dh, dl), j) in h.iter_mut().zip(lw.iter_mut()).zip(T::SLOTS) {
+            (*dh, *dl) = super::q15_x86::split(*r.get(b * T::BLOCK + j).ok_or_else(internal)?);
+        }
+    }
+    let (hi, lo) = (
+        hi.get(..blocks).ok_or_else(internal)?,
+        lo.get(..blocks).ok_or_else(internal)?,
+    );
+    let tail = r.get(main..len).ok_or_else(internal)?;
+    // The outputs of the windows `x[j..j + len]`, `j < M`.
+    let emit = |x: &[T], m: usize, dst: &mut dyn Iterator<Item = &'a mut T>| -> Result<()> {
+        let mut out = |j: usize, mut sum: T::Sum| -> Result<()> {
+            let w = x.get(j + main..j + len).ok_or_else(internal)?;
+            for (h, s) in tail.iter().zip(w) {
+                T::add(&mut sum, i32::from(*h), s.widen());
+            }
+            *dst.next().ok_or_else(internal)? = T::round(sum);
+            Ok(())
+        };
+        let mut j = 0;
+        while j + N <= m {
+            let x = x.get(j..).ok_or_else(internal)?;
+            let sums = T::sums_x86::<N>(hi, lo, x).ok_or_else(internal)?;
+            for (i, sum) in sums.into_iter().enumerate() {
+                out(j + i, sum)?;
+            }
+            j += N;
+        }
+        while j < m {
+            let x = x.get(j..).ok_or_else(internal)?;
+            let [sum] = T::sums_x86::<1>(hi, lo, x).ok_or_else(internal)?;
+            out(j, sum)?;
+            j += 1;
+        }
+        Ok(())
+    };
+    // Output `t` has the window of the `len` samples before `seen + t`.
+    let in_head = len.saturating_sub(seen).min(count);
+    if in_head > 0 {
+        // `copy = hist[end - (len - seen)..] ++ input[..seen + in_head - 1]`: the window of
+        // output `t < in_head` is `copy[t..t + len]`.
+        let mut copy = [T::default(); 2 * TAP_COPY];
+        let from = hist.len().checked_sub(len - seen).ok_or_else(internal)?;
+        let old = hist.get(from..).ok_or_else(internal)?;
+        let new = input.get(..seen + in_head - 1).ok_or_else(internal)?;
+        let window = copy
+            .get_mut(..old.len() + new.len())
+            .ok_or_else(internal)?;
+        let (ch, ci) = window.split_at_mut(old.len());
+        ch.copy_from_slice(old);
+        ci.copy_from_slice(new);
+        emit(window, in_head, &mut dst)?;
+    }
+    if count > in_head {
+        let first = seen + in_head - len;
+        let x = input
+            .get(first..first + (count - in_head) - 1 + len)
+            .ok_or_else(internal)?;
+        emit(x, count - in_head, &mut dst)?;
+    }
+    Ok(())
+}
+
 /// The engine's `single` with the exact sums of [`Ring`] (a branch of `len < 2^32` taps): the
 /// output whose window ends after `seen` samples of `input`, the samples of `input` first, then
 /// those of the history.
@@ -567,6 +673,20 @@ trait Ring: FbMac<Tap = Q15> + Default {
     fn add(sum: &mut Self::Sum, h: i32, x: Self::Wide);
     /// `sat16(round_shift(sum, 15))`, the finish of `Acc64` (see [`round_q15`]).
     fn round(sum: Self::Sum) -> Self;
+    /// The taps of one block of [`branch_x86`]: eight for `Q15`, four for `CQ15`.
+    #[cfg(all(target_arch = "x86_64", not(target_feature = "avx2")))]
+    const BLOCK: usize;
+    /// The tap of the block in each of its eight slots (`CQ15`: each pair of taps twice, for
+    /// the two components).
+    #[cfg(all(target_arch = "x86_64", not(target_feature = "avx2")))]
+    const SLOTS: [usize; 8];
+    /// The sums of the blocks `hi`, `lo` over the windows `x[j..]`, `j < N`.
+    #[cfg(all(target_arch = "x86_64", not(target_feature = "avx2")))]
+    fn sums_x86<const N: usize>(
+        hi: &[[i16; 8]],
+        lo: &[[i16; 8]],
+        x: &[Self],
+    ) -> Option<[Self::Sum; N]>;
 }
 
 /// `sat16(round_shift(sum, 15))` for a sum of [`Ring`]: `|sum| <= 2^62`, so the rounding
@@ -595,6 +715,15 @@ impl Ring for Q15 {
     fn round(sum: i64) -> Q15 {
         round_q15(sum)
     }
+    #[cfg(all(target_arch = "x86_64", not(target_feature = "avx2")))]
+    const BLOCK: usize = 8;
+    #[cfg(all(target_arch = "x86_64", not(target_feature = "avx2")))]
+    const SLOTS: [usize; 8] = [0, 1, 2, 3, 4, 5, 6, 7];
+    #[cfg(all(target_arch = "x86_64", not(target_feature = "avx2")))]
+    #[inline]
+    fn sums_x86<const N: usize>(hi: &[[i16; 8]], lo: &[[i16; 8]], x: &[Q15]) -> Option<[i64; N]> {
+        super::q15_x86::sums_real::<N>(hi, lo, bytemuck::cast_slice(x), 1)
+    }
 }
 
 impl Ring for CQ15 {
@@ -619,6 +748,19 @@ impl Ring for CQ15 {
             re: round_q15(sum.0),
             im: round_q15(sum.1),
         }
+    }
+    #[cfg(all(target_arch = "x86_64", not(target_feature = "avx2")))]
+    const BLOCK: usize = 4;
+    #[cfg(all(target_arch = "x86_64", not(target_feature = "avx2")))]
+    const SLOTS: [usize; 8] = [0, 1, 0, 1, 2, 3, 2, 3];
+    #[cfg(all(target_arch = "x86_64", not(target_feature = "avx2")))]
+    #[inline]
+    fn sums_x86<const N: usize>(
+        hi: &[[i16; 8]],
+        lo: &[[i16; 8]],
+        x: &[CQ15],
+    ) -> Option<[(i64, i64); N]> {
+        super::q15_x86::sums_complex::<N>(hi, lo, bytemuck::cast_slice(x), 2)
     }
 }
 

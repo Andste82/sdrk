@@ -256,6 +256,21 @@ impl MulReal<f32> for Fallback {
 impl MulReal<Q15> for Fallback {
     fn mul_real(&self, a: &[Q15], b: &[Q15], out: &mut [Q15]) -> Result<()> {
         check3(a, b, out)?;
+        // With AVX2 `vpmulhrsw` and the fix of `-32768 * -32768` (D3017, IO1-7): no portable
+        // form of the rounded product compiles to it.
+        #[cfg(all(target_arch = "x86_64", target_feature = "avx2"))]
+        let (a, b, out) = {
+            let done = super::q15_x86::mul_real_q15(
+                bytemuck::cast_slice(a),
+                bytemuck::cast_slice(b),
+                bytemuck::cast_slice_mut(out),
+            );
+            (
+                a.get(done..).unwrap_or_default(),
+                b.get(done..).unwrap_or_default(),
+                out.get_mut(done..).unwrap_or_default(),
+            )
+        };
         zip_q15(a, b, out, mul_q15);
         Ok(())
     }

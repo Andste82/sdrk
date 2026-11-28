@@ -664,19 +664,22 @@ pub fn scan_core_std(
     findings
 }
 
-/// The file and the module of `sdrk-core` that may hold `unsafe` code (decision D3005): the x86
-/// shuffle intrinsics of the `C32` stereo matrix fallback.
-const CORE_UNSAFE_FILE: &str = "fallback/stereo.rs";
-/// The declaration line of that module.
-const CORE_UNSAFE_MODULE: &str = "mod matrix_x86 {";
+/// The files and the modules of `sdrk-core` that may hold `unsafe` code, by the declaration line
+/// of the module: the x86 shuffle intrinsics of the `C32` stereo matrix fallback (decision
+/// D3005), and the declaration of the x86 module of the `Q15` fallbacks (D3017), whose file is
+/// [`CORE_UNSAFE_FILES`].
+const CORE_UNSAFE_MODULES: [(&str, &str); 2] = [
+    ("fallback/stereo.rs", "mod matrix_x86 {"),
+    ("fallback.rs", "mod q15_x86;"),
+];
+/// The files of `sdrk-core` that are such a module as a whole (D3017).
+const CORE_UNSAFE_FILES: [&str; 1] = ["fallback/q15_x86.rs"];
 
-/// The line numbers of the module [`CORE_UNSAFE_MODULE`] (declaration to closing brace) and of
-/// the attributes right above it (up to the first line without code: its doc comment).
-fn core_unsafe_module_lines(lines: &[Line]) -> Vec<usize> {
-    let Some(start) = lines
-        .iter()
-        .position(|l| l.code.trim() == CORE_UNSAFE_MODULE)
-    else {
+/// The line numbers of the module declared by the line `module` (declaration to closing brace,
+/// or the declaration of an out-of-line module) and of the attributes right above it (up to the
+/// first line without code: its doc comment).
+fn core_unsafe_module_lines(lines: &[Line], module: &str) -> Vec<usize> {
+    let Some(start) = lines.iter().position(|l| l.code.trim() == module) else {
         return Vec::new();
     };
     let mut allowed = Vec::new();
@@ -704,8 +707,9 @@ fn core_unsafe_module_lines(lines: &[Line]) -> Vec<usize> {
     allowed
 }
 
-/// Scans one file of a core-layer crate for `unsafe` (decision D3005: `sdrk-core` is
-/// `#![deny(unsafe_code)]`, and only the module `matrix_x86` of `fallback/stereo.rs` allows it).
+/// Scans one file of a core-layer crate for `unsafe` (decisions D3005 and D3017: `sdrk-core` is
+/// `#![deny(unsafe_code)]`, and only the module `matrix_x86` of `fallback/stereo.rs` and the
+/// module `q15_x86` of `fallback/q15_x86.rs`, with its declaration, allow it).
 /// `file` is the path relative to `src`; `exception` is set for `sdrk-core`. Every `unsafe`
 /// token (a block, a function, an `allow(unsafe_code)`) outside that module is a finding, test
 /// code included; the crate attributes `#![deny(unsafe_code)]` / `#![forbid(unsafe_code)]` of
@@ -713,8 +717,15 @@ fn core_unsafe_module_lines(lines: &[Line]) -> Vec<usize> {
 #[must_use]
 pub fn scan_core_unsafe(file: &str, source: &str, exception: bool) -> Vec<(usize, String)> {
     let ann = annotate(source, StdPolicy::Forbidden);
-    let allowed = if exception && file == CORE_UNSAFE_FILE {
-        core_unsafe_module_lines(&ann.lines)
+    if exception && CORE_UNSAFE_FILES.contains(&file) {
+        return Vec::new();
+    }
+    let allowed: Vec<usize> = if exception {
+        CORE_UNSAFE_MODULES
+            .iter()
+            .filter(|(f, _)| *f == file)
+            .flat_map(|(_, m)| core_unsafe_module_lines(&ann.lines, m))
+            .collect()
     } else {
         Vec::new()
     };
@@ -737,8 +748,9 @@ pub fn scan_core_unsafe(file: &str, source: &str, exception: bool) -> Vec<(usize
             findings.push((
                 line.number,
                 "`unsafe` in the core layer outside the module `matrix_x86` of \
-                 `sdrk_core::fallback::stereo` (D3005): more unsafe code in the core layer needs \
-                 a maintainer decision"
+                 `sdrk_core::fallback::stereo` (D3005) and the module \
+                 `sdrk_core::fallback::q15_x86` (D3017): more unsafe code in the core layer \
+                 needs a maintainer decision"
                     .to_string(),
             ));
         }
@@ -1078,6 +1090,23 @@ mod tests {
             scan_core_unsafe("fallback/stereo.rs", CORE_STEREO, false).len(),
             3
         );
+    }
+
+    #[test]
+    fn core_unsafe_allows_the_q15_module_and_its_declaration() {
+        // D3017: the file of the module as a whole, and its declaration with its attributes.
+        let module = "//! The module.\nuse core::arch::x86_64::_mm_setzero_si128;\npub fn f() {\n    // SAFETY: sse2.\n    let _ = unsafe { _mm_setzero_si128() };\n}\n";
+        assert_eq!(scan_core_unsafe("fallback/q15_x86.rs", module, true), []);
+        assert_eq!(
+            scan_core_unsafe("fallback/q15_x86.rs", module, false).len(),
+            1
+        );
+        let decl = "mod math;\n/// The `Q15` intrinsics.\n#[cfg(target_arch = \"x86_64\")]\n#[allow(unsafe_code, reason = \"D3017\")]\nmod q15_x86;\nmod spectrum;\n";
+        assert_eq!(scan_core_unsafe("fallback.rs", decl, true), []);
+        // The same declaration elsewhere, or another module allowed in `fallback.rs`.
+        assert_eq!(scan_core_unsafe("fallback/math.rs", decl, true).len(), 1);
+        let other = decl.replace("mod q15_x86;", "mod other;");
+        assert_eq!(scan_core_unsafe("fallback.rs", &other, true).len(), 1);
     }
 
     #[test]

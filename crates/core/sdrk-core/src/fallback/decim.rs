@@ -767,13 +767,14 @@ mod a64 {
 /// sum of its products, the sum of [`super::FbMac::mac_exact`] in every order: the bits of the
 /// grouped engine and of [`super::single`].
 ///
-/// The forms are those the compiler turns into vector code on each target:
+/// The forms per target:
 ///
-/// - x86-64: blocks of four samples with each tap twice (`[r0, r0, r1, r1, r2, r2, r3, r3]`
-///   against `[re0, im0, re1, im1, re2, im2, re3, im3]`); lane `i < 4` is the pair sum
-///   `t[i] x[i] + t[i + 4] x[i + 4]` (`pmaddwd` of the samples widened in place);
+/// - x86-64: `pmaddwd` in the module `q15_x86` (D3017; O1's exact lanes, which the compiler
+///   vectorized with 6 shuffles per 8 multiply-adds, are replaced): blocks of four samples, the
+///   components paired by `pshuflw` / `pshufhw`, the taps split into `256 h + l` so that every
+///   lane is exact in `i32` (no offset `K` there), four outputs per pass of the taps;
 /// - AArch64: pairs of consecutive samples with their two taps (`ld4`, `ld2`, `smull`,
-///   `smlal`, `uaddw` on sixteen samples per step).
+///   `smlal`, `uaddw` on sixteen samples per step), the offset pair sums below.
 ///
 /// The offset passes through [`core::hint::black_box`]: with the constant visible the
 /// compiler proves the `u32` sums equal to `i64` sums and returns to scalar `i64` products
@@ -804,9 +805,11 @@ mod exact {
     const MAX_PADDED: usize = MAX_TAPS + PAD - 1;
 
     /// Offset of the pair sums, `2^31 - 2^16`.
+    #[cfg(target_arch = "aarch64")]
     const K: i32 = 0x7FFF_0000;
 
-    /// A prepared unit of taps: a block of four samples (x86-64) or a pair (AArch64).
+    /// A prepared unit of taps: a block of four samples (x86-64, `[t0, t1, t0, t1, t2, t3, t2,
+    /// t3]` of the high and of the low parts, D3017) or a pair (AArch64).
     #[cfg(target_arch = "x86_64")]
     type Unit = [i16; 8];
     /// See the x86-64 type.
@@ -816,33 +819,12 @@ mod exact {
     /// Samples per [`Unit`].
     const PER_UNIT: usize = if cfg!(target_arch = "x86_64") { 4 } else { 2 };
 
-    /// Copies of each tap in a [`Unit`]: one per component on x86-64, one on AArch64.
-    const REPEAT: usize = if cfg!(target_arch = "x86_64") { 2 } else { 1 };
-
-    /// The sums of the offset pair sums of the window `x` (`PER_UNIT` samples per unit of `td`)
-    /// per component, `(re, im)`, `k` the offset `K`: each holds `P / 2` offsets.
+    /// The outputs computed together on x86-64 (one pass of the taps).
     #[cfg(target_arch = "x86_64")]
-    #[inline(never)]
-    fn lanes(td: &[Unit], x: &[CQ15], k: i32) -> (u64, u64) {
-        let x: &[i16] = bytemuck::cast_slice(x);
-        let (x, _) = x.as_chunks::<8>();
-        let mut acc = [0u64; 4];
-        for (t, v) in td.iter().zip(x) {
-            for (i, a) in acc.iter_mut().enumerate() {
-                let (Some(&t0), Some(&t1), Some(&x0), Some(&x1)) =
-                    (t.get(i), t.get(i + 4), v.get(i), v.get(i + 4))
-                else {
-                    continue;
-                };
-                let p = (i32::from(t0) * i32::from(x0)).wrapping_add(i32::from(t1) * i32::from(x1));
-                *a += u64::from(p.wrapping_add(k).cast_unsigned());
-            }
-        }
-        let [r0, i0, r1, i1] = acc;
-        (r0 + r1, i0 + i1)
-    }
+    const GROUP: usize = 4;
 
-    /// See the x86-64 form.
+    /// The sums of the offset pair sums of the window `x` (two samples per unit of `td`) per
+    /// component, `(re, im)`, `k` the offset `K`: each holds `P / 2` offsets.
     #[cfg(target_arch = "aarch64")]
     #[inline(never)]
     fn lanes(td: &[Unit], x: &[CQ15], k: i32) -> (u64, u64) {
@@ -858,7 +840,36 @@ mod exact {
         (re, im)
     }
 
-    /// The prepared taps of one call.
+    /// The prepared taps of one call (x86-64): the high and the low parts of the padded
+    /// reversed taps in units.
+    #[cfg(target_arch = "x86_64")]
+    struct Taps<'a> {
+        hi: &'a [Unit],
+        lo: &'a [Unit],
+    }
+
+    #[cfg(target_arch = "x86_64")]
+    impl Taps<'_> {
+        /// The outputs of the `N` windows `x[j s..j s + P]` (`P` samples each, oldest first).
+        #[inline]
+        fn outputs<const N: usize>(&self, x: &[CQ15], s: usize) -> Option<[CQ15; N]> {
+            let x16: &[i16] = bytemuck::cast_slice(x);
+            let sums = super::super::q15_x86::sums_complex::<N>(self.hi, self.lo, x16, 2 * s)?;
+            Some(sums.map(|(re, im)| CQ15 {
+                re: Acc64(re).finish(),
+                im: Acc64(im).finish(),
+            }))
+        }
+
+        /// The output of the window `w` (`P` samples, oldest first).
+        #[inline(never)]
+        fn output(&self, w: &[CQ15]) -> Option<CQ15> {
+            self.outputs::<1>(w, 1).map(|[y]| y)
+        }
+    }
+
+    /// The prepared taps of one call (AArch64).
+    #[cfg(target_arch = "aarch64")]
     struct Taps<'a> {
         /// The padded reversed taps in units.
         td: &'a [Unit],
@@ -868,15 +879,20 @@ mod exact {
         k: i32,
     }
 
+    #[cfg(target_arch = "aarch64")]
     impl Taps<'_> {
         /// The output of the window `w` (`P` samples, oldest first).
         #[inline]
-        fn output(&self, w: &[CQ15]) -> CQ15 {
+        #[allow(
+            clippy::unnecessary_wraps,
+            reason = "the signature of the x86-64 form, whose window may be short"
+        )]
+        fn output(&self, w: &[CQ15]) -> Option<CQ15> {
             let (re, im) = lanes(self.td, w, self.k);
-            CQ15 {
+            Some(CQ15 {
                 re: Acc64(re.wrapping_sub(self.off).cast_signed()).finish(),
                 im: Acc64(im.wrapping_sub(self.off).cast_signed()).finish(),
-            }
+            })
         }
     }
 
@@ -897,6 +913,11 @@ mod exact {
         Some(run(taps, hist, input, seen, s, out))
     }
 
+    #[allow(
+        clippy::large_stack_frames,
+        reason = "clippy counts the temporary of every `?` separately; the real frame is the \
+                  prepared taps (2 KiB of split taps on x86-64)"
+    )]
     fn run(
         taps: &[Q15],
         hist: &[CQ15],
@@ -911,21 +932,49 @@ mod exact {
         let pad = padded - len;
         // The padded reversed taps `r`: `pad` zeros, then `r[pad + k] = taps[N - 1 - k]`, so
         // `r[k] = taps[P - 1 - k]` from `k = pad` on.
-        let mut units = [Unit::default(); MAX_PADDED / PER_UNIT];
-        let td = units.get_mut(..padded / PER_UNIT).ok_or_else(internal)?;
-        for (u, unit) in td.iter_mut().enumerate() {
-            for (j, slot) in unit.chunks_exact_mut(REPEAT).enumerate() {
-                let k = u * PER_UNIT + j;
-                if k >= pad {
-                    slot.fill(taps.get(padded - 1 - k).ok_or_else(internal)?.0);
+        let r = |k: usize| -> Result<i16> {
+            if k < pad {
+                Ok(0)
+            } else {
+                Ok(taps.get(padded - 1 - k).ok_or_else(internal)?.0)
+            }
+        };
+        #[cfg(target_arch = "x86_64")]
+        let (mut hi, mut lo) = (
+            [Unit::default(); MAX_PADDED / PER_UNIT],
+            [Unit::default(); MAX_PADDED / PER_UNIT],
+        );
+        #[cfg(target_arch = "x86_64")]
+        let prepared = {
+            let hi = hi.get_mut(..padded / PER_UNIT).ok_or_else(internal)?;
+            let lo = lo.get_mut(..padded / PER_UNIT).ok_or_else(internal)?;
+            for (u, (h, l)) in hi.iter_mut().zip(lo.iter_mut()).enumerate() {
+                // `[t0, t1, t0, t1, t2, t3, t2, t3]` of the four taps of the unit.
+                for (i, j) in [0, 1, 0, 1, 2, 3, 2, 3].into_iter().enumerate() {
+                    let (th, tl) = super::super::q15_x86::split(r(PER_UNIT * u + j)?);
+                    if let (Some(dh), Some(dl)) = (h.get_mut(i), l.get_mut(i)) {
+                        (*dh, *dl) = (th, tl);
+                    }
                 }
             }
-        }
-        let k = core::hint::black_box(K);
-        let prepared = Taps {
-            td,
-            off: ((padded / 2) as u64).wrapping_mul(u64::from(k.cast_unsigned())),
-            k,
+            Taps { hi, lo }
+        };
+        #[cfg(target_arch = "aarch64")]
+        let mut units = [Unit::default(); MAX_PADDED / PER_UNIT];
+        #[cfg(target_arch = "aarch64")]
+        let prepared = {
+            let td = units.get_mut(..padded / PER_UNIT).ok_or_else(internal)?;
+            for (u, unit) in td.iter_mut().enumerate() {
+                for (j, slot) in unit.iter_mut().enumerate() {
+                    *slot = r(u * PER_UNIT + j)?;
+                }
+            }
+            let k = core::hint::black_box(K);
+            Taps {
+                td,
+                off: ((padded / 2) as u64).wrapping_mul(u64::from(k.cast_unsigned())),
+                k,
+            }
         };
         // Output `t` ends after `e = seen + t s` samples of the input. Its window is
         // `input[e - P..e]` when `e >= P`, else it reaches into the history.
@@ -939,9 +988,24 @@ mod exact {
             head(&prepared, padded, hist, input, seen, s, oh)?;
         }
         let first = seen + n_head * s;
+        #[cfg(target_arch = "x86_64")]
+        let (ob, first) = {
+            let (groups, rest) = ob.as_chunks_mut::<GROUP>();
+            let done = groups.len() * GROUP;
+            for (g, ys) in groups.iter_mut().enumerate() {
+                let e = first + g * GROUP * s;
+                let x = input
+                    .get(e - padded..e - padded + (GROUP - 1) * s + padded)
+                    .ok_or_else(internal)?;
+                *ys = prepared.outputs::<GROUP>(x, s).ok_or_else(internal)?;
+            }
+            (rest, first + done * s)
+        };
         for (t, y) in ob.iter_mut().enumerate() {
             let e = first + t * s;
-            *y = prepared.output(input.get(e - padded..e).ok_or_else(internal)?);
+            *y = prepared
+                .output(input.get(e - padded..e).ok_or_else(internal)?)
+                .ok_or_else(internal)?;
         }
         Ok(())
     }
@@ -969,7 +1033,9 @@ mod exact {
         ci.copy_from_slice(input.get(..take).ok_or_else(internal)?);
         for (t, y) in out.iter_mut().enumerate() {
             let e = seen + t * s;
-            *y = prepared.output(copy.get(e - 1..e - 1 + padded).ok_or_else(internal)?);
+            *y = prepared
+                .output(copy.get(e - 1..e - 1 + padded).ok_or_else(internal)?)
+                .ok_or_else(internal)?;
         }
         Ok(())
     }

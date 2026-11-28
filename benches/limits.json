@@ -1,5 +1,5 @@
 {
-  "_comment": "Release state per kernel and level (decision D14, judged in simulated cycles per sample since M13.1, D2708). On every level with a core model (`sse2`, `sse4.2`, `avx2`, `avx2-runtime`, `avx512`, `neon`) `cargo xtask check cycles` judges the committed results benches/results/cycles: `release` entries must stay within `_limits.release` times the cycles per sample of the comparison on both the reference model and the counter-model of the level, `dev` entries within `_limits.dev`; a ratio above `_limits.warn` and a `dev` entry within it (ready for `release`) are reported, and `_limits.goal` is reported per entry against a library only. At `simd128` (no core model) `cargo xtask count --platform wasm32` judges the instructions per sample the same way. `info` entries are reported and never judged; their `waiver` text says why the comparison is not fair. A `waiver` on a `release` or `dev` entry names the open item in docs/open-items.md that tracks a limit that is not met yet; it never hides the numbers. The level `avx2-runtime` is judged like every level against the reference library and needs its own entries (the maintainer's decision D2764): the gate takes the library's cycles and SNR from the `avx2` record of the entry (the same workload on the same models); an entry whose `avx2` comparison is our own fallback, or that is `info` at `avx2`, is `info` (D2765). The ratio of the run-time-detection build to our own fixed `avx2` build is information, never a status. D321 is a check, never a status; a `cycle_waiver` on a SIMD entry and level exempts it from that check (`cargo xtask check cycles`: the entry must not be slower than its `_fallback` entry on the reference model or the counter-model); its text gives the reason and names the open item in docs/open-items.md, and the check fails on a waiver whose gap is closed. Every entry was re-judged in cycles once with the full measurement of the CI measurement job (D2745, D2746): an entry over its cap went from `release` to `dev` only with an open item that names its numbers (I13.1-7, I13.1-8, I24-3; `avx2-runtime` re-judged against the library by D2765), never with a relaxed limit, and a `dev` entry within the release limit became `release`. Every judged record carries the SNR of ours and of the comparison against the f64 reference (`snr_db`, D2749): ours more than 1 dB below the comparison fails unless an `accuracy_waiver` gives the reason or the open item (D34). An `accuracy_trade` keeps a `release` entry above `_limits.release` at `release` while ours is at least 3 dB more accurate than the comparison, the comparison is below 100 dB (where accuracy is scarce; above it a few dB more have no practical effect) and ours is at most 1.20 times the comparison on both models (the maintainer's decision D2760: 3 dB better must not mean that we may be slow); its text names both SNR figures and the ratios. No status is ever decided by a comparison of our code with our own code (our fallback, our build of another level, our kernel): a `release` or `dev` entry whose judged comparison is not a library fails `cargo xtask check`, from the plan and from the `comparison_kind` of the records (D2767). A plain `waiver` keeps no `release` entry above `_limits.release` and a `dev` entry above `_limits.dev` only while it names its open item and says \"awaiting the maintainer's decision\" (D2779). See docs/performance.md.",
+  "_comment": "Release state per kernel and level (decision D14, judged in simulated cycles per sample since M13.1, D2708). On every level with a core model (`sse2`, `sse4.2`, `avx2`, `avx2-runtime`, `avx512`, `neon`) `cargo xtask check cycles` judges the committed results benches/results/cycles: `release` entries must stay within `_limits.release` times the cycles per sample of the comparison on both the reference model and the counter-model of the level, `dev` entries within `_limits.dev`; a ratio above `_limits.warn` and a `dev` entry within it (ready for `release`) are reported, and `_limits.goal` is reported per entry against a library only. At `simd128` (no core model) `cargo xtask count --platform wasm32` judges the instructions per sample the same way. `info` entries are reported and never judged; their `waiver` text says why the comparison is not fair. A `waiver` on a `release` or `dev` entry names the open item in docs/open-items.md that tracks a limit that is not met yet; it never hides the numbers. The level `avx2-runtime` is judged like every level against the reference library and needs its own entries (the maintainer's decision D2764): the gate takes the library's cycles and SNR from the `avx2` record of the entry (the same workload on the same models); an entry whose `avx2` comparison is our own fallback, or that is `info` at `avx2`, is `info` (D2765). The ratio of the run-time-detection build to our own fixed `avx2` build is information, never a status. D321 is a check, never a status; a `cycle_waiver` on a SIMD entry and level exempts it from that check (`cargo xtask check cycles`: the entry must not be slower than its `_fallback` entry on the reference model or the counter-model); its text gives the reason and names the open item in docs/open-items.md, and the check fails on a waiver whose gap is closed. Every entry was re-judged in cycles once with the full measurement of the CI measurement job (D2745, D2746): an entry over its cap went from `release` to `dev` only with an open item that names its numbers (I13.1-7, I13.1-8, I24-3; `avx2-runtime` re-judged against the library by D2765), never with a relaxed limit, and a `dev` entry within the release limit became `release`. Every judged record carries the SNR of ours and of the comparison against the f64 reference (`snr_db`, D2749): ours more than 1 dB below the comparison fails unless an `accuracy_waiver` gives the reason or the open item (D34). An `accuracy_trade` keeps a `release` entry above `_limits.release` at `release` while ours is at least 3 dB more accurate than the comparison, the comparison is below 100 dB (where accuracy is scarce; above it a few dB more have no practical effect) and ours is at most 1.20 times the comparison on both models (the maintainer's decision D2760: 3 dB better must not mean that we may be slow); its text names both SNR figures and the ratios. No status is ever decided by a comparison of our code with our own code (our fallback, our build of another level, our kernel): a `release` or `dev` entry whose judged comparison is not a library fails `cargo xtask check`, from the plan and from the `comparison_kind` of the records (D2767). A plain `waiver` keeps no `release` entry above `_limits.release` and a `dev` entry above `_limits.dev` only while it names its open item and says \"awaiting the maintainer's decision\" (D2779). See docs/performance.md. A `release` or `dev` entry above `_limits.release` of its library on a model (every level, `simd128` in instructions) says why (the maintainer's order of 2026-11-28, D3021): `slower_because` (`\"<kind>: <text>\"`, the kind `more work`, `more accurate` or `more robust`; what we do more, the measured gain, the open item) when it is slower for a reason, an `accuracy_trade` or a `contract_trade`, or else a `waiver` that says plainly that it is not faster yet and names the open item; `cargo xtask check cycles` fails such an entry without a text.",
   "_limits": {
     "release": 1.1,
     "dev": 1.5,
@@ -194,7 +194,8 @@
   },
   "convert_out_cu8": {
     "sse2": {
-      "status": "dev"
+      "status": "dev",
+      "slower_because": "more work: the `CU8` contract, which VOLK's `volk_32f_s32f_x2_convert_8u` does not keep: a NaN gives 128, the zero of the format (VOLK: 255), and every byte is that of the `f64` formula `rint(x 128 + 127.5)`, clamped (VOLK clamps and rounds in `f32` and gives another byte for 243,270,367 of the non-NaN `f32` inputs: the negative magnitudes from `2^-54` to below `2^-25` and the inputs near the multiples of `1 / 128`, D2955); a select and a correction more per vector, the same SNR on the workload (47.27 dB); the maintainer keeps the contract (D3013); ours / VOLK's `a_sse2` 1.252 / 1.225 on `skylake` / `znver2` (CI run 46050916654), open item IO2-19"
     },
     "sse4.2": {
       "status": "release",
@@ -269,7 +270,8 @@
   },
   "convert_out_real_ru8": {
     "sse2": {
-      "status": "dev"
+      "status": "dev",
+      "slower_because": "more work: the `CU8` contract, which VOLK's `volk_32f_s32f_x2_convert_8u` does not keep: a NaN gives 128, the zero of the format (VOLK: 255), and every byte is that of the `f64` formula `rint(x 128 + 127.5)`, clamped (VOLK clamps and rounds in `f32` and gives another byte for 243,270,367 of the non-NaN `f32` inputs: the negative magnitudes from `2^-54` to below `2^-25` and the inputs near the multiples of `1 / 128`, D2955); a select and a correction more per vector, the same SNR on the workload (47.27 dB); the maintainer keeps the contract (D3013); ours / VOLK's `a_sse2` 1.260 / 1.233 on `skylake` / `znver2` (CI run 46050916654), open item IO2-19"
     },
     "sse4.2": {
       "status": "release",
@@ -472,11 +474,13 @@
   "fir_decimate_cq15": {
     "sse2": {
       "status": "info",
-      "waiver": "no established library has a SIMD `CQ15` FIR with real `Q15` taps on our levels (VOLK's `volk_16ic_x2_dot_prod_16ic` takes complex taps and saturates its 16-bit sums, GNU Radio has no 16-bit FIR); the comparison is our own fallback, reported as information, and the branch is judged by its efficiency (D32)"
+      "waiver": "no established library has a SIMD `CQ15` FIR with real `Q15` taps on our levels (VOLK's `volk_16ic_x2_dot_prod_16ic` takes complex taps and saturates its 16-bit sums, GNU Radio has no 16-bit FIR); the comparison is our own fallback, reported as information, and the branch is judged by its efficiency (D32)",
+      "cycle_waiver": "the SIMD progression of D3007 is slower than the `pmaddwd` fallback of D3017 that replaced the compiled exact lanes: 10.79 / 11.33 against 8.85 / 9.23 cycles per sample on `skylake` / `znver2` (CI run 46134940482, 1.22 / 1.23); the progression takes the fallback's form next; open item IO2-28"
     },
     "sse4.2": {
       "status": "info",
-      "waiver": "no established library has a SIMD `CQ15` FIR with real `Q15` taps on our levels (VOLK's `volk_16ic_x2_dot_prod_16ic` takes complex taps and saturates its 16-bit sums, GNU Radio has no 16-bit FIR); the comparison is our own fallback, reported as information, and the branch is judged by its efficiency (D32)"
+      "waiver": "no established library has a SIMD `CQ15` FIR with real `Q15` taps on our levels (VOLK's `volk_16ic_x2_dot_prod_16ic` takes complex taps and saturates its 16-bit sums, GNU Radio has no 16-bit FIR); the comparison is our own fallback, reported as information, and the branch is judged by its efficiency (D32)",
+      "cycle_waiver": "as at `sse2`: 8.84 / 9.30 against 8.84 / 9.21 cycles per sample on `skylake` / `znver2` (CI run 46134940482, 1.00 / 1.01); open item IO2-28"
     },
     "avx2": {
       "status": "info",
@@ -550,11 +554,13 @@
   "fir_interpolate_cq15": {
     "sse2": {
       "status": "info",
-      "waiver": "no established library has a SIMD `CQ15` FIR with real `Q15` taps on our levels (VOLK's `volk_16ic_x2_dot_prod_16ic` takes complex taps and saturates its 16-bit sums, GNU Radio has no 16-bit FIR); the comparison is our own fallback, reported as information, and the branch is judged by its efficiency (D32)"
+      "waiver": "no established library has a SIMD `CQ15` FIR with real `Q15` taps on our levels (VOLK's `volk_16ic_x2_dot_prod_16ic` takes complex taps and saturates its 16-bit sums, GNU Radio has no 16-bit FIR); the comparison is our own fallback, reported as information, and the branch is judged by its efficiency (D32)",
+      "cycle_waiver": "the SIMD progression of D3007 is slower than the `pmaddwd` interpolator of the fallback (D3017): 66.64 / 70.02 against 59.70 / 60.72 cycles per sample on `skylake` / `znver2` (CI run 46126247106, 1.12 / 1.15); the progression takes the fallback's form next; open item IO2-28"
     },
     "sse4.2": {
       "status": "info",
-      "waiver": "no established library has a SIMD `CQ15` FIR with real `Q15` taps on our levels (VOLK's `volk_16ic_x2_dot_prod_16ic` takes complex taps and saturates its 16-bit sums, GNU Radio has no 16-bit FIR); the comparison is our own fallback, reported as information, and the branch is judged by its efficiency (D32)"
+      "waiver": "no established library has a SIMD `CQ15` FIR with real `Q15` taps on our levels (VOLK's `volk_16ic_x2_dot_prod_16ic` takes complex taps and saturates its 16-bit sums, GNU Radio has no 16-bit FIR); the comparison is our own fallback, reported as information, and the branch is judged by its efficiency (D32)",
+      "cycle_waiver": "as at `sse2`: 51.53 / 53.49 against 51.42 / 53.93 cycles per sample on `skylake` / `znver2` (CI run 46126247106, 1.00 / 0.99); open item IO2-28"
     },
     "avx2": {
       "status": "info",
@@ -909,7 +915,8 @@
       "status": "release"
     },
     "avx512": {
-      "status": "dev"
+      "status": "dev",
+      "waiver": "not faster yet, no reason in the work or the accuracy: 0.37 / 0.26 against 0.31 / 0.27 cycles per sample of CMSIS-DSP on `znver4` / `sapphirerapids` (1.21 / 0.94): the compiler gives the loop 512-bit permutations of two sources; blocks of 8 and 16 samples (IO1-7) and the 256-bit form of the AVX2 build in `core::arch` (D3017, 0.840 / 1.405, slower on `sapphirerapids`) were tried; open item IO1-7"
     },
     "neon": {
       "status": "release"
@@ -1306,7 +1313,7 @@
     },
     "neon": {
       "status": "dev",
-      "waiver": "1.320 / 1.009 of Ne10's int16 NEON transform ne10_fft_c2c_1d_int16_neon (11.77 / 10.10 against 8.91 / 10.01 cycles per sample on cortex-a72 / cortex-a76, CI run 45456013770): above 1.10 on cortex-a72; ours (block float, 63.54 dB) is 18.75 dB more accurate than Ne10 (44.79 dB), but above 1.20 the accuracy trade of D2760 does not hold; judged against Ne10 since D2781 (open item I13.1-12)"
+      "slower_because": "more accurate: block floating point (a range check per stage and the shift chosen by it), 63.54 dB against 44.79 dB of Ne10's `ne10_fft_c2c_1d_int16_neon` (18.75 dB more); 11.77 / 10.10 against 8.91 / 10.01 cycles per sample on `cortex-a72` / `cortex-a76` (CI run 45456013770, 1.320 / 1.009), above the 1.20 of the accuracy trade of D2760, so `dev`; judged against Ne10 since D2781; open items I13.1-12 and IO2-27"
     },
     "simd128": {
       "status": "info",
@@ -1370,7 +1377,7 @@
     },
     "neon": {
       "status": "dev",
-      "waiver": "1.227 / 0.900 of Ne10's int16 NEON transform ne10_fft_c2c_1d_int16_neon (10.93 / 9.01 against 8.91 / 10.01 cycles per sample on cortex-a72 / cortex-a76, CI run 45456013770): above 1.10 on cortex-a72; ours 59.88 dB against 56.90 dB of Ne10 (2.98 dB, below the 3 dB of the accuracy trade of D2760, and above 1.20); judged against Ne10 since D2781 (open item I13.1-12)"
+      "slower_because": "more work: the range check and the saturation of the full-scale contract, which Ne10's `ne10_fft_c2c_1d_int16_neon` does not do (it neither checks the range nor saturates), 59.88 dB against 56.90 dB of Ne10 (2.98 dB, below the 3 dB of an accuracy trade); 10.93 / 9.01 against 8.91 / 10.01 cycles per sample on `cortex-a72` / `cortex-a76` (CI run 45456013770, 1.227 / 0.900), above 1.20, so `dev`; judged against Ne10 since D2781; open items I13.1-12 and IO2-27"
     },
     "simd128": {
       "status": "info",
@@ -1976,13 +1983,13 @@
   },
   "fir_decimate_cq15_fallback": {
     "sse2": {
-      "status": "dev"
+      "status": "release"
     },
     "sse4.2": {
-      "status": "dev"
+      "status": "release"
     },
     "avx2": {
-      "status": "dev"
+      "status": "release"
     },
     "avx512": {
       "status": "release"
@@ -2028,7 +2035,8 @@
       "status": "release"
     },
     "neon": {
-      "status": "dev"
+      "status": "dev",
+      "waiver": "not faster yet, no reason in the work or the accuracy: 1.13 / 0.79 of CMSIS-DSP's `arm_fir_interpolate_f32` on `cortex-a72` / `cortex-a76`, not analysed yet (IO1-7); open item IO1-7"
     },
     "simd128": {
       "status": "dev",
@@ -2037,10 +2045,10 @@
   },
   "fir_interpolate_cq15_fallback": {
     "sse2": {
-      "status": "dev"
+      "status": "release"
     },
     "sse4.2": {
-      "status": "dev"
+      "status": "release"
     },
     "avx2": {
       "status": "release"
@@ -2115,7 +2123,8 @@
       "status": "release"
     },
     "neon": {
-      "status": "dev"
+      "status": "dev",
+      "waiver": "not faster yet, no reason in the work or the accuracy: 1.22 / 0.82 of CMSIS-DSP's `arm_fir_interpolate_f32` on `cortex-a72` / `cortex-a76`, not analysed yet (IO1-7); open item IO1-7"
     },
     "simd128": {
       "status": "dev",
@@ -2124,10 +2133,10 @@
   },
   "fir_interpolate_real_q15_fallback": {
     "sse2": {
-      "status": "dev"
+      "status": "release"
     },
     "sse4.2": {
-      "status": "dev"
+      "status": "release"
     },
     "avx2": {
       "status": "release"
@@ -2531,7 +2540,8 @@
       "status": "release"
     },
     "simd128": {
-      "status": "dev"
+      "status": "dev",
+      "waiver": "not faster yet, no reason in the work or the accuracy: 244.93 against 221.28 instructions per sample of CMSIS-DSP's `arm_cfft_f32` (1.11), the same accuracy (137.36 / 137.71 dB); not analysed yet; open item IO2-29"
     }
   },
   "fft_cq15_1024_fallback": {
@@ -2806,13 +2816,15 @@
       "status": "release"
     },
     "sse4.2": {
-      "status": "dev"
+      "status": "dev",
+      "slower_because": "more work: the `CU8` contract, which VOLK's `volk_32f_s32f_x2_convert_8u` does not keep: a NaN gives 128, the zero of the format (VOLK: 255), and every byte is that of the `f64` formula `rint(x 128 + 127.5)`, clamped (VOLK clamps and rounds in `f32` and gives another byte for 243,270,367 of the non-NaN `f32` inputs: the negative magnitudes from `2^-54` to below `2^-25` and the inputs near the multiples of `1 / 128`, D2955); a select and a correction more per vector, the same SNR on the workload (47.27 dB); the maintainer keeps the contract (D3013); ours / VOLK's `generic` protokernel 1.157 / 1.246 on `skylake` / `znver2` (CI run 45717818987), open item IO2-17"
     },
     "avx2": {
       "status": "release"
     },
     "avx512": {
-      "status": "dev"
+      "status": "dev",
+      "slower_because": "more work: the `CU8` contract, which VOLK's `volk_32f_s32f_x2_convert_8u` does not keep: a NaN gives 128, the zero of the format (VOLK: 255), and every byte is that of the `f64` formula `rint(x 128 + 127.5)`, clamped (VOLK clamps and rounds in `f32` and gives another byte for 243,270,367 of the non-NaN `f32` inputs: the negative magnitudes from `2^-54` to below `2^-25` and the inputs near the multiples of `1 / 128`, D2955); a select and a correction more per vector, the same SNR on the workload (47.27 dB); the maintainer keeps the contract (D3013); ours / VOLK's `generic` protokernel 1.376 / 0.964 on `znver4` / `sapphirerapids` (CI run 45717818987), open item IO2-17"
     },
     "neon": {
       "status": "release"
@@ -2826,13 +2838,15 @@
       "status": "release"
     },
     "sse4.2": {
-      "status": "dev"
+      "status": "dev",
+      "slower_because": "more work: the `CU8` contract, which VOLK's `volk_32f_s32f_x2_convert_8u` does not keep: a NaN gives 128, the zero of the format (VOLK: 255), and every byte is that of the `f64` formula `rint(x 128 + 127.5)`, clamped (VOLK clamps and rounds in `f32` and gives another byte for 243,270,367 of the non-NaN `f32` inputs: the negative magnitudes from `2^-54` to below `2^-25` and the inputs near the multiples of `1 / 128`, D2955); a select and a correction more per vector, the same SNR on the workload (47.27 dB); the maintainer keeps the contract (D3013); ours / VOLK's `generic` protokernel 1.160 / 1.249 on `skylake` / `znver2` (CI run 45717818987), open item IO2-17"
     },
     "avx2": {
       "status": "release"
     },
     "avx512": {
-      "status": "dev"
+      "status": "dev",
+      "slower_because": "more work: the `CU8` contract, which VOLK's `volk_32f_s32f_x2_convert_8u` does not keep: a NaN gives 128, the zero of the format (VOLK: 255), and every byte is that of the `f64` formula `rint(x 128 + 127.5)`, clamped (VOLK clamps and rounds in `f32` and gives another byte for 243,270,367 of the non-NaN `f32` inputs: the negative magnitudes from `2^-54` to below `2^-25` and the inputs near the multiples of `1 / 128`, D2955); a select and a correction more per vector, the same SNR on the workload (47.27 dB); the maintainer keeps the contract (D3013); ours / VOLK's `generic` protokernel 1.380 / 0.969 on `znver4` / `sapphirerapids` (CI run 45717818987), open item IO2-17"
     },
     "neon": {
       "status": "release"
@@ -2863,10 +2877,12 @@
   },
   "dot_cq15_fallback": {
     "sse2": {
-      "status": "dev"
+      "status": "dev",
+      "waiver": "not faster yet, no reason in the work or the accuracy: 2.20 / 2.53 against 1.78 / 2.03 cycles per sample of CMSIS-DSP on `skylake` / `znver2` (1.23 / 1.24); the exact lanes with the taps duplicated simulate no faster (IO1-7); a `pmaddwd` form in the x86 module of D3017 is the next step; open item IO1-7"
     },
     "sse4.2": {
-      "status": "dev"
+      "status": "dev",
+      "waiver": "not faster yet, no reason in the work or the accuracy: 2.03 / 1.72 against 2.04 / 1.49 cycles per sample of CMSIS-DSP on `skylake` / `znver2` (1.00 / 1.15); see `sse2`; open item IO1-7"
     },
     "avx2": {
       "status": "release"
@@ -2938,7 +2954,8 @@
       "status": "release"
     },
     "simd128": {
-      "status": "dev"
+      "status": "dev",
+      "waiver": "not faster yet, no reason in the work or the accuracy: 6.16 against 5.40 instructions per sample of CMSIS-DSP's `arm_scale_f32` on the `2 n` floats (1.14), the same accuracy; not analysed yet; open item IO2-29"
     }
   },
   "scale_cq15_fallback": {
@@ -3473,7 +3490,8 @@
       "status": "release"
     },
     "simd128": {
-      "status": "dev"
+      "status": "dev",
+      "slower_because": "more accurate: 57.02 dB against 23.44 dB of liquid-dsp's `nco_crcf` loop (33.58 dB more; the comparison's interpolated 1024-entry table and its phase steps), and the lock detector and the integrator limit that liquid's loop has not; 189.06 against 143.86 instructions per sample (1.31), above the 1.20 of an accuracy trade, so `dev` (D947, D2760); open item IO2-29"
     }
   },
   "stereo_pll_q15_fallback": {
@@ -3917,7 +3935,7 @@
       "status": "release"
     },
     "avx2": {
-      "status": "dev"
+      "status": "release"
     },
     "avx512": {
       "status": "release"
@@ -4037,7 +4055,8 @@
       "status": "release"
     },
     "avx2": {
-      "status": "dev"
+      "status": "dev",
+      "waiver": "not faster yet, no reason in the work or the accuracy: 0.23 / 0.23 against 0.20 / 0.26 cycles per sample of VOLK's `generic` `volk_16ic_deinterleave_16i_x2` on `znver3` / `alderlake` (1.14 / 0.86); blocks of 8 to 32 samples and the 32-bit word form were tried and were slower (IO1-7); open item IO1-7"
     },
     "avx512": {
       "status": "release"
@@ -4090,7 +4109,8 @@
     },
     "avx2": {
       "status": "info",
-      "waiver": "no SIMD library has the `Q15` product with the rounding and saturation of `q15_mul` (D2908): VOLK has no 16-bit real product, KFR's `int16_t` product wraps (no shift by 15, another function), and CMSIS-DSP's `arm_mult_q15` is generic C that truncates (information of `mul_real_q15_fallback`); so the comparison is our own fallback, which is no gate for a SIMD branch (D32), and the branch is judged by its efficiency"
+      "waiver": "no SIMD library has the `Q15` product with the rounding and saturation of `q15_mul` (D2908): VOLK has no 16-bit real product, KFR's `int16_t` product wraps (no shift by 15, another function), and CMSIS-DSP's `arm_mult_q15` is generic C that truncates (information of `mul_real_q15_fallback`); so the comparison is our own fallback, which is no gate for a SIMD branch (D32), and the branch is judged by its efficiency",
+      "cycle_waiver": "a tie with its fallback, which runs the same `vpmulhrsw` form since D3017: 0.10 / 0.09 against 0.10 / 0.08 cycles per sample on `znver3` / `alderlake` (CI run 46126247106, 0.989 / 1.010); the explicit form is accepted (D3019); open item IO2-28"
     },
     "avx512": {
       "status": "info",
@@ -4117,7 +4137,8 @@
       "status": "release"
     },
     "avx2": {
-      "status": "release"
+      "status": "release",
+      "cycle_waiver": "a tie of the explicit AVX2 path (restored by D3020, accepted by D3019) with its fallback, which LLVM vectorizes with the same instructions: 0.14 / 0.13 against 0.13 / 0.13 cycles per sample on `znver3` / `alderlake` (CI run 46126247106, the stores are the bound); open item IO2-28"
     },
     "avx2-runtime": {
       "status": "release"

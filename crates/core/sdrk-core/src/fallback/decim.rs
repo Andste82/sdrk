@@ -523,7 +523,9 @@ fn progression_at<'a, B: Target, T: FbMac + 'a, const G: usize>(
     // magnitudes (at most 2^30 each) stays below 2^63, so for fewer than 2^32 taps.
     let grouped = u32::try_from(len).is_ok();
     let mut t = 0;
-    if grouped && seen < len {
+    // Only for windows one sample apart (`fir`, `fir_interpolate`): with `s > 1` the copy
+    // moved a `resample_real` record on `sapphirerapids` past its limit (CI run 46155369153).
+    if grouped && s == 1 && seen < len {
         t = head_groups::<B, T, G>(
             target, branch, l, len, hist, input, seen, s, count, &mut dst,
         )?;

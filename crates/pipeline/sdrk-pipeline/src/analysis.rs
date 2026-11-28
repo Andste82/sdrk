@@ -11,7 +11,7 @@ use std::collections::{BTreeMap, BTreeSet};
 
 use sdrk::{Delay, Rate};
 use sdrk_blocks::PortType;
-use sdrk_device::SampleFormat;
+use sdrk_device::{Layout, SampleFormat};
 use serde_json::{Map, Value};
 
 use crate::latency::{
@@ -1869,11 +1869,22 @@ impl<'a> Stage2<'a> {
         let mut s = source;
         if let Some(format) = &output.format {
             let ty = self.streams.get(s).map(|x| x.ty);
-            if !matches!(ty, Some(PortType::C32 | PortType::CQ15)) {
+            // An inconsistent custom format is reported by the parameters of the node below.
+            let real = format.to_format().ok().map(|f| f.layout() == Layout::Real);
+            let fits = match real {
+                Some(true) => matches!(ty, Some(PortType::F32 | PortType::Q15)),
+                Some(false) => matches!(ty, Some(PortType::C32 | PortType::CQ15)),
+                None => true,
+            };
+            if !fits {
                 self.report.error(
                     join(&path, "format"),
                     DiagCode::InvalidValue,
-                    "a raw output format needs a complex stream; real streams cannot be converted",
+                    if real == Some(true) {
+                        "a real raw output format (for example rs16) needs a real stream"
+                    } else {
+                        "a complex raw output format needs a complex stream; a real stream needs a real format (for example rs16)"
+                    },
                 );
                 return;
             }

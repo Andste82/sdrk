@@ -434,14 +434,35 @@ fn planar_formats_are_rejected_and_real_ones_need_the_real_block() {
         )
         .is_err()
     );
-    // `convert_out` has no real variant.
-    for format in [formats::CS16_PLANAR, formats::RS16, formats::RF32] {
+    // `convert_out` mirrors it (D3164): planar formats are rejected, a real format needs the
+    // real block, and the real block refuses a complex format.
+    assert!(
+        ConvertOutConfig {
+            format: formats::CS16_PLANAR
+        }
+        .validate(rate(1_000_000))
+        .is_err()
+    );
+    for format in [formats::RS16, formats::RF32] {
+        let cfg = ConvertOutConfig { format };
+        assert!(cfg.validate(rate(1_000_000)).is_ok(), "{format:?}");
+        let mut arena = sdrk_blocks::ArenaStorage::new(&mut []);
+        assert!(ConvertOutBlock::<C32, _>::new(&cfg, rate(1_000_000), &mut arena).is_err());
+        let mut arena = sdrk_blocks::ArenaStorage::new(&mut []);
         assert!(
-            ConvertOutConfig { format }
-                .validate(rate(1_000_000))
-                .is_err()
+            sdrk_blocks::ConvertOutRealBlock::<f32, _>::new(&cfg, rate(1_000_000), &mut arena)
+                .is_ok()
         );
     }
+    let mut arena = sdrk_blocks::ArenaStorage::new(&mut []);
+    assert!(
+        sdrk_blocks::ConvertOutRealBlock::<Q15, _>::new(
+            &ConvertOutConfig::default(),
+            rate(1_000_000),
+            &mut arena
+        )
+        .is_err()
+    );
 }
 
 fn spectrum_cases<T: SpectrumSample>()

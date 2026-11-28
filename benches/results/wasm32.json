@@ -3441,8 +3441,8 @@
             "other": 41.76,
             "ours": 68.03
           },
-          "status": "info",
-          "verdict": "info"
+          "status": "dev",
+          "verdict": "warn"
         },
         "fft_cq15_1024_full_scale": {
           "compared_with": "KissFFT FIXED_POINT=16 (kiss_fft, 1/N scaling, out of place)",

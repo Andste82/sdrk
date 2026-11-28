@@ -2656,6 +2656,7 @@ cargo measure fft --no-golden --merge --platform x86_64 --platform x86_64-avx512
 cargo measure --all --no-golden --platform x86_64  # every entry: benches/results/cycles/x86_64.json anew
 cargo measure fir --branches                       # also the mispredictions and the cost of the data-dependent branches
 python3 -I benches/cycle_tables.py                 # the cycle and simd128 tables above from the committed results
+python3 -I benches/cycles_page.py OUT.html          # the overview page of every row (no upload); see below
 cargo xtask check cycles                           # the gates: D321 and the release gate in cycles; the report of the gaps (D2978)
 cargo xtask count --platform wasm32                # simd128 instructions; needs wasmtime and clang with the wasi-libc headers
 cargo xtask count --platform cortex-m4             # Cortex-M4 report; needs qemu-system-arm with plugins, arm-none-eabi-gcc and the newlib headers
@@ -2681,6 +2682,27 @@ Tools.
   - `llvm-mca` of LLVM 23.1.1, built from the release source (`llvm-project-23.1.1.src.tar.xz`, sha256 `ebe9be46fe8756d58c5b198ffad0fa2a766257add81a4dc52179bfacc7888ee6`, the digest of the release attestation) with the targets X86 and AArch64 and SDRk's corrections of the scheduling models (`assets/llvm-mca-23.1.1-sdrk-sched.patch`, D942), in `/opt/llvm-mca-23.1.1/bin` (`SDRK_LLVM_MCA`); the same build without the patch is kept in `/opt/llvm-mca-23.1.1-upstream/bin` (`SDRK_LLVM_MCA_UPSTREAM`) for comparisons. The patch replaces numbers that a one-time comparison of every instruction form in the simulated loops found wrong: on x86 against the measurements of uops.info (stores on `znver2`, `znver3` and `znver4`, `lea` on `znver2`, `alderlake` and `sapphirerapids`, sign and zero extension and element insertion from memory on `znver3` and `znver4`, the second 512-bit unit of `sapphirerapids`, lane moves and 512-bit loads on `znver4`, divide and square root on `alderlake` and `sapphirerapids`), on AArch64 against Arm's software optimization guides (the FP latencies of `cortex-a72`, which LLVM simulates with the `cortex-a57` model, and divide and square root on both cores). Every changed definition names its source; no model was added. The `llvm-mca` of the distribution's `llvm` package is another LLVM version and must not be mixed into the ratios. In LLVM 23.1.1 `cortex-a72` uses the `cortex-a57` model and `cortex-a76` the `neoverse-n1` model; in LLVM 21 both used the `cortex-a57` model (see the core-model table).
   - Second opinions, used only where a decision depends on a single result: OSACA 0.7.1 (PyPI; models for Zen 1 to 4, Intel from Sandy Bridge to Sapphire Rapids, Neoverse N1 and V2, Cortex-A72; `SDRK_OSACA`) and uiCA at commit `6ebeeab` (Intel cores; `SDRK_UICA`), both AGPL-3.0 development tools that only read assembly and are never linked into SDRk. uiCA's setup takes the current `instructions.xml` of uops.info, which has no version; its SHA-256 is kept in `/opt/uiCA/instructions.xml.sha256`.
 - For `aarch64-unknown-linux-gnu` cross builds xtask sets `CARGO_TARGET_AARCH64_UNKNOWN_LINUX_GNU_LINKER=aarch64-linux-gnu-gcc`.
+
+## The overview page
+
+`python3 -I benches/cycles_page.py [--repo DIR] OUT.html` writes one self-contained HTML page (inline CSS and JavaScript, no external resource, no upload, no network) from the committed `benches/results/cycles/*.json`, `benches/results/wasm32.json` and `benches/limits.json` of the repository (by default the checkout of the script); the header names the commit (from git, `unknown` without it) and the CI run ids when the results files record them. `python3 -I benches/verify_cycles_page.py [--repo DIR] [--doc] OUT.html` checks every number, status, colour class, opponent and justification of the page against the same files, independently of the generator (`--doc` also checks the generated tables of this document), and exits with 1 on any difference; `benches/test_cycles_page.py` tests both and checks a page of the committed files in CI. The page uses the full width of the screen and has filters for the level, the variant (SIMD entry or fallback), the status (with the accuracy and the contract trades), the colour, the family and the name, and sortable columns.
+
+One row per entry and level; a `_fallback` entry is a row of its own. An entry `<entry>_<suffix>` (the suffix not `fallback`) whose ours is the same as the one of `<entry>` on every level where both are measured is the same code measured against a second opponent (for example `qam_mod_block_liquid` against liquid-dsp): it is listed under the kernel `<entry>`, with its opponent in the opponent column, and its entry name is the tooltip of the kernel.
+
+| Column | Content |
+| --- | --- |
+| Status | the entry of `benches/limits.json` (`release`, `dev`, `info`), marked `accuracy trade` (D2760) or `contract trade` (D3000); at `simd128` also the verdict `waived` or `fail` |
+| Kernel | the entry name without `_fallback`; a second opponent under its entry (above) |
+| Level | `sse2`, `sse4.2`, `avx2`, `avx2-runtime`, `avx512`, `neon`, `simd128`; a fallback row `fallback (<level>)` |
+| Cycles ours (main / counter) | our cycles per sample on the reference model / the counter-model of the level; at `simd128` instructions per sample (`instr`) |
+| Cycles opponent, same models | the opponent's cycles per sample on the same two models; at `avx2-runtime` the opponent of the `avx2` record (D2764) |
+| SNR ours, SNR opponent | dB against the f64 reference, `exact` for an exact result |
+| Ratio cycles | ours / opponent per model (at `simd128` the instruction ratio of the record) |
+| SNR Δ (dB) | ours minus opponent |
+| Opponent | `compared_with` of the record; our own code marked `own (information)` (D2767); at `avx2-runtime` also ours / our own `avx2` build as information |
+| Justification | the `accuracy_trade`, `contract_trade`, `waiver`, `accuracy_waiver` and `cycle_waiver` texts of the entry and level, the head shown, the full text on a click |
+
+Colours, on judged rows only (`release` or `dev` against a library; `info` rows and comparisons with our own code get none): a ratio at most 1.00 green, at most 1.10 yellow, above 1.10 red, and **light blue** for a ratio above 1.10 and at most 1.20 of an entry and level with an `accuracy_trade` or a `contract_trade`: slower for a reason that the maintainer's decisions accept (D2760, D3000; the rule is D3050). A `waiver` never makes a ratio light blue: above 1.10 it names an open item that is still to be closed (D2779). The SNR cells are red when ours is more than 1 dB below the opponent and green when it is at least 3 dB above.
 
 ## CI
 

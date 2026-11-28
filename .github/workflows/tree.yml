@@ -949,6 +949,10 @@ jobs:
         run: arm-none-eabi-gcc --version | head -n 1
       - name: Count
         run: cargo xtask count --platform cortex-m4
+      # The committed file is the artifact of this job (D3009); a drift shows here, and the
+      # artifact replaces the committed file in the next change that touches it (D3162).
+      - name: Results drift against the committed file (informational)
+        run: git diff --stat --exit-code -- benches/results/cortex-m4.json || echo "::warning file=benches/results/cortex-m4.json::the Cortex-M4 counts drifted from the committed file; commit the artifact count-results-m4-qemu"
       - name: Report
         uses: actions/upload-artifact@v4
         with:

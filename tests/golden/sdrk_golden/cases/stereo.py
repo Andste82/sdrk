@@ -72,7 +72,7 @@ def coefficients(pilot_hz, natural_hz, pilot_level, rate_hz):
         "ki": wn * wn / (kd * two_pi),
         "imax": 50.0 / fs,
         "beta": 1.0 - math.exp(-1.0 / (fs * 0.05)),
-        "on": 0.4 * kd,
+        "on": 0.6 * kd,
         "off": 0.3 * kd,
         "step0": int(math.floor(pilot_hz / fs * 4294967296.0 + 0.5)),
     }
@@ -416,5 +416,5 @@ def disable_enable_f32(rng):
         model="float32",
         notes="not in the table of the milestone (decision D113): as lock_f32_16384, set_enabled(false) "
         "before sample 10000 and set_enabled(true) before sample 13000, both after the lock "
-        "(about sample 5000), so the case shows the zeroed and the restored difference channel",
+        "(about sample 8900), so the case shows the zeroed and the restored difference channel",
     )

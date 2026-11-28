@@ -30,11 +30,11 @@
     "kp_bits": 4577947276898414264,
     "natural_hz": 50.0,
     "off_bits": 4576557941333898035,
-    "on_bits": 4578359381184846234,
+    "on_bits": 4581061540961268531,
     "pilot_hz": 19000.0,
     "pilot_level": 0.0625,
     "rate_hz": 192000,
-    "snr_db_guard": 87.8,
+    "snr_db_guard": 87.7,
     "step0": 425022805
   },
   "provenance": {

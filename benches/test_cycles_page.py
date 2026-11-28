@@ -40,7 +40,9 @@ def fixture():
         "mag_fallback": record(2.1, 2.0),                          # yellow
         "mag_sq": record(1.15, 1.0, snr=(60.0, 50.0)),             # trade: light blue
         "mag_sq_fallback": record(1.15, 1.0),                      # no trade: red
-        "scale": record(1.25, 1.0, snr=(60.0, 50.0)),              # trade above 1.20: red
+        "scale": record(1.25, 1.0, snr=(60.0, 50.0)),              # trade above 1.20: still light blue
+        "rotate": record(1.3, 1.0),                                # slower_because: light blue
+        "add": record(1.2, 1.0),                                   # no text: red
         "scale_fallback": record(1.3, 1.0),                        # info: no colour
         "dot": record(1.0, 1.0, "sdrk fallback", kind="own_fallback"),
         "mod_block": record(4.0, 8.0, "GNU Radio mod"),
@@ -68,6 +70,9 @@ def fixture():
     limits["scale"]["avx2"] = {"status": "dev", "contract_trade": "less work: x; gain: 1; attempts: y"}
     limits["scale_fallback"]["avx2"] = {"status": "info", "waiver": "reference does different work " + "w " * 150}
     limits["mag"]["avx2-runtime"] = {"status": "info"}
+    limits["rotate"]["avx2"] = {"status": "dev", "slower_because": "more robust: a NaN rule that the library lacks",
+                                "waiver": "open item I1-3"}
+    limits["add"]["avx2"] = {"status": "dev"}
     limits["mag"]["simd128"] = {"status": "dev", "waiver": "open item I1-2"}
     return cycles, wasm, limits
 
@@ -195,7 +200,7 @@ class PageTest(unittest.TestCase):
     def test_blocks_by_kernel_with_levels_in_order(self):
         body = self.html.split("<tbody>")[1].split("</tbody>")[0]
         heads = re.findall(r'<tr class="kh" data-kernel="([^"]+)">', body)
-        self.assertEqual(heads, ["dot", "mag", "mag_sq", "mod_block", "scale"])
+        self.assertEqual(heads, ["add", "dot", "mag", "mag_sq", "mod_block", "rotate", "scale"])
         mag = body.split('<tr class="kh" data-kernel="mag">')[1].split('<tr class="kh"')[0]
         order = re.findall(r'data-level="([^"]+)" data-variant="(\w+)"', mag)
         self.assertEqual(order, [("sse2", "simd"), ("avx2", "simd"), ("avx2", "fallback"),
@@ -215,13 +220,16 @@ class PageTest(unittest.TestCase):
         r = self.rows()
         self.assertEqual(r[("avx2", "mag_sq")]["classes"], ["lb", "lb"])
         self.assertEqual(r[("avx2", "mag_sq_fallback")]["classes"], ["r", "r"])  # a waiver is no reason
-        self.assertEqual(r[("avx2", "scale")]["classes"], ["r", "r"])  # a trade above 1.20
+        self.assertEqual(r[("avx2", "scale")]["classes"], ["lb", "lb"])  # the caps decide the status only
+        self.assertEqual(r[("avx2", "rotate")]["classes"], ["lb", "lb"])  # slower_because
+        self.assertEqual(r[("avx2", "add")]["classes"], ["r", "r"])  # no reason
         self.assertEqual(r[("avx2", "scale_fallback")]["classes"], ["", ""])  # info
         self.assertEqual(r[("avx2", "dot")]["classes"], ["", ""])  # own code
         self.assertEqual(r[("avx2", "mag")]["classes"], ["g", "g"])
         self.assertEqual(cp.ratio_class(1.10, True, False), "y")
         self.assertEqual(cp.ratio_class(1.1001, True, True), "lb")
-        self.assertEqual(cp.ratio_class(1.2001, True, True), "r")
+        self.assertEqual(cp.ratio_class(1.4, True, True), "lb")
+        self.assertEqual(cp.ratio_class(1.4, True, False), "r")
         self.assertEqual(cp.ratio_class(1.15, False, True), "")
         self.assertIn('data-band="lb"', self.tr("avx2", "mag_sq"))
 
@@ -234,6 +242,19 @@ class PageTest(unittest.TestCase):
         self.assertIn('<span class="kn">mod_block </span>avx2</td>', row)
         self.assertIn(">liquid-dsp 1.8.3 mod</td>", row)
         self.assertNotIn('data-kernel="mod_block_liquid"', self.html)
+
+    def test_the_reason_why_we_are_slower_leads_the_justification(self):
+        why = self.cells("avx2", "rotate")[7]
+        self.assertTrue(why.startswith('<div class="why"><b>more robust:</b> <span class="h">a NaN rule that the library '
+                                       'lacks</span></div><div class="why"><b>waiver:</b>'), why)
+        self.assertIn("light blue = slower for a stated reason (more work, more accurate, more robust, or a trade",
+                      self.html)
+        self.assertEqual(cp.slower_because({"slower_because": "faster soon"}), ("slower because", "faster soon"))
+
+    def test_the_checker_finds_a_changed_reason_kind(self):
+        code, out = self.broken("<b>more robust:</b>", "<b>more work:</b>")
+        self.assertEqual(code, 1)
+        self.assertIn("page avx2 rotate: justification", out)
 
     def test_own_code_and_justification(self):
         row = self.tr("avx2", "dot")

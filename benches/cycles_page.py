@@ -27,15 +27,16 @@ legend maps the levels to their CPUs); `simd128` has instructions per sample and
 - Opponent: the library and function of `compared_with`, with the VOLK protokernel that runs at the
   level or the build level of the reference; the full text is the tooltip. Our own code is marked
   `own (information)`.
-- Justification: the `accuracy_trade`, `contract_trade`, `waiver`, `accuracy_waiver` and
-  `cycle_waiver` texts of `benches/limits.json` for the entry and level, the head shown, the full
+- Justification: the `slower_because` text with its kind as the label, then the `accuracy_trade`,
+  `contract_trade`, `waiver`, `accuracy_waiver` and `cycle_waiver` texts of `benches/limits.json` for the entry and level, the head shown, the full
   text on a click.
 
 Colours (judged rows only: `release` or `dev` against a library; D2767): a ratio <= 1.00 green,
-<= 1.10 yellow, above 1.10 red, and light blue for a ratio above 1.10 and at most 1.20 of an entry
-and level with an `accuracy_trade` or a `contract_trade`, the maintainer's decisions that keep it
-`release` (D2760, D3000, D3050). A `waiver` never makes a ratio light blue: above 1.10 it names an
-open item (D2779). Rows that are `info` or compare with our own code get no colour.
+<= 1.10 yellow, above 1.10 red, and light blue for a ratio above 1.10 of an entry and level that
+states why we are slower: a `slower_because` text (`more work: ...`, `more accurate: ...`,
+`more robust: ...`), an `accuracy_trade` or a `contract_trade` (D3050); the caps decide the status,
+not the colour. A `waiver` alone (not yet optimised, or the attempts failed) stays red. Rows that
+are `info` or compare with our own code get no colour.
 
 `benches/verify_cycles_page.py` checks a written page against the same files.
 """
@@ -56,7 +57,9 @@ LEVEL_ORDER = [lvl for _, lvl in ct.LEVELS] + [SIMD128]
 # The texts of benches/limits.json that justify or explain a row, in the order shown.
 REASONS = [("accuracy_trade", "accuracy trade"), ("contract_trade", "contract trade"),
            ("waiver", "waiver"), ("accuracy_waiver", "accuracy waiver"), ("cycle_waiver", "cycle waiver")]
-RELEASE, TRADE_CAP, LITTLE = 1.10, 1.20, 0.80
+RELEASE, LITTLE = 1.10, 0.80
+# The kinds of a `slower_because` text ("<kind>: <text>"): why we are slower than the opponent.
+SLOWER_KINDS = ("more work", "more accurate", "more robust")
 SHORT = 140
 NOT_PLANNED = "not simulated: not measured at"
 # The names of the core models of llvm-mca as the legend shows them.
@@ -149,7 +152,7 @@ def ratio_class(x, judged, justified):
         return "g"
     if x <= RELEASE:
         return "y"
-    return "lb" if justified and x <= TRADE_CAP else "r"
+    return "lb" if justified else "r"
 
 
 def band_of(classes):
@@ -192,9 +195,28 @@ def snr_delta(ours, opp):
     return ("0.0" if d == 0 else f"{d:+.1f}"), d, f"SNR ours {db(ours)} / opponent {db(opp)}"
 
 
+def slower_because(e):
+    """(kind, text) of the `slower_because` text of a limits entry, or None; a text without one of
+    the kinds keeps its whole text under the label `slower because`."""
+    v = e.get("slower_because")
+    if not isinstance(v, str) or not v.strip():
+        return None
+    kind, sep, text = v.partition(": ")
+    return (kind, text) if sep and kind in SLOWER_KINDS else ("slower because", v)
+
+
 def reasons_of(limits, name, level):
+    """The justification texts of an entry and level: the reason why we are slower first."""
     e = limits.get(name, {}).get(level, {})
-    return [(label, e[key]) for key, label in REASONS if isinstance(e.get(key), str) and e[key]]
+    out = [slower_because(e)] if slower_because(e) else []
+    return out + [(label, e[key]) for key, label in REASONS if isinstance(e.get(key), str) and e[key]]
+
+
+def justified(limits, name, level):
+    """Whether a ratio above 1.10 of the entry and level is slower for a stated reason: a
+    `slower_because` text, an `accuracy_trade` or a `contract_trade` (D3050)."""
+    e = limits.get(name, {}).get(level, {})
+    return bool(slower_because(e)) or any(isinstance(e.get(k), str) and e[k] for k in ("accuracy_trade", "contract_trade"))
 
 
 def is_own(kind, compared_with):
@@ -348,7 +370,7 @@ def rows_of(docs, counts, limits, volk=({}, [])):
         if r["judged"] and r["own"]:
             raise ct.TableError(f"`{r['name']}` at `{r['level']}` is `{r['status']}` against our own code")
         judged = r["judged"] and not r["own"]
-        r["classes"] = [ratio_class(x, judged, bool(r["trade"])) for x in r["ratio"]]
+        r["classes"] = [ratio_class(x, judged, justified(limits, r["name"], r["level"])) for x in r["ratio"]]
         r["band"] = band_of(r["classes"])
         r["snr_class"] = snr_class(r["snr"][0], r["snr"][1], judged)
         r["reasons"] = reasons_of(limits, r["name"], r["level"])
@@ -629,7 +651,7 @@ footer{color:var(--mut);font-size:12px}
 <div class="meta">@@HEADER@@</div>
 <p class="explain">Simulated cycles per sample of our entry and of its opponent (llvm-mca whole-loop on the execution counts of the counted calls). A cell <code>a / b</code> holds the two CPU models of the level, reference model / counter-model; ours and the opponent run on the same models. The ratio is ours / opponent, the SNR Δ ours minus the opponent in dB against the f64 reference (both values in the tooltip; <code>+∞</code> when only ours is bit-exact, <code>−∞</code> when only the opponent is, <code>0</code> when both are). The status is the entry of <code>benches/limits.json</code>: <code>release</code> at most 1.10 times the opponent on both models, <code>dev</code> at most 1.50, <code>info</code> not judged; an <span class="st tr">accuracy trade</span> (at least 3 dB more accurate than a library below 100 dB, D2760) or a <span class="st tr">contract trade</span> (the library provably does less work, D3000) keeps <code>release</code> up to 1.20. A comparison with our own code is marked <span class="st own">own (information)</span> and decides no status (D2767). The tooltip of the ratio of a SIMD row gives it against our own fallback of the level (information). Click a justification for its full text.</p>
 <div class="legend"><span>CPUs:</span>@@LEGEND@@</div>
-<div class="legend"><span>Ratio, judged rows only (<code>release</code>, <code>dev</code> against a library):</span><span><i class="g"></i>&le; 1.00</span><span><i class="y"></i>&le; 1.10</span><span><i class="lb"></i>justifiably slower: above 1.10 and at most 1.20 under an accuracy or contract trade (D3050)</span><span><i class="r"></i>above 1.10 otherwise (a waiver names an open item, D2779)</span><span>SNR Δ: <i class="r"></i>more than 1 dB below, <i class="g"></i>at least 3 dB above</span><span>A coloured cell has the colour of its worse number (red &gt; light blue &gt; yellow &gt; green); each number keeps its own colour as its text colour.</span><span>∞ = bit-exact: the output is bit-identical to the f64 reference, so the SNR is infinite.</span></div>
+<div class="legend"><span>Ratio, judged rows only (<code>release</code>, <code>dev</code> against a library):</span><span><i class="g"></i>&le; 1.00</span><span><i class="y"></i>&le; 1.10</span><span><i class="lb"></i>light blue = slower for a stated reason (more work, more accurate, more robust, or a trade; D3050)</span><span><i class="r"></i>red = slower without such a reason (a waiver: not yet optimised or the attempts failed)</span><span>SNR Δ: <i class="r"></i>more than 1 dB below, <i class="g"></i>at least 3 dB above</span><span>A coloured cell has the colour of its worse number (red &gt; light blue &gt; yellow &gt; green); each number keeps its own colour as its text colour.</span><span>∞ = bit-exact: the output is bit-identical to the f64 reference, so the SNR is infinite.</span></div>
 </header>
 <main>
 <div class="controls">

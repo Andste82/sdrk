@@ -92,14 +92,15 @@ def delta(o, c):
 
 
 def colour(x, judged, trade):
-    """The colour rule of the page (D3050)."""
+    """The colour rule of the page (D3050): above 1.10 light blue with a stated reason (`trade`:
+    a `slower_because`, an `accuracy_trade` or a `contract_trade`), red without."""
     if not judged:
         return ""
     if x <= 1.0:
         return "g"
     if x <= 1.10:
         return "y"
-    return "lb" if trade and x <= 1.20 else "r"
+    return "lb" if trade else "r"
 
 
 def snr_colour(o, c, judged):
@@ -229,7 +230,12 @@ def expected(limits, cyc, wasm, ck, volk=({}, [])):
         kernel = second.get(simd, simd)
         so, sc = (snr or {}).get("ours"), (snr or {}).get("comparison", (snr or {}).get("other"))
         fmt = (lambda x: f"{x:.2f}") if unit == "instructions" else (lambda x: f"{x:.3f}")
-        classes = [colour(x, jl, trade) for x in ratio]
+        sb = e.get("slower_because") if isinstance(e.get("slower_because"), str) and e["slower_because"].strip() else ""
+        kind, sep, rest = sb.partition(": ")
+        sb_reason = ([f"{kind}: {rest}"] if sep and kind in ("more work", "more accurate", "more robust")
+                     else [f"slower because: {sb}"]) if sb else []
+        reason = bool(sb) or bool(trade)
+        classes = [colour(x, jl, reason) for x in ratio]
         rank = ["", "g", "y", "lb", "r"]
         rows[(level, name)] = {
             "status": status, "trade": trade, "verdict": verdict, "kernel": kernel, "fallback": fb,
@@ -242,7 +248,7 @@ def expected(limits, cyc, wasm, ck, volk=({}, [])):
             "protokernels": protokernels(cw, level, volk),
             "own_build": None if own_build is None else
             "ours / own avx2 build " + " / ".join(f"{x:.2f}" for x in own_build) + " (information)",
-            "reasons": [f"{label}: {e[key]}" for key, label in REASONS if isinstance(e.get(key), str) and e[key]],
+            "reasons": sb_reason + [f"{label}: {e[key]}" for key, label in REASONS if isinstance(e.get(key), str) and e[key]],
             "variant": "fallback" if fb else "simd", "cpus": cpu.get(level),
         }
 

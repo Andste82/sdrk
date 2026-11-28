@@ -229,6 +229,51 @@ pub(super) fn mul_real_q15(lhs: &[i16], rhs: &[i16], out: &mut [i16]) -> usize {
     done
 }
 
+/// `deinterleave` `CQ15` with AVX2 into both parts (D3103, IO1-7): per sixteen samples the
+/// real parts by a blend with zero (each 32-bit lane the real part, zero-extended) and the
+/// imaginary parts by a shift right by 16, each pair of vectors packed with unsigned
+/// saturation (`vpackusdw`, exact for values below `2^16`) and put in order by `vpermq`: four
+/// shuffles per sixteen samples, where the compiler's form of the portable loop takes seven
+/// (`vpshufb`, `vshufps`, `vpermq`). Returns the number of samples done (the rest runs the
+/// portable loop). Copies, so the same bits.
+#[cfg(target_feature = "avx2")]
+#[inline]
+pub(super) fn deinterleave_cq15(x: &[i16], re: &mut [i16], im: &mut [i16]) -> usize {
+    use core::arch::x86_64::{
+        _mm256_blend_epi16, _mm256_loadu_si256, _mm256_packus_epi32, _mm256_permute4x64_epi64,
+        _mm256_setzero_si256, _mm256_srli_epi32, _mm256_storeu_si256,
+    };
+    let done = (x.len() / 2).min(re.len()).min(im.len()) / 16 * 16;
+    // SAFETY: AVX2 is enabled for the build (`cfg(target_feature)`); every load reads 32 bytes
+    // of `x[2 at..2 at + 32]`, every store writes the 32 bytes of `re[at..at + 16]` or
+    // `im[at..at + 16]`, with `at + 16 <= done`, `2 done <= x.len()`, `done <= re.len()` and
+    // `done <= im.len()`.
+    unsafe {
+        let zero = _mm256_setzero_si256();
+        let mut at = 0;
+        while at < done {
+            let lo = _mm256_loadu_si256(x.as_ptr().add(2 * at).cast());
+            let hi = _mm256_loadu_si256(x.as_ptr().add(2 * at + 16).cast());
+            let real = _mm256_packus_epi32(
+                _mm256_blend_epi16::<0xAA>(lo, zero),
+                _mm256_blend_epi16::<0xAA>(hi, zero),
+            );
+            let imag =
+                _mm256_packus_epi32(_mm256_srli_epi32::<16>(lo), _mm256_srli_epi32::<16>(hi));
+            _mm256_storeu_si256(
+                re.as_mut_ptr().add(at).cast(),
+                _mm256_permute4x64_epi64::<0xD8>(real),
+            );
+            _mm256_storeu_si256(
+                im.as_mut_ptr().add(at).cast(),
+                _mm256_permute4x64_epi64::<0xD8>(imag),
+            );
+            at += 16;
+        }
+    }
+    done
+}
+
 /// `mag_sq` `C32` with AVX-512 (D3102, IO1-7): the squares of the interleaved values of sixteen
 /// samples in two 512-bit multiplies, then the squares of the real parts and of the imaginary
 /// parts gathered by two `vpermt2ps` of the two vectors and added, `re^2 + im^2` with the
@@ -382,6 +427,25 @@ mod tests {
         for i in 0..done {
             let want = crate::num::q15_mul(crate::Q15(a[i]), crate::Q15(b[i])).0;
             assert_eq!(out[i], want, "{} * {}", a[i], b[i]);
+        }
+    }
+
+    #[cfg(target_feature = "avx2")]
+    #[test]
+    fn deinterleave_cq15_copies_the_parts() {
+        let mut seed = 3;
+        for n in [0usize, 1, 15, 16, 17, 33, 100] {
+            let x = values(&mut seed, 2 * n);
+            let (mut re, mut im) = (vec_of(n), vec_of(n));
+            let done = super::deinterleave_cq15(&x, &mut re, &mut im);
+            assert_eq!(done, n / 16 * 16);
+            for k in 0..done {
+                assert_eq!(
+                    (re[k], im[k]),
+                    (x[2 * k], x[2 * k + 1]),
+                    "sample {k} of {n}"
+                );
+            }
         }
     }
 

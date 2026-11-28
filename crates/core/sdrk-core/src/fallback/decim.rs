@@ -20,6 +20,8 @@ pub(super) trait FbMac: Copy {
     /// Whether [`WIDE_GROUP`] outputs are computed together (the real types, whose outputs
     /// take one accumulator each) instead of [`NARROW_GROUP`].
     const WIDE: bool;
+    /// Whether the groups of [`WIDE`](FbMac::WIDE) take [`LONG_GROUP`] outputs (D3108).
+    const LONG: bool = false;
     fn zero() -> Self::Acc;
     fn mac(acc: &mut Self::Acc, h: Self::Tap, x: Self);
     /// [`FbMac::mac`] where the caller guarantees that the sum cannot saturate (fewer than
@@ -117,6 +119,9 @@ impl FbMac for CQ15 {
 
 impl FbMac for f32 {
     const WIDE: bool = true;
+    // AArch64: 32 outputs, eight vectors of sums, so that `cortex-a72` (five cycles per
+    // addition, two pipes) is bound by the throughput instead of the chains (D3108).
+    const LONG: bool = cfg!(target_arch = "aarch64");
     type Tap = f32;
     type Acc = f32;
     #[inline]
@@ -166,6 +171,8 @@ impl FbMac for Q15 {
 /// latency of its chain), and for `s = 1` the products of a tap are an element-wise product of
 /// the tap with consecutive samples, which the compiler turns into vector operations.
 const WIDE_GROUP: usize = 16;
+/// The group of [`FbMac::LONG`] types with windows one sample apart: `f32` on AArch64 (D3108).
+const LONG_GROUP: usize = 32;
 /// See [`WIDE_GROUP`].
 const NARROW_GROUP: usize = 8;
 
@@ -641,7 +648,9 @@ fn progression_with<'a, B: Target, T: FbMac + 'a>(
     dst: impl Iterator<Item = &'a mut T>,
 ) -> Result<()> {
     // Windows `s > 1` samples apart take one slice per output: 16 of them spilled.
-    if T::WIDE && s == 1 {
+    if T::WIDE && T::LONG && s == 1 {
+        progression_at::<B, T, LONG_GROUP>(target, taps, l, hist, input, phase, seen, s, count, dst)
+    } else if T::WIDE && s == 1 {
         progression_at::<B, T, WIDE_GROUP>(target, taps, l, hist, input, phase, seen, s, count, dst)
     } else {
         progression_at::<B, T, NARROW_GROUP>(

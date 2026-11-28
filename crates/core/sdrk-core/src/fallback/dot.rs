@@ -138,6 +138,20 @@ const Q15_FORM: Q15Form = if cfg!(target_feature = "avx2") {
 /// The exact sums `(sum re * h, sum im * h)` of one run.
 #[inline]
 fn run_cq15(x: &[CQ15], taps: &[Q15]) -> (i64, i64) {
+    // Below AVX2 the whole blocks of eight samples take `pmaddwd` (D3101), the rest the
+    // widening form.
+    #[cfg(all(target_arch = "x86_64", not(target_feature = "avx2")))]
+    let (mut re, mut im, x, taps) = {
+        let (re, im, done) =
+            super::q15_x86::dot_cq15(bytemuck::cast_slice(x), bytemuck::cast_slice(taps));
+        (
+            re,
+            im,
+            x.get(done..).unwrap_or(&[]),
+            taps.get(done..).unwrap_or(&[]),
+        )
+    };
+    #[cfg(not(all(target_arch = "x86_64", not(target_feature = "avx2"))))]
     let (mut re, mut im) = (0i64, 0i64);
     for (s, h) in x.iter().zip(taps) {
         let h = i32::from(h.0);

@@ -32,8 +32,9 @@
 //!   blocks of 16 steps between two flushes.
 //! - **`Q15`, `CQ15` on x86 from SSE4.1 and on NEON:** the pairs run the integer arithmetic of
 //!   the fallback itself in 64-bit integer lanes (the module `int`). Plain SSE2 runs the
-//!   fallback for `Q15`.
-//! - **`Q15`, `CQ15` elsewhere** (`CQ15` at SSE2, SIMD128, the portable level, and an odd last
+//!   integer code that LLVM generates for the fallback there, written out (the module
+//!   `sse2_int`, D3015).
+//! - **`Q15`, `CQ15` elsewhere** (SIMD128, the portable level, and an odd last
 //!   `CQ15` section everywhere): the integer arithmetic of the fallback is exact in `f64`: the
 //!   products of two 16-bit values have at most 30 bits and five of them sum to less than 2^33, far
 //!   below the 53 bits of the mantissa. The coefficients are scaled by 2^-14 (exact), so that the
@@ -53,8 +54,6 @@
 use fearless_simd::{
     Simd as SimdToken, f32x4, f64x2, f64x4, i16x8, i32x4, mask32x4, mask64x2, mask64x4, prelude::*,
 };
-#[cfg(target_arch = "x86_64")]
-use sdrk_core::Fallback;
 use sdrk_core::kernels::biquad::{
     Biquad, BiquadReal, BiquadRealState, BiquadSample, BiquadState, FLUSH_PERIOD,
 };
@@ -1513,14 +1512,16 @@ impl BiquadReal<Q15> for Simd {
         C: AsRef<[[<Q15 as BiquadSample>::Coef; 5]]>,
         H: AsRef<[Q15]> + AsMut<[Q15]>,
     {
-        // Plain SSE2 has neither `pmuldq` nor `pminsd` (SSE4.1) for the integer lanes, and its
-        // `f64` path is slower than the fallback (`llvm-mca`, cycles per sample: 33.7 against
-        // 15.1 on Skylake, 23.0 against 15.1 on Zen 2), so it runs the fallback.
+        check_len(input.len(), output.len())?;
+        // Plain SSE2: the integer code of its own (D3015, the module `sse2_int`).
         #[cfg(target_arch = "x86_64")]
         if crate::level::sse2_only(crate::level::current()).is_some() {
-            return Fallback.biquad_real(s, input, output);
+            let (coefs, hist) = s.parts_mut();
+            let hist: &mut [i16] = bytemuck::cast_slice_mut(hist);
+            let x: &[i16] = bytemuck::cast_slice(input);
+            let y: &mut [i16] = bytemuck::cast_slice_mut(output);
+            return sse2_int::cascade::<sse2_int::Real>(coefs, hist, x, y);
         }
-        check_len(input.len(), output.len())?;
         let (coefs, hist) = s.parts_mut();
         let hist: &mut [i16] = bytemuck::cast_slice_mut(hist);
         let x: &[i16] = bytemuck::cast_slice(input);
@@ -1812,20 +1813,230 @@ impl Biquad<CQ15> for Simd {
         C: AsRef<[[<CQ15 as BiquadSample>::Coef; 5]]>,
         H: AsRef<[CQ15]> + AsMut<[CQ15]>,
     {
-        // Plain SSE2 runs the fallback, as for `Q15` (decision D341): its `f64` path is bound by
-        // the latency of the recursion (seven dependent `f64` operations per step), which made
-        // it slower than the fallback's integer chain on Skylake (32.45 against 24.43 cycles per
-        // sample in `llvm-mca`; 20.44 against 31.16 on Zen 2).
+        check_len(input.len(), output.len())?;
+        // Plain SSE2: the integer code of its own, as for `Q15` (D3015, the module `sse2_int`).
         #[cfg(target_arch = "x86_64")]
         if crate::level::sse2_only(crate::level::current()).is_some() {
-            return Fallback.biquad(s, input, output);
+            let (coefs, hist) = s.parts_mut();
+            let hist: &mut [[i16; 2]] = bytemuck::cast_slice_mut(hist);
+            let x: &[[i16; 2]] = bytemuck::cast_slice(input);
+            let y: &mut [[i16; 2]] = bytemuck::cast_slice_mut(output);
+            return sse2_int::cascade::<sse2_int::Complex>(coefs, hist, x, y);
         }
-        check_len(input.len(), output.len())?;
         let (coefs, hist) = s.parts_mut();
         let hist: &mut [[i16; 2]] = bytemuck::cast_slice_mut(hist);
         let x: &[[i16; 2]] = bytemuck::cast_slice(input);
         let y: &mut [[i16; 2]] = bytemuck::cast_slice_mut(output);
         run_cq15(coefs, hist, x, y);
+        Ok(())
+    }
+}
+
+// ---------------------------------------------------------------------------------------------
+// Q15 and CQ15 at plain SSE2
+
+/// `biquad_real` `Q15` and `biquad` `CQ15` at plain SSE2 (the maintainer's decision D3015 on
+/// IO2-21; it replaces the switch of D341 to the fallback): the code that LLVM generates for
+/// the fallback at this level, written out. That code is not vectorized: LLVM keeps the
+/// recursion of the fallback (`q15_wide` in `sdrk-core`) in general-purpose registers, five
+/// `imul r64` per section and component and step (no `xmm` instruction in the hot loop), so
+/// this module is the same integer arithmetic: direct form I with the carried partial sums
+/// `s = b1 x1 + b2 x2 - a1 y1 - a2 y2 + 2^13` and `q = b2 x1 - a2 y1 + 2^13`, the step
+/// `y = sat16((b0 x + s) >> 14)`, `s' = (b1 x + q) - a1 y`, `q' = b2 x - a2 y + 2^13` in `i64`
+/// (every sum exact, so the bits of the specification), `Q15` sections in pairs (each sample
+/// through both, two chains in flight), `CQ15` one section per pass with both components; the
+/// history is moved only by the last two samples of a buffer. An SSE2 vector form has no
+/// signed 32 x 32 -> 64-bit product (`pmuldq` is SSE4.1) and no 16-bit form of `-a1 = 32768`
+/// for `pmaddwd`, and its product with the output lies on the recursion chain (IO2-21), so
+/// there are no lane shuffles to save: the gain of this path is that it is compiled here, as the
+/// explicit form of the level (D3019), not that it is faster.
+#[cfg(target_arch = "x86_64")]
+mod sse2_int {
+    use sdrk_core::{Error, Result};
+
+    /// The rounding constant of `round_shift(acc, 14)`.
+    const ROUND: i64 = 1 << 13;
+
+    /// One component of one section, as `Df1` of the fallback.
+    #[derive(Clone, Copy)]
+    pub(super) struct Df1 {
+        x1: i64,
+        x2: i64,
+        y1: i64,
+        y2: i64,
+        s: i64,
+        q: i64,
+    }
+
+    impl Df1 {
+        #[inline(always)]
+        fn new(c: &[i64; 5], [x1, x2, y1, y2]: [i64; 4]) -> Df1 {
+            let [_, b1, b2, a1, a2] = *c;
+            Df1 {
+                x1,
+                x2,
+                y1,
+                y2,
+                s: b1 * x1 + b2 * x2 - a1 * y1 - a2 * y2 + ROUND,
+                q: b2 * x1 - a2 * y1 + ROUND,
+            }
+        }
+
+        #[inline(always)]
+        fn step(&mut self, c: &[i64; 5], x: i64) -> i64 {
+            let [b0, b1, b2, a1, a2] = *c;
+            let y = ((b0 * x + self.s) >> 14).clamp(-32768, 32767);
+            self.s = (b1 * x + self.q) - a1 * y;
+            self.q = b2 * x - a2 * y + ROUND;
+            y
+        }
+
+        #[inline(always)]
+        fn step_tracked(&mut self, c: &[i64; 5], x: i64) -> i64 {
+            let y = self.step(c, x);
+            self.x2 = self.x1;
+            self.y2 = self.y1;
+            self.x1 = x;
+            self.y1 = y;
+            y
+        }
+    }
+
+    /// An `i64` that holds an `i16` (the output of the clamp, or a history value).
+    #[inline(always)]
+    #[allow(clippy::cast_possible_truncation, reason = "the value is within i16")]
+    fn to_i16(v: i64) -> i16 {
+        v as i16
+    }
+
+    /// A sample type of the cascade: `Q15` (`i16`, sections in pairs) or `CQ15` (`[i16; 2]`).
+    pub(super) trait Kind {
+        type T: Copy;
+        type State: Copy;
+        /// Sections per pass.
+        const PER: usize;
+        fn load(c: &[i64; 5], h: &[Self::T]) -> Option<Self::State>;
+        fn store(s: &Self::State, h: &mut [Self::T]);
+        fn step(c: &[i64; 5], s: &mut Self::State, x: Self::T, tracked: bool) -> Self::T;
+    }
+
+    /// `Q15`.
+    pub(super) struct Real;
+    /// `CQ15`.
+    pub(super) struct Complex;
+
+    impl Kind for Real {
+        type T = i16;
+        type State = Df1;
+        const PER: usize = 2;
+        #[inline]
+        fn load(c: &[i64; 5], h: &[i16]) -> Option<Df1> {
+            let [x1, x2, y1, y2] = *h else { return None };
+            Some(Df1::new(c, [x1, x2, y1, y2].map(i64::from)))
+        }
+        #[inline]
+        fn store(s: &Df1, h: &mut [i16]) {
+            for (d, v) in h.iter_mut().zip([s.x1, s.x2, s.y1, s.y2]) {
+                *d = to_i16(v);
+            }
+        }
+        #[inline(always)]
+        fn step(c: &[i64; 5], s: &mut Df1, x: i16, tracked: bool) -> i16 {
+            let x = i64::from(x);
+            to_i16(if tracked {
+                s.step_tracked(c, x)
+            } else {
+                s.step(c, x)
+            })
+        }
+    }
+
+    impl Kind for Complex {
+        type T = [i16; 2];
+        type State = [Df1; 2];
+        const PER: usize = 1;
+        #[inline]
+        fn load(c: &[i64; 5], h: &[[i16; 2]]) -> Option<[Df1; 2]> {
+            let [x1, x2, y1, y2] = *h else { return None };
+            let h = [x1, x2, y1, y2];
+            Some([
+                Df1::new(c, h.map(|v| i64::from(v[0]))),
+                Df1::new(c, h.map(|v| i64::from(v[1]))),
+            ])
+        }
+        #[inline]
+        fn store(s: &[Df1; 2], h: &mut [[i16; 2]]) {
+            let [re, im] = s;
+            let hr = [re.x1, re.x2, re.y1, re.y2];
+            let hi = [im.x1, im.x2, im.y1, im.y2];
+            for ((d, r), i) in h.iter_mut().zip(hr).zip(hi) {
+                *d = [to_i16(r), to_i16(i)];
+            }
+        }
+        #[inline(always)]
+        fn step(c: &[i64; 5], s: &mut [Df1; 2], x: [i16; 2], tracked: bool) -> [i16; 2] {
+            let [re, im] = s;
+            [Real::step(c, re, x[0], tracked), Real::step(c, im, x[1], tracked)]
+        }
+    }
+
+    /// `f(x, tracked)` of every sample, `tracked` for the last two only: from `input` to
+    /// `output`, or in place if `input` is `None`.
+    #[inline(always)]
+    fn apply<T: Copy>(input: Option<&[T]>, output: &mut [T], mut f: impl FnMut(T, bool) -> T) {
+        let n = output.len();
+        let head = n.saturating_sub(2);
+        match input {
+            Some(input) => {
+                for (t, (o, x)) in output.iter_mut().zip(input).enumerate() {
+                    *o = f(*x, t >= head);
+                }
+            }
+            None => {
+                for (t, o) in output.iter_mut().enumerate() {
+                    *o = f(*o, t >= head);
+                }
+            }
+        }
+    }
+
+    /// The cascade of `coefs` over `input` into `output` (same lengths), the history `hist`
+    /// four samples per section.
+    pub(super) fn cascade<K: Kind>(
+        coefs: &[[i16; 5]],
+        hist: &mut [K::T],
+        input: &[K::T],
+        output: &mut [K::T],
+    ) -> Result<()> {
+        let internal = || Error::Internal("biquad history");
+        for (j, (c, h)) in coefs
+            .chunks(K::PER)
+            .zip(hist.chunks_mut(4 * K::PER))
+            .enumerate()
+        {
+            let src = (j == 0).then_some(input);
+            match c {
+                [a, b] => {
+                    let (ca, cb) = (a.map(i64::from), b.map(i64::from));
+                    let (ha, hb) = h.split_at_mut(4.min(h.len()));
+                    let mut sa = K::load(&ca, ha).ok_or_else(internal)?;
+                    let mut sb = K::load(&cb, hb).ok_or_else(internal)?;
+                    apply(src, output, |x, tracked| {
+                        let y = K::step(&ca, &mut sa, x, tracked);
+                        K::step(&cb, &mut sb, y, tracked)
+                    });
+                    K::store(&sa, ha);
+                    K::store(&sb, hb);
+                }
+                [a] => {
+                    let ca = a.map(i64::from);
+                    let mut sa = K::load(&ca, h).ok_or_else(internal)?;
+                    apply(src, output, |x, tracked| K::step(&ca, &mut sa, x, tracked));
+                    K::store(&sa, h);
+                }
+                _ => return Err(internal()),
+            }
+        }
         Ok(())
     }
 }
@@ -3124,6 +3335,58 @@ mod tests {
             }
             if let Some(t) = level.as_avx2() {
                 check_cq15::<__m256i>(t, &coefs, &x);
+            }
+        }
+    }
+
+    #[test]
+    fn the_sse2_integer_code_gives_the_bits_of_the_fallback() {
+        // D3015: the explicit path of plain SSE2, on every x86-64 host (it needs no feature),
+        // over the calls of a run, the history included.
+        let mut seed = 0x2468_ace1;
+        let total: usize = CALLS.iter().sum();
+        for coefs in cascades(&mut seed) {
+            let x = input(&mut seed, 2 * total);
+            let n = coefs.len();
+            let mut sr =
+                BiquadRealState::<Q15, _, _>::new(coefs.clone(), vec![Q15(0); 4 * n]).unwrap();
+            let mut sc = BiquadState::<CQ15, _, _>::new(coefs.clone(), vec![CQ15::default(); 4 * n])
+                .unwrap();
+            let (mut hr, mut hc) = (vec![0i16; 4 * n], vec![[0i16; 2]; 4 * n]);
+            let mut at = 0;
+            for len in CALLS {
+                let xr = &x[at..at + len];
+                let xc: Vec<[i16; 2]> = x[at..at + 2 * len]
+                    .chunks_exact(2)
+                    .map(|c| [c[0], c[1]])
+                    .collect();
+                at += 2 * len;
+                let xrq: Vec<Q15> = xr.iter().map(|&v| Q15(v)).collect();
+                let xcq: Vec<CQ15> = xc
+                    .iter()
+                    .map(|&[re, im]| CQ15 {
+                        re: Q15(re),
+                        im: Q15(im),
+                    })
+                    .collect();
+                let (mut wr, mut wc) = (vec![Q15(0); len], vec![CQ15::default(); len]);
+                Fallback.biquad_real(&mut sr, &xrq, &mut wr).unwrap();
+                Fallback.biquad(&mut sc, &xcq, &mut wc).unwrap();
+                let (mut gr, mut gc) = (vec![0i16; len], vec![[0i16; 2]; len]);
+                super::sse2_int::cascade::<super::sse2_int::Real>(&coefs, &mut hr, xr, &mut gr)
+                    .unwrap();
+                super::sse2_int::cascade::<super::sse2_int::Complex>(
+                    &coefs, &mut hc, &xc, &mut gc,
+                )
+                .unwrap();
+                let wr: Vec<i16> = wr.iter().map(|v| v.0).collect();
+                let wc: Vec<[i16; 2]> = wc.iter().map(|v| [v.re.0, v.im.0]).collect();
+                assert_eq!(wr, gr, "{coefs:?} len {len}");
+                assert_eq!(wc, gc, "{coefs:?} len {len}");
+                let h: Vec<i16> = sr.history().iter().map(|v| v.0).collect();
+                assert_eq!(h, hr, "{coefs:?} len {len}");
+                let h: Vec<[i16; 2]> = sc.history().iter().map(|v| [v.re.0, v.im.0]).collect();
+                assert_eq!(h, hc, "{coefs:?} len {len}");
             }
         }
     }
